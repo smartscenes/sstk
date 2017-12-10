@@ -128,6 +128,7 @@ Object.assign( THREE.MTLLoader.prototype, THREE.EventDispatcher.prototype, {
  *                                  Default: false
  *                  invertTransparency: If transparency need to be inverted (inversion is needed if d = 0 is fully opaque)
  *                                      Default: false (d = 1 is fully opaque)
+ *                  useRelativeTexturePath: If true ignores materialBase and resolves texture path relative to MTL file
  * @constructor
  */
 
@@ -147,7 +148,7 @@ THREE.MTLLoader.MaterialCreator = function( baseUrl, options ) {
 
 	// AXC: Allow for different url for textures than baseUrl
 	this.textureUrl = baseUrl;
-	if (options && options.materialBase) {
+	if (options && options.materialBase && !options.useRelativeTexturePath) {
 		this.textureUrl = options.materialBase;
 	}
 	if (this.textureUrl && this.textureUrl.charAt(this.textureUrl.length-1) != '/') {

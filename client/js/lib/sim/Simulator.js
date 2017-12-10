@@ -805,9 +805,7 @@ Simulator.prototype.__loadScene = function (opts, callback) {
   if (window) { window.scene = scene; }  // NOTE: for debugging with three.js inspector
   var scope = this;
   var preloads = ['regions'];
-  if (opts.scene.createArch) {
-    preloads.push('arch');
-  }
+
   if (this.opts.navmap && this.opts.navmap.recompute !== true) {
     // recompute true = force recomputation of navmap
     // otherwise, load if it exists

@@ -36,7 +36,8 @@
       "path": "${rootPath}/object/${baseVariantId}/${id}.obj",
       "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
       "voxelsAligned": true,
-      "voxelsToModelTransform": [1, 0, 0, 0, 0, 1, 0, 1, 0]
+      "voxelsToModelTransform": [1, 0, 0, 0, 0, 1, 0, 1, 0],
+      "options": { "useRelativeTexturePath": true }
     },
     { "format": "p5d",
       "path": "${rootPath}/objects/${baseVariantId}/${id}.js",

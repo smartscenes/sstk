@@ -1187,6 +1187,10 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.loadScene = function (sceneinfo, callback) {
       sceneinfo.archType = SceneState.getArchType(sceneinfo);
+      if (sceneinfo.createArch) {
+        sceneinfo.preload = sceneinfo.preload || [];
+        sceneinfo.preload.push('arch');
+      }
       if (sceneinfo.cache && sceneinfo.fullId) {
         var cachingLoader = this.__getCachingLoader('scene', sceneinfo.format);
         var scope = this;

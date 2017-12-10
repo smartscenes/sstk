@@ -57,3 +57,18 @@ typings/
 # dotenv environment variables file
 .env
 
+# custom SSTK gitignores
+server/node_modules/
+node_modules/
+.idea/
+*.iml
+server/*.log
+coverage/
+*.sublime-*
+stats.json
+client/build
+client/build-min
+jsdoc
+.DS_Store
+*~
+env.sh

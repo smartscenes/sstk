@@ -47,7 +47,8 @@
       "name": "suncg",
       "format": "suncg",
       "path": "${rootPath}/house/${id}/house.json",
-      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
+      "createArch": true
     }
   ]
 }

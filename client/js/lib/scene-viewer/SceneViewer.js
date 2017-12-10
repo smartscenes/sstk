@@ -1433,9 +1433,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       loadOptions.loadTime = { start: new Date().getTime() };
       // Make sure some information is pushed through to assetManager loadScene
       sceneinfo = _.merge(sceneinfo, _.pick(loadOptions, _.keys(defaults)));
-      if (this.createArch) {
-        sceneinfo.preload = ['arch'];
-      }
+
       var scope = this;
       this.assetManager.loadAssetAsScene(sceneinfo, function(err, sceneState) {
         scope.onSceneLoad(loadOptions, sceneState);
