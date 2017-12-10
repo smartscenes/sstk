@@ -1,0 +1,167 @@
+
+.input-group-btn {
+    width: auto;
+}
+
+#textScenePanel {
+    position: absolute;
+    top: 75px;
+    left: 20px;
+    padding: 5px;
+    cursor: pointer;
+    opacity: 0.8;
+    z-index: 1;
+    border: thin solid #A5A5A5;
+}
+
+#loadingModel {
+    float: right;
+    padding: 20px;
+    visibility: hidden;
+}
+
+div.console {
+    position: absolute;
+    bottom: 10px;
+    word-wrap: break-word;
+    font-size: 14px;
+    margin-top:4em
+}
+div.console div.jquery-console-inner
+{   width:900px; height:200px; background:#efefef; padding:0.5em;
+    opacity: 0.75;
+    overflow:auto }
+div.console div.jquery-console-prompt-box
+{ color:#444; font-family:monospace; }
+div.console div.jquery-console-focus span.jquery-console-cursor
+{ background:#333; color:#eee; font-weight:bold }
+div.console div.jquery-console-message-error
+{ color:#ef0505; font-family:sans-serif; font-weight:bold;
+    padding:0.1em; }
+div.console div.jquery-console-message-success
+{ color:#187718; font-family:monospace;
+    padding:0.1em; }
+div.console span.jquery-console-prompt-label { font-weight:bold }
+
+div.pagination {
+    margin: 0px;
+}
+
+.searchResults td, .searchResults th {
+    padding: 4px;
+}
+
+#sceneTemplatePanel {
+    position: absolute;
+    bottom: 30px;
+    right: 20px;
+    padding: 5px;
+    cursor: pointer;
+    opacity: 0.8;
+    z-index: 1;
+    border: thin solid #A5A5A5;
+    max-width: 90%;
+    max-height: 90%;
+}
+
+.sceneTemplateViewer {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+}
+
+.node rect {
+    stroke: #333;
+    fill: #fff;
+}
+
+.graph-OBJECT rect {
+    fill: #FF99CC;
+}
+
+.graph-OBJECT-inferred rect {
+    stroke: DarkGray;
+    fill: #FFC0CB;
+}
+
+.graph-ATTRIBUTE rect {
+    stroke: #333;
+    fill: #EEE8AA;
+}
+
+.node.highlighted {
+    stroke: #ffff00;
+}
+
+.edgePath path {
+    stroke: #333;
+    fill: #333;
+    stroke-width: 1.5px;
+}
+
+.graph-CONSTRAINT-inferred path {
+    stroke: DarkGray;
+    fill: DarkGray;
+    stroke-width: 1.5px;
+}
+
+#contextQueryResultsContainer {
+    position: fixed;
+    background-color: white;
+    height: 550px;
+    width: 300px;
+    visibility: hidden;
+    pointer-events: visibleFill;
+    padding: 10px;
+    border: 1px solid black;
+    z-index:2;
+}
+
+#contextQueryResultsContainer .close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index:3;
+}
+
+#contextQueryResultsContainer .searchPanel {
+    z-index:2;
+}
+
+.d3-tip {
+    z-index:5;
+}
+
+#customLoadingPanel {
+    position: absolute;
+    bottom: 30px;
+    left: 20px;
+    padding: 5px;
+    cursor: pointer;
+    opacity: 0.8;
+    z-index: 1;
+    border: thin solid #A5A5A5;
+}
+
+/* side panel */
+
+#tabs {
+    height: 90%;
+}
+
+#tabs .ui-tabs-panel {
+    height: 85%;
+    width: 100%;
+    overflow: auto;
+}
+
+#sceneHierarchy {
+    height: 100%;
+    overflow: auto;
+}
+
+#sceneBVH {
+    height: 100%;
+    overflow: auto;
+}

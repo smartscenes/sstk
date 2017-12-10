@@ -1,0 +1,50 @@
+{
+  "source": "mpr3d",
+  "assetType": "scan",
+  "regionName": "region",
+  "rootPath": "${baseUrl}/matterport/data",
+  "screenShotPath": "${rootPath}/public/v1/scans_extra/annotated_regions/${id}/${id}.png",
+  "screenShotPaths": [
+    { "name": "original", "path": "${rootPath}/public/v1/scans_extra/annotated_regions/${id}/${id}.png" },
+    { "name": "instances", "path": "${rootPath}/public/v1/scans_extra/annotated_regions/${id}/${id}.instances.annotated.png" },
+    { "name": "mpr40", "path": "${rootPath}/public/v1/scans_extra/annotated_regions/${id}/${id}.mpr40.annotated.png" }
+  ],
+  "hasThumbnail": false,
+  "assetFields": ["surfaces-public"],
+  "formats": [
+    {
+      "name": "ply",
+      "format": "ply",
+      "path": "${rootPath}/${parentId}/room_meshes7/${roomId}_C.ply",
+      "defaultUp": [ 0, 0, 1 ], "defaultFront": [ -1, 0, 0], "defaultUnit": 1,
+      "materialSidedness": "Front",
+      "useVertexColors": true,
+      "computeNormals": true
+    },
+    {
+      "name": "ply-reduced",
+      "format": "ply",
+      "path": "${rootPath}/public_extracted/v1/scans/${parentId}/region_segmentations/${regionId}_reduced.ply",
+      "defaultUp": [ 0, 0, 1 ], "defaultFront": [ -1, 0, 0], "defaultUnit": 1,
+      "materialSidedness": "Front",
+      "useVertexColors": true,
+      "computeNormals": true
+    }
+  ],
+  "surfaces": {
+    "format": "segmentGroups",
+    "dropMissingSegments": true,
+    "files": {
+      "segmentGroups": "${rootPath}/mprm7_mprmreproj_anns/${id}_surfaces_proj.semseg.json",
+      "segments": "${rootPath}/v1/${parentId}/room_meshes7/${roomId}_C.0.000100.segs.json"
+    }
+  },
+  "surfaces-public": {
+    "format": "segmentGroups",
+    "dropMissingSegments": true,
+    "files": {
+      "segmentGroups": "${rootPath}/public_extracted/v1/scans/${parentId}/region_segmentations/${regionId}.semseg.json",
+      "segments": "${rootPath}/public_extracted/v1/scans/${parentId}/region_segmentations/${regionId}.vsegs.json"
+    }
+  }
+}

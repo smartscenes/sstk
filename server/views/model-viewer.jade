@@ -1,0 +1,162 @@
+doctype html
+html(lang="en")
+  head
+    title= "Model Viewer"
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href='client/js/vendor/jpicker/jPicker-1.1.6.min.css')
+    link(rel='stylesheet', href='client/js/vendor/jquery-ui/css/jquery.contextMenu.css')
+    link(rel='stylesheet', href='css/common.css')
+    link(rel='stylesheet', href='css/search-panel.css')
+    link(rel='stylesheet', href='css/model-viewer.css')
+  body
+    #sidebar
+      #info Model Viewer
+      #options
+        //select#selectModel
+        input(type="checkbox", id="newImages")
+        label(for="newImages") Use new images
+        select#imageIndex(style="display:none")
+      #tabs
+        ul
+          li: a(href="#tabs-1") Search
+          li: a(href="#tabs-7") Images
+          li: a(href="#tabs-5") Align
+          li: a(href="#tabs-2") Textures
+          li: a(href="#tabs-3") Colors
+          li: a(href="#tabs-6") Parts
+          li: a(href="#tabs-8") Annotations
+        #tabs-1
+          #searchPanel
+        #tabs-2
+          #textureSearchPanel
+        #tabs-3
+          #colorsToolbar.tabsToolbar
+          #colorsPanel
+        #tabs-5
+          #alignPanel
+            span
+              | Use left/right/up/down arrow keys to rotate the object.
+              <br/><br/>
+              | Use the sliders below to set the angle by which to rotate when the arrow keys are pressed.
+              <br/><br/>
+            label(for="rotateZ") Rotate about <span style='color:blue'>Up-axis</span> by:
+            input#rotateZ(type="number", min="1", max="90", value="90", maxLength="2")
+            #sliderRotateZ
+            <br/>
+            label(for="rotateX") Rotate about <span style='color:red'>Right-axis</span> by:
+            input#rotateX(type="number", min="1", max="90", value="90", maxLength="2")
+            #sliderRotateX
+            <br/>
+            | Up: <span id="alignUp"></span>
+            <br/>
+            | Front: <span id="alignFront"></span>
+            <br/><br/>
+            input#clearAlignment(type="button", value="Clear", title="Clear model alignment")
+            input#resetAlignment(type="button", value="Reset", title="Revert to initial alignment")
+            input#submitAlignment(type="button", value="Submit", title="Save alignment")
+            input#alignNext(type="button", value="Next (N)", title="Goes to next model")
+        #tabs-6
+          #partsPanel
+            p#partTypeSelectDiv
+              label(for="partType") Part Type
+              select#partType
+            p#labelTypeSelectDiv
+              label(for="labelType") Label
+              select#labelType
+            p
+              #treePanel
+            p
+              input(type="checkbox", id="keepSegmentColors")
+              label(for="keepSegmentColors") Keep segment colors
+            p#showSegmentOBBsDiv
+              input(type="checkbox", id="showSegmentOBBs")
+              label(for="showSegmentOBBs") Show segment OBBs
+            p#partsConfigControls
+        #tabs-7
+          #imagesPanel
+        #tabs-8
+            #annotationsPanel
+                input#clearAnnotations(type="button", value="Clear", title="Clear all model annotations")
+                input#resetAnnotations(type="button", value="Reset", title="Revert to initial model annotations")
+                input#previewAnnotations(type="button", value="Preview", title="Preview model annotations")
+                input#submitAnnotations(type="button", value="Submit", title="Save annotations")
+    #main
+      #canvas
+      #alert.alert(style="display:none")
+        button.close(type="button", onclick="hideAlert()") &times;
+        span#alertMessage
+
+      #materialsPanel.roundBorder.grayBackground
+      #instructionsPanel.roundBorder.grayBackground
+        span Instructions
+        p#instructions
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        #nameButtonsDiv.btn-group.btn-group-vertical
+    #customLoadingPanel.roundBorder.grayBackground
+      #customLoadingContents
+        div
+          span.input-group-btn
+            span.btn.btn-default.btn-file Custom Model
+              input#loadLocalFile(type="file")
+            input#loadLocalFilename.form-control(type="text",readonly)
+        div
+          span.input-group-btn
+            span.btn.btn-default.btn-file Models
+              input#registerAssetsFile(type="file")
+            input#registerAssetsFilename.form-control(type="text",readonly)
+        div
+          span.input-group-btn
+            span.btn.btn-default.btn-file Metadata
+              input#registerMetaFile(type="file")
+            input#registerMetaFilename.form-control(type="text",readonly)
+        div
+          span#registerBtn.btn.btn-default Register
+
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    // Special bootbox
+    script(src="#{baseUrl}/client/js/vendor/bootbox.form.min.js")
+    script(src="three.min.js")
+    script(src="STK.bundle.js")
+    link(rel='stylesheet', href='css/datgui-light.css')
+    script.
+      var tabsDiv = $('#tabs');
+      tabsDiv.tabs().css({ 'min-height': '400px', 'overflow': 'auto' });
+      var modelViewer = new STK.ModelViewer({
+        container: document.getElementById('canvas'),
+        allowPrevNext: true,
+        showSearchSimilar: true,
+        includeTestModels: true,
+        showSearchSortOption: true,
+        useNewImages: true,
+        tabs: ['models', 'images', 'align', 'textures', 'colors', 'parts', 'annotations']
+      });
+      modelViewer.launch();
+
+      tabsDiv.bind('tabsactivate', function (event, ui) {
+        switch (ui.newPanel.attr('id')) {
+          case 'tabs-1':
+            modelViewer.modelSearchController.onResize();
+            break;
+          case 'tabs-2':
+            modelViewer.textureSearchController.onResize();
+            break;
+          case 'tabs-7':
+            modelViewer.modelImagesPanel.onResize();
+            break;
+        }
+      });
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
+      // Make various components draggable
+      $('#namesPanel').draggable();
+      $('#customLoadingPanel').draggable();
+      $('#instructionsPanel').draggable();
+      $('#materialsPanel').draggable();
+      window.app = modelViewer;  // For console debugging

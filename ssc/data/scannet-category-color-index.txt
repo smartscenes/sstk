@@ -1,0 +1,100 @@
+wall
+floor
+chair
+door
+table
+couch
+cabinet
+desk
+shelf
+bed
+office chair
+trashcan
+pillow
+sink
+window
+toilet
+picture
+bookshelf
+monitor
+curtain
+computer
+armchair
+bathtub
+coffee table
+box
+dining chair
+refrigerator
+book
+lamp
+towel
+kitchen cabinet
+drawer
+tv
+nightstand
+counter
+dresser
+clothes
+countertop
+stool
+plant
+cushion
+ceiling
+bedframe
+keyboard
+end table
+toilet paper
+bag
+backpack
+blanket
+dining table
+tvstand
+printer
+shower curtain
+closet
+stair
+microwave
+whiteboard
+stove
+rug
+carpet
+dustbin
+shoe
+washbasin
+mirror
+basket
+ottoman
+board
+bin
+shower
+desktop
+bottle
+bench
+file cabinet
+dishwasher
+oven
+fan
+washing machine
+blinds
+person
+laptop
+faucet
+headboard
+paper
+paper towel dispenser
+telephone
+footstool
+art
+radiator
+container
+soap
+soap dispenser
+wardrobe
+laundry basket
+light
+piano
+trash bin
+heater
+bucket
+rack
+seat

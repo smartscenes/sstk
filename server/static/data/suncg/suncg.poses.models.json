@@ -1,0 +1,17 @@
+{
+  "source": "poses",
+  "assetType": "model",
+  "rootPath": "${baseUrl}/suncg/poses",
+  "screenShotPath": "${rootPath}/${id}/${id}-${index}.png",
+  "defaultImageCount": 14,
+  "defaultImageIndex": 13,
+  "texturePath": "${rootPath}/",
+  "prefetchModelInfo": { "source": "poses", "query": "*:*", "limit": 4000 },
+  "formats": [
+    { "format": "obj",
+      "path": "${rootPath}/${id}/${id}.obj",
+      "options": { "ignoreZeroRGBs": true },
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 0.01
+    }
+  ]
+}

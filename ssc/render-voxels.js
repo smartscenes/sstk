@@ -1,0 +1,156 @@
+#!/usr/bin/env node
+
+var async = require('async');
+var path = require('path');
+var fs = require('fs');
+var shell = require('shelljs');
+var STK = require('./stk-ssc');
+var cmd = require('./ssc-parseargs');
+var THREE = global.THREE;
+
+cmd
+  .version('0.0.1')
+  .option('--input <filename>', 'Input voxels')
+  .option('--output <filename>', 'Output filename base')
+  .option('--output_dir <dir>', 'Base directory for output files')
+  .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, true)
+  .option('--mesher <mesher>', 'Mesher to use for visualization' , /^(greedy|stupid|monotone|culled)$/i, 'stupid')
+  .option('--size <size>', 'Size to use for voxels when using stupid mesher (default: alpha)', STK.util.cmd.parseFloat)
+  .optionGroups(['render_views'])
+  .option('--voxel_threshold <threshold>', 'Threshold (from 0 to 1) on alpha channel for showing voxel [0]', STK.util.cmd.parseFloat, 0)
+  .option('--width <width>', 'Image width [default: 1000]', STK.util.cmd.parseInt, 1000)
+  .option('--height <height>', 'Image height [default: 1000]', STK.util.cmd.parseInt, 1000)
+  .option('--heapdump <num>', 'Number of times to dump the heap (for memory debugging)', STK.util.cmd.parseInt, 0)
+  .parse(process.argv);
+
+if (!cmd.input) {
+  console.error('Please specify --input <filename>');
+  process.exit(-1);
+}
+var files = [cmd.input];
+if (cmd.input.endsWith('.txt')) {
+  // Read files form input file
+  var data = STK.util.readSync(cmd.input);
+  files = data.split('\n').map(function(x) { return STK.util.trim(x); }).filter(function(x) { return x.length > 0; });
+}
+
+var output_basename = cmd.output;
+// Parse arguments and initialize globals
+var renderer = new STK.PNGRenderer({
+  width: cmd.width, height: cmd.height, useAmbientOcclusion: cmd.use_ambient_occlusion,
+  compress: cmd.compress_png, skip_existing: cmd.skip_existing, reuseBuffers: true
+});
+
+
+function processFiles() {
+  var memcheckOpts = { heapdump: { limit: cmd.heapdump } };
+  async.forEachOfSeries(files, function (file, index, callback) {
+    STK.util.clearCache();
+    STK.util.checkMemory('Processing ' + file + ' index=' + index, memcheckOpts);
+
+    // skip if output png already exists
+    var outputDir = cmd.output_dir;
+    var basename = output_basename;
+    if (basename) {
+      // Specified output - append index
+      if (files.length > 0) {
+        basename = basename + '_' + index;
+      }
+      basename = outputDir? outputDir + '/' + basename : basename;
+    } else {
+      basename = path.basename(file, path.extname(file)) || 'voxels';
+      basename = (outputDir? outputDir : path.dirname(file)) + '/' + basename;
+    }
+    var pngfilename = basename + '.png';
+
+    if (cmd.skip_existing && STK.fs.existsSync(pngfilename)) {
+
+      console.warn('Skipping render of existing file at ' + pngfilename);
+      callback();
+
+    } else {
+
+      shell.mkdir('-p', path.dirname(pngfilename));
+
+      console.log('Processing ' + file + '(' + index + '/' + files.length + ')');
+      // Create THREE scene
+      var scene = new THREE.Scene();
+      var light = STK.gfx.Lights.getDefaultHemisphereLight(false);
+      var camera = new THREE.PerspectiveCamera(50, cmd.width / cmd.height, 0.1*STK.Constants.metersToVirtualUnit, 10*STK.Constants.metersToVirtuanUnit);
+      scene.add(light);
+      scene.add(camera);
+      var cameraControls = new STK.controls.CameraControls({
+        camera: camera,
+        container: renderer.canvas,
+        controlType: 'none',
+        cameraPositionStrategy: 'positionByCentroid'
+      });
+
+      var voxels = new STK.geo.Voxels({
+        path: file,
+        mesher: cmd.mesher,
+        size: cmd.size,
+        sizeBy: cmd.size? null : 'alpha'
+      });
+      voxels.init();
+      voxels.loadVoxels(function() {
+          console.log('Setting voxel threshold to ' + cmd.voxel_threshold);
+          voxels.updateGridField('minThreshold', cmd.voxel_threshold);
+          var voxelNode = voxels.getVoxelNode();
+          STK.geo.Object3DUtil.centerAndRescaleObject3DToWorld(voxelNode, 200);
+          scene.add(voxelNode);
+          var sceneBBox = STK.geo.Object3DUtil.getBoundingBox(voxelNode);
+          //console.log(sceneBBox);
+
+          var wrappedCallback = function() {
+            voxels.reset();
+            STK.geo.Object3DUtil.dispose(scene);
+            callback();
+          };
+
+          var renderOpts = {
+            cameraControls: cameraControls,
+            targetBBox: sceneBBox,
+            basename: basename,
+            angleStep: cmd.turntable_step,
+            framerate: cmd.framerate,
+            tilt: cmd.tilt,
+            skipVideo: cmd.skip_video,
+            callback: wrappedCallback,
+            distanceScale: 2.0
+          };
+
+          function render() {
+            if (cmd.render_all_views) {
+              renderer.renderAllViews(scene, renderOpts);
+            } else if (cmd.render_turntable) {
+              renderer.renderTurntable(scene, renderOpts);
+            } else {  // top down view is default
+              cameraControls.viewTarget({
+                targetBBox: sceneBBox,
+                theta: Math.PI/6,
+                phi: -Math.PI/4,
+                distanceScale: 2.0
+              });
+              renderer.renderToPng(scene, camera, pngfilename);
+              setTimeout( function() { wrappedCallback(); }, 0);
+            }
+          }
+
+          STK.util.waitImagesLoaded(function() {
+            render();
+          });
+        },
+        function (error) {
+          console.error('Error', error);
+          callback(error, null);
+        });
+
+    }
+
+  }, function (err, results) {
+    console.log('DONE');
+  });
+}
+
+processFiles();

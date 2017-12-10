@@ -1,0 +1,7 @@
+{
+  "ssc": {
+    "fileCache": { "size": 50 },
+    "imageCache": { "size": 200 },
+    "imageQueue": { "concurrency": 4 }
+  }
+}

@@ -1,0 +1,61 @@
+doctype html
+html(lang='en')
+  head
+    title='Simple Model Viewer'
+    meta(charset='utf-8')
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='css/common.css')
+    link(rel='stylesheet', href='css/search-panel.css')
+    link(rel='stylesheet', href='css/model-viewer.css')
+    link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+    style.
+      .overlay {
+        position: absolute;
+        cursor: pointer;
+        opacity: 0.9;
+        z-index: 1;
+      }
+  body
+    #canvas
+    #instructionsPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-question-sign
+      p#instructions
+    #accordion.overlay.panel-group(style='top:60px; right:0; max-height:100vh; overflow:auto;')
+      .panel.panel-default
+        h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#annotationsPanel') Attributes
+        #annotationsPanel.panel-body.panel-collapse.collapse
+      .panel.panel-default
+        h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#partsPanel') Parts
+        #partsPanel.panel-body.panel-collapse.collapse
+          p
+            div PGUP/PGDN: slice voxels
+            div Shift+PGUP/PGDN: change plane
+            label(for="partType") Part Type
+            select#partType
+          p
+            #treePanel
+      .panel.panel-default
+        h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#images') Images
+        #images.panel-collapse.collapse
+          .panel-body
+            #imagesPanel(style='height:450px; width:300px;')
+
+    script(src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js")
+    script(src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js")
+    script(src="three.min.js")
+    script(src="STK.bundle.js")
+    script.
+      var canvas = document.getElementById('canvas');
+      var modelViewer = new STK.SimpleModelViewerWithControls(canvas);
+      modelViewer.redisplay();
+      $('#images').on('shown.bs.collapse', function () {
+        modelViewer.modelImagesPanel.onResize();
+      });
+      // Make instructions tab toggleable
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () {
+        $('#instructions').toggle();
+      });

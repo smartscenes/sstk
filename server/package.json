@@ -1,0 +1,57 @@
+{
+  "name": "sstk-server",
+  "version": "0.5.0",
+  "description": "SmartScenes ToolKit server: tools and interfaces for viewing, editing and annotating 3D models and scenes",
+  "scripts": {
+    "cover": "istanbul cover mocha",
+    "jshint": "jshint config/ && jshint lib/ && jshint app/ && jshint test/",
+    "jscs": "jscs config/ --fix && jscs test/ --fix",
+    "lint": "npm run jshint && npm run jscs",
+    "mocha": "mocha",
+    "start": "node app/",
+    "test": "npm run cover"
+  },
+  "dependencies": {
+    "async": "^2.5.0",
+    "body": "^5.1.0",
+    "body-parser": "1.17.x",
+    "cache-control": "^1.0.3",
+    "compression": "^1.7.0",
+    "csv": "^0.4.6",
+    "csv-parse": "^1.1.11",
+    "express": "4.15.x",
+    "express-csv": "0.6.x",
+    "express-winston": "^0.2.x",
+    "forwarded-for": "^1.0.0",
+    "http-proxy": "https://github.com/stanford-gfx/node-http-proxy.git",
+    "http-proxy-rules": "^1.1.1",
+    "http-server": "0.10.x",
+    "jade": "1.11.0",
+    "jshint": "^2.8.0",
+    "lodash": "^4.17.4",
+    "method-override": "2.3.x",
+    "mysql": "^2.10.2",
+    "papaparse": "^4.1.0",
+    "promise": "latest",
+    "request": "^2.65.0",
+    "winston": "^2.3.1",
+    "winston-context": "^0.0.7",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "istanbul": "^0.4.0",
+    "jscs": "^2.5.1",
+    "mocha": "^2.3.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smartscenes/sstk.git"
+  },
+  "author": "Manolis Savva <manolis.savva@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/smartscenes/sstk/issues"
+  },
+  "homepage": "https://github.com/smartscenes/sstk"
+}

@@ -1,0 +1,53 @@
+{
+  "name": "sstk-ssc",
+  "version": "0.5.0",
+  "description": "SmartScenes ToolKit Server-side Compute: tools for rendering and exporting 3D models and scenes",
+  "main": "stk-ssc",
+  "scripts": {
+    "render": "node --max-old-space-size=2048 render.js",
+    "scn2img": "node --max-old-space-size=2048 scn2img.js",
+    "export-annotated-ply": "node --max-old-space-size=2048 export-annotated-ply.js",
+    "color-voxels": "node --max-old-space-size=2048 color-voxels.js",
+    "mocha": "mocha",
+    "cover": "istanbul cover mocha",
+    "test": "npm run cover"
+  },
+  "dependencies": {
+    "async": "^2.5.0",
+    "commander": "^2.9.0",
+    "config": "^1.25.1",
+    "deasync": "0.1.10",
+    "get-pixels": "msavva/get-pixels",
+    "gl": "4.0.3",
+    "jsdom": "9.12.0",
+    "jquery-param": "^0.2.0",
+    "najax": "^1.0.3",
+    "lodash": "^4.17.4",
+    "minimist": "1.2.0",
+    "papaparse": "^4.1.0",
+    "pngjs": "3.3.0",
+    "seedrandom": "^2.4.2",
+    "shelljs": "^0.7.0",
+    "sharp": "^0.18.4",
+    "sstk-core": "^0.5.0",
+    "w3c-xmlhttprequest": "2.1.2",
+    "xmlhttprequest": "1.8.0",
+    "heapdump": "^0.3.9"
+  },
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "istanbul": "^0.4.0",
+    "mocha": "^2.3.3",
+    "pixel-diff": "^1.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smartscenes/sstk.git"
+  },
+  "author": "Manolis Savva <manolis.savva@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/smartscenes/sstk/issues"
+  },
+  "homepage": "https://github.com/smartscenes/sstk"
+}

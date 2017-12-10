@@ -1,0 +1,42 @@
+<?xml version="1.0"?><svg width="640" height="480" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <title>Sort_Button.png</title>
+ <defs>
+  <filter id="filter3318">
+   <feGaussianBlur stdDeviation="0.379811" id="feGaussianBlur3320"/>
+  </filter>
+  <linearGradient id="linearGradient3322">
+   <stop id="stop3324" offset="0" stop-color="#bce6ff"/>
+   <stop offset="0.623077" id="stop3326" stop-color="#72a2db"/>
+   <stop id="stop3328" offset="1" stop-color="#00448f"/>
+  </linearGradient>
+  <linearGradient id="linearGradient3255">
+   <stop offset="0" id="stop3257" stop-color="#001e6e"/>
+   <stop offset="1" id="stop3259" stop-opacity="0" stop-color="#000000"/>
+  </linearGradient>
+  <linearGradient id="linearGradient3247">
+   <stop offset="0" id="stop3249" stop-color="#d1fdff"/>
+   <stop offset="1" id="stop3251" stop-opacity="0" stop-color="#c4e6ff"/>
+  </linearGradient>
+  <linearGradient id="linearGradient3237">
+   <stop offset="0" id="stop3239" stop-color="#ffffff"/>
+   <stop offset="1" id="stop3241" stop-opacity="0.256198" stop-color="#d1f3ff"/>
+  </linearGradient>
+  <linearGradient xlink:href="#linearGradient3247" id="linearGradient3307" x1="0.555564" y1="1.029409" x2="0.555564" y2="-0.000001"/>
+  <linearGradient xlink:href="#linearGradient3237" id="linearGradient3310" x1="0.500366" y1="-0.000006" x2="0.500366" y2="1.181629"/>
+  <linearGradient xlink:href="#linearGradient3322" id="linearGradient3313" x1="0.561471" y1="0.808179" x2="0.561471" y2="0.177594"/>
+  <linearGradient xlink:href="#linearGradient3255" id="linearGradient3315" x1="0.365621" y1="0.172472" x2="0.365621" y2="1.404241"/>
+ </defs>
+ <metadata id="metadata7">image/svg+xml</metadata>
+ <g>
+  <title>Layer 1</title>
+  <g id="layer1">
+   <g id="g2413">
+    <rect transform="matrix(5.32234,0,0,5.6071,-1.62655,-4.6071) " rx="11.930446" ry="11.770797" id="button_shadow" width="52.420509" height="23.541594" x="37.695196" y="31.140355" filter="url(#filter3318)" stroke-dashoffset="0" stroke-miterlimit="4" fill-opacity="0.140187" fill="#000000"/>
+    <rect rx="10.192005" ry="10.489123" y="172.93199" x="207.106435" height="120.396897" width="262.78712" id="glossy_button" stroke-dashoffset="0" stroke-miterlimit="4" stroke-width="1.021753" stroke="url(#linearGradient3315)" fill="url(#linearGradient3313)"/>
+    <path id="light_reflex" d="m261.119415,175.739136l154.92337,0c27.078186,0.782455 43.174347,40.173904 16.347412,40.173904l-187.788467,0c-26.82692,0 -10.730774,-39.391449 16.517654,-40.173904l0.000031,0z" stroke-dashoffset="0" stroke-miterlimit="4" stroke-width="2" fill="url(#linearGradient3310)" opacity="0.883621"/>
+    <rect rx="3.546124" ry="3.294118" y="244.608696" x="241.923071" height="40.173913" width="193.153845" id="filtered_light" stroke-dashoffset="0" stroke-miterlimit="4" stroke-width="2" fill="url(#linearGradient3307)"/>
+   </g>
+  </g>
+  <text fill="#000000" stroke="#000000" stroke-width="0" x="63.492567" y="76.240309" id="svg_1" font-size="24" font-family="Arial" text-anchor="middle" xml:space="preserve" transform="matrix(2.65385,0,0,2.85185,171.346,39.963) ">Sort</text>
+ </g>
+</svg>

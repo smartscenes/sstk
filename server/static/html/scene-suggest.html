@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css"/>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/search-panel.css">
+  <link rel="stylesheet" href="css/scene-viewer.css">
+  <link rel="stylesheet" href="css/camera_controls.css">
+  <link rel="stylesheet" href="css/toolbar.css">
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+  <title>Scene Suggest</title>
+  <meta charset="utf-8">
+</head>
+<style>
+  .alert {
+    position: absolute;
+    width: 50%;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+  }
+</style>
+<body>
+<!-- UI Markup -->
+
+<div id="sidebar">
+  <div id="info">
+    Scene Suggest
+  </div>
+  <div>
+    <!--<select id="selectScene" title="Select Scene"></select>-->
+  </div>
+
+  <div id="tabs">
+    <ul>
+      <li><a href="#tabs-1">Scenes</a></li>
+      <li><a href="#tabs-2">Models</a></li>
+      <li><a href="#tabs-3">Scene Hierarchy</a></li>
+      <li><a href="#tabs-4">BVH</a></li>
+      <li><a href="#tabs-5">Scene Generator Config</a></li>
+      <!--<li><a href="#tabs-6">Annotate</a></li>-->
+    </ul>
+    <div id="tabs-1">
+      <div id="sceneSearchPanel" class="searchPanel">
+      </div>
+    </div>
+    <div id="tabs-2">
+      <div id="modelSearchPanel" class="searchPanel">
+      </div>
+    </div>
+  </div>
+</div>
+<div id="contextQueryResultsContainer" class="roundBorder"></div>
+<div id="main">
+  <div id="cameraControls"></div>
+  <div id="sceneToolbar" class="toolbar"></div>
+  <div id="canvas">
+  </div>
+  <div id="instructionsPanel" class="roundBorder grayBackground" style="display:none">
+    <span>Instructions</span>
+    <p id="instructions"></p>
+  </div>
+  <div id="loadingModel">
+    <span>Loading Model...</span>
+  </div>
+</div>
+
+<!-- This is ridiculous!!!! We need a system where all dependencies are specified in one place.
+     Please revert back to using require.js and get rid of these -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/4.4.0/bootbox.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+<script src="three.min.js"></script>
+<script src="STK.bundle.js"></script>
+<script>
+  function onResize() {
+    var tabs = $('#tabs');
+    var tabsPanelTotalHeight = $('#sidebar').height() - $('#info').height() - 10;
+    tabs.height(tabsPanelTotalHeight);
+    var tabsPanelHeight = tabsPanelTotalHeight - tabs.children('ul.ui-tabs-nav').outerHeight() - 10;
+    tabs.children('.ui-tabs-panel').height(tabsPanelHeight);
+  }
+
+  window.addEventListener('resize', onResize, false);
+
+  $('#textScenePanel').hide();
+  var tabs = $('#tabs');
+  tabs.tabs();
+
+  var canvas = document.getElementById('canvas');
+  var sceneViewer = new STK.SceneViewer({
+    container: canvas,
+    addGround: false,
+    allowBBoxQuery: true,
+    loadingIconUrl: STK.Constants.defaultLoadingIconUrl,
+    allowEdit: true,
+    allowSelectMode: true,
+    allowConsole: false,
+    defaultSceneId: 'wssScenes.scene00005',
+    showInstructions: true,
+    sceneSources: ['wssScenes'],
+    contextQueryOptions: { showPriorsViz: true, allowGroupExpansion: true },
+    useDatGui: true
+  });
+  sceneViewer.launch();
+
+  sceneViewer.sceneSearchController.searchPanel.Subscribe('SearchSucceededPreparePanel', null, function() {
+    $('#tabs').tabs({ active: 0 });
+  });
+  sceneViewer.modelSearchController.searchPanel.Subscribe('SearchSucceededPreparePanel', null, function() {
+    $('#tabs').tabs({ active: 1 });
+  });
+  $('#tabs').bind('tabsactivate', function (event, ui) {
+    onResize();
+    switch (ui.newPanel.attr('id')) {
+      case 'tabs-1':
+        sceneViewer.sceneSearchController.onResize();
+        break;
+      case 'tabs-2':
+        sceneViewer.modelSearchController.onResize();
+        break;
+    }
+  });
+
+  // Make various components draggable
+  $('#instructionsPanel').draggable();
+  onResize();
+  STK.UIUtil.showAlert(null,
+    'Select "Suggest" to enter suggestion mode, ' +
+    ' and "shift + left click" on the desk to get suggestions on what goes there',
+    'alert-success',
+    30000
+  );
+  window.app = sceneViewer; // Hack through to sceneViewer for console debugging
+</script>
+<link rel="stylesheet" href="css/datgui-light.css">
+</body>
+</html>

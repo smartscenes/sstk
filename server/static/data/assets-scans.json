@@ -1,0 +1,12 @@
+[
+  {
+    "name": "mp3d",
+    "metadata": "${assetsDir}/data/matterport/matterport3d.json",
+    "ids": "${assetsDir}/data/matterport/matterport3d.csv"
+  },
+  {
+    "name": "mpr3d",
+    "metadata": "${assetsDir}/data/matterport/mpr3d.json",
+    "ids": "${assetsDir}/data/matterport/mpr3d.csv"
+  }
+]

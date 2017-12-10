@@ -1,0 +1,81 @@
+[
+  {
+    "category": "car",
+    "sounds": {
+      "beep": "car_beep.wav"
+    }
+  },
+  {
+    "category": "dishwasher",
+    "sounds": {
+      "on": "dishwasher.wav"
+    }
+  },
+  {
+    "category": "vacuum_cleaner",
+    "sounds": {
+      "on": "vacuum_cleaner.wav"
+    }
+  },
+  {
+    "category": "air_conditioner",
+    "sounds": {
+      "on": "air_conditioner.wav"
+    }
+  },
+  {
+    "category": "loudspeaker",
+    "sounds": {
+      "music": "music.wav"
+    }
+  },
+  {
+    "category": "stereo_set",
+    "sounds": {
+      "music": "music.wav"
+    }
+  },
+  {
+    "category": "clock",
+    "modelIds": ["s__2367"],
+    "sounds": {
+      "ring": "alarm_clock.wav"
+    }
+  },
+  {
+    "category": "television",
+    "sounds": {
+      "on": "tv.wav"
+    }
+  },
+  {
+    "category": ["door", "arch"],
+    "sounds": {
+      "doorbell": "doorbell.wav"
+    }
+  },
+  {
+    "category": "range_hood",
+    "sounds": {
+      "exhaust": "kitchen_exhaust.wav"
+    }
+  },
+  {
+    "category": "sink",
+    "sounds": {
+      "drop": "water_drop.wav"
+    }
+  },
+  {
+    "category": "cat",
+    "sounds": {
+      "talk": "cat.wav"
+    }
+  },
+  {
+    "category": "dog",
+    "sounds": {
+      "talk": "dog.wav"
+    }
+  }
+]

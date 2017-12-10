@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ShapeNet">
+  <meta name="author" content="Noah Golub">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+  <link href="client/js/vendor/visualsearch/visualsearch-datauri.css" media="screen" rel="stylesheet" type="text/css" />
+  <link rel="stylesheet" type="text/css" href="css/bootstrap-slider.css">
+  <link rel="stylesheet" type="text/css" href="css/dataVis.css">
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+  <link rel="stylesheet" type="text/css" href="css/chartStyle.css">
+  <title>ScenesDB Visualizer</title>
+</head>
+
+<body>
+<div class='main'>
+  <div class="queryPanel">
+    <div class='title'>
+      <h1 class='title'>ScenesDB Visualizer <span class='extra'> explore our database</span></h1>
+      <button class='btn btn-default settingsButton'><i class='glyphicon glyphicon-cog'></i></button>
+      <div class="searchOptions">
+        <div class="input-group" style="width:100%">
+          <div id="filters"></div>
+        </div>
+      </div>
+    </div>
+    <div class='graphView'>
+    </div>
+    <div class='vizSelectionPanel'>
+      <span><select id='vizAttr1' class='selectVizAttr'></select></span>
+      <span><select id='vizAttr2' class='selectVizAttr'></select></span>
+      <span><select class='selectVisualization'></select></span>
+      <br>
+      <button id='visualizeButton' type="button" class="btn btn-default">Visualize</button>
+    </div>
+  </div>
+  <div id="customLoadingPanel" class="roundBorder">
+    <div id="customLoadingContents">
+    </div>
+  </div>
+</div>
+
+<div id='alert' class='alert' style="display:none;">
+  <button class="close" type="button" onclick="hideAlert()"> &times;</button>
+  <span id="alertMessage"></span>
+</div>
+
+<div class='itemViewerDialog' title='Scene Viewer'>
+  <div id='viewerTabs'>
+    <ul>
+      <li><a href="#tabs-1">3D Scene</a></li>
+      <li><a href="#tabs-2">Image</a></li>
+    </ul>
+    <div id='tabs-1'>
+      <iframe id='itemFrame' src=""></iframe>
+    </div>
+    <div id='tabs-2'>
+      <img id='itemImage' src="">
+    </div>
+  </div>
+</div>
+
+<div class="settingsDialog" title='Settings'>
+  <div id="settingsTabs">
+    <ul>
+      <li><a href="#hist">Histogram</a></li>
+      <li><a href="#scatter">Scatterplot</a></li>
+      <li><a href="#pie">Pie Chart</a></li>
+    </ul>
+    <div id="hist">
+      <label for="binSpinner"># of Histogram Bins:</label>
+      <input id="binSpinner" name="value">
+      <br>
+      <label for="countDisplay">Count Display: </label>
+      <div id="countDisplay">
+        <input type='radio' id='radio1' name='radio' checked='checked'><label for='radio1'>Frequency</label>
+        <input type='radio' id='radio2' name='radio'><label for='radio2'>Percentage</label>
+      </div>
+    </div>
+    <div id="scatter">
+      <label for='selectColorField'> Color Mapping </label>
+      <select id='selectColorField'> </select>
+      <div id='selectColorType'>
+        <input type='radio' id='radio3' name='radio1' checked='checked'><label for='radio3'>Diverging</label>
+        <input type='radio' id='radio4' name='radio1'><label for='radio4'>Monochromatic</label>
+      </div>
+    </div>
+    <div id="pie">
+    </div>
+  </div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+<script src="three.min.js"></script>
+<script src="STK.bundle.js"></script>
+<script>
+  var dataViz = new STK.DataViz();
+  var sceneSchema = new STK.SceneSchema();
+  dataViz.initialize({
+    schema: sceneSchema,
+    filterPanel: '#filters',
+//    filters: [{ field: 'datasets', values: [ 'ShapeNetCore', 'ShapeNetSem' ], required: true, limited: true }],
+    graphView: '.graphView',
+    customLoading: '#customLoadingContents'
+  });
+  // Make various components draggable
+  $('#customLoadingPanel').draggable();
+</script>
+
+</body>
+</html>

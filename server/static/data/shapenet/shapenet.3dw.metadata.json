@@ -1,0 +1,130 @@
+{
+  "name": "3dw",
+  "assetType": "model",
+  "rootPath": "${baseUrl}/shapenet",
+  "shapenetDataDir": "${rootPath}/data",
+  "shapenetScreenshotDir": "${rootPath}/screenshots",
+  "shapenetCoreV1Dir": "${rootPath}/obj-zip/ShapeNetCore.v1",
+  "shapenetCoreV2Dir": "${rootPath}/obj-zip/ShapeNetCore.v2",
+  "colorVoxelsDir": "${rootPath}/color_voxelizations",
+  "hasThumbnails": true,
+  "defaultImageCount": 14,
+  "defaultImageIndex": 13,
+  "defaultUp": [0, 0, 1],
+  "defaultFront": [0, -1, 0],
+  "defaultUnit": 0.0254,
+  "defaultFilter": "+hasModel:true",
+  "assetFields": {
+    "inShapeNetCore": "<%= !!vars.datasets && vars.datasets.indexOf('ShapeNetCore') >= 0 %>",
+    "imageCount": "<%= (vars.inShapeNetCore)? 14 : 0 %>",
+    "hasThumbnails": "${inShapeNetCore}",
+    "assetDataPath": "${shapenetDataDir}/<%= _.splitPrefixId(5, '/', vars.id) %>/${id}/",
+    "assetScreenshotPath": "${shapenetScreenshotDir}/models/3dw/<%= _.splitPrefixId(5, '/', vars.id) %>/${id}/",
+    "synsetv1Path": "${shapenetCoreV1Dir}/${shapenetCoreSynset}/",
+    "synsetv2Path": "${shapenetCoreV2Dir}/${shapenetCoreSynset}/",
+    "originalSourceUrl": "https://3dwarehouse.sketchup.com/model.html?id=${id}",
+    "isObjv1": "<%= vars.name === 'objv1' %>"
+  },
+  "dataTypes": {
+    "mesh": [
+        {
+          "name": "kmz",
+          "format": "kmz",
+          "path": "${assetDataPath}/Collada/${id}.kmz",
+          "up": [0, 0, 1],
+          "front": [0, -1, 0],
+          "unit": 0.0254,
+          "voxelsNormalizedAligned": true,
+          "voxelsCentered": true,
+          "voxelsUp": [0, 1, 0],
+          "voxelsFront": [0, 0, -1],
+          "options": { "preserveMeshes": false },
+          "shapenetCorev2ModelSpaceMetadataFile": "${synsetv2Path}/${id}/models/model_normalized.json",
+          "modelSpaceMetadataFile": "<%= vars.inShapeNetCore? vars.shapenetCorev2ModelSpaceMetadataFile : '' %>"
+        },
+        {
+          "name": "obj",
+          "format": "obj",
+          "isSupported": "${inShapeNetCore}",
+          "path": "${synsetv2Path}/${id}/models/model_normalized.obj",
+          "aligned": true,
+          "normalized": "diagonal",
+          "up": [0, 1, 0],
+          "front": [0, 0, -1],
+          "unit": 1,
+          "overrideFields": { "up": 1, "front": 1, "unit": 1 },
+          "options": { "preserveMeshes": false }
+        },
+        {
+          "name": "objv1",
+          "format": "obj",
+          "isSupported": "${inShapeNetCore}",
+          "path": "${synsetv1Path}/${id}/model.obj",
+          "aligned": true,
+          "normalized": "diagonal",
+          "up": [0, 1, 0],
+          "front": [1, 0, 0],
+          "unit": 1,
+          "overrideFields": { "up": 1, "front": 1, "unit": 1 },
+          "options": { "preserveMeshes": false }
+        }
+    ],
+    "voxel": [
+      {
+        "name": "voxels-surface",
+        "pathv1": "${synsetv1Path}/${id}/model.binvox",
+        "pathv2": "${synsetv2Path}/${id}/models/model_normalized.surface.binvox",
+        "path": "<%= (vars.isObjv1)? vars.pathv1 : vars.pathv2 %>",
+        "isSupported": "${inShapeNetCore}",
+        "createdFrom": { "dataType": "mesh", "name": "<%= (vars.isObjv1)? 'objv1' : 'obj' %>" }
+      },
+      {
+        "name": "voxels-solid",
+        "pathv1": "${synsetv1Path}/${id}/model.presolid.binvox",
+        "pathv2": "${synsetv2Path}/${id}/models/model_normalized.solid.binvox",
+        "path": "<%= (vars.isObjv1)? vars.pathv1 : vars.pathv2 %>",
+        "isSupported": "${inShapeNetCore}",
+        "createdFrom": { "dataType": "mesh", "name": "<%= (vars.isObjv1)? 'objv1' : 'obj' %>" }
+      },
+      {
+        "name": "voxels-solid-256",
+        "pathv1": "${rootPath}/ShapeNetCore.v1/${shapenetCoreSynset}/${id}/model.binvox",
+        "pathv2": "${synsetv2Path}/${id}/models/model_normalized.binvox",
+        "path": "<%= (vars.isObjv1)? vars.pathv1 : vars.pathv2 %>",
+        "isSupported": "<%= vars.inShapeNetCore && (vars.shapenetCoreSynset.indexOf('03001627') >= 0 || vars.shapenetCoreSynset.indexOf('04379243') >= 0) %>",
+        "createdFrom": { "dataType": "mesh", "name": "<%= (vars.isObjv1)? 'objv1' : 'obj' %>" }
+      },
+      {
+        "name": "voxels-color",
+        "variants": {
+          "varying": ["resolution", "solidity"],
+          "resolution": [32, 64, 128, 256],
+          "solidity": ["surface", "solid"],
+          "name": "voxels-color-${resolution}-${solidity}",
+          "path": "${colorVoxelsDir}/${resolution}/${solidity}/${id}/${id}.nrrd",
+          "image": "${colorVoxelsDir}/${resolution}/${solidity}/${id}/${id}.png"
+        },
+        "isSupported": "<%= vars.inShapeNetCore && (vars.shapenetCoreSynset.indexOf('03001627') >= 0 || vars.shapenetCoreSynset.indexOf('04379243') >= 0) %>",
+        "createdFrom": { "dataType": "mesh", "name": "obj" }
+      },
+      {
+        "name": "voxels-color-filtered",
+        "variants": {
+          "varying": ["resolution", "solidity"],
+          "resolution": [32, 64, 128],
+          "solidity": ["surface", "solid"],
+          "name": "voxels-color-${resolution}-${solidity}-filtered",
+          "path": "${colorVoxelsDir}/filtered/${resolution}/${solidity}/${id}/${id}.nrrd",
+          "image": "${colorVoxelsDir}/filtered/${resolution}/${solidity}/${id}/${id}.png"
+        },
+        "isSupported": "<%= vars.inShapeNetCore && (vars.shapenetCoreSynset.indexOf('03001627') >= 0 || vars.shapenetCoreSynset.indexOf('04379243') >= 0) %>",
+        "createdFrom": { "dataType": "mesh", "name": "obj" }
+      }
+    ],
+    "image": [
+      { "name": "screenshot", "path": "${assetScreenshotPath}/${id}-${index}.png" },
+      { "name": "originalImage", "path": "${assetDataPath}/Image/${id}" },
+      { "name": "rotatingImage", "path": "${assetScreenshotPath}/${id}.gif", "isSupported": "${inShapeNetCore}" }
+    ]
+  }
+}

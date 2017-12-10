@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+<link rel="stylesheet" href="css/common.css">
+<link rel="stylesheet" href="css/search-panel.css">
+<link rel="stylesheet" href="css/model-viewer.css">
+<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+<title>Asset Labeler</title>
+<meta charset="utf-8">
+</head>
+
+<body>
+<div id="main">
+    <div id="categorizerPanel">
+        <h2>Asset Labeler</h2>
+        <div id="selectControls">
+            <input type="checkbox" id="selectAll" title=""/>Select / Deselect All
+            <input type="checkbox" id="newImages" title="" checked/>Use new images
+            <select id="imageIndex" style="display:none" title=""></select>
+            <span id="numCheckedMsg"></span>
+        </div>
+        <div id="searchPanel">
+        </div>
+    </div>
+</div>
+<div id="sidebar">
+    <div id="labelTextInput">
+        <label for="label">Label</label>
+        <input type="text" id="label"/>
+        <br/>
+        <input type="button" id="buttonAdd" value="Add"/>
+        <input type="button" id="buttonRemove" value="Remove"/>
+    </div>
+    <div id="tabs">
+        <ul>
+            <li><a href="#tabs-2">Labels</a></li>
+            <li><a href="#tabs-1">Preview</a></li>
+            <li><a href="#tabs-3">Selected</a></li>
+        </ul>
+        <div id="tabs-1">
+            <input type="button" id="clear" value="Clear"/>
+            <input type="button" id="submit" value="Submit"/>
+            <div id="previewPane">
+            </div>
+        </div>
+        <div id="tabs-2">
+            <div id="labelsPanel"></div>
+        </div>
+        <div id="tabs-3">
+            <input type="button" id="selectedAdd" value="Add"/>
+            <input type="button" id="selectedClear" value="Clear"/>
+            <input type="button" id="selectedLoad" value="Load"/>
+            <input type="button" id="selectedSave" value="Save"/>
+            <div id="selectedPane">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script src="three.min.js"></script>
+<script src="modelTools.bundle.js"></script>
+<script>
+  var labels = [
+    'Bedroom',
+    'Bathroom',
+    'Toilet',
+    'Conference_Room',
+    'Kitchen',
+    'Living_Room',
+    'Room',
+    'Dining_Room',
+    'Office',
+    'Garage',
+    'Hallway',
+    'Hall',
+    'Gym',
+    'Child_Room',
+    'Balcony',
+    'Storage',
+    'Wardrobe',
+    'Entryway',
+    'Lobby',
+    'Terrace',
+    'Study',
+    'Lounge',
+    'TV_Room',
+    'Stairs',
+    'Porch',
+    'Pool',
+    'Laundry',
+    'Train',
+    'Theater',
+    'Store',
+    'Shower',
+    'Sauna',
+    'Roof',
+    'Deck'
+  ];
+
+  var labeler = new STK.AssetLabeler({
+    assetGroups: [{
+      name: 'mpr-pano',
+      type: 'image',
+      searchUrl: STK.Constants.baseUrl + '/solr/mpr-pano/select',
+      updateUrl: STK.Constants.baseUrl + '/solr/mpr-pano/update',
+      getImageUrl: function(id, i, metadata) {
+        return STK.Constants.baseUrl + '/matterport/data/mp_sb/' + metadata.sceneId + '/' + id + '.jpg';
+      }
+    }],
+    suggestedLabels: labels
+  });
+  labeler.redisplay();
+  labeler.showLabels();
+  var tabs = $('#tabs');
+  tabs.tabs();
+  tabs.bind('tabsactivate', function (event, ui) {
+    switch (ui.newPanel.attr('id')) {
+      case 'tabs-1':
+        labeler.resizePreviewPanel();
+        break;
+      case 'tabs-2':
+        labeler.showLabels();
+        break;
+      case 'tabs-3':
+        labeler.resizeSelectedPanel();
+        break;
+    }
+  });
+</script>
+</body>
+</html>

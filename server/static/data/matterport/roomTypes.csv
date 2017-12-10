@@ -1,0 +1,29 @@
+index,roomType
+1,hallway
+2,bathroom
+3,bedroom
+4,stairs
+5,other room
+6,kitchen
+7,closet
+8,lounge
+9,living room
+10,balcony
+11,dining room
+12,entryway/foyer/lobby
+13,office
+14,porch/terrace/deck
+15,familyroom/lounge
+16,rec/game
+17,toilet
+18,spa/sauna
+19,meetingroom/conferenceroom
+20,laundryroom/mudroom
+21,workout/gym/exercise
+22,tv
+23,outdoor
+24,utilityroom/toolroom
+25,junk
+26,garage
+27,library
+28,bar

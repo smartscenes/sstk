@@ -1,0 +1,59 @@
+{
+  "name": "yobi3d",
+  "assetType": "model",
+  "rootPath": "${baseUrl}/data/models3d/yobi3d/",
+  "screenShotDir": "${baseUrl}/text2scene/screenshots/models/yobi3d",
+  "shapenetCoreV1Dir": "${baseUrl}/shapenet/obj-zip/ShapeNetCore.v1/",
+  "hasThumbnails": false,
+  "defaultImageCount": 14,
+  "defaultImageIndex": 13,
+  "defaultUp": [0, 1, 0],
+  "defaultFront": [0, 0, 1],
+  "defaultUnit": 0.0254,
+  "defaultFilter": "+hasModel:true",
+  "assetFields": {
+    "assetPath": "${rootPath}/<%= _.getPrefix(3, '/', vars.id).toLowerCase() %>",
+    "shapenetCoreSynset": "02834778",
+    "synsetPath": "${shapenetCoreV1Dir}/${shapenetCoreSynset}",
+    "originalSourceUrl": "https://www.yobi3d.com/v/${id}"
+  },
+  "dataTypes": {
+    "mesh": [
+        {
+          "name": "obj",
+          "format": "obj",
+          "path": "${synsetPath}/${id}/model.obj",
+          "aligned": true,
+          "normalized": "diagonal",
+          "up": [0, 1, 0],
+          "front": [1, 0, 0],
+          "unit": 1,
+          "overrideFields": { "up": 1, "front": 1, "unit": 1 }
+        },
+        {
+          "name": "three.js",
+          "format": "three.js",
+          "path": "${assetPath}/${id}.js.zip",
+          "voxelsNormalizedAligned": true,
+          "voxelsUp": [0, 1, 0],
+          "voxelsFront": [1, 0, 0]
+        }
+    ],
+    "voxel": [
+      {
+        "name": "voxels-surface",
+        "path": "${synsetPath}/${id}/model.binvox",
+        "createdFrom": { "dataType": "mesh", "name": "obj" }
+      },
+      {
+        "name": "voxels-solid",
+        "path": "${synsetPath}/${id}/model.presolid.binvox",
+        "createdFrom": { "dataType": "mesh", "name": "obj" }
+      }
+    ],
+    "image": [
+      { "name": "screenshot", "path": "${screenShotDir}/${id}/${id}-${index}.png" },
+      { "name": "originalImage", "path": "${assetPath}/${id}.jpg" }
+    ]
+  }
+}

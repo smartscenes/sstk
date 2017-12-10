@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <link rel="stylesheet" type="text/css" href="css/common.css">
+  <link rel="stylesheet" type="text/css" href="css/model-viewer.css">
+  <link rel="stylesheet" type="text/css" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+  <title>Model Viewer</title>
+  <meta charset="utf-8">
+</head>
+
+<body>
+<div id="sidebar">
+  <div id="tabs">
+    <ul>
+      <li><a href="#tabs-1">Search</a></li>
+    </ul>
+    <div id="tabs-1">
+      <div id="modelSearchPanel" class="searchPanel">
+      </div>
+    </div>
+  </div>
+</div>
+<div id="main">
+  <div id="canvas">
+  </div>
+  <div id="instructionsPanel" class="roundBorder grayBackground">
+    <span>Instructions</span>
+    <p id="instructions"></p>
+  </div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+<script src="three.min.js"></script>
+<script src="STK.bundle.js"></script>
+<script>
+  var tabs = $('#tabs');
+  tabs.tabs();
+  var canvas = document.getElementById('canvas');
+  var modelViewer = new STK.SimpleModelViewer({
+    container: canvas
+  });
+  modelViewer.redisplay();
+  tabs.bind('tabsactivate', function (event, ui) {
+    switch (ui.newPanel.attr('id')) {
+      case 'tabs-1':
+        modelViewer.modelSearchController.onResize();
+        break;
+    }
+  });
+  // Make instructions tab toggleable
+  $('#instructions').hide();
+  $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
+</script>
+</body>
+</html>

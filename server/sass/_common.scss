@@ -1,0 +1,37 @@
+@mixin background-linear-gradient($c1, $c2) {
+  background: -moz-linear-gradient(top, $c1 0%, $c2 100%);
+  background: -webkit-linear-gradient(top, $c1 0%, $c2 100%);
+  background: -ms-linear-gradient(top, $c1 0%, $c2 100%);
+  background: -o-linear-gradient(top, $c1 0%, $c2 100%);
+  background: linear-gradient(top, $c1 0%, $c2 100%);
+}
+
+@mixin user-select($v) {
+  -moz-user-select: $v;
+  -webkit-user-select: $v;
+  -o-user-select: $v;
+  -ms-user-select: $v;
+  user-select: $v;
+}
+
+@mixin border-radius($v) {
+  border-radius: $v;
+  -moz-border-radius: $v;
+  -o-border-radius: $v;
+  -webkit-border-radius: $v;
+  -ms-border-radius: $v;
+}
+
+@mixin box-shadow($v) {
+  -moz-box-shadow: $v;
+  -webkit-box-shadow: $v;
+  -ms-box-shadow: $v;
+  -o-box-shadow: $v;
+  box-shadow: $v;
+}
+
+@mixin box-sizing($v) {
+  -webkit-box-sizing: $v;
+  -moz-box-sizing: $v;
+  box-sizing: $v;
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css"/>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/search-panel.css">
+  <link rel="stylesheet" href="css/model-viewer.css">
+  <link rel="stylesheet" href="css/camera_controls.css">
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+  <title>Voxel Viewer</title>
+  <meta charset="utf-8">
+</head>
+
+<body>
+<!-- UI Markup -->
+
+<div id="main">
+  <div id="canvas">
+  </div>
+  <div id="controls">
+  </div>
+  <div id="instructionsPanel" class="roundBorder grayBackground" style="display:none">
+    <span>Instructions</span>
+    <p id="instructions"></p>
+  </div>
+</div>
+
+<!-- This is ridiculous!!!! We need a system where all dependencies are specified in one place.
+     Please revert back to using require.js and get rid of these -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/4.4.0/bootbox.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+<script src="three.min.js"></script>
+<script src="common.bundle.js"></script>
+<script src="STK.bundle.js"></script>
+<script>
+  var viewer = new STK.VoxelViewer({
+    container: document.getElementById('canvas'),
+    controls: '#controls'
+  });
+  viewer.launch();
+</script>
+<link rel="stylesheet" href="css/datgui-light.css">
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+  <link href="client/js/vendor/visualsearch/visualsearch-datauri.css" media="screen" rel="stylesheet" type="text/css" />
+  <link rel="stylesheet" type="text/css" href="css/bootstrap-slider.css">
+  <link rel="stylesheet" type="text/css" href="css/pagination.css">
+  <link rel="stylesheet" type="text/css" href="css/search-panel.css">
+  <link rel="stylesheet" type="text/css" href="css/dataVis.css">
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+  <title>Scene Querier</title>
+</head>
+
+<body>
+  <div id="main" class="container">
+    <div class="queryPanel">
+      <h2>Scene Search</h2>
+      <div id="searchOptions">
+        <div class="input-group" style="width:100%" title="Select additional query filters">
+          <div id="filters"></div>
+        </div>
+        <div class="input-group" style="width:100%">
+          <input id="searchText" type="text" class="form-control" placeholder="Search for... (PRESS ? TO THE RIGHT FOR HELP)">
+            <span class="input-group-btn">
+              <button id="searchButton" class="btn btn-default" type="button" title="Search">
+                <i class="glyphicon glyphicon-search"></i>
+              </button>
+              <button id="helpButton" class="btn btn-default" type="button" title="Help" data-toggle="modal" data-target="#helpModal">
+                <i class="glyphicon glyphicon-question-sign"></i>
+              </button>
+            </span>
+        </div>
+      </div>
+      <div id="searchPanel" class=".searchPanel">
+      </div>
+    </div>
+  </div>
+
+  <!-- Help panel modal -->
+  <div id="helpModal" class="modal fade" tabindex='-1'>
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-body">
+          <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+          <div id="helpPanel">
+          </div>
+        </div>
+      </div><!-- /.modal-content -->
+    </div><!-- /.modal-dialog -->
+  </div><!-- /.modal -->
+
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+  <script src="three.min.js"></script>
+  <script src="STK.bundle.js"></script>
+  <script>
+    new STK.SceneQuerier({
+      assetTypes: ['scene','room'],
+      filterPanel: '#filters',
+      searchPanel: '#searchPanel',
+      searchButton: '#searchButton',
+      searchTextElem: '#searchText',
+      helpPanel: {
+        selector: '#helpPanel',
+        close: function() { $('#helpModal').modal('hide'); }
+      }
+    });
+  </script>
+</body>
+</html>

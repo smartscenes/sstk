@@ -1,0 +1,48 @@
+{
+  "source": "p5d",
+  "assetType": "model",
+  "rootPath": "${baseUrl}/suncg/",
+  "defaultImageCount": 14,
+  "screenShotPath": "${rootPath}/object_screenshots/p5d.js/${id}/${id}-${index}.png",
+  "hasThumbnails": true,
+  "originalScreenShotPath": "${rootPath}/objects/${baseVariantId}/${id}.png",
+  "texturePath": "${rootPath}/texture/",
+  "lightSpecsFile": "${assetsDir}/data/suncg/suncg.lights.json",
+  "soundsFile": "${assetsDir}/data/suncg/sounds.json",
+  "prefetchModelInfo": { "source": "p5d", "query": "*:*", "limit": 4000 },
+  "voxels-solid": "${rootPath}/object_vox/object_vox_data/${baseVariantId}/${id}.binvox",
+  "assetFields": ["parts"],
+  "surfaces": {
+    "file": "${rootPath}/object_segmentations/${id}/${id}-segments.json",
+    "format": "indexedSegmentation"
+  },
+  "parts": {
+    "file": "${rootPath}/object_part_annotations/${id}/${id}.json",
+    "format": "indexedSegmentation"
+  },
+  "part-annotations": {
+    "name": "parts",
+    "format": "indexedSegmentation",
+    "files": {
+      "annIds": "${baseUrl}/part-annotations/list?itemId=${fullId}&$columns=id,workerId,data&format=json",
+      "annotation": "${baseUrl}/query?qt=parts&annId=${annId}&modelId=${fullId}",
+      "segmentation": "${rootPath}/object_segmentations/${id}/${id}-segments.json"
+    }
+  },
+  "formats": [
+    {
+      "name": "obj",
+      "format": "p5d",
+      "path": "${rootPath}/object/${baseVariantId}/${id}.obj",
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
+      "voxelsAligned": true,
+      "voxelsToModelTransform": [1, 0, 0, 0, 0, 1, 0, 1, 0]
+    },
+    { "format": "p5d",
+      "path": "${rootPath}/objects/${baseVariantId}/${id}.js",
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
+      "voxelsAligned": true,
+      "voxelsToModelTransform": [1, 0, 0, 0, 0, 1, 0, 1, 0]
+    }
+  ]
+}

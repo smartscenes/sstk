@@ -1,0 +1,195 @@
+@import "common";
+
+$white: rgba(207,231,250,1);
+$lightblue: rgba(99,147,193,1);
+$lightgray: rgba(187,211,230,1);
+$blue: rgba(79,127,173,1);
+
+#cameraControls
+{
+  pointer-events: auto;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  @include user-select(none);
+  z-index: 1;
+}
+
+.cameraControlsButton
+{
+  position: relative;
+  border: 1px solid #7C7C7C;
+  padding: 4px;
+
+  cursor: default;
+
+  text-align: center;
+
+  line-height: normal;
+  @include background-linear-gradient($white, $lightblue);
+  @include box-sizing(content-box);
+}
+.cameraControlsButton:hover
+{
+  @include background-linear-gradient($lightgray, $blue);
+}
+.cameraControlsButton:active
+{
+  color: white;
+}
+
+#cameraButton
+{
+  @include border-radius(4px 4px 0px 0px);
+  margin-bottom: 0px;
+}
+
+#cameraControlPanel
+{
+  position: absolute;
+  top: 25px;
+  padding: 4px;
+  border: 1px solid #7C7C7C;
+  @include border-radius(0px 4px 4px 4px);
+  margin-top: 0px;
+  background-color: rgba(255, 255, 255, 0.75);
+}
+
+.dpadContainer
+{
+  position: relative;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 10px;
+  @include box-sizing(content-box);
+}
+
+.dpadIconHolder
+{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  margin-top: -10px;
+  background-color: rgba(207,231,250,1);
+  @include box-sizing(content-box);
+}
+
+.dpadIcon
+{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin-left: -8px;  /* Half the image width */
+  margin-top: -8px;   /* Half the image height */
+}
+
+.dpadButton
+{
+  position: absolute;
+  font-size: 8pt;
+  padding: 2px;
+  width: 14px;
+  height: 14px;
+}
+
+.dpadLeftButton
+{
+  top: 50%;
+  margin-top: -10px;
+  @include border-radius(8px 0px 0px 8px);
+}
+.dpadRightButton
+{
+  top: 50%;
+  margin-top: -10px;
+  right: 0;
+  @include border-radius(0px 8px 8px 0px);
+}
+
+.dpadUpButton
+{
+  left: 50%;
+  margin-left: -10px;
+  @include border-radius(8px 8px 0px 0px);
+}
+
+.dpadDownButton
+{
+  left: 50%;
+  margin-left: -10px;
+  bottom: 0;
+  @include border-radius(0px 0px 8px 8px);
+}
+
+#zoomControl
+{
+  position: relative;
+  width: 60px;
+  height: 22px;
+  margin-bottom: 10px;
+}
+
+.zoomIconHolder
+{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 18px;
+  margin-left: -10px;
+  margin-top: -10px;
+
+  border-top: 1px solid #7C7C7C;
+  border-bottom: 1px solid #7C7C7C;
+
+  background-color: rgba(207,231,250,1);
+}
+
+#zoomIcon
+{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin-left: -8px;  /* Half the image width */
+  margin-top: -8px;   /* Half the image height */
+}
+
+.zoomButton
+{
+  position: absolute;
+  font-size: 12pt;
+  font-weight: bold;
+  padding: 2px;
+  width: 14px;
+  height: 14px;
+
+  /*    position: absolute;
+      font-weight: bold;
+      font-size: 12pt;
+      width: 10px;
+      height: 10px;*/
+
+  top: 50%;
+  margin-top: -10px;
+}
+
+#zoomMinusButton
+{
+  @include border-radius(8px 0px 0px 8px);
+}
+
+#zoomPlusButton
+{
+  right: 0;
+  @include border-radius(0px 8px 8px 0px);
+}
+
+#homeButton
+{
+  left: 50%;
+  margin-left: -13px;
+  @include border-radius(4px 4px 4px 4px);
+}

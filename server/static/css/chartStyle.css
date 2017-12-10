@@ -1,0 +1,97 @@
+
+.axis line,
+.axis path{
+
+	fill: none;
+	stroke: #000;
+	shape-rendering: crispEdges;
+}
+
+#svg{
+	font: 20px sans-serif;
+}
+/*tooltip - referenced from http://www.d3noob.org/2013/01/adding-tooltips-to-d3js-graph.html*/
+div.tooltip{
+	text-align: center;
+	left:50px;
+	bottom:50px;
+	width: 50px;
+	height: 25px;
+	padding: 2px;
+	font: 10px sans-serif;
+	background: black;
+	border-radius: 8px;
+	border:0px;
+
+	z-index: 2;
+}
+
+div.wrapper{
+	width:auto;
+	height:auto;
+}
+
+.d3-tip {
+  line-height: 1;
+  font-weight: bold;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border-radius: 2px;
+}
+
+#visualizer{
+	margin:50px;
+	text-align: center;
+	padding:25px;
+}
+
+.cell{
+	stroke-width:5;
+}
+
+.treeDiv{
+	opacity:1;
+	border: 1px solid;
+    overflow: hidden;
+}
+
+.treeDivLabel {
+	position:absolute;
+	left: 4px;
+    bottom: 0px;
+	background-color: #ffffff;
+	opacity: 0.75;
+}
+
+.treeMapDiv{
+	padding: 20px;
+}
+
+.leafText{
+	opacity: .75;
+	font-size: 35px;
+	margin-top: 20%;
+	text-align: center;
+}
+
+.hoverable:hover{
+	opacity: 0.5;
+	border: 1px solid #66afe9;
+	cursor: pointer;
+}
+
+#taxonomyTreemapPanel {
+	height: 500px;
+	width: 95%;
+}
+
+#treemapFrame{
+	height: 500px;
+	width: 500px;
+}
+
+#treemapDialog{
+	height: 700px;
+	width: 600px;
+}

@@ -1,0 +1,65 @@
+.toolbar {
+  pointer-events: auto;
+  position: absolute;
+  right: 0px;
+  top: 20px;
+  z-index: 2;
+  margin-right: 30px; }
+
+.toolbar .button {
+  display: inline-block;
+  padding: 6px;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -o-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  -moz-border-radius: 3px;
+  -o-border-radius: 3px;
+  -webkit-border-radius: 3px;
+  -ms-border-radius: 3px;
+  margin-left: 8px;
+  background-color: rgba(255, 255, 255, 0.3);
+  background-repeat: no-repeat;
+  background-position: center 2px;
+  color: #333;
+  font-size: 9pt;
+  position: relative;
+  height: 34px;
+  width: 40px;
+  cursor: default;
+  -webkit-box-sizing: content-box;
+  -moz-box-sizing: content-box;
+  box-sizing: content-box; }
+
+.toolbar .button:hover {
+  background-color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(0, 0, 0, 0.15); }
+
+.toolbar .button:active {
+  background-color: black;
+  color: white; }
+
+.toolbar .button.selected {
+  opacity: 1;
+  background-color: gainsboro;
+  border: thin solid #A5A5A5;
+}
+
+.toolbar .button.disabled {
+  opacity: 0.3; }
+
+.toolbar .buttonLabel {
+  position: absolute;
+  text-align: center;
+  left: 0;
+  right: 0;
+  bottom: 2px; }
+
+.toolbar .spacer {
+  width: 30px;
+  display: inline-block;
+  visibility: hidden; }
+

@@ -1,0 +1,13 @@
+{
+  "name": "p5dTexture",
+  "source": "p5dTexture",
+  "assetType": "texture",
+  "rootPath": "${baseUrl}/suncg/",
+  "texturePath": "${rootPath}/texture/",
+  "dataTypes": {
+    "image": [
+      { "name": "originalImage", "path": "${texturePath}/${name}" },
+      { "name": "texture", "path": "${texturePath}/${name}" }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "source": "p5dRoom",
+  "assetType": "room",
+  "rootPath": "${baseUrl}/suncg/",
+  "screenShotPath": "${rootPath}/rooms_rendered/${sceneId}/${id}.png",
+  "prefetchModelInfo": { "source": "p5d", "query": "*:*", "limit": 4000 },
+  "texturePath": "${rootPath}/texture/",
+  "formats": [
+    { "name": "obj-yup",
+      "format": "obj",
+      "path": [
+        "${rootPath}/room/${sceneId}/fr_${floor}rm_${roomIndex}w.obj",
+        "${rootPath}/room/${sceneId}/fr_${floor}rm_${roomIndex}f.obj",
+        "${rootPath}/room/${sceneId}/fr_${floor}rm_${roomIndex}c.obj"
+      ],
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1
+    }
+  ]
+}

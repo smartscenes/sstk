@@ -1,0 +1,58 @@
+{
+  "source": "mp3d",
+  "assetType": "model",
+  "rootPath": "${baseUrl}/matterport/data/public_extracted/v1",
+  "rootPathLocal": "${baseUrl}/mp3d",
+  "screenShotPath": "${baseUrl}/matterport/data/public/v1/scans_extra/video/${id}/${id}-0000.png",
+  "video": "${baseUrl}/matterport/data/public/v1/scans_extra/video/${id}/${id}.mp4",
+  "assetFields": ["navmap", "regions", "video", "partSource", "panoramas"],
+  "formats": [
+    { "name": "matterport-glb",
+      "format": "glb",
+      "path": "${rootPath}/scans/${id}/matterport_mesh/${meshId}/${meshId}.merged.glb",
+      "groupMeshes": true,
+      "defaultUp": [ 0, 0, 1 ], "defaultFront": [ -1, 0, 0], "defaultUnit": 1
+    },
+    { "name": "matterport",
+      "format": "obj",
+      "path": "${rootPath}/scans/${id}/matterport_mesh/${meshId}/${meshId}.obj",
+      "groupMeshes": true,
+      "options": { "ignoreZeroRGBs": true, "preserveMeshes": false, "computeNormals": true, "smooth": true },
+      "defaultUp": [ 0, 0, 1 ], "defaultFront": [ -1, 0, 0], "defaultUnit": 1
+    },
+    { "name": "poisson",
+      "format": "ply",
+      "path": "${rootPath}/scans/${id}/poisson_meshes/${id}_9.ply",
+      "defaultUp": [ 0, 0, 1 ], "defaultFront": [ -1, 0, 0], "defaultUnit": 1
+    },
+    { "name": "vh",
+      "format": "ply",
+      "path": "${rootPath}/scans/${id}/vh_meshes/${id}_vh_clean_2.ply",
+      "defaultUp": [ 0, 0, 1 ], "defaultFront": [ -1, 0, 0], "defaultUnit": 1
+    }
+  ],
+  "navmap": {
+    "assetType": "navmap",
+    "encoding": "json",
+    "format": "navgrid",
+    "path": "${rootPath}/navgrid_10/${id}/${id}.furnished.grid.json"
+  },
+  "regions": {
+    "assetType": "house",
+    "path": "${rootPath}/scans/${id}/house_segmentations/${id}.house"
+  },
+  "roomTypes": {
+    "assetType": "labelMapping",
+    "encoding": "csv",
+    "path": "${assetsDir}/data/matterport3d/roomTypes.csv",
+    "fields": { "label": "roomType", "index": "index" }
+  },
+  "objectTypes": {
+    "assetType": "labelMapping",
+    "encoding": "tsv",
+    "path": "${assetsDir}/data/labels/mpr40.tsv",
+    "fields": { "label": "mpcat40", "index": "mpcat40index", "color": "hex" }
+  },
+  "partSource": "mpr3d",
+  "panoramas": "${rootPath}/scans/${id}/house_segmentations/panorama_to_region.txt"
+}

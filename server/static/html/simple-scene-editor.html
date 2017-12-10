@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css"/>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/search-panel.css">
+  <link rel="stylesheet" href="css/scene-viewer.css">
+  <link rel="stylesheet" href="css/camera_controls.css">
+  <link rel="stylesheet" href="css/toolbar.css">
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+  <title>Scene Editor</title>
+  <meta charset="utf-8">
+</head>
+
+<body>
+<!-- UI Markup -->
+
+<div id="sidebar">
+  <div id="info">
+    Scene Editor
+  </div>
+  <div id="modelSearchPanel" class="searchPanel">
+  </div>
+</div>
+<div id="textScenePanel" class="roundBorder grayBackground" style="display:none">
+  <span id="textSceneCaption">Scene Description</span>
+  <div id="textSceneForm">
+    Please enter an textual description of your scene and <br/> click "Create" to create a scene based on your description
+    <br/>
+    <textarea rows="4" cols="50" id="sceneDescription" title="Scene Description"></textarea>
+    <br/>
+    <input type=button id="createSceneButton" value="Create"/>
+  </div>
+</div>
+<div id="contextQueryResultsContainer" class="roundBorder"></div>
+<div id="main">
+  <div id="cameraControls"></div>
+  <div id="sceneToolbar" class="toolbar"></div>
+  <div id="canvas">
+  </div>
+  <div id="console" class="console" style="display:none"></div>
+  <div id="instructionsPanel" class="roundBorder grayBackground" style="display:none">
+    <span>Instructions</span>
+    <p id="instructions"></p>
+  </div>
+  <div id="loadingModel">
+    <span>Loading Model...</span>
+  </div>
+</div>
+
+<!-- This is ridiculous!!!! We need a system where all dependencies are specified in one place.
+     Please revert back to using require.js and get rid of these -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/4.4.0/bootbox.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+<script src="three.min.js"></script>
+<script src="STK.bundle.js"></script>
+<script>
+var canvas = document.getElementById('canvas');
+STK.Constants.defaultModelSource = 'models3d';
+var sceneViewer = new STK.SceneViewer({
+  container: canvas,
+  addGround: true,
+  allowEdit: true,
+  allowBBoxQuery: true,
+  allowSelectMode: true,
+  allowConsole: true,
+  allowScenePrevNext: true,
+  allowHighlightMode: true,
+  enableUILog: true,
+  showSearchSourceOption: true,
+  showInstructions: true,
+  contextQueryOptions: { showPriorsViz: true, allowGroupExpansion: true },
+  useAmbientOcclusion: true,
+  useDatGui: false,
+  restrictModels: '+datasets:ShapeNetCore'
+});
+sceneViewer.Subscribe("Launch", sceneViewer, function() {
+  sceneViewer.loadModel("archive3d","9c5c1480")
+});
+sceneViewer.launch();
+
+// Make various components draggable
+$('#instructionsPanel').draggable();
+window.app = sceneViewer; // Hack through to sceneViewer for console debugging
+</script>
+<link rel="stylesheet" href="css/datgui-light.css">
+</body>
+</html>
