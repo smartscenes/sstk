@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "stk-ssc",
-  "devDependencies": {
+  "dependencies": {
     "lerna": "^2.5.1"
   },
   "scripts": {
