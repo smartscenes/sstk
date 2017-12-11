@@ -455,7 +455,9 @@ Simulator.prototype.getGoalObservations = function(opts, callback) {
   async.map(goals, function(goal, cb) {
     // TODO: Take some sensory input
     // Move agent to goal
-    var goalPos = { position: goal.position, rotation: goal.rotation, isTemporary: true };
+    var goalPos = { position: goal.position.clone(), rotation: goal.rotation, isTemporary: true };
+    // Set goal position to be at same height as agent
+    goalPos.position.y = agent.position.y;  // TODO: handle if goal is on different floor
     //console.log('move agent to goal', goalPos, goal);
     agent.moveTo(goalPos);
     scope.getObservations(cb);
