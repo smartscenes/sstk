@@ -49,6 +49,20 @@
       "path": "${rootPath}/house/${id}/house.json",
       "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
       "createArch": true
+    },
+    {
+      "name": "suncg-v1",
+      "format": "suncg",
+      "path": "${rootPath}/house.v1/${id}/house.json",
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
+      "createArch": true
+    },
+    {
+      "name": "suncg-v2",
+      "format": "suncg",
+      "path": "${rootPath}/house.v2/${id}/house.json",
+      "defaultUp": [ 0, 1, 0 ], "defaultFront": [ 0, 0, 1], "defaultUnit": 1,
+      "createArch": true
     }
   ]
 }

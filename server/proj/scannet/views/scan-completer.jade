@@ -1,0 +1,72 @@
+doctype html
+html(lang="en")
+  head
+    title='Scan Completer'
+    meta(charset='UTF-8')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href='#{baseUrl}/client/js/vendor/jquery-ui/css/opentip.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/common.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/search-panel.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/scene-viewer.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/camera_controls.css')
+  body
+    #imagePanel(style="position: absolute; bottom: 0; z-index: 1;")
+    #sidebar
+      #info Scan Completer
+      #options
+        input(type='checkbox', id='newImages')
+        label(for='newImages') Use new images
+        select#imageIndex(style='display:none')
+      #modelSearchPanel.searchPanel
+    #main
+      #cameraControls
+      #canvas
+        #mouseToolTip.mouse-tooltip
+      #alert.alert(style='display:none')
+        button.close(type='button', onclick='hideAlert()') &times;
+        span#alertMessage
+      #instructionsPanel.roundBorder.grayBackground
+        span Instructions
+        p#instructions
+    #customLoadingPanel.roundBorder.grayBackground(style="left: 350px;")
+      #customLoadingContents
+
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js")
+    // Special bootbox
+    script(src="#{baseUrl}/client/js/vendor/bootbox.form.min.js")
+    script(src="#{baseUrl}/three.min.js")
+    script(src="#{baseUrl}/scanNet.bundle.js")
+    link(rel='stylesheet', href='#{baseUrl}/css/datgui-light.css')
+    script.
+      //STK.Constants.setVirtualUnit(1);
+      var scanAnnotator = new STK.ScanCompleter({
+        container: document.getElementById('canvas'),
+        //sources: ['vf'],
+        loadAnnotationsPanel: '#loadAnnotationsPanel'
+      });
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
+      var mpBase = STK.Constants.assetsDir + 'scans/data/panocomplete/human_complete';
+      var assets = [{ids: mpBase + '.csv', metadata: mpBase + '.json'}];
+      console.log(assets);
+      scanAnnotator.Subscribe('Launch', scanAnnotator, function () {
+        scanAnnotator.registerCustomAssetGroups(scanAnnotator.sceneSearchController, assets, function () {
+          var initialSearch = '';
+          if (scanAnnotator.urlParams['sceneId']) {
+            initialSearch = 'fullId:' + scanAnnotator.urlParams['sceneId'];
+          }
+          scanAnnotator.setSourceAndSearch(scanAnnotator.sceneSearchController, 'mprm-hc', initialSearch);
+        });
+      });
+      scanAnnotator.launch();
+      // Make various components draggable
+      $('#imagePanel').draggable();
+      $('#customLoadingPanel').draggable();
+      window.app = scanAnnotator;  // For console debugging

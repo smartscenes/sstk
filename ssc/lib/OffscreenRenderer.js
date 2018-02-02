@@ -20,6 +20,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     params.isOffscreen = true;
     this.compress = params.compress;  // whether to compress PNG output
     this.skip_existing = params.skip_existing;  // whether to skip rendering existing files
+    this.flipxy = params.flipxy; // whether to flip xy when writing out the png image
     this.__fs = params.fs || require('./file-util.js');  // filesystem to use for IO
     this.__debugCount = 0; // For debug output
     this.__debugFilename = params.debugFilename;
@@ -136,11 +137,11 @@ function OffscreenRendererFactory (baseRendererClass) {
   // handle y flip due to WebGL render target
   OffscreenRenderer.prototype.__flipY = function (p) {
     var t;
-    var numPixelsPerRow = 4 * this.width;
+    var numElementsPerRow = 4 * this.width;
     for (var row = 0; row < this.height / 2; row++) {
       var yOut = this.height - row - 1;
-      var base = numPixelsPerRow * row;
-      var baseOut = numPixelsPerRow * yOut;
+      var base = numElementsPerRow * row;
+      var baseOut = numElementsPerRow * yOut;
       for (var col = 0; col < this.width; col++) {
         var step = col << 2;  // 4*x
         var idx = base + step;
@@ -153,11 +154,55 @@ function OffscreenRendererFactory (baseRendererClass) {
     }
   };
 
+  // Flip XY with respect to upper left corner
+  OffscreenRenderer.prototype.__flipXY_ul = function (p, width, height, pout) {
+    var numElementsPerRow = 4 * width;
+    var numElementsPerColumn = 4 * height;
+    for (var row = 0; row < height; row++) {
+      var base = numElementsPerRow * row;
+      for (var col = 0; col < width; col++) {
+        var idx = base + (col << 2);
+        var idxOut = numElementsPerColumn*col + (row << 2);
+        for (var k = 0; k < 4; k++) {
+          pout[idxOut + k] = p[idx + k];
+        }
+      }
+    }
+  };
+
+  // Flip XY with respect to lower left corner
+  OffscreenRenderer.prototype.__flipXY_ll = function (p, width, height, pout) {
+    var numElementsPerRow = 4 * width;
+    var numElementsPerColumn = 4 * height;
+    for (var row = 0; row < height; row++) {
+      var base = numElementsPerRow * row;
+      var rowOut = height - row - 1;
+      for (var col = 0; col < width; col++) {
+        var colOut = width - col - 1;
+        var idx = base + (col << 2);
+        var idxOut = numElementsPerColumn*colOut + (rowOut << 2);
+        for (var k = 0; k < 4; k++) {
+          pout[idxOut + k] = p[idx + k];
+        }
+      }
+    }
+  };
+
   OffscreenRenderer.prototype.writePNG = function (pngFile, width, height, pixels) {
-    var png = new PNG({ width: width, height: height });
     //png.data = Buffer.from(pixels);
-    for (var i = 0; i < png.data.length; i++) {
-      png.data[i] = pixels[i];
+    var png;
+    if (this.flipxy) {
+      png = new PNG({ width: height, height: width });
+      if (this.flipxy === 'lower_left') {
+        this.__flipXY_ll(pixels, width, height, png.data);
+      } else {
+        this.__flipXY_ul(pixels, width, height, png.data);
+      }
+    } else {
+      png = new PNG({ width: width, height: height });
+      for (var i = 0; i < png.data.length; i++) {
+        png.data[i] = pixels[i];
+      }
     }
     var buff = PNG.sync.write(png);
     this.__fs.writeFileSync(pngFile, buff);

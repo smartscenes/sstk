@@ -1,5 +1,10 @@
 [
   {
+    "name": "nyuv2",
+    "metadata": "${assetsDir}/data/scannet/nyuv2.json",
+    "ids": "${assetsDir}/data/scannet/nyuv2.csv"
+  },
+  {
     "name": "mp3d",
     "metadata": "${assetsDir}/data/matterport/matterport3d.json",
     "ids": "${assetsDir}/data/matterport/matterport3d.csv"

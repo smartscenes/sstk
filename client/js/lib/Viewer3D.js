@@ -551,7 +551,7 @@ Viewer3D.prototype.saveImage = function (maxWidth, maxHeight) {
   var dataUrl = this.getImageData(maxWidth, maxHeight);
   var blob = CanvasUtil.dataUrlToBlob(dataUrl);
   this.__savedImageCount = this.__savedImageCount || 0;
-  FileUtil.saveBlob(blob, this.getRenderScene().name + '_image_' + this.__savedImageCount);
+  FileUtil.saveBlob(blob, this.getRenderScene().name + '_image_' + this.__savedImageCount + '.png');
   this.__savedImageCount++;
   //this.showImageData(dataUrl);
 };

@@ -4,6 +4,7 @@
 'use strict';
 
 var Constants = require('Constants');
+var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 
 function Camera(fov, aspect, near, far) {
@@ -102,11 +103,28 @@ Camera.fromJson = function(json, width, height) {
       camera.fov = json.fov;
       camera.aspect = aspect;
       break;
+    // case 'direct':
+    //   camera = new THREE.Camera();
+    //   camera.projectionMatrix.copy(json.projectionMatrix);
+    //   break;
     case 'perspective':
     case 'PerspectiveCamera':
     default:
       camera = new THREE.PerspectiveCamera(json.fov, aspect, json.near, json.far);
       break;
+  }
+  var updateProjectMatrixNeeded = false;
+  if (json.position) {
+    camera.position.copy(Object3DUtil.toVector3(json.position));
+    updateProjectMatrixNeeded = true;
+  }
+  if (json.target) {
+    camera.lookAt(Object3DUtil.toVector3(json.target));
+    updateProjectMatrixNeeded = true;
+  }
+  camera.updateMatrix();
+  if (updateProjectMatrixNeeded/*&& json.type !== 'direct'*/) {
+    camera.updateProjectionMatrix();
   }
   return camera;
 };

@@ -29,7 +29,10 @@ THREE.RenderPass.prototype = Object.assign( Object.create( THREE.Pass.prototype 
 		var oldAutoClear = renderer.autoClear;
 		renderer.autoClear = false;
 
-		this.scene.overrideMaterial = this.overrideMaterial;
+		// AXC: Save oldOverrideMaterial so it can be restored
+		// AXC: also keep with scene overrideMaterial if our own overrideMaterial not specified
+		var oldOverrideMaterial = this.scene.overrideMaterial;
+		this.scene.overrideMaterial = (this.overrideMaterial !== undefined)? this.overrideMaterial : oldOverrideMaterial;
 
 		var oldClearColor, oldClearAlpha;
 
@@ -56,8 +59,10 @@ THREE.RenderPass.prototype = Object.assign( Object.create( THREE.Pass.prototype 
 
 		}
 
-		this.scene.overrideMaterial = null;
+		// AXC: Restore oldOverrideMaterial
+		this.scene.overrideMaterial = oldOverrideMaterial;
 		renderer.autoClear = oldAutoClear;
+
 	}
 
 } );

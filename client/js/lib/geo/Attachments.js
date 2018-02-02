@@ -15,10 +15,15 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
   // includeAllCandidates - Returns array of all candidates within threshold
   opts = opts || {};
   //console.log('identifyAttachments opts', opts);
+  var maxCandidates = opts.maxCandidates || Infinity;
+  var maxCandidatesToCheck = opts.maxCandidatesToCheck || maxCandidates;
   var contactDistThreshold = opts.contactDistThreshold || (0.10 * Constants.metersToVirtualUnit);
   var modelInstance = modelInstWithCandidates.modelInstance;
   var candidatesAttachments = modelInstWithCandidates.attachments;
-  function isBetter(cand, best) {
+  var childModelId = modelInstance? modelInstance.model.info.fullId : null;
+  var childObjectId = modelInstance? modelInstance.object3D.userData.id : null;
+
+  function isBetter(cand, best, debug) {
     var intersected = cand.parentAttachment;
     //console.log('compare', cand, best);
     if (intersected.distance > contactDistThreshold) {
@@ -31,33 +36,64 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
     var modelIdSameCostCurr = 0;
     if (opts.sameModelCost > 0) {
       // Check if the two models are the same
-      var bestModelInst = Object3DUtil.getModelInstance(best.parentAttachment.object, true);
-      var currentModelInst = Object3DUtil.getModelInstance(cand.parentAttachment.object, true);
-      var childModelId = modelInstance? modelInstance.model.info.fullId : null;
+      var bestModelInst = best.parentInst;
+      var currentModelInst = cand.parentInst;
       var parentModelIdBest = bestModelInst? bestModelInst.model.info.fullId : null;
       var parentModelIdCurr = currentModelInst? currentModelInst.model.info.fullId : null;
       var modelIdSameBest = parentModelIdBest? parentModelIdBest === childModelId : false;
       modelIdSameCostBest = modelIdSameBest? opts.sameModelCost : 0;
       var modelIdSameCurr = parentModelIdCurr? parentModelIdCurr === childModelId : false;
       modelIdSameCostCurr = modelIdSameCurr? opts.sameModelCost : 0;
-      //console.log('modelIdSameCosts: ', modelIdSameCostBest, modelIdSameCostCurr);
+      //if (debug) console.log('modelIdSameCosts: ', modelIdSameCostBest, modelIdSameCostCurr);
     }
-    if (Math.abs(intersected.distance - best.parentAttachment.distance) < contactDistThreshold/2) {
+    if (Math.abs(intersected.distance - best.parentAttachment.distance) < contactDistThreshold*0.75) {
       if (Math.abs(intersected.normSim - best.parentAttachment.normSim) < 0.01) {
+        if (opts.aggregatedSceneStatistics) {
+          var ss = opts.aggregatedSceneStatistics;
+          // Determine preferred normal and attachment based on object id/type (curtain to windows, etc)
+          // Get parent child statistics for the object types
+          var childIdAttachmentCounts = ss.getObjectIdChildAttachmentCounts();
+          var counter = childIdAttachmentCounts.get([childModelId]);
+          var total = counter? counter.sum : 0;
+          var modelCats = modelInstance ? modelInstance.model.getCategories() : [];
+          var selectedCat = null;
+          while (total < 20 && modelCats.length) {
+            var cat = modelCats[modelCats.length - 1];
+            var childTypeAttachmentCounts = ss.getObjectTypeChildAttachmentCounts();
+            counter = childTypeAttachmentCounts.get([cat]);
+            total = counter? counter.sum : 0;
+            selectedCat = cat;
+          }
+          if (total > 50) {
+            var countThreshold = total * 0.1;
+            var candAttachmentFace = ss.bbfaceIndexToAttachmentTypeIndex(cand.childAttachment.bbfaceIndex);
+            var bestAttachmentFace = ss.bbfaceIndexToAttachmentTypeIndex(best.childAttachment.bbfaceIndex);
+            var candCount = counter.get(candAttachmentFace);
+            var bestCount = counter.get(bestAttachmentFace);
+            //if (debug) console.log('got attachment priors for object', childObjectId, 'model', childModelId, selectedCat,
+            //  'total', total, 'threshold', countThreshold,
+            //  'cand', ss.getAttachmentType(candAttachmentFace), candCount,
+            //  'best', ss.getAttachmentType(bestAttachmentFace), bestCount);
+            if (candCount > (bestCount + countThreshold)) {
+              //if (debug) console.log('select cand', childObjectId);
+              return true;
+            } else if (bestCount > (candCount + countThreshold)) {
+              //if (debug) console.log('select best', childObjectId);
+              return false;
+            }
+          }
+        }
         // Favor big flat surfaces
-        // var candFaceMin = cand.childWorldBBFaceDims? Math.min(cand.childWorldBBFaceDims.x, cand.childWorldBBFaceDims.y) : 0;
-        // var bestFaceMin = best.childWorldBBFaceDims? Math.min(best.childWorldBBFaceDims.x, best.childWorldBBFaceDims.y) : 0;
-        var candBBFaceDims = _.get(cand, ['candidate', 'world', 'faceDims']);
-        var bestBBFaceDims = _.get(cand, ['candidate', 'world', 'faceDims']);
+        var candBBFaceDims = _.get(cand, ['childAttachment', 'world', 'faceDims']);
+        var bestBBFaceDims = _.get(best, ['childAttachment', 'world', 'faceDims']);
         var candFaceMin = candBBFaceDims? Math.min(candBBFaceDims.x, candBBFaceDims.y) : 0;
         var bestFaceMin = bestBBFaceDims? Math.min(bestBBFaceDims.x, bestBBFaceDims.y) : 0;
-        //console.log('compare faces', candFaceMin, bestFaceMin);
+        //if (debug) console.log('compare faces', childModelId, cand, candFaceMin, best, bestFaceMin);
         if (candFaceMin > bestFaceMin*5) {
           return true;
         } else if (bestFaceMin > candFaceMin*5) {
           return false;
         }
-        // TODO: Determine preferred normal based on object type (curtain to windows, etc)
         // prefer world bottom attachment
         if (intersected.normal.dot(Constants.worldUp) > 0.99) {
           return true;
@@ -67,6 +103,15 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
           return false;
         } else if (best.parentSurfaceNormal.dot(Constants.worldUp) < -0.99) {
           return true;
+        } else {
+          var candFaceArea = candBBFaceDims? candBBFaceDims.x * candBBFaceDims.y : 0;
+          var bestFaceArea = bestBBFaceDims? bestBBFaceDims.x * bestBBFaceDims.y : 0;
+          //if (debug) console.log('compare faces', childModelId, cand, candFaceArea, best, bestFaceArea);
+          if (candFaceArea > bestFaceArea*2) {
+            return true;
+          } else if (bestFaceArea > candFaceArea*2) {
+            return false;
+          }
         }
       } else {
         return (intersected.normSim > best.parentAttachment.normSim);
@@ -77,7 +122,7 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
   // Raytrace out from candidate attachments
   var picker = new Picker();
   var raycaster = new THREE.Raycaster();
-  //var raycasterOpposite = new THREE.Raycaster();
+  var raycasterOpposite = new THREE.Raycaster();
   var best = null;
   var candidates = [];
   //var bbox = modelInstance.getBBox();
@@ -104,11 +149,11 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
         return x.distance <= contactDistThreshold;
       });
 
-      //console.log('closest', closest);
+      //console.log('closest', childObjectId, closest);
 
-      // Don't remember what this is for (disable)
+      // Don't remember what this is for
       // Check if there is a better intersection slightly before this one
-      // if (intersectedWithinThreshold.length > 1) {
+      // if (opts.checkOpposite && intersectedWithinThreshold.length > 1) {
       //   raycasterOpposite.ray.origin.copy(closest.point);
       //   raycasterOpposite.ray.direction.copy(candidate.world.out);
       //   raycasterOpposite.ray.direction.negate();
@@ -133,49 +178,67 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
       //   }
       // }
 
-      //console.log('closest', closest);
+      // console.log('closest', childObjectId, closest, intersectedWithinThreshold);
+      // Compute normSim
       var candidateNormOut = candidate.world.out.clone().negate();
-      var norm = picker.getIntersectedNormal(closest);
-      var normSim = candidateNormOut.dot(norm);
-      closest.normSim = normSim;
-      //console.log(closest);
-      var childWorldBBFaceIndex = Object3DUtil.findClosestBBFaceByInNormal(norm);
-      //var childWorldBBFaceDims = bbox.getFaceDims()[childWorldBBFaceIndex];
-      var closestCandidate = {
-        child: modelInstance? modelInstance.object3D : undefined,
-        childInst: modelInstance? modelInstance : undefined,
-        parent: closest.object,
-        parentSurfaceNormal: norm,
-        childWorldBBFaceIndex: childWorldBBFaceIndex,
-        //childWorldBBFaceDims: childWorldBBFaceDims,
-        parentAttachment: closest,
-        childAttachment: candidate  // Candidate attachment point
-      };
-      if (isBetter(closestCandidate, best)) {
-        best = closestCandidate;
-        //console.log('updating best', best);
+      for (var j = 0; j < intersectedWithinThreshold.length; j++) {
+        var c = intersectedWithinThreshold[j];
+        c.order = j;
+        var norm = picker.getIntersectedNormal(c);
+        if (c.normSim == undefined) {
+          c.normSim = candidateNormOut.dot(norm);
+        }
       }
 
-      // Update acceptable candidates (next to)
-      if (opts.includeAllCandidates) {
-        for (var j = 0; j < intersectedWithinThreshold.length; j++) {
-          var c = intersectedWithinThreshold[j];
-          var norm = picker.getIntersectedNormal(c);
-          if (c.normSim == undefined) {
-            c.normSim = candidateNormOut.dot(norm);
+      if (opts.disallowSameModelHorizontalAttachment && childModelId != null) {
+        intersectedWithinThreshold = _.filter(intersectedWithinThreshold, function(intersect) {
+          var parentInst = Object3DUtil.getModelInstance(intersect.object, true);
+          if (parentInst && parentInst.model.info.fullId === childModelId) {
+            if (childWorldBBFaceIndex === Constants.BBoxFaces.TOP || childWorldBBFaceIndex === Constants.BBoxFaces.BOTTOM) {
+              return true;
+            } else {
+              console.log('filtering out potential support due to disallowSameModelHorizontalAttachment for ' +  childObjectId + ' and ' + intersect.object.userData.id);
+              return false;
+            }
+          } else {
+            return true;
           }
-          childWorldBBFaceIndex = Object3DUtil.findClosestBBFaceByInNormal(norm);
+        });
+      }
+      // Group by object id
+      var groupedByObjectId = _.groupBy(intersectedWithinThreshold, function(x) { return x.object.uuid; });
+      var objectIds = _.keys(groupedByObjectId);
+      objectIds = _.sortBy(objectIds, function(id) { return groupedByObjectId[id][0].order; });
+
+      // Update acceptable candidates (next to)
+      var nCandidates = Math.min(objectIds.length, maxCandidates);
+      for (var k = 0; k < nCandidates; k++) {
+        var objectId = objectIds[k];
+        var intersectsForObject = groupedByObjectId[objectId];
+        for (var j = 0; j < intersectsForObject.length; j++) {
+          var c = intersectsForObject[j];
+          var norm = picker.getIntersectedNormal(c);
+          var childWorldBBFaceIndex = Object3DUtil.findClosestBBFaceByInNormal(norm);
           //childWorldBBFaceDims = bbox.getFaceDims()[childWorldBBFaceIndex];
-          candidates.push({
-            child: modelInstance? modelInstance.object3D : undefined,
-            childInst: modelInstance? modelInstance : undefined,
+          var parentInst = Object3DUtil.getModelInstance(c.object, true);
+          var candidateToCheck = {
+            child: modelInstance ? modelInstance.object3D : undefined,
+            childInst: modelInstance ? modelInstance : undefined,
             parent: c.object,
+            parentInst: parentInst,
             parentSurfaceNormal: norm,
             childWorldBBFaceIndex: childWorldBBFaceIndex,
             //childWorldBBFaceDims: childWorldBBFaceDims,
             parentAttachment: c,
             childAttachment: candidate // Candidate attachment point
-          });
+          };
+          if (k < maxCandidatesToCheck && isBetter(candidateToCheck, best, false)) {
+            best = candidateToCheck;
+            //console.log('updating best', childObjectId, best);
+          }
+          if (opts.includeCandidates) {
+            candidates.push(candidateToCheck);
+          }
         }
       }
     }
@@ -183,7 +246,8 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
   var res = {
     best: best
   };
-  if (opts.includeAllCandidates) {
+  if (opts.includeCandidates) {
+    candidates.sort(function(a,b) { return isBetter(a,b,false)? -1 : 1; });  // NOTE this compare is not necessarily valid
     res.candidates = candidates;
   }
   return res;

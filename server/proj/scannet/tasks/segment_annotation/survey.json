@@ -1,0 +1,63 @@
+{
+  "fixup": {
+    "name": "ann-fixup",
+    "version": "v0.01",
+    "title": "Tell us about your annotation experience",
+    "showAll": true,
+    "questions": [
+      {
+        "title": "Do you think your annotation can be improved?",
+        "inputType": "select",
+        "inputOptions": [
+          {
+            "text": "The annotation can be improved but I ran out of time and it was too difficult.",
+            "value": 3
+          },
+          {
+            "text": "I tried my best, but there were areas that I can’t see or reach or don’t know what to annotate.",
+            "value": 4
+          },
+          {
+            "text": "It’s perfect!  No improvements can be made!",
+            "value": 5
+          },
+          {
+            "text": "Other",
+            "value": 0
+          }
+        ],
+        "customInput": {
+          "value": 0,
+          "placeholder": "Please write your comment here..."
+        }
+      },
+      {
+        "title": "Was the quality of the annotation you started out with okay?",
+        "inputType": "select",
+        "inputOptions": [
+          {
+            "text": "The initial annotation was great but needed some small fix ups.",
+            "value": 4
+          },
+          {
+            "text": "The initial annotation was good but incomplete.",
+            "value": 3
+          },
+          {
+            "text": "The initial annotation was a complete disaster.",
+            "value": 1
+          },
+          {
+            "text": "Other",
+            "value": 0
+          }
+        ],
+        "customInput": {
+          "value": 0,
+          "placeholder": "Please write your comment here..."
+        }
+      }
+    ]
+  }
+}
+

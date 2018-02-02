@@ -405,9 +405,12 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       set: function (v) {
         this._showCeiling = v;
         if (this.sceneState) {
-          var ceilings = Object3DUtil.findNodes(this.sceneState.scene, function(node) { return node.userData.type === 'Ceiling'; });
+          var ceilings = Object3DUtil.findNodes(this.sceneState.scene, function(node) {
+            return node.userData.type === 'Ceiling' || node.userData.archType === 'Ceiling';
+          });
           for (var i = 0; i < ceilings.length; i++) {
-            Object3DUtil.setVisible(ceilings[i], v);
+            var recursive = ceilings[i].userData.type === 'ModelInstance';
+            Object3DUtil.setVisible(ceilings[i], v, recursive);
           }
         }
       }
@@ -1433,7 +1436,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       loadOptions.loadTime = { start: new Date().getTime() };
       // Make sure some information is pushed through to assetManager loadScene
       sceneinfo = _.merge(sceneinfo, _.pick(loadOptions, _.keys(defaults)));
-
       var scope = this;
       this.assetManager.loadAssetAsScene(sceneinfo, function(err, sceneState) {
         scope.onSceneLoad(loadOptions, sceneState);
@@ -2907,38 +2909,20 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
     };
 
     SceneViewer.prototype.changeMaterials = function() {
-      if (!this.__aggregatedSceneStatistics) {
-        var scope = this;
-        var assetGroup = AssetGroups.getAssetGroup('p5dScene');
-        this.__aggregatedSceneStatistics = new (require('ssg/SceneStatistics'))();
-        this.__aggregatedSceneStatistics.importCsvs({
-          fs: FileUtil,
-          basename: assetGroup.rootPath + '/stats/suncg',
-          callback: function() {
-            scope.colorBy = 'original';
-            scope.__colorBy = 'custom';
-            SceneUtil.recolorWithCompatibleMaterials(scope.sceneState, {
-              randomize: true,
-              textureOnly: false,
-              texturedObjects: scope.retexture.texturedObjects,
-              textureSet: scope.retexture.textureSet,
-              assetManager: scope.assetManager,
-              aggregatedSceneStatistics: scope.__aggregatedSceneStatistics
-            });
-          }
-        });
-      } else {
-        this.colorBy = 'original';
-        this.__colorBy = 'custom';
-        SceneUtil.recolorWithCompatibleMaterials(this.sceneState, {
+      this.__cache = this.__cache || {};
+      var scope = this;
+      SceneUtil.getAggregatedSceneStatistics(this.__cache, function(err, aggregatedSceneStatistics) {
+        scope.colorBy = 'original';
+        scope.__colorBy = 'custom';
+        SceneUtil.recolorWithCompatibleMaterials(scope.sceneState, {
           randomize: true,
           textureOnly: false,
-          texturedObjects: this.retexture.texturedObjects,
-          textureSet: this.retexture.textureSet,
-          assetManager: this.assetManager,
-          aggregatedSceneStatistics: this.__aggregatedSceneStatistics
+          texturedObjects: scope.retexture.texturedObjects,
+          textureSet: scope.retexture.textureSet,
+          assetManager: scope.assetManager,
+          aggregatedSceneStatistics: aggregatedSceneStatistics
         });
-      }
+      }, { fs: FileUtil });
     };
 
     SceneViewer.prototype.isContextQueryModeActive = function () {

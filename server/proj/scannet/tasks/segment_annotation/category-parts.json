@@ -1,0 +1,32 @@
+[
+  {
+    "name": "sofa",
+    "parts": [ "pillow", "cushion", "seat", "back", "leg", "arm" ],
+    "radius": 0.5
+  },
+  {
+    "name": "cabinet",
+    "parts": [ "door", "shelf", "side_panel", "back_panel" ],
+    "radius": 0.5
+  },
+  {
+    "name": "table",
+    "parts": [ "tabletop", "leg" ],
+    "radius": 0.5
+  },
+  {
+    "name": "chair",
+    "parts": [ "seat", "cushion", "back", "arm", "leg", "wheel" ],
+    "radius": 0.25
+  },
+  {
+    "name": "bookshelf",
+    "parts": [ "shelf", "back_panel", "side_panel" ],
+    "radius": 0.5
+  },
+  {
+    "name": "bed",
+    "parts": [ "mattress", "pillow", "sheet", "headboard", "frame", "footboard", "leg" ],
+    "radius": 1
+  }
+]

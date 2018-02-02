@@ -39,6 +39,16 @@ MeshHierarchyLabeler.prototype.labelPart = function (part, labelInfo, opts) {
   }
 };
 
+MeshHierarchyLabeler.prototype.unlabelPart = function (part, opts) {
+  MeshLabeler.prototype.unlabelPart.call(this, part, opts);
+  if (part.userData.level > 0) {
+    for (var i = 0; i < part.children.length; i++) {
+      var c = part.children[i];
+      this.unlabelPart(c, opts);
+    }
+  }
+};
+
 MeshHierarchyLabeler.prototype.__dehighlightPart = function (part) {
   if (part.userData.level > 0) {
     for (var i = 0; i < part.children.length; i++) {

@@ -1,0 +1,47 @@
+.input-group-btn {
+    width: auto;
+}
+
+.overlay {
+    position: absolute;
+    cursor: pointer;
+    opacity: 0.9;
+    z-index: 1;
+}
+
+.btn-space {
+    margin-bottom: 15px;
+}
+
+#namesPanel {
+    top: 20px;
+    right: 20px;
+}
+
+label div {
+    display: inline-block;
+    width: 40px;
+    color: white;
+    text-align: center;
+    margin-right: 10px;
+}
+
+.label-left {
+    text-align: left;
+}
+
+.mouse-tooltip {
+    display: inline-block;
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.vakata-context {
+    z-index: 10;
+}
+
+.regionTree {
+    overflow: auto;
+    background-color: white;
+}

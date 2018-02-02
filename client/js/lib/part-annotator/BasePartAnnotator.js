@@ -5,6 +5,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var UndoStack = require('editor/UndoStack');
 var LabelPointer = require('controls/LabelPointer');
 var LabelPainter = require('controls/LabelPainter');
+var MeshHelpers = require('geo/MeshHelpers');
 var UIUtil = require('ui/UIUtil');
 var _ = require('util');
 //var bootbox = require('bootbox');
@@ -30,24 +31,14 @@ function BasePartAnnotatorFactory(baseClass) {
    *   Use `referrer` to go to referring document on close.  If not specified, a message will indicate that submission was successful.
    * @param [params.clearAnnotationOptions] Configuration of what to do when annotator is ready
    * @param [params.clearAnnotationOptions.clearLabels=true] {boolean} Set clearLabels to true to clear any predefined labels
+   * @param [params.linkWordNet] Whether we should allow user to link to WordNet synsets
+   * @param [params.obbsVisible=false] {boolean} To show obbs of labeled segment groups or not.
+   * @param [params.allowPass=false] {boolean} Whether passing of this item is allowed
    * @constructor BasePartAnnotator
    */
   function BasePartAnnotator(params) {
-    // see http://swisnl.github.io/jQuery-contextMenu/demo/input.html
-    var defaultContextMenuItems = {};
-    if (params.linkWordNet || _.getUrlParam('linkWordNet')) {
-      // create wordnetLinker who will do magic!
-      var WordNetLinker = require('nlp/WordNetLinker');
-      var wordnetLinker = new WordNetLinker({
-        app: this,
-        contextMenuItems: defaultContextMenuItems
-      });
-    }
-    var defaultContextMenuOptions;
-    if (_.size(defaultContextMenuItems)) {
-      defaultContextMenuOptions = { items: defaultContextMenuItems };
-    }
     // Default configuration
+    this.isAnnotator = true;
     var defaults = {
       appId: 'BasePartAnnotator.v1',
       screenshotMaxWidth: 100,
@@ -70,7 +61,6 @@ function BasePartAnnotatorFactory(baseClass) {
           'Step 2: Color in parts of the object using the mouse'
       },
       labelsPanel: {
-        contextMenu: defaultContextMenuOptions,
         allowNewLabels: true,
         allowDelete: true,
         checkedDelete: this.__checkedDeleteLabel.bind(this),
@@ -111,6 +101,7 @@ function BasePartAnnotatorFactory(baseClass) {
     params = _.defaultsDeep(Object.create(null), params, defaults);
     baseClass.call(this, params);
 
+    this.allowPass = params.allowPass;
     this.defaultClearAnnotationOptions = params.clearAnnotationOptions;
     this.enforceUserId = params.enforceUserId;
     this.submitAnnotationsUrl = params.submitAnnotationsUrl;
@@ -125,6 +116,12 @@ function BasePartAnnotatorFactory(baseClass) {
 
     this.annotations = [];
     this.annotationStats = {};
+
+    if (this.allowPass) {
+      $('#passBtn').removeClass('hidden');
+    } else {
+      $('#passBtn').addClass('hidden');
+    }
 
     var scope = this;
     this.painter = params.labelPainter || new (params.useLabelPointer? LabelPointer : LabelPainter)({
@@ -166,6 +163,13 @@ function BasePartAnnotatorFactory(baseClass) {
 
     // Did we successfully submit our annotations (if not there will be prompt asking if we want to leave this interface)
     this.__annotationsSubmitted = false;
+
+    // Debug OBBs
+    this.obbsVisible = params.obbsVisible;
+    this.debugOBBsNode = new THREE.Group();
+    this.debugOBBsNode.name = 'DebugOBBs';
+    this.debugNode.add(this.debugOBBsNode);
+    this.excludeFromPicking.push(this.debugOBBsNode);
   }
 
   BasePartAnnotator.prototype = Object.create(baseClass.prototype);
@@ -230,11 +234,27 @@ function BasePartAnnotatorFactory(baseClass) {
   };
 
   BasePartAnnotator.prototype.onPartChanged = function (part) {
+    if (this.obbsVisible && this.selectedLabelInfos) {
+      this.showPartOBBs(this.selectedLabelInfos);
+    }
   };
 
-  BasePartAnnotator.prototype.onSelectLabel = function (labelInfo) {
+  BasePartAnnotator.prototype.onSelectLabel = function (labelInfos) {
+    var labelInfo;
+    if (Array.isArray(labelInfos)) {
+      if (labelInfos.length === 1) {
+        labelInfo = labelInfos[0];
+      }
+    } else {
+      labelInfo = labelInfos;
+      labelInfos = [labelInfo];
+    }
     baseClass.prototype.onSelectLabel.call(this, labelInfo);
     this.painter.setLabelInfo(labelInfo);
+    this.selectedLabelInfos = labelInfos;
+    if (this.obbsVisible) {
+      this.showPartOBBs(labelInfos);
+    }
   };
 
   BasePartAnnotator.prototype.onRenameLabel = function (labelInfo) {
@@ -447,6 +467,102 @@ function BasePartAnnotatorFactory(baseClass) {
         callback('Error retrieving annotations for '  + params.modelId, null);
       }
     });
+  };
+
+  BasePartAnnotator.prototype.getAllSelectedWithParts = function() {
+    var labeler = this.labeler;
+    var selected = this.labelsPanel.getAllSelected();
+    // filter out selected that don't have any parts
+    selected = selected? selected.filter(function(x) { return labeler.hasParts(x) }) : null;
+    return selected;
+  };
+
+  // Some helpful actions on labels
+  BasePartAnnotator.prototype.fillSelected = function(fill) {
+    // filter out selected that don't have any segIndices
+    var selected = this.getAllSelectedWithParts();
+    if (selected && selected.length) {
+      this.onEditOpInit('fill', { labelInfo: selected, fill: fill });
+      this.__trackUndo(false);
+      for (var i = 0; i < selected.length; i++) {
+        var obb = this.labeler.getPartOBB(selected[i]);
+        this.labeler.labelPartsInOBB(obb, this.labelsPanel, fill? selected[i] : null);
+      }
+      this.__trackUndo(true);
+      this.onEditOpDone('fill', { labelInfo: selected, fill: fill });
+    } else {
+      // Show alert...
+      UIUtil.showAlert(null, 'Please select labels with painted regions that gives a bounding box to fill', 'alert-info', 2000, '10pt').css('bottom', '5px');
+    }
+  };
+
+  BasePartAnnotator.prototype.mergeSelected = function () {
+    // merges selected labels
+    var selected = this.labelsPanel.getAllSelected();
+    if (selected && selected.length > 1) {
+      // Doing merge
+      //console.log('Merging ' + selected.length);
+      this.onEditOpInit('merge', { labelInfo: selected });
+      this.__trackUndo(false);
+      var merged = this.labeler.merge(selected, this.labelsPanel);
+      this.labelsPanel.selectLabel(merged);
+      this.__trackUndo(true);
+      this.onEditOpDone('merge', { labelInfo: merged });
+    }
+  };
+
+  BasePartAnnotator.prototype.freezeSelected = function (flag) {
+    // merges selected labels
+    var selected = this.labelsPanel.getAllSelected();
+    if (selected && selected.length) {
+      this.onEditOpInit('freeze', { labelInfo: selected, flag: flag });
+      this.__trackUndo(false);
+      for (var i = 0; i < selected.length; i++) {
+        this.labelsPanel.setFrozen(selected[i], flag);
+      }
+      this.__trackUndo(true);
+      this.onEditOpDone('freeze', { labelInfo: selected, flag: flag });
+    }
+  };
+
+  BasePartAnnotator.prototype.lookAtSelected = function () {
+    // merges selected labels
+    var selected = this.labelsPanel.getAllSelected();
+    if (selected && selected.length) {
+      this.lookAtParts(selected);
+    }
+  };
+
+  // Following functions are to support display of part OBBs
+  BasePartAnnotator.prototype.clearDebug = function () {
+    Object3DUtil.removeAllChildren(this.debugOBBsNode);
+  };
+
+  BasePartAnnotator.prototype.__addOBB = function (obb, material, transform) {
+    var obj3D = new THREE.Object3D();
+    if (transform) {
+      Object3DUtil.setMatrix(obj3D, transform);
+    }
+    var mesh = new MeshHelpers.OBB(obb, material);
+    var meshwf = mesh.toWireFrame(2.0 / obj3D.scale.length(), true);
+    obj3D.add(meshwf);
+    this.debugOBBsNode.add(obj3D);
+    return obj3D;
+  };
+
+  BasePartAnnotator.prototype.showPartOBBs = function(labelInfos) {
+    this.clearDebug();
+    if (!labelInfos) return;
+    for (var i = 0; i < labelInfos.length; i++) {
+      var labelInfo = labelInfos[i];
+      // Ensure obb (do we need this?)
+      if (labelInfo) {
+        var obb = this.labeler.getLabelOBB(labelInfo);
+        if (obb) {
+          this.__addOBB(obb, labelInfo.colorMat);
+        }
+      }
+    }
   };
 
   return BasePartAnnotator;

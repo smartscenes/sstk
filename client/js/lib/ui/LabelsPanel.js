@@ -86,6 +86,8 @@ var LabelsPanel = function (params) {
       throw new Error('Invalid checkNewLabel: ' + this.checkNewLabelFn);
     }
   }
+  // Callback for customizing labels
+  this.customizeLabel = params.customizeLabel;
   // How to show alert messages
   this.showAlert = params.showAlert || function(msg) {
     UIUtil.showAlert(null, msg);
@@ -149,9 +151,11 @@ LabelsPanel.CheckLabelNotInExisting = function(existingLabels, label) {
 /**
  * Set the labels used.
  * @function
- * @param labels {string[]}
+ * @param labels {string[]|LabelInfo[]}
  */
 LabelsPanel.prototype.setLabels = function (labels, labelColorIndex) {
+  var inputLabelInfos = (labels.length && typeof(labels[0]) === 'object')? labels : null;
+  labels = inputLabelInfos? _.map(inputLabelInfos, function(x) { return x.label; }): labels;
   this.labels = labels;
   this.labelInfos = [];
   this.labelColorIndex = labelColorIndex;
@@ -166,7 +170,7 @@ LabelsPanel.prototype.setLabels = function (labels, labelColorIndex) {
   if (this.container) {
     this.container.empty();
   }
-  this.createPanel();
+  this.createPanel(inputLabelInfos);
 };
 
 /**
@@ -217,6 +221,9 @@ LabelsPanel.prototype.createLabelInfo = function (label, options) {
     colorMat: colorMaterial,
     hoverMat: hoverMaterial
   };
+  if (options.data) {
+    labelInfo.data = options.data;
+  }
   if (options.fixed) {
     labelInfo.fixed = true;
   }
@@ -297,7 +304,7 @@ LabelsPanel.prototype.saveLegend = function (options) {
   $(opened.document.body).append(panel);
 };
 
-LabelsPanel.prototype.createPanel = function () {
+LabelsPanel.prototype.createPanel = function (inputLabelInfos) {
   var panel = this.container;
   this.labelInfos = []; // clear in case we're recreating the panel
   for (var i = 0; i < this.labels.length; i++) {
@@ -309,7 +316,11 @@ LabelsPanel.prototype.createPanel = function () {
       }
     }
     var colorIdx = this.labelColorIndex? this.labelColorIndex[label] : i+1;
-    this.labelInfos[i] = this.createLabelInfo(label, { index: i, color: colorIdx });
+    var baseLabelInfo = { index: i, color: colorIdx };
+    if (inputLabelInfos && inputLabelInfos[i]) {
+      baseLabelInfo = _.defaults(baseLabelInfo, inputLabelInfos[i]);
+    }
+    this.labelInfos[i] = this.createLabelInfo(label, baseLabelInfo);
   }
   if (panel && panel.length > 0) {
     panel.empty();
@@ -324,12 +335,17 @@ LabelsPanel.prototype.createPanel = function () {
   }
 
   $(document).keypress(function (e) {
-    var keyCount = e.which - 48; // subtract ascii for "0" key number
-    if (keyCount >= 0 && keyCount <= this.numShortCuts) {
-      var button = $('#' + this.__getElemId('button', keyCount));
-      if (button.length > 0) {
-        button.click();
-        return false;
+    // Don't handle event if from input/select/textarea
+    var tagName = (e.target || e.srcElement).tagName;
+    var process = !(tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA');
+    if (process) {
+      var keyCount = e.which - 48; // subtract ascii for "0" key number
+      if (keyCount >= 0 && keyCount <= this.numShortCuts) {
+        var button = $('#' + this.__getElemId('label', keyCount));
+        if (button.length > 0) {
+          button.click();
+          return false;
+        }
       }
     }
   }.bind(this));
@@ -629,6 +645,9 @@ LabelsPanel.prototype.createButton = function (labelInfo) {
     }
   }
   label.append(inputGroup);
+  if (this.customizeLabel) {
+    this.customizeLabel(labelInfo);
+  }
   return label;
 };
 
@@ -722,8 +741,15 @@ LabelsPanel.prototype.appendButton = function (labelInfo, options) {
 
 LabelsPanel.prototype.copySelected = function(defaultLabel) {
   if (this.selectedLabelInfo) {
+    var oldSelected = this.selectedLabelInfo;
     this.addNewNameTextbox.val(this.selectedLabelInfo.label);
     this.addNewNameBtn.click();
+    if (oldSelected.data) {
+      this.selectedLabelInfo.data = _.clone(oldSelected.data);
+    }
+    if (this.customizeLabel) {
+      this.customizeLabel(this.selectedLabelInfo);
+    }
     return this.selectedLabelInfo;
   } else if (defaultLabel) {
     // If nothing selected and there is defaultLabel, create default label
@@ -790,7 +816,7 @@ LabelsPanel.prototype.onLabelButtonClick = function (labelInfo, event) {
       }
     }
   }
-  if (this.allowMultiSelect && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+  if (this.allowMultiSelect && event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
     if (event.shiftKey) {
       if (lastSelectedIndex >= 0 && selectedIndex >= 0) {
         // Make sure everything between what is selected and this one is selected
@@ -919,8 +945,32 @@ LabelsPanel.prototype.clearSelected = function() {
   this.Publish('labelSelected', this.selectedLabelInfo);
 };
 
+LabelsPanel.prototype.setHighlighted = function(highlighted) {
+  for (var i = 0; i < this.labelInfos.length; i++) {
+    var labelInfo = this.labelInfos[i];
+    if (labelInfo) {
+      var highlight = highlighted.indexOf(labelInfo) >= 0;
+      if (highlight) {
+        labelInfo.element.addClass('highlight');
+      } else {
+        labelInfo.element.removeClass('highlight');
+      }
+    }
+  }
+};
+
 LabelsPanel.prototype.getAllSelected = function() {
   var selected = this.labelInfos.filter( function(x) { return x && !x.removed && x.element.hasClass('active'); });
+  return selected;
+};
+
+LabelsPanel.prototype.getMatching = function(pattern, matchEntireLabel) {
+  if (matchEntireLabel) {
+    if (!pattern.startsWith('^')) { pattern = '^' + pattern; }
+    if (!pattern.endsWith('$')) { pattern = pattern + '$'; }
+  }
+  var regex = new RegExp(pattern);
+  var selected = this.labelInfos.filter( function(x) { return x && !x.removed && x.label.match(regex); });
   return selected;
 };
 
@@ -1091,5 +1141,6 @@ module.exports = LabelsPanel;
  * @property {material} colorMat - Material to use on meshes to represent this label
  * @property {material} hoverMat - Material to use on meshes to represent this label when hovering
  * @property {boolean} fixed - Whether the label can be changed or not
+ * @property {Object} data - Arbitrary data associated with the label
  */
 

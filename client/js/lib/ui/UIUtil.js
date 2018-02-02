@@ -76,6 +76,11 @@ function createFileInput(params) {
       labelButton.click(function() { file.click(); });
       file.hide();
       div.append(labelButton).append(file).append(filename);
+    } else if (style === 'existing') {
+        var labelButton = params.labelButton;
+        labelButton.click(function() { file.click(); });
+        file.hide();
+        div.append(file).append(filename);
     } else if (style !== 'hidden') {
       // bootstrap style (default)
       filename.addClass('form-control');

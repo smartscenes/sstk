@@ -48,7 +48,8 @@ var getObjMtl = function (root, params, data) {
   var startVertexOffset = params.vertexOffset || 0;
   var startNormalOffset = params.normalOffset || 0;
   var startUvOffset = params.uvOffset || 0;
-  data = data || { v: [], vt: [], vn: [], f: [], materials: [] };
+  var materialOffset = params.materialOffset || 0;
+  data = _.defaults(data || {}, { v: [], vt: [], vn: [], f: [] });
   if (!params.includeNotVisible && !root.visible) {
     // Ignore invisible meshes
     return data;
@@ -90,33 +91,52 @@ var getObjMtl = function (root, params, data) {
       vi++;
     }, t, attrInfos);
     var geometry = root.geometry;
-    if (!params.skipMtl) {
-      var material = root.material;
-      if (material.id) {
-        var mtlId = 'material_' + material.id;
-        data.f.push('usemtl ' + mtlId + '\n');
-        data.materials[mtlId] = material;
-      } else {
-        console.warn('Material is missing id!');
-      }
+
+    var materials = root.material.materials || root.material;
+    if (!Array.isArray(materials)) {
+      materials = [materials];
     }
-    GeometryUtil.forFaceVertexIndices(geometry, function (iface, verts) {
-      var faceStrings = [];  // will hold face spec strings (f)
-      for (var i = 0; i < verts.length; i++) {
-        var vi = verts[i] + vertexOffset;
-        var ti = hasUvs ? (attrInfos[0].mapping[verts[i]] + uvOffset) : -1;
-        var ni = hasNormals ? (attrInfos[1].mapping[verts[i]] + normalOffset) : -1;
-        faceStrings[i] = toVertexStr(vi, ti, ni);
+
+    for (var iMat = 0; iMat < materials.length; iMat++) {
+      // material
+      var material = materials[iMat];
+      // console.log(material);
+      if (!params.skipMtl) {
+        if (material.uuid) {
+          var matIndex = params.materialsIndex.indexOf(material.uuid, true) + materialOffset;
+          var mtlId = 'material_' + matIndex;
+          data.f.push('usemtl ' + mtlId);
+          params.materials[mtlId] = material;
+        } else {
+          console.warn('Material is missing uuid!');
+        }
       }
-      var fs = toObjStr('f', faceStrings);
-      data.f.push(fs);
-    });
-  }
-  if (root.children) {
-    for (var i = 0; i < root.children.length; i++) {
-      getObjMtl(root.children[i], params, data);
+
+      // faces
+      GeometryUtil.forFaceVertexIndices(geometry, function (iface, verts) {
+        var group = _.find(geometry.groups, function (g) {
+          return (iface >= g.start) && (iface < g.start + g.count);
+        });
+        var materialIndex = (materials.length > 1)? (group? group.materialIndex : 0) : 0;
+        if (materialIndex === iMat) {
+          var faceStrings = [];  // will hold face spec strings (f)
+          for (var i = 0; i < verts.length; i++) {
+            var vi = verts[i] + vertexOffset;
+            var ti = hasUvs ? (attrInfos[0].mapping[verts[i]] + uvOffset) : -1;
+            var ni = hasNormals ? (attrInfos[1].mapping[verts[i]] + normalOffset) : -1;
+            faceStrings[i] = toVertexStr(vi, ti, ni);
+          }
+          var fs = toObjStr('f', faceStrings);
+          data.f.push(fs);
+        }
+      });
     }
   }
+  // if (root.children) {
+  //   for (var i = 0; i < root.children.length; i++) {
+  //     getObjMtl(root.children[i], params, data);
+  //   }
+  // }
   return data;
 };
 
@@ -230,8 +250,11 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
     transform = params.transform.clone();
     transform.multiply(mesh.matrixWorld);
   }
-  var isMultiMaterial = mesh.material.type === 'MultiMaterial';
-  var nMaterials = isMultiMaterial? mesh.material.materials.length : 1;
+
+  var materials = mesh.material.materials || mesh.material;
+  if (!Array.isArray(materials)) {
+    materials = [materials];
+  }
   var normIndex = new Index();
   var uvIndex = new Index();
   var normIndexRemap = {};
@@ -270,7 +293,8 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
         if (vertexUvs) {
           for (var j = 0; j < vertexUvs.length; j++) {
             var uv = vertexUvs[j].clone();
-            var material = isMultiMaterial ? mesh.material.materials[face.materialIndex] : mesh.material;
+            var materialIndex = (materials.length > 1)? face.materialIndex || 0 : 0;
+            var material = materials[materialIndex];
             if (material.map && material.map.repeat) {
               uv.x *= material.map.repeat.x;
               uv.y *= material.map.repeat.y;
@@ -309,9 +333,9 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
       }
     }
 
-    for (var iMat = 0; iMat < nMaterials; iMat++) {
+    for (var iMat = 0; iMat < materials.length; iMat++) {
       // material
-      var material = isMultiMaterial? mesh.material.materials[iMat] : mesh.material;
+      var material = materials[iMat];
       // console.log(material);
       if (!params.skipMtl) {
         if (material.uuid) {
@@ -327,7 +351,8 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
       // faces
       for (var iFace = 0, j = 0; iFace < faces.length; iFace++, j += 3) {
         var face = faces[iFace];
-        if (isMultiMaterial && face.materialIndex !== iMat) {
+        var materialIndex = (materials.length > 1)? face.materialIndex || 0 : 0;
+        if (materialIndex !== iMat) {
           continue; // Skip this face
         }
         var uvis = [uvIndexRemap[j]+1, uvIndexRemap[j+1]+1, uvIndexRemap[j+2]+1];
@@ -340,7 +365,14 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
       }
     }
   } else {  // BufferGeometry
-    var data = getObjMtl(mesh, { vertexOffset: result.indexVertex, normalOffset: result.indexNormals, uvOffset: result.indexVertexUvs, materials: result.materials });
+    var data = getObjMtl(mesh,
+      { transform: params.transform,
+        vertexOffset: result.indexVertex,
+        normalOffset: result.indexNormals,
+        uvOffset: result.indexVertexUvs,
+        materialOffset: result.indexMaterials,
+        materials: result.materials,
+        materialsIndex: result.materialsIndex });
     obj += data.v.join('\n') + '\n'
         + ((data.vn.length > 0)? (data.vn.join('\n') + '\n') : '')
         + ((data.vt.length > 0)? (data.vt.join('\n') + '\n') : '')
@@ -422,6 +454,7 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
 
   // Get our nodes in depth-first traversal order
   var nodes = [];
+  object.updateMatrixWorld();
   object.traverse(function (child) {
     nodes.push(child);
   });

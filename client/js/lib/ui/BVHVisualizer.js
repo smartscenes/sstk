@@ -9,6 +9,7 @@ var _ = require('util');
 
 function BVHVisualizer(params) {
   params.allowLoadSave = false; //  Load save not supported for BVH
+  params.supportAttachment = false; // No need for this
   this.showObjectsAtAllNodes = false;
   TreeVisualizer.call(this, params);
   this.__bvh = null;

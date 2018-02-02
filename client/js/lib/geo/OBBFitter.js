@@ -1,3 +1,4 @@
+var GeometryUtil = require('geo/GeometryUtil');
 var OBB = require('geo/OBB');
 var numeric = require('numeric');
 
@@ -13,33 +14,44 @@ function fitOBB(points, opts) {
   }
 
   if (opts.constrainVertical) {
-    obb = findOBB3DVertical(points);
+    var res = findOBB2D_Points3D(points)
+    obb = findOBB3DVertical(res.obb2d, res.minV, res.maxV);
   } else {
     obb = findOBB3DUnconstrained(points);
   }
 
-  // TODO: Avoid degenerate boxes by enforcing non-zero width along all dimensions
-  //var minWidth = 1e-6;
-  //for (var i = 0; i < 3; i++) {
-  //  if (r_[i] < minWidth) { r_[i] = minWidth; }
-  //}
-  //this.__computeTransforms();
+  if (obb) {
+    ensureNotDegenerate(obb);
+  }
   return obb;
 }
 self.fitOBB = fitOBB;
 
-function findOBB3DVertical(points) {
-  // Get centroid, z range and x-y points for 2D rect fitting
-  var minV = Number.MAX_VALUE;
-  var maxV = -Number.MAX_VALUE;
-  // Assumes y up
-  for (var i = 0; i < points.length; i++) {
-    var p = points[i];
-    if (p.y < minV) { minV = p.y; } else if (p.y > maxV) { maxV = p.y; }
+function fitMeshOBB(meshes, opts) {
+  opts = opts || {};
+  var obb;
+  if (opts.constrainVertical) {
+    var res = findOBB2D_Meshes(meshes)
+    obb = findOBB3DVertical(res.obb2d, res.minV, res.maxV);
+  } else {
+    throw 'fitOBBMeshes unimplemented for opts.constrainVertical=false';
   }
-  // Find minimum rectangle in x-z plane
-  var obb2D = findOBB2D(points, 'x', 'z');
+  if (obb) {
+    ensureNotDegenerate(obb);
+  }
+  return obb;
+}
+self.fitMeshOBB = fitMeshOBB;
 
+function ensureNotDegenerate(obb) {
+  // TODO: Avoid degenerate boxes by enforcing non-zero width along all dimensions
+  var minWidth = 1e-6;
+  if (obb.halfSizes.x < minWidth) { obb.halfSizes.x = minWidth; }
+  if (obb.halfSizes.y < minWidth) { obb.halfSizes.y = minWidth; }
+  if (obb.halfSizes.z < minWidth) { obb.halfSizes.z = minWidth; }
+}
+
+function findOBB3DVertical(obb2D, minV, maxV) {
   // Set x and y bbox axes from 2D rectangle axes
   var center2D = obb2D.center;
   var v0n = obb2D.axes[0];
@@ -57,18 +69,41 @@ function findOBB3DVertical(points) {
 }
 
 function findOBB3DUnconstrained(points) {
-  console.error('Unimplemented!!!!');
+  throw 'findOBB3DUnconstrained unimplemented';
 }
 
-function findOBB2D(points, xfield, yfield) {
-  // copy the [x,y] array
-  // input: dataPoints is an array of Vector3
-
+function findOBB2D_Points3D(points) {
+  var minV = Number.MAX_VALUE;
+  var maxV = -Number.MAX_VALUE;
   var xyArray = [];
   for (var i = 0; i < points.length; i++) {
-    xyArray.push([points[i][xfield], points[i][yfield]]);
+    // Assumes y up
+    var p = points[i];
+    if (p.y < minV) { minV = p.y; } else if (p.y > maxV) { maxV = p.y; }
+    xyArray.push([p.x, p.z]);
   }
 
+  // Find minimum rectangle in x-z plane and vertical range
+  return { obb2d: findOBB2D(xyArray), minV: minV, maxV: maxV };
+}
+
+function findOBB2D_Meshes(meshes) {
+  var minV = Number.MAX_VALUE;
+  var maxV = -Number.MAX_VALUE;
+  var xyArray = [];
+  for (var i = 0; i < meshes.length; i++) {
+    // Assumes y up
+    GeometryUtil.forMeshVertices(meshes[i], function (p) {
+      if (p.y < minV) { minV = p.y; }
+      else if (p.y > maxV) { maxV = p.y; }
+      xyArray.push([p.x, p.z]);
+    });
+  }
+  // Find minimum rectangle in x-z plane and vertical range
+  return { obb2d: findOBB2D(xyArray), minV: minV, maxV: maxV };
+}
+
+function findOBB2D(xyArray) {
   // find mean
   var xbar = 0;
   var ybar = 0;

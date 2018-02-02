@@ -1,9 +1,12 @@
+var Intersections = require('geo/Intersections');
 var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 
 function ArchCreator(params) {
   this.up = Object3DUtil.toVector3(params.up);
   this.front = Object3DUtil.toVector3(params.front);
+  this.left = new THREE.Vector3();
+  this.left.crossVectors(this.up, this.front);
   this.unit = params.unit || 0.01;
   this.defaults = _.defaultsDeep(Object.create(null), params.defaults, { 'Wall': { depth: 0.10 / this.unit, extraHeight: 0 }}); // in cm
 }
@@ -30,14 +33,26 @@ ArchCreator.prototype.createArch = function(arch, opts) {
       room.userData.id = roomId;
       room.userData.type = 'Room';
       for (var i = 0; i < relements.length; i++) {
-        room.add((relements[i] instanceof THREE.Object3D)? relements[i] : relements[i].object3D);
+        if (!opts.filterElements || opts.filterElements(relements[i])) {
+          room.add((relements[i] instanceof THREE.Object3D) ? relements[i] : relements[i].object3D);
+        }
       }
       rooms[roomId] = room;
     } else {
       outsideElements = relements;
     }
   });
-  return { rooms: rooms, outside: outsideElements, elementsById: archElements };
+  var walls = _.filter(arch.elements, function(x) { return x.type === 'Wall'; });
+  var holeToWalls = {};
+  _.each(walls, function(w) {
+    if (w.holes) {
+      _.each(w.holes, function(h) {
+        holeToWalls[h.id] = holeToWalls[h.id] || [];
+        holeToWalls[h.id].push(w.id);
+      })
+    }
+  });
+  return { rooms: rooms, outside: outsideElements, elementsById: archElements, holeToWalls: holeToWalls };
 };
 
 ArchCreator.prototype.createArchElements = function(arch, opts) {
@@ -198,7 +213,7 @@ ArchCreator.prototype.createWalls = function(walls, getWallPoints, getMaterials)
     mesh.userData.type = 'Wall';
     mesh.userData.id = wall.id;
     mesh.userData.roomId = roomId;
-    mesh.userData.holeIds = wall.holeIds;
+    mesh.userData.holeIds = _.map(wall.holes, 'id');
     mesh.userData.isSupportObject = true;
     mesh.userData.isPickable = true;
     mesh.userData.isEditable = false;
@@ -207,6 +222,76 @@ ArchCreator.prototype.createWalls = function(walls, getWallPoints, getMaterials)
   }
   return wallObject3Ds;
 }
+
+ArchCreator.prototype.associateWallsWithHoles = function(walls, holes, getHoleBBox) {
+  //console.log('associateWallsWithHoles');
+
+  // For each wall, figure out holes to cut
+  var holeBBoxes = holes.map(function(hole) { return getHoleBBox(hole); });
+  // associate each hole with appropriate wall by clipping line walls against hole BBox
+  for (var i = 0; i < holeBBoxes.length; i++) {
+    var holeBBox = holeBBoxes[i];
+    var holeObject = holes[i].object3D;
+
+    // assign hole to intersecting wall
+    for (var iWall = 0; iWall < walls.length; iWall++) {
+      var wall = walls[iWall];
+      //console.log('check if hole ' + i + ' intersects wall ' + iWall);
+      if (!wall.height) {
+        console.error('No wall height!!!!');
+      } else if (wall.height < 0) {
+        console.error('Negative wall height: ' + wall.height);
+      }
+      var wallLine = { a: wall.points2DFinal[0], b: wall.points2DFinal[1] };
+      wall.width = wallLine.a.distanceTo(wallLine.b);
+
+      // Check whether box intersects wall (from top down view)
+      var clip = Intersections.clipLine(holeBBox.min, holeBBox.max, wallLine);
+      if (clip.intersects) {
+        //console.log('intersected', holeBBox, wallLine);
+        // Consider wall not axis aligned if more than 2.5 cm different in x or y
+        var min = new THREE.Vector2(wall.width*Math.max(clip.E, 0), Math.max(holeBBox.min.z, wall.height * 0));
+        var max = new THREE.Vector2(wall.width*Math.min(clip.L, 1), Math.min(holeBBox.max.z, wall.height * 1));
+        if (Math.abs(wallLine.a.x - wallLine.b.x) >= 25 && Math.abs(wallLine.a.y - wallLine.b.y) >= 25) {
+          //console.log('Wall not axis-aligned: ', wallLine);
+          // Take corners of bbox in original model coordinates and project onto wall
+          var corners = Object3DUtil.computeBoundingBoxLocal(holeObject).getCorners();
+          var points = corners.map(function(c) {
+            var v3 = c.clone().applyMatrix4(holeObject.matrixWorld);
+            return new THREE.Vector2(v3.x, v3.z);
+          });
+          var ratios = Intersections.projectPointsToRatio(wallLine, points);
+          var rmin = Math.min.apply(null, ratios);
+          var rmax = Math.max.apply(null, ratios);
+          min = new THREE.Vector2(wall.width*Math.max(rmin, 0), Math.max(holeBBox.min.z, wall.height * 0));
+          max = new THREE.Vector2(wall.width*Math.min(rmax, 1), Math.min(holeBBox.max.z, wall.height * 1));
+        }
+        // Make sure it is a valid hole
+        if (min.x >= max.x || min.y >= max.y) {
+          continue; // Skip this
+        }
+        var holeBox = new THREE.Box2(min, max);
+        if (!wall.holes) { wall.holes = []; }
+        var holeType;
+        if (holes[i].modelInstance.model.isDoor()) { holeType = 'Door'; }
+        else if (holes[i].modelInstance.model.isWindow()) { holeType = 'Window'; }
+        wall.holes.push({ id: holeObject.userData.id, modelId: holes[i].modelId, type: holeType, box: holeBox});
+        if (!wall.holeIds) { wall.holeIds = []; }
+        wall.holeIds.push(holeObject.userData.id);
+
+        if (!wall.json.hidden || !this.keepHidden) {
+          if (!holeObject.userData.wallIds) { holeObject.userData.wallIds = []; }
+          holeObject.userData.wallIds.push(wall.id);
+        }
+
+        //console.log('INTERSECTS wall ' + iWall, holes[i], wall);
+      }
+    }
+  }
+
+  return walls;
+}
+
 
 // Exports
 module.exports = ArchCreator;

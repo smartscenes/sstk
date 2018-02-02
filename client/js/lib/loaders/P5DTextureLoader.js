@@ -108,7 +108,7 @@ TextureLoader.prototype.updateMaterial = function (meshMaterial, config, matInde
           meshMaterial.map = loadedTexture;
         }
       }
-      meshMaterial.color = new THREE.Color(matConfig.tcolor || 0xffffff);
+      meshMaterial.color = new THREE.Color(matConfig.diffuse || matConfig.tcolor || 0xffffff);
     }
     if (alphaTweak) {
       meshMaterial.opacity = 1;
@@ -126,8 +126,10 @@ TextureLoader.prototype.updateMaterial = function (meshMaterial, config, matInde
   } else {
     if (matConfig.color) {
       meshMaterial.color = new THREE.Color(matConfig.color);
+    } else if (matConfig.diffuse) {
+      meshMaterial.color = new THREE.Color(matConfig.diffuse);
     }
-    if (matname.substr(0, 6) == 'chrome') {
+    if (matname.substr(0, 6) == 'chrome' || matname === 'mirror') {
       meshMaterial.envMap = config.reflectionCube;
       meshMaterial.metal = true;
       meshMaterial.shininess = 200;

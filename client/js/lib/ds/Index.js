@@ -62,8 +62,13 @@ Index.prototype.get = function(index) {
   return this.__objects[index];
 };
 
-Index.prototype.metadata = function(index) {
-  return this.__indexToMetadata[index];
+Index.prototype.metadata = function(index, field) {
+  var m = this.__indexToMetadata[index];
+  if (field != null) {
+    return m? m[field] : undefined;
+  } else {
+    return m;
+  }
 };
 
 Index.prototype.add = function(obj, metadata) {

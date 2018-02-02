@@ -29,7 +29,7 @@ Form.prototype.form = function(cb) {
   _.each(this.questions, function(q,i) {
     q.value = scope.config[q.name];
   });
-  bootbox.form({
+  return bootbox.form({
     title: this.title,
     inputs: this.questions,
     callback: function(results) {

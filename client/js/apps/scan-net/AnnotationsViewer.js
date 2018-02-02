@@ -11,6 +11,7 @@ function AnnotationsViewer(params) {
   //this.viewUrl = this.baseUrl + '/scene-viewer'; // TODO: update
   this.annotateUrl = this.baseUrl + '/scans/scan-model-aligner';
   this.editUrl = this.baseUrl + '/annotations/edit';
+  this.jsonUrl = this.baseUrl + '/annotations/get';
   this.previewUrl = this.baseUrl + '/annotations/preview';
 }
 
@@ -246,6 +247,15 @@ AnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     }
     return createLink(label, url, '_blank');
   }
+
+  function createJsonLink(ann, label, extraParams) {
+    var url = scope.jsonUrl + '/' + ann.id;
+    if (extraParams) {
+      url += ('?' + $.param(extraParams));
+    }
+    return createLink(label, url, '_blank');
+  }
+
   function createFilterLink(ann, field) {
     return createFilterLinks(scope.listUrl, ann, field);
   }
@@ -268,7 +278,7 @@ AnnotationsViewer.prototype.createAnnotationsTable = function(params) {
       "data": "id",
       "title": "Id",
       render: function (data, type, full, meta) {
-        return getHtml(createViewLink(full, full.id));
+        return getHtml(createGroup([createViewLink(full, full.id), createJsonLink(full, 'json')], 'div'));
       }
     },
     {

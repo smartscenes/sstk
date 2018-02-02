@@ -120,8 +120,9 @@ _.getUrlParams = function () {
   return vars;
 };
 
-_.getUrlParam = function (name) {
-  return _.getUrlParams()[name];
+_.getUrlParam = function (name, defaultValue) {
+  var v = _.getUrlParams()[name];
+  return (v != undefined)? v : defaultValue;
 };
 
 // Stuffs arguments into object

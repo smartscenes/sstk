@@ -11,6 +11,8 @@ function PartAnnotationsViewer(params) {
   this.annotateUrl = this.baseUrl + '/part-annotator';
 //  this.editUrl = this.baseUrl + '/annotations/edit';
   this.previewUrl = this.baseUrl + '/annotations/preview';
+  this.jsonUrl = this.baseUrl + '/annotations/get';
+  this.partsUrl = this.baseUrl + '/query?qt=parts';
 }
 
 PartAnnotationsViewer.prototype.__onLoadIds = function(file) {
@@ -221,6 +223,23 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     }
     return createLink(label, url, '_blank');
   }
+
+  function createJsonLink(ann, label, extraParams) {
+    var url = scope.jsonUrl + '/' + ann.id;
+    if (extraParams) {
+      url += ('?' + $.param(extraParams));
+    }
+    return createLink(label, url, '_blank');
+  }
+
+  function createPartsLink(ann, label, extraParams) {
+    var url = scope.partsUrl + '&annId=' + ann.id + '&modelId=' + ann.itemId;
+    if (extraParams) {
+      url += ('&' + $.param(extraParams));
+    }
+    return createLink(label, url, '_blank');
+  }
+
   function createFilterLink(ann, field) {
     return createFilterLinks(scope.listUrl, ann, field);
   }
@@ -243,7 +262,7 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
       "data": "id",
       "title": "Id",
       render: function (data, type, full, meta) {
-        return getHtml(createViewLink(full, full.id));
+        return getHtml(createGroup([createViewLink(full, full.id), createJsonLink(full, 'json'), createPartsLink(full, 'parts')], 'div'));
       }
     },
     {
@@ -312,11 +331,13 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     {
       "data": "nlabels",
       "title": "# Labels",
+      "aggregation": "sum",
       defaultContent: ""
     },
     {
       "data": "ninstances",
       "title": "# Objects",
+      "aggregation": "sum",
       defaultContent: ""
     },
     {
@@ -409,6 +430,7 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     },
     "initComplete": function() {
       $.fn.dataTable.addColumnFilters({ table: resultTable });
+      $.fn.dataTable.addColumnAggregations({ table: resultTable });
       resultTable.css('visibility', 'visible');
       resultTable.show();
       $(loadingMessageSelector).hide();

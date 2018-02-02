@@ -445,28 +445,29 @@ Segments.prototype.__addUnlabeledSegmentGroup = function(segGroups, segs) {
   });
 };
 
-Segments.prototype.__indexedSegmentationToSegmentsWithTriMesh = function(index, meshIndex) {
+Segments.prototype.__indexedSegmentationToSegmentsWithTriMesh = function(index, meshIndex, meshTriIndex) {
   var segmentsByKey = {};
   var segments = [];
   for (var i = 0; i < index.length; i++) {
     var sIndex = index[i];
     var mIndex = meshIndex? meshIndex[i] : 0;
+    var triIndex = meshTriIndex? meshTriIndex[i] : i;
     var key = mIndex + '-' + sIndex;
     if (!segmentsByKey[key]) {
-      segmentsByKey[key] = { id: sIndex, surfaceIndex: segments.length, meshIndex: mIndex, triIndex: [i]};
+      segmentsByKey[key] = { id: sIndex, surfaceIndex: segments.length, meshIndex: mIndex, triIndex: [triIndex]};
       segments.push(segmentsByKey[key]);
     } else {
-      segmentsByKey[key].triIndex.push(i);
+      segmentsByKey[key].triIndex.push(triIndex);
     }
   }
   return segments;
 };
 
-Segments.prototype.__indexedSegmentationToHierarchicalSegments = function (nTris, segmentationsByName) {
-  return this.__indexedSegmentationToHierarchicalSegmentsUseExisting(nTris, segmentationsByName);
+Segments.prototype.__indexedSegmentationToHierarchicalSegments = function (nTris, segmentationsByName, meshTriIndex) {
+  return this.__indexedSegmentationToHierarchicalSegmentsUseExisting(nTris, segmentationsByName, meshTriIndex);
 };
 
-Segments.prototype.__indexedSegmentationToHierarchicalSegmentsUseExisting = function (nTris, segmentationsByName) {
+Segments.prototype.__indexedSegmentationToHierarchicalSegmentsUseExisting = function (nTris, segmentationsByName, meshTriIndex) {
   var meshes = Object3DUtil.getMeshes(this.origObject3D).list;
   var meshIndex = segmentationsByName['meshes'].index;
 
@@ -476,7 +477,7 @@ Segments.prototype.__indexedSegmentationToHierarchicalSegmentsUseExisting = func
     var index = segLevels.map( function(name) { return segmentationsByName[name].index[i]; }).join('_');
     combinedIndex.push(index);
   }
-  var rawSegments = this.__indexedSegmentationToSegmentsWithTriMesh(combinedIndex, (meshes.length > 1)? meshIndex : undefined);
+  var rawSegments = this.__indexedSegmentationToSegmentsWithTriMesh(combinedIndex, (meshes.length > 1)? meshIndex : undefined, meshTriIndex);
   var segmented = Object3DUtil.remeshObject(this.origObject3D, rawSegments, Object3DUtil.ClearMat);
   var segments = segmented.children;
   // Take segmented object and hierarchically cluster it
@@ -507,7 +508,7 @@ Segments.prototype.__indexedSegmentationToHierarchicalSegmentsUseExisting = func
   return { index: combinedIndex, segmented: segmented };
 };
 
-Segments.prototype.__indexedSegmentationToHierarchicalSegmentsRegroup = function (nTris, segmentationsByName) {
+Segments.prototype.__indexedSegmentationToHierarchicalSegmentsRegroup = function (nTris, segmentationsByName, meshTriIndex) {
   var meshes = Object3DUtil.getMeshes(this.origObject3D).list;
   var meshIndex = segmentationsByName['meshes'].index;
 
@@ -576,6 +577,7 @@ Segments.prototype.__parseIndexedSegmentation = function (callback, data, annota
   this.indexedSegmentation = data;
   if (data.elementType === 'triangles') {
     var meshes = Object3DUtil.getMeshes(this.origObject3D).list;
+    var meshTriIndex = null;
     var segmentationsByName = _.keyBy(data.segmentation, 'name');
     var ignoreList = ['faces', 'materials', 'meshes'];
     var meshIndex = segmentationsByName['meshes'].index;
@@ -585,13 +587,23 @@ Segments.prototype.__parseIndexedSegmentation = function (callback, data, annota
       if (ignoreList.indexOf(segmentation.name) >= 0) continue; // ignore
       var converted;
       if (meshes.length > 1) {
-        converted = this.__indexedSegmentationToSegmentsWithTriMesh(segmentation.index, meshIndex);
+        if (!meshTriIndex) {
+          var meshTriCounts = [];
+          meshTriIndex = [];
+          for (var j = 0; j < data.elementCount; j++) {
+            var mi = meshIndex[j];
+            var c = (meshTriCounts[mi] || 0);
+            meshTriIndex[j] = c;
+            meshTriCounts[mi] = c + 1;
+          }
+        }
+        converted = this.__indexedSegmentationToSegmentsWithTriMesh(segmentation.index, meshIndex, meshTriIndex);
       } else {
         converted = this.__indexedSegmentationToSegmentsWithTriMesh(segmentation.index);
       }
       segmentations[segmentation.name] = converted;
     }
-    var info = this.__indexedSegmentationToHierarchicalSegments(data.elementCount, segmentationsByName);
+    var info = this.__indexedSegmentationToHierarchicalSegments(data.elementCount, segmentationsByName, meshTriIndex);
     if (annotations) {
       // Augment original indexSegmentation with annotations
       // Figure out corresponding faceIndices
@@ -623,6 +635,35 @@ Segments.prototype.__parseIndexedSegmentation = function (callback, data, annota
   }
 };
 
+function __remapFromOriginalVertices(object, vertToSegIndices) {
+  // Go over segment groups
+  var meshes = Object3DUtil.getMeshes(object);
+  // Assumes just one mesh
+  var mesh = meshes.list[0];
+  var geometry = mesh.geometry;
+  var origVertIndices;
+  if (geometry.faces) {
+    // TODO: use original vert indices
+  } else {
+    var attributes = geometry.attributes;
+    if ( attributes.position ) {
+      var positions = attributes.position.array;
+      if (attributes.vertIndices) {
+        origVertIndices = attributes.vertIndices.array;
+      }
+      if (origVertIndices) {
+        var vcount = Math.floor(positions.length / 3);
+        var remapped = [];
+        for (var i = 0; i < vcount; i++) {
+          remapped[i] = vertToSegIndices[origVertIndices[i]];
+        }
+        return remapped;
+      }
+    }
+  }
+
+  return vertToSegIndices;
+}
 
 Segments.prototype.__setSegments = function (callback, field, format, data) {
   if (format === 'trimesh') {
@@ -641,7 +682,8 @@ Segments.prototype.__setSegments = function (callback, field, format, data) {
   } else if (format === 'segmentGroups') {
     console.time('setSegments');
     this.segments = null;
-    var vertToSegIndices = data['segIndices'];
+    var origVertToSegIndices = data['segIndices'];
+    var vertToSegIndices = __remapFromOriginalVertices(this.origObject3D, origVertToSegIndices);
     var segToVertIndices = groupVertToSegIndicesBySeg(vertToSegIndices);
     this.rawSegmentObject3D = Object3DUtil.copyAndRecolorVertices(this.origObject3D, vertToSegIndices, this.rawSegmentColor);
     this.rawSegmentObject3D.userData.vertToSegIndices = vertToSegIndices;

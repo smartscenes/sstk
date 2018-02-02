@@ -36,12 +36,13 @@ SUNCGLoader.PortalCategories = ['door', 'arch', 'garage_door', 'window'];
 function SUNCGLoader(params) {
   SceneLoader.call(this, params);
   this.defaultSource = 'p5d';
-  this.includeCeiling = params.includeCeiling;
+  this.includeCeiling = (params.includeCeiling != undefined)? params.includeCeiling : true;
   this.attachWallsToRooms = params.attachWallsToRooms;
   this.archOnly = params.archOnly;  // Only load architecture elements (no objects)
   this.useVariants = params.useVariants;
   this.keepInvalid = params.keepInvalid; // Retain invalid objects
   this.keepParse = params.keepParse; // Retain intermediate parse
+  this.useArchModelId = params.useArchModelId; // Use model id for room and ground instead of json id
 
   this.skipElements = params.skipElements;  // Set to ['Object'] to only load architecture elements (no Object)
                                             // Set to ['Object', 'Box'] to skip Object and Box
@@ -104,7 +105,44 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
   };
   if (this.archCreator && loadOpts.arch && loadOpts.arch.data) {
     var scope = this;
+    var archIds;
+    //console.log('useArchModelId', scope.useArchModelId);
+    if (scope.useArchModelId) {
+      var archMappings = {};
+      var archRegex = /[a-zA-Z]+_(\d+)[a-zA-Z]+_(\d+)/;
+      var rooms = _.flatten(_.map(json.levels, function(level) {
+        return _.filter(level.nodes, function(x) { return x.type === 'Room' || x.type === 'Ground'; }) }
+      ));
+      _.each(rooms, function(arch) {
+        var archId = arch.id;
+        if (arch.modelId) {
+          // Get archId from modelId
+          var match = arch.modelId.match(archRegex);
+          if (match) {
+            archId = match[1] + '_' + match[2];
+          }
+        }
+        archMappings[arch.id] = archId;
+      });
+      context.archMappings = archMappings;
+      //console.log('create archMappings', rooms, archMappings);
+      archIds = _.values(archMappings);
+    }
     context.arch = this.archCreator.createArch(loadOpts.arch.data, {
+      filterElements: function(element) {
+        if (!scope.includeCeiling) { return element.type !== 'Ceiling'; }
+        else {
+          if (scope.room != undefined && scope.level != undefined) {
+            return element.roomId === (scope.level + '_' + scope.room);
+          } else if (scope.level != undefined) {
+            return element.roomId && element.roomId.startsWith(scope.level + '_');
+          } else if (archIds) {
+            return archIds.indexOf(element.roomId) >= 0 || archIds.indexOf(element.id) >= 0;
+          } else {
+            return true;
+          }
+        }
+      },
       getMaterials: function(w) {
         return _.map(w.materials, function(m) {
           return scope.__getMaterial(m.diffuse, m.texture);
@@ -112,6 +150,9 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
       },
       groupWalls: false
     });
+  }
+  if (json.camera) {
+    this.__parseCamera(json.camera, sceneResult);
   }
   this.__parseItemDeferred(json, json.levels, context, ['Level'], function(err, parsed, results) {
     __addChildren(scene, results);
@@ -123,6 +164,43 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
   }.bind(this));
 };
 
+SUNCGLoader.prototype.__parseCamera = function(cameraJson, sceneResult) {
+  var cameras;
+  if (_.isArray(cameraJson)) {
+    cameras = _.groupBy(cameraJson, 'name');
+  } else {
+    cameras = cameraJson;
+  }
+  _.each(cameras, function(v, k) {
+    v.name = k;
+    if (!v.type) {
+      v.type = k;
+    }
+    if (v.type === 'orthographic') {
+      if (!v.position) {
+        // Convert from world into local
+        v.position = new THREE.Vector3((v.left + v.right)/2, v.near, (v.top + v.bottom)/2);
+        v.target = new THREE.Vector3((v.left + v.right)/2, v.far, (v.top + v.bottom)/2);
+        var w = (v.right - v.left)/2;
+        var h = (v.top - v.bottom)/2;
+        v.left = -w; v.right = w;
+        v.top = h, v.bottom = -h;
+        delete v['near'];
+        delete v['far'];
+      }
+    }
+    if (v.position) {
+      v.position = Object3DUtil.toVector3(v.position);
+    }
+    if (v.target) {
+      v.target = Object3DUtil.toVector3(v.target);
+    }
+    if (v.direction) {
+      v.direction = Object3DUtil.toVector3(v.direction);
+    }
+  });
+  sceneResult.cameras = cameras;
+};
 
 SUNCGLoader.prototype.__parseItemDeferred = function (json, items, context, allowed, callback) {
   // List of asynchronous jobs we want to do
@@ -260,6 +338,15 @@ SUNCGLoader.prototype.__parseLevel = function (json, context, callback) {
           }
         }
       }
+      if (context.arch) {
+        var holeToWalls = context.arch.holeToWalls;
+        for (var i = 0; i < results.length; i++) {
+          var r = results[i];
+          if (r.object3D && holeToWalls[r.id]) {
+            r.object3D.userData.wallIds = holeToWalls[r.id];
+          }
+        }
+      }
       callback(err, parsed);
     });
   } else {
@@ -302,7 +389,14 @@ SUNCGLoader.prototype.__parseRoom = function (json, context, callback) {
 SUNCGLoader.prototype.__parseRoomCached = function (json, context, callback) {
   //console.log('parseRoomCached', json, context);
   var parsed = { json: json, parent: context.parent, floor: context.floor, id: context.id, index: context.index };
-  parsed.object3D = context.arch.rooms[json.id];
+  var archId = json.id;
+  if (context.archMappings) {
+    var m = context.archMappings[json.id];
+    if (m != null) {
+      archId = m;
+    }
+  }
+  parsed.object3D = context.arch.rooms[archId];
   if (parsed.object3D) {
     var ro = parsed.object3D;
     if (json.roomTypes) {
@@ -322,7 +416,7 @@ SUNCGLoader.prototype.__parseRoomLoad = function (json, context, callback) {
   if (json.hideFloor) {
     _.pull(parts, 'f');
   }
-  if (json.hideCeiling) {
+  if (!this.includeCeiling || json.hideCeiling) {
     _.pull(parts, 'c');
   }
   if (json.hideWalls) {
@@ -531,7 +625,7 @@ SUNCGLoader.prototype.__parseArchLoad = function (json, context, callback) {
       // Okay
       object.modelInstance = modelInstance;
       object.object3D = modelInstance.getObject3D();
-      object.object3D.userData.type = json.archType;
+      object.object3D.userData.archType = json.archType;
 
       scope.__applyTransform(object.object3D, json);
       //scope.__applyMaterials(object.object3D, json);
@@ -617,6 +711,10 @@ SUNCGLoader.prototype.__applyTransform = function (object3D, json) {
   if (json.transform) {
     var transform = new THREE.Matrix4();
     transform.fromArray(json.transform);
+    if (json.isMirrored == null) {
+      var det = transform.determinant();
+      json.isMirrored = det < 0;
+    }
     Object3DUtil.setMatrix(object3D, transform);
   }
 

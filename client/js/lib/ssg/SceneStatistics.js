@@ -5,6 +5,9 @@ var Object3DUtil = require('geo/Object3DUtil');
 var async = require('async');
 var _ = require('util');
 
+var supportSurfaces = ['vertical', 'vertical', 'down', 'up', 'vertical', 'vertical'];
+var attachmentTypes = ['left','right','bottom','top','front','back'];
+
 /**
  * Scene statistics that we have computed
  * @constructor
@@ -24,15 +27,44 @@ function SceneStatistics() {
   this.__objectIdIndex = new Index({name: 'objectId'});
   this.__objectTypeIndex = new Index({name: 'objectType'});
   this.__bbfaceTypeIndex = new Index({name: 'bbfaceType'});
+  this.__bbfaceTypeIndex.addAll(attachmentTypes);
   this.__supportSurfaceTypeIndex = new Index({name: 'supportSurfaceType'});
+  this.__supportSurfaceTypeIndex.addAll(supportSurfaces);
+
   this.__objectIdRelationCounts = new IndexedCounters(
-    { name: 'objectIdRelationCounts', indices: [this.__relationIndex, this.__objectIdIndex,  this.__objectIdIndex]});
+    { name: 'objectIdRelationCounts', indices: [this.__relationIndex, this.__objectIdIndex,  this.__objectIdIndex],
+      fieldnames: [null, 'objectId1', 'objectId2']});
   this.__objectTypeRelationCounts = new IndexedCounters(
-    { name: 'objectTypeRelationCounts', indices: [this.__relationIndex, this.__objectTypeIndex,  this.__objectTypeIndex]});
+    { name: 'objectTypeRelationCounts', indices: [this.__relationIndex, this.__objectTypeIndex,  this.__objectTypeIndex],
+      fieldnames: [null, 'objectType1', 'objectType2'] });
   this.__objectIdChildAttachmentCounts = new IndexedCounters({ name: 'objectIdChildAttachmentCounts', indices: [this.__objectIdIndex, this.__bbfaceTypeIndex]});
   this.__objectTypeChildAttachmentCounts = new IndexedCounters({ name: 'objectTypeChildAttachmentCounts', indices: [this.__objectTypeIndex, this.__bbfaceTypeIndex]});
   this.__objectIdSupportSurfaceCounts = new IndexedCounters({ name: 'objectIdSupportSurfaceCounts', indices: [this.__objectIdIndex, this.__supportSurfaceTypeIndex]});
   this.__objectTypeSupportSurfaceCounts = new IndexedCounters({ name: 'objectTypeSupportSurfaceCounts', indices: [this.__objectTypeIndex, this.__supportSurfaceTypeIndex]});
+
+  // Object room relations
+  // this.__roomTypeIndex = new Index({name: 'roomType', filename: 'roomType'});
+  // this.__objectIdRoomTypeRelationCounts = new IndexedCounters(
+  //   { name: 'objectIdRoomTypeRelationCounts', indices: [this.__relationIndex, this.__objectIdIndex,  this.__roomTypeIndex]});
+  // this.__objectTypeRoomTypeRelationCounts = new IndexedCounters(
+  //   { name: 'objectTypeRoomTypeRelationCounts', indices: [this.__relationIndex, this.__objectTypeIndex,  this.__roomTypeIndex]});
+}
+
+
+SceneStatistics.prototype.bbfaceIndexToSupportSurfaceIndex = function(i) {
+  return this.__supportSurfaceTypeIndex.indexOf(supportSurfaces[i]);
+};
+
+SceneStatistics.prototype.bbfaceIndexToAttachmentTypeIndex = function(i) {
+  return this.__bbfaceTypeIndex.indexOf(attachmentTypes[i]);
+};
+
+SceneStatistics.prototype.getAttachmentType = function(i) {
+  return this.__bbfaceTypeIndex.get(i);
+}
+
+SceneStatistics.prototype.getSupportSurfaceType = function(i) {
+  return this.__supportSurfaceTypeIndex.get(i);
 }
 
 function __getKey(obj, attrnames) {
@@ -132,6 +164,55 @@ SceneStatistics.prototype.getTexturedMaterialCounts = function(textureSet) {
   }
 };
 
+
+SceneStatistics.prototype.getObjectIdRelationCounts = function(filter) {
+  if (filter) {
+    return this.__objectIdRelationCounts? this.__objectIdRelationCounts.filter(filter) : null;
+  } else {
+    return this.__objectIdRelationCounts;
+  }
+};
+
+SceneStatistics.prototype.getObjectTypeRelationCounts = function(filter) {
+  if (filter) {
+    return this.__objectTypeRelationCounts? this.__objectTypeRelationCounts.filter(filter) : null;
+  } else {
+    return this.__objectTypeRelationCounts;
+  }
+};
+
+SceneStatistics.prototype.getObjectIdChildAttachmentCounts = function(filter) {
+  if (filter) {
+    return this.__objectIdChildAttachmentCounts? this.__objectIdChildAttachmentCounts.filter(filter) : null;
+  } else {
+    return this.__objectIdChildAttachmentCounts;
+  }
+};
+
+SceneStatistics.prototype.getObjectTypeChildAttachmentCounts = function(filter) {
+  if (filter) {
+    return this.__objectTypeChildAttachmentCounts? this.__objectTypeChildAttachmentCounts.filter(filter) : null;
+  } else {
+    return this.__objectTypeChildAttachmentCounts;
+  }
+};
+
+SceneStatistics.prototype.getObjectIdSupportSurfaceCounts = function(filter) {
+  if (filter) {
+    return this.__objectIdSupportSurfaceCounts? this.__objectIdSupportSurfaceCounts.filter(filter) : null;
+  } else {
+    return this.__objectIdSupportSurfaceCounts;
+  }
+};
+
+SceneStatistics.prototype.getObjectTypeSupportSurfaceCounts = function(filter) {
+  if (filter) {
+    return this.__objectTypeSupportSurfaceCounts? this.__objectTypeSupportSurfaceCounts.filter(filter) : null;
+  } else {
+    return this.__objectTypeSupportSurfaceCounts;
+  }
+};
+
 SceneStatistics.prototype.__updatePortals = function(nodesById, portals) {
   for (var i = 0; i < portals.length; i++) {
     var portal = portals[i];
@@ -171,8 +252,6 @@ SceneStatistics.prototype.__updateSupport = function(nodesById, support) {
     }
   }
 
-  var supportSurfaces = ['vertical', 'vertical', 'down', 'up', 'vertical', 'vertical'];
-  var attachmentTypes = ['left','right','bottom','top','front','back'];
   for (var si = 0; si < support.length; si++) {
     var s = support[si];
     var parentNode = getNode(s.parent);
@@ -230,8 +309,8 @@ SceneStatistics.prototype.updateRelations = function(scene, sceneStats) {
 };
 
 SceneStatistics.prototype.importCsvs = function(opts) {
-  var statsToExport = opts.stats || ['materials'];
-  var funcNames = _.map(statsToExport, function(s) { return '__' + s + '_importCsvs'; });
+  var statsToImport = opts.stats || ['materials'];
+  var funcNames = _.map(statsToImport, function(s) { return '__' + s + '_importCsvs'; });
   this.__run(funcNames, opts);
 };
 

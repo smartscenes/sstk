@@ -188,17 +188,6 @@ SegmentLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
   });
 };
 
-SegmentLabeler.prototype.labelPart = function (part, labelInfo, opts) {
-  // Label information is saved in both the labelInfo and the part.userData
-  if (part && part.userData.labelInfo) {
-    //console.log('Relabel part ' + part.segmentIndex + ' from ' +
-    //  part.userData.labelInfo.name + ' to ' + labelInfo.name);
-    this.__unlabel(part, opts);
-  }
-  BasePartLabeler.prototype.labelPart.call(this, part, labelInfo, opts);
-  this.__label(part, labelInfo, opts);
-};
-
 SegmentLabeler.prototype.__label = function (part, labelInfo, opts) {
   opts = opts || {};
   var segsChanged = false;
@@ -224,6 +213,13 @@ SegmentLabeler.prototype.__label = function (part, labelInfo, opts) {
   }
 };
 
+SegmentLabeler.prototype.getLabelOBB = function(labelInfo) {
+  if (!labelInfo.obb && labelInfo.segIndices && labelInfo.segIndices.length) {
+    labelInfo.obb = this.segments.fitOBB('Raw', labelInfo.segIndices);
+  }
+  return labelInfo.obb;
+}
+
 SegmentLabeler.prototype.getPartOBB = function (part) {
   var labelInfo = (part.obb || part.segIndices)? part : part.userData.labelInfo;
   if (labelInfo) {
@@ -240,11 +236,6 @@ SegmentLabeler.prototype.getPartBoundingBox = function (part) {
   var obb = this.getPartOBB(part);
   var minmax = obb.getMinMax();
   return new BBox(minmax.min, minmax.max);
-};
-
-SegmentLabeler.prototype.unlabelPart = function (part, opts) {
-  this.__unlabel(part, opts);
-  BasePartLabeler.prototype.unlabelPart.call(this, part, opts);
 };
 
 SegmentLabeler.prototype.unlabelParts = function (parts, labelInfo) {
@@ -378,17 +369,17 @@ SegmentLabeler.prototype.merge = function(labelInfos, labels) {
     var first = labelInfos[0];
     for (var i = 1; i < labelInfos.length; i++) {
       var labelInfo = labelInfos[i];
-      var segIndices = labelInfo.segIndices.slice();
-      if (segIndices) {
+      if (labelInfo.segIndices && labelInfo.segIndices.length) {
+        var segIndices = labelInfo.segIndices.slice();
         // console.log('Merge segments ' + segIndices + ' from label "' + labelInfo.name
         //   + '" into label "' + first.name + '"');
         for (var j = 0; j < segIndices.length; j++) {
           var p = this.__segIdxToPart(mesh, null, segIndices[j]);
           this.labelPart(p, first, { skipFitOBB: true });
         }
-      }
-      if (labelInfo.segIndices.length > 0) {
-        console.warn('Not all segments removed from ' + labelInfo.name);
+        if (labelInfo.segIndices.length > 0) {
+          console.warn('Not all segments removed from ' + labelInfo.name);
+        }
       }
       labels.removeLabel(labelInfo);
     }

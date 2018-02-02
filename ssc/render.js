@@ -25,14 +25,20 @@ cmd
   .option('--level <level>', 'Scene level to render', STK.util.cmd.parseInt)
   .option('--room <room>', 'Room id to render [null]')
   .option('--show_ceiling [flag]', 'Whether to show ceiling or not', STK.util.cmd.parseBoolean, false)
+  .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .option('--seed <num>', 'Random seed to use', STK.util.cmd.parseInt, 12345678)
   .option('--repeat <num>', 'Number of times to repeat rendering of scene (for stress testing)', STK.util.cmd.parseInt, 1)
   .option('--heapdump <num>', 'Number of times to dump the heap (for memory debugging)', STK.util.cmd.parseInt, 0)
+  .option('--material_type <material_type>')
   .parse(process.argv);
 
 var useSearchController = STK.Constants.baseUrl.startsWith('http://') || STK.Constants.baseUrl.startsWith('https://');
 // Parse arguments and initialize globals
 STK.Constants.setVirtualUnit(1);  // set to meters
+if (cmd.material_type) {
+  STK.materials.Materials.DefaultMaterialType = STK.materials.Materials.getMaterialType(cmd.material_type)
+}
+
 var renderer = new STK.PNGRenderer({
   width: cmd.width,
   height: cmd.height,
@@ -44,7 +50,7 @@ var renderer = new STK.PNGRenderer({
   reuseBuffers: true
 });
 var assetManager = new STK.assets.AssetManager({
-  autoAlignModels: false,
+  autoAlignModels: cmd.auto_align,
   autoScaleModels: false,
   assetCacheSize: cmd.assetCacheSize,
   enableLights: cmd.use_lights,
@@ -101,24 +107,8 @@ var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
 
 main();
 
-function getAggregatedSceneStatistics(cache, cb) {
-  if (cache.aggregatedSceneStatistics) {
-    setTimeout(function() { cb(null, cache.aggregatedSceneStatistics); }, 0);
-  } else {
-    var p5dSceneAssetGroup = STK.assets.AssetGroups.getAssetGroup('p5dScene');
-    cache.aggregatedSceneStatistics = new STK.ssg.SceneStatistics;
-    cache.aggregatedSceneStatistics.importCsvs({
-      fs: STK.fs,
-      basename: p5dSceneAssetGroup.rootPath + '/stats/suncg',
-      callback: function(err, data) {
-        cb(err, cache.aggregatedSceneStatistics);
-      }
-    })
-  }
-}
-
 function retexture(opts, cb) {
-  getAggregatedSceneStatistics(opts.cache, function(err, aggregatedSceneStatistics) {
+  STK.scene.SceneUtil.getAggregatedSceneStatistics(opts.cache, function(err, aggregatedSceneStatistics) {
     STK.scene.SceneUtil.recolorWithCompatibleMaterials(opts.sceneState, {
       randomize: true,
       textureOnly: opts.retexture.textureOnly,
@@ -135,7 +125,7 @@ function retexture(opts, cb) {
     } else {
       setTimeout(function() { cb(); }, 0);
     }
-  });
+  }, { fs: STK.fs });
 }
 
 var rng = new STK.math.RNG();
@@ -301,7 +291,8 @@ function processIds(assetsDb) {
               count++;
               // reseed and retexure
               var name = outbasename + '.' + count;
-              var newseed = (count === 1 && cmd.scene.retexture && cmd.scene.retexture.seed)? cmd.scene.retexture.seed : rng.randBits(31);
+              var retextureOpts = _.get(cmd, 'scene.retexture') || {};
+              var newseed = (count === 1 && retextureOpts.seed)? retextureOpts.seed : rng.randBits(31);
               console.log('retexturing with seed ' + newseed + ' for ' + name);
               rng.seed(newseed);
               retexture({
@@ -310,7 +301,7 @@ function processIds(assetsDb) {
                 sceneState: sceneState,
                 assetManager: assetManager,
                 rng: rng,
-                retexture: cmd.scene.retexture
+                retexture: retextureOpts
               }, function(err, res) {
                 render(name, cb);
               });
@@ -332,6 +323,7 @@ function processIds(assetsDb) {
             color: cmd.color,
             encodeIndex: cmd.encode_index,
             writeIndex: cmd.write_index? basename : null,
+            restrictToIndex: cmd.restrict_to_color_index,
             fs: STK.fs,
             callback: function(err, res) {
               if (err) {
@@ -355,14 +347,19 @@ function processIds(assetsDb) {
           m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
         });
         var sceneState = new STK.scene.SceneState(null, mInst.model.info);
-        sceneState.addObject(mInst);
+        sceneState.addObject(mInst, cmd.auto_align);
         scene.add(sceneState.fullScene);
         var sceneBBox = STK.geo.Object3DUtil.getBoundingBox(mInst.object3D);
+        var suffix = cmd.output_suffix || cmd.color_by;
+        var outbasename = suffix? (basename + '.' + suffix) : basename;
+        if (cmd.encode_index) {
+          outbasename = outbasename + '.encoded';
+        }
 
         var renderOpts = {
           cameraControls: cameraControls,
           targetBBox: sceneBBox,
-          basename: basename,
+          basename: outbasename,
           angleStep: cmd.turntable_step,
           framerate: cmd.framerate,
           tilt: cmd.tilt,
@@ -389,7 +386,12 @@ function processIds(assetsDb) {
             cameraControls.viewTarget(viewOpts);
             renderer.renderToPng(scene, camera, outbasename);
             setTimeout( function() { cb(); }, 0);
-          } else {  // top down view is default
+          } else if (cmd.view_index) {
+            var views = cameraControls.generateViews(sceneBBox, cmd.width, cmd.height);
+            cameraControls.viewTarget(views[cmd.view_index]);  // default
+            renderer.renderToPng(scene, camera, outbasename);
+            setTimeout( function() { wrappedCallback(); }, 0);
+          } else {  // angled view is default
             cameraControls.viewTarget({
               targetBBox: sceneBBox,
               //viewIndex: 4,
@@ -397,7 +399,7 @@ function processIds(assetsDb) {
               theta: Math.PI / 4,
               distanceScale: 1.5
             });
-            renderer.renderToPng(scene, camera, basename + '.png');
+            renderer.renderToPng(scene, camera, outbasename);
             setTimeout( function() { wrappedCallback(); }, 0);
           }
         }
@@ -426,6 +428,7 @@ function processIds(assetsDb) {
             color: cmd.color,
             encodeIndex: cmd.encode_index,
             writeIndex: cmd.write_index? basename : null,
+            restrictToIndex: cmd.restrict_to_color_index,
             fs: STK.fs,
             callback: function(err, res) {
               if (err) {

@@ -12,7 +12,8 @@
   "defaultUnit": 0.0254,
   "defaultFilter": "+hasModel:true",
   "assetFields": {
-    "originalSourceUrl": "https://3dwarehouse.sketchup.com/model.html?id=${id}"
+    "originalSourceUrl": "https://3dwarehouse.sketchup.com/model.html?id=${id}",
+    "categoryOrdering": "coarse-to-fine"
   },
   "dataTypes": {
     "mesh": {

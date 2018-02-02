@@ -27,11 +27,13 @@ cmd.Command.prototype.optionGroups = function(opts) {
       .option('--framerate <frames per secs>', 'Frames per second for turntable video [25]', STK.util.cmd.parseInt, 25)
       .option('--skip_video [flag]', 'Skip turntable video [false]', STK.util.cmd.parseBoolean, false)
       .option('--tilt <tilt>', 'Default tilt (from horizontal) in degrees [60]', STK.util.cmd.parseInt, 60)
-      .option('--compress_png [flag]', 'Compress PNG output using pngquant [false]', STK.util.cmd.parseBoolean, false);
+      .option('--compress_png [flag]', 'Compress PNG output using pngquant [false]', STK.util.cmd.parseBoolean, false)
+      .option('--flipxy <fliptype>', 'Flip xy when generating image')
   }
   // Options for specifying view point
   if (opts.view) {
     this.option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt, 0);
+    this.option('--use_scene_camera <camera_name>', 'Use camera from scene');
   }
   // Options for special color by
   if (opts.color_by) {
@@ -40,7 +42,8 @@ cmd.Command.prototype.optionGroups = function(opts) {
       .option('--encode_index [flag]', 'Encode color index directly', STK.util.cmd.parseBoolean, false)
       .option('--write_index [flag]', 'Output index to file', STK.util.cmd.parseBoolean, false)
       .option('--index <filename>', 'Input index to use for consistent encoding')
-      .option('--object_index <filename>', 'Input index to use for object ids');
+      .option('--object_index <filename>', 'Input index to use for object ids')
+      .option('--restrict_to_color_index [flag]', 'Restrict coloring to index', STK.util.cmd.parseBoolean, false);
   }
   // Options for scene
   if (opts.scene) {
@@ -79,7 +82,7 @@ cmd.Command.prototype.__trackOptions = function() {
   this.__explicitOptions = {};
   STK.util.each(this.options, function(option) {
     if (!option.__trackOption) {
-      scope.on(option.name(), function(val) {
+      scope.on('option:' + option.name(), function(val) {
         scope.__explicitOptions[option.name()] = val;
       });
       option.__trackOption = true;
@@ -92,6 +95,7 @@ cmd.Command.prototype.loadConfig = function() {
     var data = STK.fs.readSync(this.config_file);
     var config = replaceRefs(JSON.parse(data), path.dirname(this.config_file));
     console.log('got config', config);
+    console.log('got explicit options', this.__explicitOptions);
     STK.util.merge(this, _.omit(config, _.keys(this.__explicitOptions)));
   }
 };

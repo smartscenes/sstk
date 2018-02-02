@@ -1,0 +1,90 @@
+doctype html
+html(lang='en')
+  head
+    title='Segment Annotator'
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.css')
+    link(rel='stylesheet', href='#{baseUrl}/client/js/vendor/jquery-ui/css/opentip.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/part-annotator.css')
+  body
+    #main
+      #canvas
+        #mouseToolTip.mouse-tooltip
+      video#video.overlay(width='320', height='240', controls, style='display:none')
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        button.btn.btn-lg.btn-success.btn-space(id='nextBtn', type='button') Next (Shift+N)
+        #newNameDiv.input-group
+          input#addNewNameTextbox.form-control(type='text', placeholder='Add new object...')
+          span.input-group-btn
+            button#addNewNameBtn.btn.btn-default(type='button') Add
+        #nameButtonsDiv.btn-group.btn-group-vertical
+      #instructionsPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-question-sign
+        #instructions
+      #guidelinesPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-info-sign
+        #guidelines(style="display:none")
+          include segment-annotator-task-details.jade
+      #alert(style="display:none")
+        a.close.alert-close(href="#", aria-label="close") &times;
+        #alertMessage
+      #counterBox.panel.panel-default.overlay
+      .topBtns.overlay.text-center(align="center")
+        button.btn.btn-lg.btn-primary(id='colorBtn', type='button') Show/hide color (C)
+        button.btn.btn-lg.btn-primary(id='labelObbBtn', type='button') Label box (R)
+        button.btn.btn-lg.btn-primary(id='unlabelObbBtn', type='button') Unlabel box (D)
+        button.btn.btn-lg.btn-primary(id='overrideBtn', type='button', style="display:none") Toggle distance override (O)
+      button.overlay.btn.btn-lg.btn-danger.hidden(id='passBtn', type='button') Pass - Can't do it!
+
+    // globals stores data we want to be able to access in the js code
+    script.
+      window.globals = {
+        modelId: "#{modelId}",
+        userId: "#{userId}",
+        sessionId: "#{sessionId}",
+        condition: "#{condition}",
+        task: "#{task}",
+        taskMode: "#{taskMode}",
+        base_url: "#{baseUrl}"
+      };
+
+    // Load require.js and start the app
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    // Special bootbox
+    script(src="#{baseUrl}/client/js/vendor/bootbox.form.min.js")
+    script(src="#{baseUrl}/three.min.js")
+    script(src='#{baseUrl}/scanNet.bundle.js')
+    script.
+      $('#guidelinesPanel').click(function () {
+        $('#guidelines').toggle();
+      });
+      var annotator = new STK.SegmentAnnotator({
+        container: document.getElementById('canvas'),
+        delayedLoading: true,
+        video: document.getElementById('video'),
+        labelsPanel: {
+          addNewLabelToTop: true,
+          suggestions: !{JSON.stringify(taskInfo.labels || [])}
+        },
+        annotationChecks: !{JSON.stringify(taskInfo.annotationChecks || null)},
+        segmentType: '#{segmentType}',
+        surveys: !{JSON.stringify(surveys || null)},
+        // Where we will go next after finishing with this annotation
+        onCloseUrl: "#{nextUrl}",
+        // For progress counter display
+        numItemsAnnotated: #{modelsAnnotated},
+        numItemsTotal: #{totalToAnnotate}
+      });
+      annotator.start();
+      annotator.assetManager.registerCustomAssetGroups({
+        assetFiles: STK.Constants.scanAssetsFile,
+        filterByAssetId: annotator.getAnnotationItemId(),
+        callback: function(err, res) {
+          annotator.setupScene();
+        }
+      });
+      window.app = annotator;  // For console debugging!

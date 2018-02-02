@@ -106,6 +106,19 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
         var front = this.getFront();
         //console.log('aligning model to world: up=' + JSON.stringify(up) + ', front=' + JSON.stringify(front));
         Object3DUtil.alignToUpFrontAxes(this.object3D, up, front, Constants.worldUp, Constants.worldFront);
+        if (this.info.alignments) {
+          //console.log('Got alignments', this.info.alignments);
+          if (this.info.alignments.data) {
+            var alns = this.info.alignments.data;
+            if (alns.length) {
+              var aln = alns[0].matrix;
+              // Premultiply (right multiply) matrix with aln
+              var transform = new THREE.Matrix4();
+              transform.multiplyMatrices(this.object3D.matrix, aln);
+              Object3DUtil.setMatrix(this.object3D, transform);
+            }
+          }
+        }
       };
 
       Model.prototype.getUp = function () {
@@ -246,6 +259,19 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
         return false;
       };
 
+      Model.prototype.getMatchingCategory = function (validCategories) {
+        var cats = this.getCategories();
+        if (cats.length > 0) {
+          for (var i = 0; i < cats.length; i++) {
+            var cat = cats[i];
+            if (validCategories.has(cat)) {
+              return cat;
+            }
+          }
+          return null;
+        } else { return null; }
+      };
+
       Model.prototype.getCategory = function (useFine) {
         var cats = this.getCategories();
         if (cats.length > 0) {
@@ -255,7 +281,11 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
 
       Model.prototype.getCategories = function () {
         if (this.info && this.info.category) {
-          return this.info.category.filter( function(x) { return !x.startsWith('_'); });
+          var cats = this.info.category.filter( function(x) { return !x.startsWith('_'); });
+          if (this.info.categoryOrdering === 'coarse-to-fine') {
+            cats = _.reverse(cats);
+          }
+          return cats;
         } else {
           return [];
         }

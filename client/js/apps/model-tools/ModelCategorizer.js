@@ -1,8 +1,8 @@
 'use strict';
 
-define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'search/SearchModule', 'util',
-    'dragscrollable', 'jquery-lazy'],
-  function (Constants, AssetManager, SearchController, SearchModule, _) {
+define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'search/SearchModule',
+    'io/FileUtil', 'ui/UIUtil', 'util', 'dragscrollable', 'jquery-lazy'],
+  function (Constants, AssetManager, SearchController, SearchModule, FileUtil, UIUtil, _) {
     // Interface for categorizing models
     function ModelCategorizer(params) {
       // Keep our own copy of categories
@@ -124,8 +124,17 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
       var selectedSaveButton = $('#selectedSave');
       selectedSaveButton.click(this.saveSelected.bind(this));
 
-      var selectedLoadButton = $('#selectedLoad');
-      selectedLoadButton.click(this.loadSelected.bind(this));
+      var selectedLoad = UIUtil.createFileInput({
+        id: 'selectLoad',
+        label: 'Load',
+        style: 'existing',
+        hideFilename: true,
+        labelButton: $('#selectedLoad'),
+        loadFn: function(file) {
+          this.loadSelected(file);
+        }.bind(this)
+      });
+      $('#selectedControls').append(selectedLoad.group);
 
       var imageNames = [
         'left', 'right', 'bottom', 'top', 'front', 'back', // 6
@@ -715,30 +724,33 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
 
     };
 
-    ModelCategorizer.prototype.loadSelected = function () {
-      var jsonFile = 'resources/data/modelSets/objectMapsWhitelist.json';
+    ModelCategorizer.prototype.loadSelected = function (jsonFile) {
       console.log('loading selected models from ' + jsonFile);
       this.selectedModels = {};
-      $.getJSON(jsonFile,
-        function (data) {
-          console.log(data);
-          for (var cat in data) {
-            // console.log(cat);
-            if (data.hasOwnProperty(cat)) {
-              var catIds = data[cat];
-              for (var i = 0; i < catIds.length; i++) {
-                var id = catIds[i];
-                if (!this.selectedModels[id]) {
-                  this.selectedModels[id] = [cat];
-                } else {
-                  this.selectedModels[id].push(cat);
+      FileUtil.readAsync(jsonFile, 'json',
+        function (error, data) {
+          if (error) {
+            UIUtil.showAlert(null, 'Error loading file');
+          } else {
+            console.log(data);
+            for (var cat in data) {
+              // console.log(cat);
+              if (data.hasOwnProperty(cat)) {
+                var catIds = data[cat];
+                for (var i = 0; i < catIds.length; i++) {
+                  var id = catIds[i];
+                  if (!this.selectedModels[id]) {
+                    this.selectedModels[id] = [cat];
+                  } else {
+                    this.selectedModels[id].push(cat);
+                  }
                 }
               }
             }
+            //console.log(this.selectedModels);
+            this.fetchModelCategories(Object.keys(this.selectedModels));
+            //this.updateSelectedPanel();
           }
-          //console.log(this.selectedModels);
-          this.fetchModelCategories(Object.keys(this.selectedModels));
-          //this.updateSelectedPanel();
         }.bind(this)
       );
     };

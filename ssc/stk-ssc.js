@@ -203,6 +203,14 @@ THREE.ImageLoader.prototype.load = function (url, onLoad, onProgress, onError, w
   }
 };
 
+function resolvePath(refPath, p) {
+  if (p.startsWith('https://') || p.startsWith('http://') || p.startsWith('file://')) {
+    return p;
+  } else {
+    return path.resolve(refPath, p);
+  }
+}
+
 // Read gaps lights map file and returns object mapping { p5dId: [lights] }
 var readGapsLights = function (lightsfile) {
   var data = fs.readSync(lightsfile);
@@ -268,7 +276,9 @@ var registerCustomAssetGroupsSync = function(assetsMap, assetGroupNames, refPath
   for (var j = 0; j < assetsToRegister.length; j++) {
     var g = assetsMap[assetsToRegister[j]];
     console.log('register ' + g.metadata);
-    registerCustomAssetGroupSync(path.resolve(refPath, g.metadata), path.resolve(refPath, g.ids), g.assetIdField);
+    var metadataPath = resolvePath(refPath, g.metadata);
+    var idsPath = resolvePath(refPath, g.ids)
+    registerCustomAssetGroupSync(metadataPath, idsPath, g.assetIdField);
   }
 };
 
@@ -349,5 +359,6 @@ STK.util.readAsync = STK.fs.readAsync;
 STK.util.loadLabelColorIndex = STK.fs.loadLabelColorIndex;
 STK.util.execSync = STK.fs.execSync;
 STK.util.busywait = busywait;
+STK.util.resolvePath = resolvePath;
 
-  module.exports = STK;
+module.exports = STK;

@@ -180,6 +180,15 @@ function SimViewer(params) {
   if (allParams.agentConfig) {
     _.defaultsDeep(allParams.agent, agentConfigs[allParams.agentConfig]);
   }
+  if (this.urlParams.addObjectAtGoal) {
+    // Initial modifications to scene
+    allParams.modifications = [{
+      'name': 'add',
+      'modelIds': 'p5d.s__1957',
+      'positionAt': 'goal',
+      'rotation': 'random'
+    }];
+  }
   Viewer3D.call(this, allParams);
 
   this.allParams = allParams;
@@ -259,6 +268,7 @@ SimViewer.prototype.init = function () {
       start: this.allParams.start,
       goal: this.allParams.goal,
       defaultLightState: this.allParams.defaultLightState,
+      modifications: this.allParams.modifications,
       colorEncoding: 'screen',
       fs: fs
     });
@@ -351,8 +361,10 @@ SimViewer.prototype.launch = function () {
 };
 
 SimViewer.prototype.reset = function () {
-  this.simulator.reset();
-  this.getEpisodeInfo();
+  var scope = this;
+  this.simulator.reset(function(err, sceneState) {
+    scope.getEpisodeInfo();
+  });
 };
 
 SimViewer.prototype.getEpisodeInfo = function() {

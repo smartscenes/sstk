@@ -1,0 +1,134 @@
+doctype html
+html(lang="en")
+  head
+    title= "ScanNet"
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/common.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/search-panel.css')
+    link(rel='stylesheet', href='#{baseUrl}/css/model-viewer.css')
+  body
+    // UI Markup
+    #sidebar
+      #info ScanNet
+      #options
+        label(for="imageIndex") View
+        select#imageIndex(style="display:none")
+      #tabs
+        ul
+          li: a(href="#tabs-1") Search
+          li: a(href="#tabs-7") Images
+          li: a(href="#tabs-6") Parts
+          li: a(href="#tabs-8") Annotations
+        #tabs-1
+          #searchPanel
+        #tabs-6
+          #partsPanel
+            p#partTypeSelectDiv
+              label(for="partType") Part Type
+              select#partType
+            p#labelTypeSelectDiv
+              label(for="labelType") Label
+              select#labelType
+            p
+              input(type="checkbox", id="keepSegmentColors")
+              label(for="keepSegmentColors") Keep segment colors
+            p#showSegmentOBBsDiv
+              input(type="checkbox", id="showSegmentOBBs")
+              label(for="showSegmentOBBs") Show segment OBBs
+        #tabs-7
+          #imagesPanel
+        #tabs-8
+          #annotationsPanel
+            input#clearAnnotations(type="button", value="Clear", title="Clear all model annotations")
+            input#resetAnnotations(type="button", value="Reset", title="Revert to initial model annotations")
+            input#previewAnnotations(type="button", value="Preview", title="Preview model annotations")
+            input#submitAnnotations(type="button", value="Submit", title="Save annotations")
+    #main
+      #canvas
+      #alert.alert(style="display:none")
+        button.close(type="button", onclick="hideAlert()") &times;
+        span#alertMessage
+
+      #instructionsPanel.roundBorder.grayBackground
+        span Instructions
+        p#instructions
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        #nameButtonsDiv.btn-group.btn-group-vertical
+    #customLoadingPanel.roundBorder.grayBackground
+      #customLoadingContents
+        div
+          span.input-group-btn
+            span.btn.btn-default.btn-file Custom Model
+              input#loadLocalFile(type="file")
+            input#loadLocalFilename.form-control(type="text",readonly)
+        div
+          span.input-group-btn
+            span.btn.btn-default.btn-file Models
+              input#registerAssetsFile(type="file")
+            input#registerAssetsFilename.form-control(type="text",readonly)
+        div
+          span.input-group-btn
+            span.btn.btn-default.btn-file Metadata
+              input#registerMetaFile(type="file")
+            input#registerMetaFilename.form-control(type="text",readonly)
+        div
+          span#registerBtn.btn.btn-default Register
+          span#loadLocalBtn.btn.btn-default Load
+
+    script(src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js")
+    script(src="#{baseUrl}/three.min.js")
+    script(src="#{baseUrl}/STK.bundle.js")
+    link(rel='stylesheet', href='#{baseUrl}/css/datgui-light.css')
+    script.
+      var tabsDiv = $('#tabs');
+      tabsDiv.tabs().css({ 'min-height': '400px', 'overflow': 'auto' });
+      var canvas = document.getElementById('canvas');
+      var modelViewer = new STK.ModelViewer({
+        container: canvas,
+        sources: ['vf'],
+        useNewImages: true,
+        tooltipIncludeExtraFields: ['sceneLabel', 'sceneType'],
+        partsPanel: {
+          partTypes: ['none', 'meshes', 'surfaces', 'surfaces-coarse', 'surfaces-fine', 'surfaces-finest', 'voxels-solid', 'voxels-surface', 'voxels-labeled'],
+          defaultPartType: STK.util.getUrlParam('defaultPartType') || 'none',
+          defaultLabelType: STK.util.getUrlParam('defaultLabelType') || 'Raw'
+        },
+        tabs: ['models', 'images', 'parts', 'annotations']
+      });
+      var modelId = STK.util.getUrlParam('modelId');
+      modelViewer.launch();
+      modelViewer.assetManager.registerCustomAssetGroups({
+        assetFiles: STK.Constants.scanAssetsFile,
+        filterByAssetId: modelId,
+        callback: function(err, res) {
+          if (!err) {
+            if (modelId != undefined) {
+              var modelIdParts = modelId.split('.');
+              modelViewer.setSourceAndSearch(modelViewer.modelSearchController, modelIdParts[0], 'fullId:' + modelId);
+            }
+          }
+        }
+      });
+
+      tabsDiv.bind('tabsactivate', function (event, ui) {
+        switch (ui.newPanel.attr('id')) {
+          case 'tabs-1':
+            modelViewer.modelSearchController.onResize();
+            break;
+          case 'tabs-7':
+            modelViewer.modelImagesPanel.onResize();
+            break;
+        }
+      });
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
+      $('#namesPanel').draggable();
+      $('#customLoadingPanel').draggable();
+      $('#instructionsPanel').draggable();
+      window.app = modelViewer;  // For console debugging

@@ -19,8 +19,18 @@ function Counter(opts) {
   this.clear();
 }
 
+Object.defineProperty(Counter.prototype, 'sum', {
+  get: function () {
+    if (this.__sum == undefined) {
+      this.__sum = _.sum(_.values(this.__counts));
+    }
+    return this.__sum;
+  }
+});
+
 Counter.prototype.clear = function() {
   this.__counts = {};
+  this.__sum = undefined;
 };
 
 Counter.prototype.size = function() {
@@ -29,6 +39,9 @@ Counter.prototype.size = function() {
 
 Counter.prototype.set = function(obj, count) {
   var id = this.__idFn(obj);
+  if (this.__sum != undefined) {
+    this.__sum += (count - (this.__counts[id] || 0));
+  }
   this.__counts[id] = count;
 };
 
@@ -45,6 +58,9 @@ Counter.prototype.add = function(obj, count) {
   count = count || 1;
   var id = this.__idFn(obj);
   this.__counts[id] = (this.__counts[id] || this.__defaultCount) + count;
+  if (this.__sum != undefined) {
+    this.__sum += count;
+  }
 };
 
 Counter.prototype.update = function(counts) {
@@ -84,6 +100,7 @@ Counter.prototype.sample = function(opts) {
 
 Counter.prototype.filterCounts = function(filter) {
   this.__counts = _.pickBy(this.__counts, filter);
+  this.__sum = undefined;
 };
 
 Counter.prototype.filter = function(filter) {
@@ -103,8 +120,10 @@ Counter.prototype.copy = function(counter, filter) {
   this.__defaultCount = counter.__defaultCount;
   if (filter) {
     this.__counts = _.pickBy(counter.__counts, filter);
+    this.__sum = undefined;
   } else {
     this.__counts = _.clone(counter.__counts);
+    this.__sum = counter.__sum;
   }
 };
 

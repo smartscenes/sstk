@@ -1,4 +1,5 @@
 var async = require('async');
+var AssetGroups = require('assets/AssetGroups');
 var BVH = require('geo/BVH');
 var Constants = require('Constants');
 var Colors = require('util/Colors');
@@ -10,6 +11,7 @@ var MeshSampling = require('gfx/MeshSampling');
 var Object3DUtil = require('geo/Object3DUtil');
 var VPTreeFactory = require('ds/VPTree');
 var RNG = require('math/RNG');
+var SceneStatistics = require('ssg/SceneStatistics');
 var _ = require('util');
 
 /**
@@ -254,13 +256,13 @@ SceneUtil.__colorSceneByMaterial = function (sceneState, opts) {
       var materials = mesh.material.materials.map(function(m, i) {
         var category = materialIdMap? materialIdMap[m.id] : m.id;
         var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-        return getMaterialFn(colorIdx, null, palette);
+        return getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette);
       });
       return new THREE.MultiMaterial(materials);
     } else {
       var category = mesh.material.id; // TODO: build index of materials
       var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-      return getMaterialFn(colorIdx, null, palette);
+      return getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette);
     }
   };
   var modelInstances = sceneState.modelInstances;
@@ -315,11 +317,11 @@ SceneUtil.__colorSceneByModelId = function (sceneState, opts) {
     var modelInstance = sceneState.modelInstances[i];
     var category = modelInstance.model.getFullID();
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-    colorObj(modelInstance.object3D, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
-    colorObj(object, getMaterialFn(unknownIdx, null, palette), opts);
+    colorObj(object, getMaterialFn(unknownIdx, categoryIndex.metadata(unknownIdx, 'color'), palette), opts);
   }
   if (opts.callback) {
     opts.callback(null, { index: categoryIndex });
@@ -337,13 +339,13 @@ SceneUtil.__colorSceneByObjectId = function (sceneState, opts) {
     var modelInstance = sceneState.modelInstances[i];
     var category = opts.getId? opts.getId(modelInstance.object3D) : modelInstance.object3D.id;
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true, { modelId: modelInstance.model.getFullID(), category: modelInstance.model.info.category }) : unknownIdx;
-    colorObj(modelInstance.object3D, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
     var category = opts.getId? opts.getId(object) : object.id;
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true, { category: object.userData.type }) : unknownIdx;
-    colorObj(object, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   if (opts.callback) {
     opts.callback(null, { index: categoryIndex });
@@ -427,6 +429,7 @@ SceneUtil.__colorSceneByObjectPart = function (sceneState, opts) {
 
 SceneUtil.__colorSceneByObjectType = function (sceneState, opts) {
   opts = opts || {};
+  var getCategory = opts.getCategory;
   var getMaterialFn = opts.getMaterialFn || getMaterial;
   var palette = opts.palette || Colors.concatPalettes('all-roomtypes',[
     Colors.createPalette('other-roomtypes', ['#A9A9A9', '#708090']),
@@ -434,18 +437,39 @@ SceneUtil.__colorSceneByObjectType = function (sceneState, opts) {
   ]);
   var categoryIndex = opts.index || new Index();
   var unknownIdx = categoryIndex.indexOf('unknown', true);
-  categoryIndex.indexOf('Wall', true);
+  if (opts.restrictToIndex && opts.index) {
+    var validCategories = new Set(opts.index.objects());
+    if (getCategory) {
+      var getBaseCategory = getCategory;
+      getCategory = function(mi) {
+        var c = getBaseCategory(mi);
+        if (!validCategories.has(c)) {
+          c = undefined;
+        }
+        return c;
+      }
+    } else {
+      getCategory = function(mi) {
+        return mi.model.getMatchingCategory(validCategories);
+      }
+    }
+  } else {
+    categoryIndex.indexOf('Wall', true);
+  }
   for (var i = 0; i < sceneState.modelInstances.length; i++) {
     var modelInstance = sceneState.modelInstances[i];
-    var category = opts.getCategory? opts.getCategory(modelInstance) : modelInstance.model.getCategory();
+    var category = getCategory? getCategory(modelInstance) : modelInstance.model.getCategory();
+    if (category == undefined && modelInstance.object3D.userData.archType) {
+      category = modelInstance.object3D.userData.archType;
+    }
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-    colorObj(modelInstance.object3D, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
     var category = object.userData.type || object.name;
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-    colorObj(object, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   if (opts.callback) {
     opts.callback(null, { index: categoryIndex });
@@ -471,7 +495,8 @@ SceneUtil.__colorSceneByRoomId = function (sceneState, opts) {
     var objRooms = modelInstance.object3D.userData.roomIds;
     var inRoom = objRooms && objRooms.length > 0;
     if (!inRoom) {
-      colorObj(modelInstance.object3D, getMaterialFn(categoryIndex.indexOf('Outside', true), null, palette), opts);
+      var colorIdx = categoryIndex.indexOf('Outside', true);
+      colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
     }
   }
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
@@ -479,7 +504,8 @@ SceneUtil.__colorSceneByRoomId = function (sceneState, opts) {
     var objRooms = object.userData.roomIds;
     var inRoom = objRooms && objRooms.length > 0;
     if (!inRoom) {
-      colorObj(object, getMaterialFn(categoryIndex.indexOf('Outside', true), null, palette), opts);
+      var colorIdx = categoryIndex.indexOf('Outside', true);
+      colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
     }
   }
 
@@ -487,14 +513,15 @@ SceneUtil.__colorSceneByRoomId = function (sceneState, opts) {
     var room = rooms[i];
     var category = room.userData.id;
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-    colorObj(room, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(room, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
 
   // Keep walls a nice lovely gray
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
     if (object.userData.type === 'Wall') {
-      colorObj(object, getMaterialFn(categoryIndex.indexOf('Wall', true), null, palette), opts);
+      var colorIdx = categoryIndex.indexOf('Wall', true);
+      colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
     }
   }
   if (opts.callback) {
@@ -535,7 +562,8 @@ SceneUtil.__colorSceneByRoomType = function (sceneState, opts) {
     var objRooms = modelInstance.object3D.userData.roomIds;
     var inRoom = objRooms && objRooms.length > 0;
     if (!inRoom) {
-      colorObj(modelInstance.object3D, getMaterialFn(categoryIndex.indexOf('Outside', true), null, palette), opts);
+      var colorIdx = categoryIndex.indexOf('Outside', true);
+      colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
     }
   }
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
@@ -543,7 +571,8 @@ SceneUtil.__colorSceneByRoomType = function (sceneState, opts) {
     var objRooms = object.userData.roomIds;
     var inRoom = objRooms && objRooms.length > 0;
     if (!inRoom) {
-      colorObj(object, getMaterialFn(categoryIndex.indexOf('Outside', true), null, palette), opts);
+      var colorIdx = categoryIndex.indexOf('Outside', true);
+      colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
     }
   }
 
@@ -552,14 +581,15 @@ SceneUtil.__colorSceneByRoomType = function (sceneState, opts) {
     var category = (room.userData.roomType && room.userData.roomType.length > 0)?
       room.userData.roomType[0] : null;
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
-    colorObj(room, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(room, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
 
   // Keep walls a nice lovely gray
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
     if (object.userData.type === 'Wall') {
-      colorObj(object, getMaterialFn(categoryIndex.indexOf('Wall', true), null, palette), opts);
+      var colorIdx = categoryIndex.indexOf('Wall', true);
+      colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
     }
   }
   if (opts.callback) {
@@ -715,7 +745,7 @@ SceneUtil.colorObjects = function (object3Ds, opts) {
     var object = object3Ds[i];
     var id = opts.getId? opts.getId(object) : object.id;
     var colorIdx = (id != undefined)? idIndex.indexOf(id, true, { category: object.userData.type }) : unknownIdx;
-    colorObj(object, getMaterialFn(colorIdx, null, palette), opts);
+    colorObj(object, getMaterialFn(colorIdx, idIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   if (opts.callback) {
     opts.callback(null, { index: idIndex });
@@ -1024,7 +1054,7 @@ SceneUtil.sampleRoom = function(rooms, opts) {
 
 SceneUtil.getWallsBBox = function(sceneState) {
   var walls = sceneState.findNodes(function (o) {
-    return o.userData.type === 'Wall';
+    return o.userData.type === 'Wall' || o.userData.archType === 'Wall';
   });
   return Object3DUtil.getBoundingBox(walls);
 };
@@ -1073,7 +1103,7 @@ SceneUtil.estimateFloorHeight = function(level, point, nsamples, maxDist, kNeigh
       level.__floorSamplesVPTree2DL2 = VPTreeFactory.build(level.__floorSamples, function (a, b) {
           var dx = a.x - b.x;
           var dz = a.z - b.z;
-          return dx * dx + dz * dz;
+          return Math.sqrt(dx * dx + dz * dz);
       });
     }
     var closest = level.__floorSamplesVPTree2DL2.search(point, kNeighbors, maxDist);
@@ -1146,6 +1176,19 @@ SceneUtil.computeStatistics = function(sceneState, opts) {
     if (area != undefined) {
       stats.floorArea = area;
     }
+    var portals = portalsByRoom[room.userData.id];
+    if (portals) {
+      var portalCounts = _.countBy(portals, 'portalType');
+      stats.nwindows = portalCounts['window'];
+      stats.ndoors = portalCounts['door'];
+      // Attach portals to this room
+      _.each(portals, function(p) {
+        var portalObject = sceneState.findNodeById(p.portal);
+        if (portalObject) {
+          Object3DUtil.attachToParent(portalObject, room);
+        }
+      });
+    }
     var bboxRoom = Object3DUtil.computeBoundingBox(room, transform, function(x) {
       return (x.userData.type !== 'ModelInstance');
     });
@@ -1166,12 +1209,6 @@ SceneUtil.computeStatistics = function(sceneState, opts) {
     stats.bboxRoom =  bboxRoom;  // Bounding box of room itself
     if (bboxObjects.valid()) {
       stats.bboxObjects = bboxObjects; // Bounding box of the objects in the room
-    }
-    var portals = portalsByRoom[room.userData.id];
-    if (portals) {
-      var portalCounts = _.countBy(portals, 'portalType');
-      stats.nwindows = portalCounts['window'];
-      stats.ndoors = portalCounts['door'];
     }
     nodes.push(stats);
   }
@@ -1350,29 +1387,57 @@ SceneUtil.identifyRelations = function(sceneState, opts, callback) {
     support: supportRelations
   };
   // Support relations
-  sceneState.identifySupportHierarchy({ portalRelations: portalRelations, assetManager: opts.assetManager }, function(err, supportAttachments) {
-    if (supportAttachments) {
-      for (var i = 0; i < supportAttachments.length; i++) {
-        var attachment = supportAttachments[i];
-        if (attachment) {
-          // TODO: Add bbfaceIndex to parentAttachment and position of child attachment point in parent frame
-          var parentAttachment = _.pick(attachment.parentAttachment, ['distance', 'faceIndex', 'normSim', 'normal', 'point', 'uv']);
-          parentAttachment.meshId = Object3DUtil.getSceneGraphPath(attachment.parentAttachment, attachment.parent);
-          supportRelations.push({
-            child: attachment.child.userData.id,
-            parent: attachment.parent.userData.id,
-            parentAttachment: parentAttachment,
-            childAttachment: attachment.childAttachment
-          });
-        }
-      }
-    }
-    callback(err, relations);
+  sceneState.identifySupportHierarchy({ portalRelations: portalRelations, assetManager: opts.assetManager, aggregatedSceneStatistics: opts.aggregatedSceneStatistics },
+    function(err, supportAttachments) {
+      SceneUtil.supportAttachmentsToRelations(supportAttachments, supportRelations);
+      callback(err, relations);
   });
   return relations;
 };
 
+SceneUtil.supportAttachmentsToRelations = function(supportAttachments, supportRelations) {
+  supportRelations = supportRelations || [];
+  if (supportAttachments) {
+    for (var i = 0; i < supportAttachments.length; i++) {
+      var attachment = supportAttachments[i];
+      if (attachment) {
+        // TODO: Add bbfaceIndex to parentAttachment and position of child attachment point in parent frame
+        var parentAttachment = _.pick(attachment.parentAttachment, ['distance', 'faceIndex', 'normSim', 'normal', 'point', 'uv']);
+        parentAttachment.meshId = Object3DUtil.getSceneGraphPath(attachment.parentAttachment, attachment.parent);
+        supportRelations.push({
+          child: attachment.child.userData.id,
+          parent: attachment.parent.userData.id,
+          parentAttachment: parentAttachment,
+          childAttachment: attachment.childAttachment
+        });
+      }
+    }
+  }
+  return supportRelations;
+};
+
+SceneUtil.identifyGroupings = function(sceneState, supportRelations, opts) {
+  console.time('identifyGroupings');
+  opts = opts || {};
+  var bvhConfig = _.defaults(Object.create(null), opts, {
+    splitStrategy: BVH.SplitStrategy.SURFACE_AREA_HEURISTIC,
+    axisChoiceStrategy: BVH.AxisChoiceStrategy.OPTIMAL
+  });
+  var groupedRelations = _.groupBy(supportRelations, 'parent');
+  var grouped = _.mapValues(groupedRelations, function(rels) {
+    var object3Ds = _.map(rels, function (rel) {
+      var object3D = sceneState.findNodeById(rel.child);
+      return object3D;
+    });
+    var bvh = new BVH(object3Ds, bvhConfig);
+    return bvh;
+  });
+  console.timeEnd('identifyGroupings');
+  return grouped;
+};
+
 SceneUtil.detectOutlierObjects = function(sceneState, opts) {
+  console.time('detectOutlierObjects');
   opts = opts || {};
   var bvh = opts.bvh;
   var minObjects = opts.minObjects || 10;
@@ -1396,8 +1461,12 @@ SceneUtil.detectOutlierObjects = function(sceneState, opts) {
     return false;
   }
   if (!bvh) {
+    var bvhConfig = _.defaults(Object.create(null), opts, {
+      splitStrategy: BVH.SplitStrategy.SURFACE_AREA_HEURISTIC,
+      axisChoiceStrategy: BVH.AxisChoiceStrategy.OPTIMAL
+    });
     var object3Ds = sceneState.getObject3Ds();
-    bvh = new BVH(object3Ds);
+    bvh = new BVH(object3Ds, bvhConfig);
   }
   var outliers = [];
   var root = bvh.root;
@@ -1435,11 +1504,33 @@ SceneUtil.detectOutlierObjects = function(sceneState, opts) {
       }
     }
   }
+  console.timeEnd('detectOutlierObjects');
   if (Constants.isBrowser) {
     console.log('New root ', root);
     console.log('Outliers ', outliers);
   }
   return { outliers: outliers, root: root };
+};
+
+SceneUtil.getAggregatedSceneStatistics = function(cache, cb, opts) {
+  opts = opts || {};
+  if (cache.aggregatedSceneStatistics) {
+    setTimeout(function() { cb(null, cache.aggregatedSceneStatistics); }, 0);
+  } else {
+    var p5dSceneAssetGroup = AssetGroups.getAssetGroup('p5dScene');
+    cache.aggregatedSceneStatistics = new SceneStatistics();
+    cache.aggregatedSceneStatistics.importCsvs({
+      fs: opts.fs || Constants.sys.fs,
+      basename: p5dSceneAssetGroup.rootPath + '/stats/v4/suncg',
+      stats: opts.stats || ['materials', 'relations'],
+      callback: function(err, data) {
+        if (err) {
+          console.error('error loading scene statistics', err);
+        }
+        cb(err, cache.aggregatedSceneStatistics);
+      }
+    })
+  }
 };
 
 SceneUtil.visualizeWallLines = function(sceneState, walls) {

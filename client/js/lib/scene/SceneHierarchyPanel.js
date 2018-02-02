@@ -6,6 +6,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var MeshHelpers = require('geo/MeshHelpers');
 var FileUtil = require('io/FileUtil');
 var UIUtil = require('ui/UIUtil');
+var SceneUtil = require('scene/SceneUtil');
 var TypeUtils = require('data/TypeUtils');
 var keymap = require('controls/keymap');
 var hilbert = require('hilbert');
@@ -88,6 +89,22 @@ SceneHierarchyPanel.prototype.init = function () {
         }
       });
     }
+    if (this.supportAttachment) {
+      configOptions.push({
+        id: 'addGroupsToSupport',
+        name: 'addGroupsToSupport',
+        text: 'Use grouping within support hierarchy',
+        type: 'boolean',
+        defaultValue: true
+      });
+      configOptions.push({
+        id: 'useStatsForSupport',
+        name: 'useStatsForSupport',
+        text: 'Use aggregated statistics',
+        type: 'boolean',
+        defaultValue: true
+      });
+    }
     this.configControls = new ConfigControls({
       container: this.configPanel,
       prefix: this.__prefix,
@@ -153,12 +170,7 @@ SceneHierarchyPanel.prototype.init = function () {
     if (this.supportAttachment) {
       var identifySupportHierarchyButton = $('<input type="button" value="Support Hierarchy"/>')
         .click(function () {
-          if (scope.sceneState) {
-            scope.sceneState.identifySupportHierarchy({groupBySupport: true, attachToParent: true, assetManager: scope.assetManager},
-              function(err, attachments) {
-                scope.setSceneState(scope.sceneState);
-              });
-          }
+          scope.identifySupportHierarchy();
         });
       this.buttonsPanel.append(identifySupportHierarchyButton);
     }
@@ -183,6 +195,75 @@ SceneHierarchyPanel.prototype.init = function () {
         scope.tree.jstree('deselect_all');
       }
     });
+  }
+};
+
+SceneHierarchyPanel.prototype.identifySupportHierarchy = function() {
+  var scope = this;
+  if (scope.sceneState) {
+    var useStatsForSupport = scope.configControls.getFieldValue('useStatsForSupport');
+    if (useStatsForSupport) {
+      scope.app.__cache = this.app.__cache || {};
+      SceneUtil.getAggregatedSceneStatistics(scope.app.__cache, function (err, aggregatedSceneStatistics) {
+        console.log('got aggregated scene statistics', aggregatedSceneStatistics);
+        scope.__identifySupportHierarchy(aggregatedSceneStatistics);
+      }, {fs: FileUtil});
+    } else {
+      scope.__identifySupportHierarchy();
+    }
+  }
+};
+
+SceneHierarchyPanel.prototype.__identifySupportHierarchy = function(aggregatedSceneStatistics) {
+  var scope = this;
+  if (scope.sceneState) {
+    scope.sceneState.identifySupportHierarchy({groupBySupport: true, attachToParent: true,
+        assetManager: scope.assetManager, aggregatedSceneStatistics: aggregatedSceneStatistics},
+      function(err, attachments) {
+        var addGroups = scope.configControls.getFieldValue('addGroupsToSupport');
+        if (addGroups) {
+          var supportRelations = SceneUtil.supportAttachmentsToRelations(attachments);
+          var grouped = SceneUtil.identifyGroupings(scope.sceneState, supportRelations);
+          // Translate groups to parent child relationship
+          var regions = {};
+          _.each(grouped, function(group, parentId) {
+            // Each group is a BVH
+            var bvh = group;
+            //console.log(bvh, parentId);
+            if (bvh.root.objects.length > 2) {
+              bvh.traverse(function (bvhNode) {
+                  var region = new THREE.Group();
+                  region.name = 'Region-' + bvhNode.id;
+                  region.userData.type = 'BVHGroup';
+                  region.userData.sceneHierarchyGroup = true;
+                  scope.sceneState.addExtraObject(region);
+                  bvhNode.object3D = region;
+                  if (bvhNode.parent) {
+                    Object3DUtil.attachToParent(region, bvhNode.parent.object3D, scope.sceneState.scene);
+                  } else {
+                    var parent = scope.sceneState.findNode(function(x) { return x.name === 'Region-' + parentId + '-children'; });
+                    if (parent == null) {
+                      parent = scope.sceneState.findNode(function(x) { return x.userData.id === parentId; });
+                    }
+                    Object3DUtil.attachToParent(region, parent, scope.sceneState.scene);
+                  }
+                },
+                function (bvhNode) {
+                  if (bvhNode.objects) {
+                    if (bvhNode.isLeaf) {
+                      for (var j = 0; j < bvhNode.objects.length; j++) {
+                        var obj = bvhNode.objects[j];
+                        Object3DUtil.attachToParent(obj, bvhNode.object3D, scope.sceneState.scene);
+                      }
+                    }
+                  }
+                }
+              );
+            }
+          });
+        }
+        scope.setSceneState(scope.sceneState);
+      });
   }
 };
 
@@ -396,6 +477,9 @@ SceneHierarchyPanel.prototype.__convertModelInstancesToTreeNodes = function (sce
       this.__setTreeNodeId(object, shId);
       // Object has metadata - use it figure out how the hierarchy is
       var child = treeNodes[index];
+      if (!object.parent) {
+        console.warn('No parent for object', object);
+      }
       var parentIndex = object.parent.index;
       var parentId = (parentIndex >= 0) ? this.__prefix + parentIndex : '#';
       if (!child) {
@@ -796,7 +880,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
               "separator_after": false,
               "label": "Identify attachment",
               "action": function (obj) {
-                var attachment = scope.sceneState.identifyAttachment(modelInstance);
+                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { maxCandidatesToCheck: 1 });
                 console.log(attachment);
               }
             };

@@ -14,6 +14,24 @@ NODE_BASE_URL='/myapp' REVERSE_PROXY_PORT=8010 HTTP_SERVER_PORT=9010 npm start
 ```
 You can specify these values in an `env.sh` file (see [env.example.sh](env.example.sh) for an example), and then run `run.sh`.
 
+## Directory Structure
+```
+  # Existing files
+    app/                # Main express.js app 
+    config/             # Server configuration
+    lib/                # Utility functions (e.g db querying, logging)
+    proj/               # Project specific server apps (mirrors main app directory structure)
+      index.js          # Hookup of server apps to main express.js
+    sass/               # Templated css files
+    static/             # All our static html, css, data goes here
+    test/               # Need some more tests
+    views/              # Template .jade (pug) files for generating html
+    
+  # Generated files
+  node_modules/      # dependent node modules (populated by npm install)
+  logs/              # generated log files go here
+```
+
 ## Setting up a new instance ##
 ```
   cp env.example.sh env.sh  
@@ -65,3 +83,4 @@ You can specify these values in an `env.sh` file (see [env.example.sh](env.examp
 * `Unit/integration tests and code coverage*` <-> `npm run cover`
 * `Run everything!` <-> `npm test`  
 **Note: Code coverage is only over files touched by unit/integration tests*
+

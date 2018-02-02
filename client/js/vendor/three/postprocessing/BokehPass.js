@@ -63,6 +63,7 @@ THREE.BokehPass = function ( scene, camera, params ) {
 	this.scene2  = new THREE.Scene();
 
 	this.quad2 = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2, 2 ), null );
+	this.quad2.frustumCulled = false; // Avoid getting clipped
 	this.scene2.add( this.quad2 );
 
 };
@@ -77,6 +78,8 @@ THREE.BokehPass.prototype = Object.assign( Object.create( THREE.Pass.prototype )
 
 		// Render depth into texture
 
+		// AXC: Save oldOverrideMaterial so it can be restored
+		var oldOverrideMaterial = this.scene.overrideMaterial;
 		this.scene.overrideMaterial = this.materialDepth;
 
 		renderer.render( this.scene, this.camera, this.renderTargetDepth, true );
@@ -95,7 +98,8 @@ THREE.BokehPass.prototype = Object.assign( Object.create( THREE.Pass.prototype )
 
 		}
 
-		this.scene.overrideMaterial = null;
+		// AXC: Restore oldOverrideMaterial
+		this.scene.overrideMaterial = oldOverrideMaterial;
 
 	}
 

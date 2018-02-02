@@ -68,7 +68,9 @@ ModelPartViewer.prototype.setupScene = function () {
 
   var mId = this.getAnnotationItemId();
   if (mId) {
-    var modelInfo = this.assetManager.getLoadModelInfo(this.defaultSource, mId);
+    var format = this.urlParams['format'];
+    var metadata = format? { defaultFormat: format } : null;
+    var modelInfo = this.assetManager.getLoadModelInfo(this.defaultSource, mId, metadata);
     this.clearAndLoadModel(modelInfo);
   }
 };

@@ -91,6 +91,14 @@ define(['geo/BBox', 'geo/Object3DUtil','Constants'], function (BBox, Object3DUti
   };
 
   ModelInstance.prototype.__switchModel = function(m) {
+    function replaceModelObject3D(obj3D, modelObject3D) {
+      var modelInstChildren = _.filter(obj3D.children, function(x) { return x.userData.type === 'ModelInstance'; });
+      Object3DUtil.removeAllChildren(obj3D);
+      obj3D.add(modelObject3D);
+      for (var i = 0; i < modelInstChildren.length; i++) {
+        obj3D.add(modelInstChildren[i]);
+      }
+    }
     // console.log('switchModel', this, this.modelObject3D, m);
     var oldModelObject3D = this.modelObject3D;
     this.model = m;
@@ -105,11 +113,9 @@ define(['geo/BBox', 'geo/Object3DUtil','Constants'], function (BBox, Object3DUti
       }
     }
     if (this.modelBaseObject3D) {
-      Object3DUtil.removeAllChildren(this.modelBaseObject3D);
-      this.modelBaseObject3D.add(this.modelObject3D);
+      replaceModelObject3D(this.modelBaseObject3D, this.modelObject3D);
     } else {
-      Object3DUtil.removeAllChildren(this.object3D);
-      this.object3D.add(this.modelObject3D);
+      replaceModelObject3D(this.object3D, this.modelObject3D);
     }
     this.object3D.matrixWorldNeedsUpdate = true;
     Object3DUtil.clearCache(this.object3D);

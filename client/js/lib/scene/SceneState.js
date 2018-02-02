@@ -126,7 +126,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return m.attachment;
     };
 
-    SceneState.prototype.identifyAttachment = function (modelInst, candidateSupportObjects) {
+    SceneState.prototype.__filterSupportObjects = function (modelInst, candidateSupportObjects, opts) {
       candidateSupportObjects = candidateSupportObjects || this.fullScene.supportObjects;
       var filteredCandidateSupportObjects = candidateSupportObjects;
       if (modelInst.object3D.userData.wallIds) {
@@ -134,21 +134,59 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           return modelInst.object3D.userData.wallIds.indexOf(cobj.userData.id) >= 0;
         });
         //console.log('wallIds', modelInst.object3D.userData.wallIds, filteredCandidateSupportObjects);
+      } else if (opts && opts.keepSameLevel && this.getLevels() > 1) {
+        var id = modelInst.object3D.userData.id;
+        var pi = id.indexOf('_');
+        if (pi > 0) {
+          var level = id.substring(0, pi);
+          var prefix = level + '_';
+          filteredCandidateSupportObjects = _.filter(candidateSupportObjects, function(cobj) {
+            return modelInst.object3D.userData.id.startsWith(prefix);
+          });
+        }
       }
-      return this.__identifyAttachment(modelInst, filteredCandidateSupportObjects);
+      return filteredCandidateSupportObjects;
     };
 
-    SceneState.prototype.__identifyAttachment = function (modelInst, candidateSupportObjects) {
+    SceneState.prototype.identifyAttachment = function (modelInst, candidateSupportObjects, opts) {
+      var filteredCandidateSupportObjects = this.__filterSupportObjects(modelInst, candidateSupportObjects, opts);
+      return this.__identifyAttachment(modelInst, filteredCandidateSupportObjects, opts);
+    };
+
+    SceneState.prototype.__identifyAttachment = function (modelInst, candidateSupportObjects, opts) {
+      opts = opts || {};
       var supportObjectsForMe = candidateSupportObjects.filter(function(x) {
         return !Object3DUtil.isDescendantOf(x, modelInst.object3D);
       });
       if (supportObjectsForMe.length > 0) {
-        var attachment = Attachments.identifyAttachment(supportObjectsForMe, { modelInstance: modelInst, attachments: modelInst.getCandidateAttachmentPoints() }, { sameModelCost: 1.0 });
+        var attachment = Attachments.identifyAttachment(supportObjectsForMe,
+          { modelInstance: modelInst, attachments: modelInst.getCandidateAttachmentPoints() },
+          _.merge({ sameModelCost: 1.0 }, opts));
         if (attachment) {
           //var ball = Object3DUtil.makeBall(attachment.childAttachment.world.pos, 0.05*Constants.metersToVirtualUnit);
           //this.fullScene.add(ball);
           attachment.parentInst = Object3DUtil.getModelInstance(attachment.parent, true);
           return attachment;
+        }
+      }
+    };
+
+    SceneState.prototype.identifyCandidateAttachments = function (modelInst, candidateSupportObjects, opts) {
+      var filteredCandidateSupportObjects = this.__filterSupportObjects(modelInst, candidateSupportObjects, opts);
+      return this.__identifyCandidateAttachments(modelInst, filteredCandidateSupportObjects, opts);
+    };
+
+    SceneState.prototype.__identifyCandidateAttachments = function (modelInst, candidateSupportObjects, opts) {
+      opts = opts || {};
+      var supportObjectsForMe = candidateSupportObjects.filter(function(x) {
+        return !Object3DUtil.isDescendantOf(x, modelInst.object3D);
+      });
+      if (supportObjectsForMe.length > 0) {
+        var attachments = Attachments.identifyAttachments(supportObjectsForMe,
+          { modelInstance: modelInst, attachments: modelInst.getCandidateAttachmentPoints() },
+          _.merge({ sameModelCost: 1.0 }, opts));
+        if (attachments && attachments.best) {
+          return attachments;
         }
       }
     };
@@ -215,7 +253,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return result;
     };
 
-      // Asynchronous version of identify support hierarchy that makes sure doors are closed
+    // Asynchronous version of identify support hierarchy that makes sure doors are closed
     SceneState.prototype.identifySupportHierarchy = function(opts, callback) {
       console.time('identifySupportHierarchyAll');
       var scope = this;
@@ -233,10 +271,17 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       console.time('identifySupportHierarchy');
       var allCandidateSupportObjects = this.fullScene.supportObjects;
       var attachments = [];
+      var candidates = [];
       for (var i = 0; i < this.modelInstances.length; i++) {
         var m = this.modelInstances[i];
         if (!m) { continue; }
-        attachments[i] = this.identifyAttachment(m, allCandidateSupportObjects);
+        var candidateAttachments = this.identifyCandidateAttachments(m, allCandidateSupportObjects,
+          { aggregatedSceneStatistics: opts.aggregatedSceneStatistics, includeCandidates: true,
+            maxCandidatesToCheck: 1, keepSameLevel: true, disallowSameModelHorizontalAttachment: true });
+        if (candidateAttachments) {
+          attachments[i] = candidateAttachments.best;
+          candidates[i] = candidateAttachments.candidates;
+        }
       }
       // Go through attachments and identify groups of modelInstances
       var groups = [];
@@ -252,7 +297,14 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         var nodes = [];
         nodes.push(m);
         indices.push(m.index);
+        var group = null;
         while (p && indices.indexOf(p.index) < 0) {
+          group = indexToGroup[p.index];
+          if (group) {
+            // Merge with this group;
+            p = null;
+            break;
+          }
           indices.push(p.index);
           nodes.push(p);
           if (attachments[p.index]) {
@@ -261,14 +313,18 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
             p = null;
           }
         }
-        var group = {
-          nodes: nodes,
-          isCycle: !!p
-        };
-        if (p) {
-          group.cycleNode = p;
+        if (group) {
+          group.nodes = group.nodes.concat(nodes);
+        } else {
+          group = {
+            nodes: nodes,
+            isCycle: !!p
+          };
+          if (p) {
+            group.cycleNode = p;
+          }
+          groups.push(group);
         }
-        groups.push(group);
         for (var j = 0; j < nodes.length; j++) {
           var index = nodes[j].index;
           indexToGroup[index] = group;
@@ -281,28 +337,84 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       //console.log('groups', groups);
       //console.log('cycles', cycles);
 
+      function getNodeSize(object3D, index) {
+        //return Object3DUtil.getBoundingBox(object3D).volume();
+        var faceDims = _.get(attachments[index], 'childAttachment.world.faceDims');
+        //console.log('got faceDims', faceDims, index);
+        return faceDims? faceDims.x * faceDims.y : 0;
+      }
+
+      function hasAncestor(attachment, indices, checkSelf) {
+        var visitedNodes = new Set();
+        if (checkSelf && attachment) {
+          if (indices.indexOf(attachment.child.index) >= 0) { return true; }
+        }
+        while (attachment && !visitedNodes.has(attachment)) {
+          visitedNodes.add(attachment);
+          var parentIndex = attachment.parent.index;
+          if (indices.indexOf(parentIndex) >= 0) { return true; }
+          attachment = attachments[parentIndex];
+        }
+        return false;
+      }
+
       for (var i = 0; i < cycles.length; i++) {
         var cycle = cycles[i];
+        if (!cycle.isCycle) continue;  // Skip if no longer a cycle
         var cycleNode = cycle.cycleNode;
         // Find the largest object in cycle and break the link between it and it's so called parent
         var largest = cycleNode;
-        var largestSize = Object3DUtil.getBoundingBox(cycleNode.object3D).volume();
-        var p = cycleNode;
-        while (p.id !== cycleNode.id) {
-          p = attachments[p.index].parentInst;
-          var pSize = Object3DUtil.getBoundingBox(p.object3D);
+        var largestSize = getNodeSize(cycleNode.object3D, largest.index);
+        var p = attachments[largest.index].parentInst;
+        while (p && p.index !== cycleNode.index) {
+          var pSize = getNodeSize(p.object3D, p.index);
           if (pSize > largestSize) {
             largest = p;
             largestSize = pSize;
           }
+          if (attachments[p.index]) {
+            p = attachments[p.index].parentInst;
+          } else {
+            largest = p;
+            largestSize = pSize;
+            console.log('no cycle, selecting', largest.object3D.userData.id);
+            break;
+          }
         }
+        console.log('Breaking cycle: ', _.map(cycle.nodes, function(x) { return x.object3D.userData.id; }), largest.object3D.userData.id);
         if (Constants.isBrowser) {
           console.log('Breaking cycle: ', cycle, largest);
         }
         cycle.removedAttachment = attachments[largest.index];
+        cycle.wasCycle = cycle.isCycle;
+        cycle.isCycle = false;
         attachments[largest.index] = null;
+        // See if there is better attachment for this node that doesn't create a cycle, if so add it
+        var cs = candidates[largest.index];
+        if (cs && cs.length) {
+          var descIndices = _.map(_.filter(this.modelInstances, function(m) {
+            return hasAncestor(attachments[m.index], [largest.index], true);
+          }), function(m) {
+            return m.index;
+          });
+          for (var j = 0; j < cs.length; j++) {
+            var c = cs[j];
+            var inGroup = _.some(cycle.nodes, function(x) { return x.index === c.parent.index; });
+            //console.log('inGroup', j, inGroup, c);
+            if (!inGroup) {
+              // do we need to check that no other cycles is created?
+              if (!hasAncestor(c, descIndices, true)) {
+                attachments[largest.index] = c;
+                console.log('Attaching former cyclic node ' + largest.object3D.userData.id + ' to ' + c.parent.userData.id);
+                //console.log('cycles', _.map(cycles, function(cyc) { return _.map(cyc.nodes, function(n) { return n.object3D.userData.id; })}));
+                break;
+              }
+            }
+          }
+        }
       }
 
+      //console.log('attachments', attachments);
       if (opts) {
         if (opts.groupBySupport) {
           var parentToChildren = {};
@@ -311,15 +423,16 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
             var attachment = attachments[i];
             if (!attachment) { continue; }
             var group = indexToGroup[i];
-            //if (group.isCycle) { continue; } // skip
+            if (group.isCycle) { continue; } // skip
 
-            var parentId = attachment.parent.uuid;
+            var parentId = attachment.parent.uuid; // userData.id;
             if (!parentToChildren.hasOwnProperty(parentId)) {
               parentToChildren[parentId] = { parent: attachment.parent, parentInst: attachment.parentInst, children: [m] };
             } else {
               parentToChildren[parentId].children.push(m);
             }
           }
+          //console.log('parentToChildren', parentToChildren);
           for (var parentId in parentToChildren) {
             if (parentToChildren.hasOwnProperty(parentId)) {
               var g = parentToChildren[parentId];
@@ -362,8 +475,12 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
             if (group.isCycle) { continue; } // skip
             var parentInst = attachment.parentInst;
             if (parentInst) {
-              //console.log('attachToParent', m.object3D, parentInst.object3D);
-              Object3DUtil.attachToParent(m.object3D, parentInst.object3D);
+              if (parentInst.object3D) {
+                //console.log('attachToParent', m.object3D, parentInst.object3D);
+                Object3DUtil.attachToParent(m.object3D, parentInst.object3D, this.scene);
+              } else {
+                console.warn('No object3D for parent instance', parentInst);
+              }
             }
           }
         }
@@ -652,8 +769,9 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
 
     SceneState.prototype.removeSelected = function () {
       var selectedIndices = this.getSelectedModelIndices();
-      this.removeObjects(selectedIndices, true);
+      var removed = this.removeObjects(selectedIndices, true);
       this.selectedObjects = [];
+      return removed;
     };
 
     SceneState.prototype.removeObjects = function (indices, skipSelectedUpdate) {
@@ -692,6 +810,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         this.selectedObjects = newSelected;
       }
       this.compactify();
+      return removed;
     };
 
     /**
@@ -1008,6 +1127,15 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       }
     };
 
+    SceneState.prototype.convertCameraConfig = function (cameraConfig) {
+      var sceneToWorld = this.getSceneToWorldMatrix();
+      // Convert to world orientation
+      var scale = this.getVirtualUnit();
+      console.log('scale', scale);
+      cameraConfig = this.transformCameraState(cameraConfig, sceneToWorld, scale);
+      return cameraConfig;
+    };
+
     SceneState.prototype.updateState = function (json) {
       // Set selected models
       this.json = json;
@@ -1098,6 +1226,14 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
             // also apply scale
             transformedCamState[field].multiplyScalar(scale);
           }
+        }
+      }
+      var scaleFields = ['left','right','bottom','top'];
+      for (var i = 0; i < scaleFields.length; i++) {
+        var field = scaleFields[i];
+        var fieldValue = camState[field];
+        if (fieldValue) {
+          transformedCamState[field] = fieldValue*scale;
         }
       }
       for (var prop in camState) {

@@ -19,7 +19,7 @@ function getFaceFaceDistanceCalculator(geometry) {
         }
       }
     }
-    return maxDistance;
+    return Math.sqrt(maxDistance);
   };
 }
 
@@ -45,7 +45,7 @@ function createVPTreeVertex(geometry) {
   return VPTreeFactory.build(GeometryUtil.getGeometryVertexCount(geometry), function(a,b) {
     var v1 = GeometryUtil.getGeometryVertex(geometry, a);
     var v2 = GeometryUtil.getGeometryVertex(geometry, b);
-    return v1.distanceToSquared(v2);
+    return v1.distanceTo(v2);
   });
 }
 
@@ -123,7 +123,7 @@ function buildConnectivityGraph(geometry, faceIndices, edgeMap) {
   return faceMap;
 }
 
-ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, normSimThreshold, point) {
+ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLength, normSimThreshold, point) {
   var geometry = this.geometry;
   var mainFaceVertexIndices = GeometryUtil.getFaceVertexIndices(geometry, mainFaceIndex);
   var mainFaceVertexPositions = mainFaceVertexIndices.map( function(vi) {
@@ -136,7 +136,7 @@ ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, 
     var tri = new THREE.Triangle(positions[0], positions[1], positions[2]);
     point = tri.midpoint();
   }
-  var maxRadiusSq = maxLengthSq/4;
+  var maxRadius = maxLength/2;
   var neighboringFaceIndices = this.vptree.search(mainFaceIndex, null, maxRadiusSq*1.1).map( function(x) {
     return x.i;  // x has dist and i
   });
@@ -154,15 +154,15 @@ ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, 
       });
     }
 
-    var currentRadiusSq = 0;
+    var currentRadius = 0;
     var distanceCalculator = getPointFaceVerticesDistanceCalculator(geometry);
     for (var i = 0; i < neighboringFaceIndices.length; i++) {
       var d = distanceCalculator(point, neighboringFaceIndices[i]);
-      if (d > currentRadiusSq) {
-        currentRadiusSq = d;
+      if (d > currentRadius) {
+        currentRadius = d;
       }
     }
-    return { faceIndices: neighboringFaceIndices, radiusSq: currentRadiusSq };
+    return { faceIndices: neighboringFaceIndices, radius: currentRadius };
   }
 
   var cg = buildConnectivityGraph(geometry, neighboringFaceIndices);
@@ -171,7 +171,7 @@ ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, 
   var todo = [mainFaceIndex];
   var visited = {};
   visited[mainFaceIndex] = 1;
-  var currentRadiusSq = 0;
+  var currentRadius = 0;
   while (todo.length > 0) {
     var fi = todo.shift();
     var faceVertexIndices = GeometryUtil.getFaceVertexIndices(geometry, fi);
@@ -191,11 +191,11 @@ ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, 
     });
     var dmax = Math.max.apply(null, distancesToFaceVertices);
     var dmin = Math.min.apply(null, distancesToFaceVertices);
-    if (currentRadiusSq === 0 || dmax < maxRadiusSq || dmax <= currentRadiusSq) {
+    if (currentRadius === 0 || dmax < maxRadius || dmax <= currentRadius) {
       faceIndices.push(fi);
-      currentRadiusSq = Math.max(currentRadiusSq, dmax);
+      currentRadius = Math.max(currentRadius, dmax);
     }
-    if (dmin < maxRadiusSq || dmax <= currentRadiusSq) {
+    if (dmin < maxRadius || dmax <= currentRadius) {
       // Let's try to grow this!
       var neighbors = cg[fi];
       if (neighbors) {
@@ -209,8 +209,8 @@ ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, 
       }
     }
   }
-  //console.log('gathered: r=' + currentRadiusSq + ', max=' + maxRadiusSq, faceIndices);
-  return { faceIndices: faceIndices, radiusSq: currentRadiusSq };
+  //console.log('gathered: r=' + currentRadius + ', max=' + maxRadius, faceIndices);
+  return { faceIndices: faceIndices, radius: currentRadius };
 };
 
 module.exports = ConnectivitySearch;

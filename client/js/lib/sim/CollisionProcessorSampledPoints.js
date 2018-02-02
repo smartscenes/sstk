@@ -53,14 +53,14 @@ CollisionProcessorSampledPoints.prototype.__prepareScene = function(sceneState, 
     sceneState.__sampledVPTree2DL2 = VPTreeFactory.build(sampledPoints, function (a, b) {
       var dx = a.x - b.x;
       var dz = a.z - b.z;
-      return dx * dx + dz * dz;
+      return Math.sqrt(dx * dx + dz * dz);
     });
     console.timeEnd('buildVPTree2DL2');
   }
   if (opts['3dl2'] && !sceneState.__sampledVPTree3DL2) {
     console.time('buildVPTree3DL2');
     sceneState.__sampledVPTree3DL2 = VPTreeFactory.build(sampledPoints, function(a,b) {
-      return a.distanceToSquared(b);
+      return a.distanceTo(b);
     });
     console.timeEnd('buildVPTree3DL2');
   }

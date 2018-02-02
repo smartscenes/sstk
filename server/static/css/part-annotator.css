@@ -9,7 +9,17 @@ body {
 }
 
 .input-group-btn {
-    width: auto;
+  width: auto;
+}
+
+.with-errors {
+  color: red;
+}
+
+.highlight {
+  border-color: green !important;
+  border-style: solid;
+  border-width: 5px;
 }
 
 .overlay {
