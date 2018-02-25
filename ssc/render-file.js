@@ -216,7 +216,11 @@ function processFiles() {
               var views = cameraControls.generateViews(sceneBBox, cmd.width, cmd.height);
               cameraControls.viewTarget(views[cmd.view_index]);  // default
             } else if (cmd.view) {
-              var viewOpts = _.defaults({targetBBox: sceneBBox}, cmd.view);
+              var viewOpts = cmd.view;
+              if (cmd.view.coordinate_frame === 'scene') {
+                viewOpts = sceneState.convertCameraConfig(cmd.view);
+              }
+              viewOpts = _.defaults({targetBBox: sceneBBox}, viewOpts);
               cameraControls.viewTarget(viewOpts);
             } else {
               cameraControls.viewTarget({

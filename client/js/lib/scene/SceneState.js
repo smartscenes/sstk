@@ -1228,7 +1228,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           }
         }
       }
-      var scaleFields = ['left','right','bottom','top'];
+      var scaleFields = ['left','right','bottom','top','near','far'];
       for (var i = 0; i < scaleFields.length; i++) {
         var field = scaleFields[i];
         var fieldValue = camState[field];
