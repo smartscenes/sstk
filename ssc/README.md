@@ -70,8 +70,4 @@ Annotation tools:
 
 Known Issues:
 
-1. Loading of KMZ models does not work in SSC
-
-2. Lighting and depth rendering not supported in master branch (supported in r8x branch)
-
-3. Load via local filesystem not supported for all scripts
+1. Load via local filesystem not supported for all scripts

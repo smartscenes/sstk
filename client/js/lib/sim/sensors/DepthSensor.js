@@ -43,11 +43,11 @@ DepthSensor.prototype.__getFrame = function(scene) {
   var camera = depthSensor.camera;
   var renderer = depthSensor.renderer;
   var pixels = SceneUtil.renderWithMaterial(scene, {
-//    colorBy: 'depth',
     renderer: renderer,
     camera: camera,
-    material: new THREE.MeshDepthMaterial(useBasicPacking? THREE.BasicDepthPacking : THREE.RGBADepthPacking)
-//    depthPacking: useBasicPacking? THREE.BasicDepthPacking : THREE.RGBADepthPacking
+    material: new THREE.MeshDepthMaterial({
+      depthPacking: useBasicPacking ? THREE.BasicDepthPacking : THREE.RGBADepthPacking
+    })
   });
   var npixels = pixels.length / 4;
 
@@ -83,7 +83,7 @@ DepthSensor.prototype.__getFrame = function(scene) {
           transparent = (pixels[b+3] === 0);
         } else {
           for (var j = 0; j < 4; j++) {
-            pd += pixels[b + j] * unpack_factors[3-j];
+            pd += pixels[b + j] * unpack_factors[j];
           }
         }
 
