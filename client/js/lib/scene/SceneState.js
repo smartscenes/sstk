@@ -1512,11 +1512,11 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       var upwards = RaycasterUtil.getIntersected(rooms, { position: position, direction: Constants.worldUp, intersectBackFaces: true});
       if (upwards && upwards.length) {
         var c = selectRoom(upwards);
-        if (room) {
+        if (room && c) {
           if (c.distance < room.distance) {
             room = c;
           }
-        } else {
+        } else if (c) {
           room = c;
         }
       }
