@@ -216,9 +216,15 @@ Agent.prototype.worldToLocalPositionNoScaling = function(position, out) {
 };
 
 Agent.prototype.moveTo = function (opts) {
-  this.position.copy(Object3DUtil.toVector3(opts.position));
+  if (opts.position != undefined) {
+    this.position.copy(Object3DUtil.toVector3(opts.position));
+  }
   if (opts.angle != undefined) {
     this.rotation = opts.angle;
+  }
+  if (opts.tilt != undefined) {
+    this.__pitchObject3D.rotation.x = opts.tilt;
+    this.__pitchObject3D.rotation.x = Math.max(-this.__PI_2, Math.min(this.__PI_2, this.__pitchObject3D.rotation.x));
   }
   if (!opts.isTemporary) {
     this.velocity.set(0, 0, 0);
