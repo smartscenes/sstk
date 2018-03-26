@@ -87,9 +87,12 @@ DepthSensor.prototype.__getFrame = function(scene) {
           }
         }
 
-        // Convert and negate
-        var v = - perspectiveDepthToViewZ(camera.near, camera.far, pd);
-        v = scaleFactor * v;
+        var v = 0;
+        if (pd != 0) {  // Convert from packed depth buffer value pd to real depth v
+          v = - perspectiveDepthToViewZ(camera.near, camera.far, pd);
+          v = scaleFactor * v;
+        }
+
         d[i] = v;
         sum += d[i];
         if (!transparent) {
