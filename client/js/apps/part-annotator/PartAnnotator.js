@@ -14,6 +14,7 @@ require('physijs');
  * @param params
  * @param [params.allowLevels=false] {boolean} Whether different resolution levels of painting are allowed.
  *   If so, can use pgup/pgdown and level slider control to adjust resolution level. Also url param.
+ * @param [params.obbsVisible=false] {boolean} To show obbs of labeled segment groups or not. Toggle with 'b'.
  * @param [params.useSegments=false] {boolean} Whether custom segmentation should be used. Also url param.
  * @param [params.allowEditLabels=false] {boolean} Whether label names can be changed and new labels added. Also url param.
  * @param [params.startFrom=latest] {string|integer} What annotation to start from (used if taskMode is `fixup` or `coverage`)
@@ -45,6 +46,20 @@ function PartAnnotator(params) {
       name: 'debug',
         click: this.debugAnnotations.bind(this),
       shortcut: 'ctrl-shift-d'
+    }
+  );
+  uihookups.push(
+    {
+      name: 'obb',
+      click: function () {
+        this.obbsVisible = !this.obbsVisible;
+        if (this.obbsVisible) {
+          this.showPartOBBs(this.labelsPanel.getAllSelected());
+        } else {
+          this.clearDebug();
+        }
+      }.bind(this),
+      shortcut: 'b'
     }
   );
   uihookups.push(
@@ -97,6 +112,7 @@ function PartAnnotator(params) {
         'Mouse wheel = Zoom view<br>' +
         'Number keys = Keyboard shortcut for part name<br><br>' +
         'C = toggle transparency and enable/disable annotation<br><br>' +
+        'B = toggle display of bounding boxes<br><br>' +
         'Step 1: Select a name on the right<br>' +
         'Step 2: Color in parts of the object using the mouse<br>' +
         'Step 3: Press BreakItUp! button (or B key) to remove colored parts and get to more parts!'
@@ -104,8 +120,54 @@ function PartAnnotator(params) {
     labelsPanel: {
       allowNewLabels: true,
       allowEditLabels: allowEditLabels,
-      allowDelete: allowEditLabels
+      allowDelete: allowEditLabels,
+      allowMultiSelect: true,
+      // see http://swisnl.github.io/jQuery-contextMenu/demo/input.html
+      contextMenu: {
+        items: {
+          merge: {
+            name: 'Merge',
+            callback: function () {
+              scope.mergeSelected();
+            },
+            accesskey: "M"
+          },
+          labelOBB: {
+            name: 'Label box',
+            callback: function () {
+              scope.fillSelected(true);
+            }
+          },
+          unlabelOBB: {
+            name: 'Unlabel box',
+            callback: function () {
+              scope.fillSelected(false);
+            }
+          },
+          lookAt: {
+            name: 'LookAt',
+            callback: function () {
+              scope.lookAtSelected();
+            },
+            accesskey: "L"
+          },
+          freeze: {
+            name: 'Freeze',
+            callback: function() {
+              scope.freezeSelected(true);
+            },
+            accesskey: "F"
+          },
+          unfreeze: {
+            name: 'Unfreeze',
+            callback: function() {
+              scope.freezeSelected(false);
+            }
+          }
+        }
+      }
     },
+    obbsVisible: false,
     useSegments: useSegments,
     uihookups: _.keyBy(uihookups, 'name')
   };
@@ -127,7 +189,9 @@ function PartAnnotator(params) {
     scope.__rawAnnotations = null;
     if (scope.taskMode !== 'new') {
       console.log('preparing for taskMode ' + scope.taskMode + ' ' + scope.startFrom);
-      if (scope.startFrom !== 'aggr'/* && _.isInteger(scope.startFrom)*/) {
+      if (scope.startFrom === 'latest') {
+        scope.loadLatestAnnotation(modelInfo.fullId);
+      } else if (scope.startFrom !== 'aggr'/* && _.isInteger(scope.startFrom)*/) {
         scope.loadRawAnnotations(modelInfo.fullId, scope.startFrom);
       }
     }
@@ -138,6 +202,13 @@ PartAnnotator.prototype = Object.create(BasePartAnnotator.prototype);
 PartAnnotator.prototype.constructor = PartAnnotator;
 
 PartAnnotator.prototype.createLabeler = function () {
+  function isLabelable(part, labelInfo) {
+    if (!part || part.userData.labelInfo && (part.userData.labelInfo.fixed || part.userData.labelInfo.frozen)) {
+      // No part, or part is already labeled with fixed label
+      return false;
+    }
+    return true;
+  }
   var scope = this;
   var labeler;
   if (this.useSegments) {
@@ -152,7 +223,8 @@ PartAnnotator.prototype.createLabeler = function () {
       onSegmentsLoaded:   function (segments) {
         scope.__annotatorReady();
       },
-      getIntersected: scope.getIntersectedMesh.bind(scope)
+      getIntersected: scope.getIntersectedMesh.bind(scope),
+      isLabelable: isLabelable
     });
     labeler.segments.Subscribe('loadSegments', this, function () {
       scope.addWaiting('loadSegments');
@@ -166,7 +238,8 @@ PartAnnotator.prototype.createLabeler = function () {
       showNodeCallback: function (node) {
         scope.debugNode.add(node);
       },
-      getIntersected: scope.getIntersectedMesh.bind(scope)
+      getIntersected: scope.getIntersectedMesh.bind(scope),
+      isLabelable: isLabelable
     });
   }
   labeler.Subscribe('levelUpdated', this, function(v) {
@@ -284,7 +357,8 @@ PartAnnotator.prototype.__submitAnnotations = function () {
       partSetId: id,
       partId: rec.meshIds,  //mesh ids
       label: rec.label, //name of the part
-      labelType: 'category'
+      labelType: 'category',
+      data: rec.data
     };
     partAnnotations.push(ann);
   }
@@ -298,6 +372,7 @@ PartAnnotator.prototype.__submitAnnotations = function () {
     sessionId: Constants.getGlobalOrDefault('sessionId', 'local-session'),
     condition: Constants.getGlobalOrDefault('condition', 'test'),
     task: Constants.getGlobal('task'),
+    taskMode: this.taskMode,
     userId: this.userId,  // This is set to workerId under mturk
     annotations: partAnnotations, //All parts
     screenshot: screenshot,
@@ -430,6 +505,21 @@ PartAnnotator.prototype.loadRawAnnotations = function (modelId, annId) {
   }, function(err, anns) {
     if (anns) {
       scope.__rawAnnotations = anns;
+    }
+  });
+};
+
+PartAnnotator.prototype.loadLatestAnnotation = function (modelId) {
+  var scope = this;
+  //http://localhost:8010/annotations/latest?itemId=p5d.100
+  this.__retrieveAnnotations({
+    modelId: modelId,
+//    taskMode: 'fixup',
+    '$limitOnAnnotations': true,
+    '$limit': 1
+  }, function(err, anns) {
+    if (anns) {
+      scope.__bestFixupAnnotation = anns;
     }
   });
 };

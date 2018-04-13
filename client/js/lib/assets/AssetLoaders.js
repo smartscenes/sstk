@@ -18,6 +18,7 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('mesh', 'dae', require('loaders/ColladaLoader'));
 
   // The following loaders already use error first callback style
+  assetManager.registerAssetLoader('alignmentMatrix', 'aln', require('loaders/ALNLoader'));
   assetManager.registerAssetLoader('wall', 'wall', require('loaders/WallLoader'));
   assetManager.registerAssetLoader('voxel', '*', require('loaders/VoxelLoader'));
   assetManager.registerAssetLoader('navmesh', 'navmesh', require('loaders/NavMeshLoader'));

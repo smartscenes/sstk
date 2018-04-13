@@ -142,7 +142,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
       // Fields we want to preserve and send to the scene loaders
       this.__sceneLoadInfoFields = ['preload', 'freezeObjects', 'floor', 'room',
-        'includeCeiling', 'attachWallsToRooms', 'useVariants', 'createArch',
+        'includeCeiling', 'attachWallsToRooms', 'useVariants', 'createArch', 'useArchModelId',
         'keepInvalid', 'keepHidden', 'keepParse', 'precomputeAttachments',
         'hideCategories', 'replaceModels', 'loadModelsFilter', 'skipElements',
         'emptyRoom', 'archOnly', 'defaultModelFormat'];
@@ -668,11 +668,16 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       // Load model with cache
       var key = (modelinfo.fullId)? 'model-' + modelinfo.fullId + '-' + modelinfo.formatName : undefined;
       var loader = this.__getCachingLoader('model');
+      var scope = this;
       loader.load({
         skipCache: modelinfo.skipCache,
         key: key,
         loadOpts: modelinfo,
-        loadFn: this.__loadModelUncached.bind(this),
+        loadFn: function(minfo, cb) {
+          return scope.__preloadAssets(minfo, function(err, res) {
+            scope.__loadModelUncached(minfo, cb);
+          });
+        },
         dispose: function(model) {
           if (model && model.object3D) {
             Object3DUtil.dispose(model.object3D);
@@ -843,10 +848,15 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     AssetManager.prototype.__loadObjMtlModel = function (modelInfo, callback, onerror) {
       var objFile = modelInfo.file;
       var mtlFile = modelInfo.mtl;
+      // TODO: Move this material options to be less format specific
       var options = modelInfo.options || {};
       if (options) {
         options.materialBase = options.materialBase || options.texturePath || modelInfo.materialBase || modelInfo.texturePath;
-        options.defaultMaterialType = Materials.DefaultMaterialType;
+        var materialType = options.defaultMaterialType || modelInfo.defaultMaterialType || Materials.DefaultMaterialType;
+        if (_.isString(materialType)) {
+          materialType = Materials.getMaterialType(materialType);
+        }
+        options.defaultMaterialType = materialType;
       }
       var onLoad = function (object) {
         callback(object);
@@ -861,6 +871,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         // Use new OBJLoader
         //console.log('Using new OBJLoader');
         var loader = new THREE.OBJLoader();
+        loader.setOptions(options);
         loader.setMtlOptions(options);
         options.mtl = modelInfo.mtl;
         return loader.load(objFile, onLoad, undefined, onerror);
@@ -887,8 +898,12 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       // Tested to work for ASCII and BINARY ply files
       var plyFile = modelInfo.file;
       var options = modelInfo.options || {};
+      // TODO: Move more of this logic to be less format specificy
       // TODO: Check modelInfo use vertex colors
       var materialType = modelInfo.defaultMaterialType || THREE.MeshBasicMaterial;
+      if (_.isString(materialType)) {
+        materialType = Materials.getMaterialType(materialType);
+      }
       var side = this.__getMaterialSide(modelInfo);
       var vertexColorMaterial = new materialType(
         { name: 'vertexColors', vertexColors: THREE.VertexColors, side: side });
@@ -1483,9 +1498,24 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     AssetManager.prototype.__loadSceneFromJsonFile = function (sceneinfo, callback) {
       var file = sceneinfo.file;
       var filename = file.name || file;
+      //console.log('load file', sceneinfo);
       return this.assetLoader.load(file, 'json',
         function (data) {
           sceneinfo.data = data;
+          // Populate additional load info, a bit perculiar
+          if (sceneinfo.id == null && data.id != null) {
+            sceneinfo.id = data.id;
+            if (sceneinfo.source) {
+              sceneinfo.fullId = sceneinfo.source + '.' + sceneinfo.id;
+              // Try to interpolate sceneinfo
+              var loadinfo = this.getLoadInfo(sceneinfo.source, sceneinfo.id, sceneinfo);
+              //console.log('got loadinfo', loadinfo);
+              if (loadinfo) {
+                sceneinfo =  _.defaults(sceneinfo, loadinfo);
+                //console.log('updated sceneinfo', sceneinfo);
+              }
+            }
+          }
           this.__loadSceneFromData(sceneinfo, callback);
         }.bind(this),
         undefined,

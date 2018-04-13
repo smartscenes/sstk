@@ -3158,17 +3158,34 @@ Object3DUtil.decomposeMatrix4 = function(matrix) {
   };
 };
 
-Object3DUtil.colorVerticesUsingFaceAttribute = function(object3D, attribute, colorIndex) {
+Object3DUtil.transferFaceAttributeToVertexColor = function(object3D, attribute, convertAttrFn) {
+  var color = new THREE.Color();
+  Object3DUtil.colorVerticesUsingFaceAttribute(object3D, attribute, function(x) {
+    var v = convertAttrFn? convertAttrFn(x) : x;
+    color.setHex(v);
+    return color;
+  });
+};
+
+Object3DUtil.colorVerticesUsingFaceAttribute = function(object3D, attribute, colorIndexOrFn) {
+  var colorFn = null;
+  if (colorIndexOrFn) {
+    if (_.isFunction(colorIndexOrFn)) {
+      colorFn = colorIndexOrFn;
+    } else {
+      colorFn = function(x) { return colorIndexOrFn[x]; };
+    }
+  }
   Object3DUtil.traverseMeshes(object3D, false, function(mesh) {
     var geometry = mesh.geometry;
     if (geometry.customFaceAttributes) {
       var faceAttributes = geometry.customFaceAttributes[attribute];
       var vertexColorBuffer = geometry.attributes['color'].array;
-      console.log('got faceAttributes: ' + faceAttributes.length);
+      console.log('got faceAttributes ' + attribute + ': ' + faceAttributes.length /*, _.min(faceAttributes), _.max(faceAttributes)*/);
       GeometryUtil.forFaceVertexIndices(geometry, function(iFace, vertIndices) {
         var v = faceAttributes[iFace];
         //console.log('got face attribute ' + v + ', vertices ' + JSON.stringify(vertIndices));
-        var c = colorIndex? colorIndex[v] : v;
+        var c = colorFn? colorFn(v) : v;
         if (c == undefined) {
           c = v || 0;
         }

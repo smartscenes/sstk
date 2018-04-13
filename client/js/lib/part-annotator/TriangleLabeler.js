@@ -38,16 +38,7 @@ TriangleLabeler.prototype.__setLabelInfo = function(part, labelInfo) {
   }
 };
 
-TriangleLabeler.prototype.labelPart = function (part, labelInfo, opts) {
-  if (part && part.userData.labelInfo) {
-    this.__unlabel(part);
-  }
-  BasePartLabeler.prototype.labelPart.call(this, part, labelInfo, opts);
-  this.__label(part, labelInfo);
-  this.__setLabelInfo(part, labelInfo);
-};
-
-TriangleLabeler.prototype.__label = function(part, labelInfo) {
+TriangleLabeler.prototype.__label = function(part, labelInfo, opts) {
   //if (labelInfo.triIndices) {
   //  if (labelInfo.triIndices.indexOf(part.triIndex) < 0) {
   //    labelInfo.triIndices.push(part.triIndex);
@@ -56,12 +47,7 @@ TriangleLabeler.prototype.__label = function(part, labelInfo) {
   //  labelInfo.triIndices = [part.triIndex];
   //}
   // TODO: keep track of mesh/tri
-};
-
-TriangleLabeler.prototype.unlabelPart = function (part) {
-  this.__unlabel(part);
-  this.__setLabelInfo(part, null);
-  BasePartLabeler.prototype.unlabelPart.call(this, part);
+  this.__setLabelInfo(part, labelInfo);
 };
 
 TriangleLabeler.prototype.unlabelParts = function(parts, labelInfo) {
@@ -74,7 +60,7 @@ TriangleLabeler.prototype.unlabelParts = function(parts, labelInfo) {
   BasePartLabeler.prototype.unlabelParts.call(this, parts);
 };
 
-TriangleLabeler.prototype.__unlabel = function(part) {
+TriangleLabeler.prototype.__unlabel = function(part, opts) {
   if (part) {
     var labelInfo = part.userData.labelInfo;
     if (labelInfo && labelInfo.segIndices) {
@@ -83,6 +69,7 @@ TriangleLabeler.prototype.__unlabel = function(part) {
       //  labelInfo.segIndices.splice(i,1);
       //}
     }
+    this.__setLabelInfo(part, null);
   }
 };
 

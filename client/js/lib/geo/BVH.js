@@ -228,7 +228,8 @@ BVH.prototype.constructor = BVH;
 BVH.AxisChoiceStrategy = Object.freeze({
   FIXED: 0,
   LONGEST: 1,
-  RANDOM: 2
+  RANDOM: 2,
+  OPTIMAL: 3
 });
 
 BVH.SplitStrategy = Object.freeze({
@@ -428,7 +429,7 @@ function splitAxisMidpoint(objects, params) {
   return getLeftRightSplit(lr);
 }
 
-function minCostSplitAxis(objects, params, costFunction) {
+function calculateMinCostSplitAxis(objects, params, costFunction) {
   var getBBox = params.getBoundingBox || getBoundingBox;
   var bbox = getBBox(objects);
   var saNorm = 1 / bbox.surfaceArea();
@@ -465,8 +466,25 @@ function minCostSplitAxis(objects, params, costFunction) {
     }
   }
 
+  return {minCost: minCost, minIndex: mi, sorted: sorted, splitAxis: params.splitAxis};
+}
+
+function minCostSplitAxis(objects, params, costFunction) {
+  var minCostInfo;
+  if (params.axisChoiceStrategy === BVH.AxisChoiceStrategy.OPTIMAL) {
+    var costInfos = _.map(params.splittableAxes, function(splitAxis) {
+      params.splitAxis = splitAxis;
+      return calculateMinCostSplitAxis(objects, params, costFunction);
+    });
+    minCostInfo = _.minBy(costInfos, 'minCost');
+    params.splitAxis = minCostInfo.splitAxis;
+  } else {
+    minCostInfo = calculateMinCostSplitAxis(objects, params, costFunction);
+  }
   // return split
-  var lr = [sorted.slice(0, mi), sorted.slice(mi)];
+  var mi = minCostInfo.minIndex;
+  var sorted = minCostInfo.sorted;
+  var lr = [sorted.slice(0, mi + 1), sorted.slice(mi + 1)];
   return getLeftRightSplit(lr);
 }
 

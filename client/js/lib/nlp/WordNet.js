@@ -26,10 +26,10 @@ function WordNet(opts) {
     limit: 100
   };
   opts = _.defaults(Object.create(null), opts || _, defaults);
-  if (opts.wordnetVersion === 3.0) {
+  if (opts.wordnetVersion === '3.0') {
     this.__wnSynsetId = 'wn30synsetid';
     this.__wnSynsetKey = 'wn30synsetkey';
-  } else if (opts.wordnetVersion === 3.1) {
+  } else if (opts.wordnetVersion === '3.1') {
     this.__wnSynsetId = 'wn31synsetid';
     this.__wnSynsetKey = 'wn31synsetkey'; // TODO: Not yet populated
   }

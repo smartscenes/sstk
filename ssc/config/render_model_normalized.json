@@ -1,0 +1,19 @@
+{
+  "assetInfo": {
+    "defaultUp": [ 0, 1, 0 ],
+    "defaultFront": [ -1, 0, 0],
+    "defaultUnit": 1,
+    "materialSidedness": "Front",
+    "useVertexColors": true,
+    "computeNormals": true
+  },
+  "view": {
+    "coordinate_frame": "scene",
+    "position": [0, 0.5, -1],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "near": 0.01,
+    "far": 100,
+    "fov": 90
+  }
+}

@@ -221,30 +221,35 @@ Materials.createMaterial = function(params) {
     }
   });
 
-  switch (params.type) {
+  var materialType = Materials.getMaterialType(params.type);
+  return new materialType(p);
+}
+
+Materials.getMaterialType = function(mtype) {
+  switch (mtype) {
     case 'basic':
-      return new THREE.MeshBasicMaterial(p);
+      return THREE.MeshBasicMaterial;
     case 'normal':
-      return new THREE.MeshNormalMaterial(p);
+      return THREE.MeshNormalMaterial;
     case 'depth':
-      return new THREE.MeshDepthMaterial(p);
+      return THREE.MeshDepthMaterial;
     case 'face':
-      return new THREE.MultiMaterial(p);
+      return THREE.MultiMaterial;
     case 'lambert':
-      return new THREE.MeshLambertMaterial(p);
+      return THREE.MeshLambertMaterial;
     case 'phong':
-      return new THREE.MeshPhongMaterial(p);
+      return THREE.MeshPhongMaterial;
     case 'physical':
-      return new THREE.MeshPhysicalMaterial(p);
+      return THREE.MeshPhysicalMaterial;
     case 'standard':
-      return new THREE.MeshStandardMaterial(p);
+      return THREE.MeshStandardMaterial;
     case 'toon':
-      return new THREE.MeshToonMaterial(p);
+      return THREE.MeshToonMaterial;
     default:
-      console.log('Unknown material type: ' + params.type + ', default to ' + Materials.DefaultMaterialType.constructor.name);
-      return new Materials.DefaultMaterialType(p);
+      console.log('Unknown material type: ' + mtype + ', default to ' + Materials.DefaultMaterialType.constructor.name);
+      return Materials.DefaultMaterialType;
   }
-};
+}
 
 Materials.getMaterialParams = function (material) {
   var includeFields = [

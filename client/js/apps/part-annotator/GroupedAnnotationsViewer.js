@@ -16,6 +16,7 @@ require('jquery-lazy');
  * @param params.viewerUrl {string} Link to go to when person clicks on the image (example: #{baseUrl}/part-annotator-single)
  * @param params.annotateFromLatest {boolean} Whether to do fixup mode and annotate from latest annotation or not
  * @param params.groupBy {string} Field to group by (example: category)
+ * @param [params.viewerParams] {Object} Additional parameters for viewer
  * @param [params.task] {string} Annotation task name (used in database for storing/querying)
  * @param [params.annotationTasks] {string[]} Array of annotation task names to filter by (when querying)
  * @param [params.annotationConditions] {string[]} Array of annotation conditions to filter by (when querying)
@@ -31,7 +32,7 @@ function GroupedAnnotationsViewer(params) {
   this.container = $(params.container);
   this.loadingElement = $(params.loadingMessageSelector || '#loadingMessage');
   this.assetGroup = params.assetGroup;
-  this.groupBy = params.groupBy;
+  this.groupBy = _.getUrlParam('groupBy', params.groupBy);
   this.previewImageIndex = params.previewImageIndex || -1;
 
 //   this.baseUrl = params.baseUrl || '';
@@ -42,24 +43,29 @@ function GroupedAnnotationsViewer(params) {
 //   this.previewUrl = this.baseUrl + '/annotations/preview';
 
   this.viewerUrl = params.viewerUrl || Constants.baseUrl + '/model-viewer';
+  this.viewerParams = params.viewerParams;
   this.annotationsUrl = params.annotationsUrl || Constants.baseUrl + '/part-annotations/list';
   this.assetIdField = params.assetIdField || 'modelId';
-  this.sortBy = params.sortBy || _.getUrlParam('sortBy');
+  this.sortBy = _.getUrlParam('sortBy', params.sortBy);
   this.assetManager = new AssetManager({ previewImageIndex: this.previewImageIndex });
 }
 
 GroupedAnnotationsViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) {
   viewerUrl = viewerUrl || this.viewerUrl;
-  var additionalParams = '';
+  var queryParams = this.viewerParams? _.clone(this.viewerParams) : {};
+  queryParams[this.assetIdField] = assetInfo.fullId;
+  queryParams['task'] = this.task;
   if (this.annotateFromLatest) {
-    var prevAnn = this.__annotatedByItemId[assetInfo.fullId];
-    if (prevAnn) {
-      var prevAnnIds = prevAnn.ids;
-      var latestAnnId = _.max(prevAnnIds);
-      additionalParams = '&taskMode=fixup&startFrom=' + latestAnnId;
-    }
+//    var prevAnn = this.__annotatedByItemId[assetInfo.fullId];
+//    if (prevAnn) {
+//      var prevAnnIds = prevAnn.ids;
+//      var latestAnnId = _.max(prevAnnIds);
+      queryParams['taskMode'] = 'fixup';
+      queryParams['startFrom'] = 'latest'; //latestAnnId;
+//    }
   }
-  return viewerUrl + '?' + this.assetIdField + '=' + assetInfo.fullId + '&task=' + this.task + additionalParams;
+  var url = viewerUrl + '?' + $.param(queryParams);
+  return url;
 };
 
 GroupedAnnotationsViewer.prototype.getAnnotationsUrl = function(assetInfo) {
@@ -213,16 +219,19 @@ GroupedAnnotationsViewer.prototype.__init = function() {
         var groupEntry = group[j];
         var assetInfo = groupEntry.assetInfo;
         var assetDetails = { id: assetInfo.id, category: assetInfo.category };
+        if (assetInfo.setIds && assetInfo.setIds.length) {
+          assetDetails.setIds = assetInfo.setIds;
+        }
         var nAnns = groupEntry.nAnns;
         var div = $('<td></td>');
         div.append('<br/>');
         div.append(this.getAssetImageLink(this.assetGroup, assetInfo, this.viewerUrl)
-          .attr('target', 'annotator-window')
+          .attr('target', '_blank')
           .attr('title', JSON.stringify(assetDetails, null, 2))
         );
         div.append('<br/>');
         var annsButton = this.getButtonLink('Anns (' + nAnns + ')', this.getAnnotationsUrl(assetInfo), 'View annotations');
-        annsButton.attr('target', 'annotations-window');
+        annsButton.attr('target', '_blank');
         if (nAnns === 0) {
           annsButton.removeClass('btn-primary').addClass('btn-warning');
         } else if (nAnns >= nTargetAnns) {

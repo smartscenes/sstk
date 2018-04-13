@@ -11,6 +11,7 @@ function SegmentAnnotationsViewer(params) {
   this.annotateUrl = this.baseUrl + '/scans/segment-annotator-single';
   this.alignUrl = this.baseUrl + '/scans/scan-model-aligner';
   this.editUrl = this.baseUrl + '/scans/annotations/edit';
+  this.jsonUrl = this.baseUrl + '/scans/segment-annotations/aggregated';
   this.previewUrl = this.baseUrl + '/annotations/preview';
 }
 
@@ -247,6 +248,15 @@ SegmentAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     }
     return createLink(label, url, '_blank');
   }
+
+  function createJsonLink(ann, label, extraParams) {
+    var url = scope.jsonUrl + '?annId=' + ann.id;
+    if (extraParams) {
+      url += ('&' + $.param(extraParams));
+    }
+    return createLink(label, url, '_blank');
+  }
+
   function createFilterLink(ann, field) {
     return createFilterLinks(scope.listUrl, ann, field);
   }
@@ -269,7 +279,7 @@ SegmentAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
       "data": "id",
       "title": "Id",
       render: function (data, type, full, meta) {
-        return getHtml(createViewLink(full, full.id));
+        return getHtml(createGroup([createViewLink(full, full.id), createJsonLink(full, 'json')], 'div'));
       }
     },
     {

@@ -7,7 +7,6 @@ var FileLoader = require('io/FileLoader');
 var BBox = require('geo/BBox');
 var Object3DUtil = require('geo/Object3DUtil');
 var OffscreenPicker = require('controls/OffscreenPicker');
-var MeshHelpers = require('geo/MeshHelpers');
 var SegmentLabeler = require('part-annotator/SegmentLabeler');
 var SegmentAnnotationStats = require('./SegmentAnnotationStats');
 var Survey = require('ui/Survey');
@@ -22,8 +21,6 @@ var _ = require('util');
  * @param [params.checkLabelable=true] {boolean} Whether to enforce check if something can be labeled or not
  *   (i.e. the distance check constraints).
  *   Toggled using `ctrl-shift-o`.
- * @param [params.obbsVisible=true] {boolean} To show obbs of labeled segment groups or not.
- *   Toggled using `b`.
  * @param [params.taskMode=new] {string} Task mode can be `new`, `coverage`, or `fixup`.
  *   Use `new` to start brand new annotation,
  *   `coverage` to get additional annotations (but the existing annotation is fixed and cannot be changed), and
@@ -107,19 +104,22 @@ function SegmentAnnotator(params) {
             name: 'Merge',
             callback: function () {
               scope.mergeSelected();
-            }
+            },
+            accesskey: "M"
           },
           lookAt: {
             name: 'LookAt',
             callback: function () {
               scope.lookAtSelected();
-            }
+            },
+            accesskey: "L"
           },
           freeze: {
             name: 'Freeze',
             callback: function() {
               scope.freezeSelected(true);
-            }
+            },
+            accesskey: "F"
           },
           unfreeze: {
             name: 'Unfreeze',
@@ -247,10 +247,6 @@ function SegmentAnnotator(params) {
 
   this.annotations = [];
   this.annotationStats = new SegmentAnnotationStats();
-  this.debugOBBsNode = new THREE.Group();
-  this.debugOBBsNode.name = 'DebugOBBs';
-  this.debugNode.add(this.debugOBBsNode);
-  this.excludeFromPicking.push(this.debugOBBsNode);
   this.painter.enabled = false;
   this.painter.eraseMat = Object3DUtil.ClearColor;
   this.__shownDistanceHeuristicAlert = false;
@@ -559,66 +555,6 @@ SegmentAnnotator.prototype.getChanged = function() {
   }
 };
 
-SegmentAnnotator.prototype.fillSelected = function(fill) {
-  var selected = this.labelsPanel.getAllSelected();
-  // filter out selected that don't have any segIndices
-  selected = selected? selected.filter(function(x) { return x.segIndices; }) : null;
-  if (selected && selected.length) {
-    this.onEditOpInit('fill', { labelInfo: selected, fill: fill });
-    this.__trackUndo(false);
-    for (var i = 0; i < selected.length; i++) {
-      var obb = this.labeler.getPartOBB(selected[i]);
-      this.labeler.labelPartsInOBB(obb, this.labelsPanel, fill? selected[i] : null);
-    }
-    this.__trackUndo(true);
-    this.onEditOpDone('fill', { labelInfo: selected, fill: fill });
-  } else {
-    // Show alert...
-    UIUtil.showAlert(null, 'Please select labels with painted regions that gives a bounding box to fill', 'alert-info', 2000, '10pt').css('bottom', '5px');
-  }
-};
-
-SegmentAnnotator.prototype.mergeSelected = function () {
-  // merges selected labels
-  var selected = this.labelsPanel.getAllSelected();
-  if (selected && selected.length > 1) {
-    // Doing merge
-    //console.log('Merging ' + selected.length);
-    this.onEditOpInit('merge', { labelInfo: selected });
-    this.__trackUndo(false);
-    var merged = this.labeler.merge(selected, this.labelsPanel);
-    this.labelsPanel.selectLabel(merged);
-    this.__trackUndo(true);
-    this.onEditOpDone('merge', { labelInfo: merged });
-  }
-};
-
-SegmentAnnotator.prototype.freezeSelected = function (flag) {
-  // merges selected labels
-  var selected = this.labelsPanel.getAllSelected();
-  if (selected && selected.length) {
-    this.onEditOpInit('freeze', { labelInfo: selected, flag: flag });
-    this.__trackUndo(false);
-    for (var i = 0; i < selected.length; i++) {
-      this.labelsPanel.setFrozen(selected[i], flag);
-    }
-    this.__trackUndo(true);
-    this.onEditOpDone('freeze', { labelInfo: selected, flag: flag });
-  }
-};
-
-SegmentAnnotator.prototype.lookAtSelected = function () {
-  // merges selected labels
-  var selected = this.labelsPanel.getAllSelected();
-  if (selected && selected.length) {
-    this.lookAtParts(selected);
-  }
-};
-
-SegmentAnnotator.prototype.clearDebug = function () {
-  Object3DUtil.removeAllChildren(this.debugOBBsNode);
-};
-
 SegmentAnnotator.prototype.clearAnnotations = function (opts) {
   BasePartAnnotator.prototype.clearAnnotations.call(this, opts);
   this.clearDebug();
@@ -893,60 +829,6 @@ SegmentAnnotator.prototype.__showLargestUnlabeledSegment = function() {
   }
   this.largestUnlabeledSeg = largest;
   return largest;
-};
-
-SegmentAnnotator.prototype.__addOBB = function (obb, material, transform) {
-  var obj3D = new THREE.Object3D();
-  if (transform) {
-    Object3DUtil.setMatrix(obj3D, transform);
-  }
-  var mesh = new MeshHelpers.OBB(obb, material);
-  var meshwf = mesh.toWireFrame(2.0 / obj3D.scale.length(), true);
-  obj3D.add(meshwf);
-  this.debugOBBsNode.add(obj3D);
-  return obj3D;
-};
-
-SegmentAnnotator.prototype.showPartOBBs = function(labelInfos) {
-  this.clearDebug();
-  if (!labelInfos) return;
-  for (var i = 0; i < labelInfos.length; i++) {
-    var labelInfo = labelInfos[i];
-    // Ensure obb (do we need this?)
-    if (labelInfo && labelInfo.segIndices && labelInfo.segIndices.length > 0) {
-      if (!labelInfo.obb) {
-        labelInfo.obb = this.labeler.segments.fitOBB('Raw', labelInfo.segIndices);
-      }
-      this.__addOBB(labelInfo.obb, labelInfo.colorMat);
-    }
-  }
-};
-
-SegmentAnnotator.prototype.onSelectLabel = function (labelInfos) {
-  var labelInfo;
-  if (Array.isArray(labelInfos)) {
-    if (labelInfos.length === 1) {
-      labelInfo = labelInfos[0];
-    }
-  } else {
-    labelInfo = labelInfos;
-    labelInfos = [labelInfo];
-  }
-  if (labelInfo) {
-    this.setTransparency(true);
-  }
-  this.labeler.currentLabelInfo = labelInfo;
-  this.painter.setLabelInfo(labelInfo);
-  this.selectedLabelInfos = labelInfos;
-  if (this.obbsVisible) {
-    this.showPartOBBs(labelInfos);
-  }
-};
-
-SegmentAnnotator.prototype.onPartChanged = function (part) {
-  if (this.obbsVisible && this.selectedLabelInfos) {
-    this.showPartOBBs(this.selectedLabelInfos);
-  }
 };
 
 SegmentAnnotator.prototype.onWindowResize = function (options) {

@@ -99,8 +99,19 @@ BasePartLabeler.prototype.labelParts = function (parts, labelInfo, opts) {
 };
 
 BasePartLabeler.prototype.labelPart = function (part, labelInfo, opts) {
-  this.colorPart(part, labelInfo.colorMat);
-  part.userData.labelInfo = labelInfo;
+  // Clear if label information is saved in both the labelInfo and the part.userData
+  if (part && part.userData.labelInfo !== labelInfo) {
+    if (part && part.userData.labelInfo) {
+      this.__unlabel(part, opts);
+    }
+    this.colorPart(part, labelInfo.colorMat);
+    part.userData.labelInfo = labelInfo;
+    this.__label(part, labelInfo, opts);
+  }
+};
+
+BasePartLabeler.prototype.__label = function (part, labelInfo, opts) {
+  // TODO: Override with your implementation
 };
 
 BasePartLabeler.prototype.unlabelParts = function (parts, labelInfo) {
@@ -113,8 +124,13 @@ BasePartLabeler.prototype.unlabelParts = function (parts, labelInfo) {
 };
 
 BasePartLabeler.prototype.unlabelPart = function (part, opts) {
+  this.__unlabel(part, opts);
   this.decolorPart(part);
   part.userData.labelInfo = null;
+};
+
+BasePartLabeler.prototype.__unlabel = function (part, opts) {
+  // TODO: Override with your implementation
 };
 
 BasePartLabeler.prototype.unlabelAll = function() {

@@ -179,7 +179,7 @@ AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
   });
   // TODO: Rework hack
   var arrayFields = {
-    model: ['datasets', 'category', 'variantIds'],
+    model: ['datasets', 'category', 'variantIds', 'componentIds', 'setIds', 'wnsynset','wnsynsetkey'],
     scene: ['datasets', 'modelIds', 'modelCats', 'modelNames', 'modelTags', 'roomIds', 'roomTypes', 'origRoomTypes']
   };
   var splitFields = arrayFields[assetGroup.type];
@@ -191,8 +191,16 @@ AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
     var m = assetInfos[i];
     if (splitFields) {
       _.each(m, function(v,k) {
-        if (splitFields.indexOf(k) >= 0) {
-          m[k] = v.split(',');
+        if (splitFields.indexOf(k) >= 0 && v != undefined) {
+          if (typeof(v) != 'string') {
+            v = v.toString();
+          }
+          v = v.trim();
+          if (v.length > 0) {
+            m[k] = v.split(',');
+          } else {
+            m[k] = [];
+          }
         }
       });
     }

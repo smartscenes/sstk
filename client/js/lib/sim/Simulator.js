@@ -126,10 +126,12 @@ Simulator.prototype.__init = function (opts) {
     _.defaults({ mode: 'raycast' }, opts.collisionDetection)  // for sampling start configurations (avoids NavScene co-dependency)
     );
 
+  this.__modifications = opts.modifications;    // scene modifications
   this.__outputDir = opts.outputDir || '.'; // Output directory for debug
   this.__resetCnt = 0; // Reset count
   this.__simOperations = new SimOperations({
-    simulator: this
+    simulator: this,
+    rng: opts.rng
   });
   var actionTraceLog = opts.actionTraceLog || opts.logActionTrace;
   if (actionTraceLog) {
@@ -526,7 +528,9 @@ Simulator.prototype.getObservationMetadata = function() {
 Simulator.prototype.getObservations = function (callback) {
   // Collect observations!
   var offsetsToGoal = this.state.offsetsToGoals();
-  var agentPosition = this.getAgent().position;
+  var agent = this.getAgent();
+  var agentPosition = agent.position;
+  var agentVelocity = agent.velocity;
   var room = null;
   if (this.navmap) {
     room = this.navmap.getRoom(agentPosition);
@@ -544,6 +548,7 @@ Simulator.prototype.getObservations = function (callback) {
       collision: this.state.lastStepCollided,
       sensors: {},
       measurements: {
+        velocity: agentVelocity,
         distance_to_goal: offsetsToGoal.map(function (x) {
           return x.distance;
         }),
@@ -556,13 +561,13 @@ Simulator.prototype.getObservations = function (callback) {
         })
       },
       roomInfo: roomInfo
-    },
+    }//,
     //reward: 1.0,
     //done: false//,
-    info: {
-      agent_state: this.getAgent().getState()//,
-      //goal: this.state.getSerializableGoals()
-    }
+    // info: {
+    //   agent_state: this.getAgent().getState(),
+    //   goal: this.state.getSerializableGoals()
+    // }
   };
 
   if (this.state.navscene) {
@@ -661,8 +666,9 @@ Simulator.prototype.prepareTopDownMapProjection = function() {
   return this.topDownMapProjection;
 };
 
-Simulator.prototype.__setSceneState = function(sceneState) {
+Simulator.prototype.__setSceneState = function(sceneState, callback) {
   this.state.reset(sceneState);
+
   if (this._actionTrace) {
     var goals = this.state.getGoals();
     this._actionTrace.updateConstants( { sceneId: sceneState.getFullID() });
@@ -672,28 +678,51 @@ Simulator.prototype.__setSceneState = function(sceneState) {
       this._actionTrace.push([this.state.ticks, p.x, p.y, p.z, r, 'goal', goals[i].objectId]);
     }
   }
+
+  if (this.state.sceneState && this.__modifications) {
+    // TODO: handle clearing state of scene to initial state before all times of modifications (not just this one)
+    this.__simOperations.removeObjects(this.state, function(x) { return x.object3D.userData.inserted; });
+    this.__simOperations.modify(this.state, this.__modifications, callback);
+  } else {
+    callback(null);
+  }
 };
 
 /**
  * Reset simulator to a new episode.  Start/goals are reinitialized and agent moved to start.
  */
-Simulator.prototype.reset = function () {
+Simulator.prototype.reset = function (callback) {
   if (this._actionTrace && !this._actionTrace.isEmpty()) {
     this._logAction('reset'); // Last action before clearing
     this._actionTrace.clear();
   }
 
-  if (this.state.sceneState) {
-    this.__setSceneState(this.state.sceneState);
-  }
-  if (this.audioSim) {
-    this.audioSim.reset();
-  }
+  var scope = this;
+  async.waterfall(
+    [
+      function(cb) {
+        if (scope.state.sceneState) {
+          scope.__setSceneState(scope.state.sceneState, cb);
+        } else {
+          setTimeout( function() { cb(); }, 0);
+        }
+      },
+      function(cb) {
+        if (scope.audioSim) {
+          scope.audioSim.reset();
+        }
 
-  this.__resetCnt++;
-  if (this._actionTrace) {
-    this._actionTrace.updateConstants( { episode: this.__resetCnt });
-  }
+        scope.__resetCnt++;
+        if (scope._actionTrace) {
+          scope._actionTrace.updateConstants( { episode: scope.__resetCnt });
+        }
+        setTimeout( function() { cb(); }, 0);
+      }
+    ],
+    function(err,res) {
+      callback(err, scope.state.sceneState);
+    }
+  )
 };
 
 Simulator.prototype.render = function(camera) {
@@ -727,6 +756,9 @@ Simulator.prototype.configure = function (opts) {
     this.audioSim.configure(opts);
   }
   var res = this.state.configure(opts);
+  if (opts.modifications) {
+    this.__modifications = opts.modifications; // Modifications to be made to the scene
+  }
   return _.omit(res, __optsToIgnore);
 };
 
@@ -766,8 +798,9 @@ Simulator.prototype.start = function (callback) {
   var scope = this;
   this.__waitReady(function() {
     scope.state.clear();
-    scope.reset();
-    scope.__loadScene(scope.state.opts, callback);
+    scope.reset(function(err, sceneState) {
+      scope.__loadScene(scope.state.opts, callback);
+    });
   });
 };
 
@@ -807,7 +840,6 @@ Simulator.prototype.__loadScene = function (opts, callback) {
   if (window) { window.scene = scene; }  // NOTE: for debugging with three.js inspector
   var scope = this;
   var preloads = ['regions'];
-
   if (this.opts.navmap && this.opts.navmap.recompute !== true) {
     // recompute true = force recomputation of navmap
     // otherwise, load if it exists
@@ -871,22 +903,23 @@ Simulator.prototype.__loadScene = function (opts, callback) {
       });
     }
 
-    scope.__setSceneState(sceneState);
-    if (scope.audioSim) {
-      // Local configure
-      console.time('Timing startAudio');
-      var receivers = scope.state.getAudioReceivers({ op: 'create', baseId: 0});
-      // Stupid audio simulator requires sound sources be inside walls
-      var sources = scope.state.getAudioSources({ op: 'create', baseId: receivers.length, keepInsideWalls: true });
-      scope.audioSim.configure({endpoints: _.concat(receivers, sources)});
-      scope.audioSim.start(function () {
-        //TODO(MS): improve error handling
-        console.timeEnd('Timing startAudio');
+    scope.__setSceneState(sceneState, function(err, ss) {
+      if (scope.audioSim) {
+        // Local configure
+        console.time('Timing startAudio');
+        var receivers = scope.state.getAudioReceivers({ op: 'create', baseId: 0});
+        // Stupid audio simulator requires sound sources be inside walls
+        var sources = scope.state.getAudioSources({ op: 'create', baseId: receivers.length, keepInsideWalls: true });
+        scope.audioSim.configure({endpoints: _.concat(receivers, sources)});
+        scope.audioSim.start(function () {
+          //TODO(MS): improve error handling
+          console.timeEnd('Timing startAudio');
+          callback(err, sceneState);
+        });
+      } else {
         callback(err, sceneState);
-      });
-    } else {
-      callback(err, sceneState);
-    }
+      }
+    });
   });
 };
 

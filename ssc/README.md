@@ -56,6 +56,7 @@ Annotation tools:
 1. `./export-annotated-ply` - Takes semantically annotated segments and outputs a PLY with semantic data on vertices
 
 2. `./recolor-ply` - Recolors ply with face annotations using prettier colors
+   `./transfer-property.ply` - Transfers face annotation in ply directly onto vertex colors
 
 3. `./export-annotated-parts` - Export part annotations
 

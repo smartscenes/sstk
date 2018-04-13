@@ -3,6 +3,7 @@ var SimUtil = require('sim/SimUtil');
 var ImageUtil = require('util/ImageUtil');
 var Picker = require('controls/Picker');
 var _ = require('util');
+var async = require('async');
 
 /**
  * Different operations supported by the simulator
@@ -13,6 +14,7 @@ var _ = require('util');
 function SimOperations(opts) {
   this.simulator = opts.simulator;
   this.picker = new Picker();
+  this.rng = opts.rng;
 }
 
 SimOperations.selectFirst = function(res) {
@@ -21,16 +23,122 @@ SimOperations.selectFirst = function(res) {
   }
 };
 
-// SimOperations.selectRandom = function(res) {
-//   if (res && res.length) {
-//     return rng.choice(res);
-//   }
-// };
+SimOperations.selectRandom = function(res, opts) {
+  if (res && res.length) {
+    return opts.rng.choice(res);
+  }
+};
+
+SimOperations.selectors = {
+  'first': SimOperations.selectFirst,
+  'random': SimOperations.selectRandom
+}
 
 SimOperations.prototype.init = function() {
   this.__sceneOperations = new SceneOperations({
     assetManager: this.simulator.assetManager
   });
+};
+
+/**
+ * Performs a set of modifications on the scene
+ * @param simState {SimState}
+ * @param modifications
+ * @param callback
+ */
+SimOperations.prototype.modify = function(simState, modifications, callback) {
+  if (!_.isArray(modifications)) {
+    modifications = [modifications];
+  }
+  var scope = this;
+  console.log('modifications', modifications);
+  async.forEachSeries(modifications, function(modification, cb) {
+    scope.__modify(simState, modification, cb);
+  }, callback);
+};
+
+/**
+ * Performs one modification on the scene
+ * @param simState
+ * @param modification
+ * @param cb
+ */
+SimOperations.prototype.__modify = function(simState, modification, cb) {
+  var scope = this;
+  if (modification.name === 'add') {
+    if (modification.positionAt === 'goal') {
+      // Position at goal
+      var goals = simState.getGoals();
+      if (goals.length) {
+        var updatedModifications = _.map(goals, function(g) {
+          var m = _.clone(modification);
+          m.positionAt = g.position;
+          if (m.rotation == undefined) {
+            m.rotation = g.rotation;
+          }
+          return m;
+       });
+        this.modify(simState, updatedModifications, cb);
+      } else {
+        cb('Cannot place without goals');
+      }
+      return;
+    }
+
+    var prepareModelInstance = function(modelInstance) {
+      scope.__sceneOperations.prepareModelInstance(modelInstance, {
+        useShadows: scope.simulator.useShadows,
+        enableMirrors: scope.simulator.enableMirrors // TODO: these are scene options
+      });
+      // Have attachment point
+      modelInstance.setAttachmentPoint({ position: new THREE.Vector3(0.5, 0, 0.5), coordFrame: 'childBB' });
+      modelInstance.object3D.userData.inserted = true;
+    };
+    var placementOptions = _.defaults(_.pick(modification, ['positionAt', 'rotation', 'format']),
+      { anchorFrame: 'objectOrigin', prepareModelInstance: prepareModelInstance });
+    if (modification.select) {
+      placementOptions.objectSelector = SimOperations.selectors;
+    }
+    if (placementOptions.rotation === 'random') {
+      placementOptions.rotation = this.rng.random() * 2 * Math.PI;
+    }
+    if (modification.modelIds) {
+      this.addObjectWithId(simState, modification.modelIds, placementOptions, cb);
+    } else if (modification.keywords) {
+      this.addObjectWithKeywords(simState, modification.keywords, placementOptions, cb);
+    } else if (modification.categories) {
+      this.addObjectWithCategory(simState, modification.categories, placementOptions, cb);
+    } else if (modification.query) {
+      this.addQueriedObject(simState, modification.categories, placementOptions, cb);
+    } else {
+      cb('Please specify modelIds, keywords, categories, or query for add');
+    }
+  } else if (modification.name === 'remove') {
+    if (modification.modelIds) {
+      this.removeObjects(simState, function(modelInstance) { return modification.modelIds.indexOf(modelInstance.model.getFullID()) >= 0; }, cb);
+    } else if (modification.objectIds) {
+      this.removeObjects(simState, function(modelInstance) { return modification.objectIds.indexOf(modelInstance.object3D.userData.id) >= 0; }, cb);
+    } else if (modification.categories) {
+      this.removeObjects(simState, function(modelInstance) { return modelInstance.model.hasCategoryIn(modification.categories); }, cb);
+    } else if (modification.filter) {
+      this.removeObjects(simState, modification.filter, cb);
+    } else {
+      cb('Please specify modelIds, objectIds, categories, or filter for remove');
+    }
+  } else {
+    cb('Unsupported operation ' + modification.name);
+  }
+};
+
+/**
+ * Removes objects matching filter condition
+ * @param simState {SimState}
+ * @param filter {function(ModelInstance)}
+ * @param cb
+ */
+SimOperations.prototype.removeObjects = function(simState, filter, cb) {
+  this.__sceneOperations.removeObjects({ sceneState: simState.sceneState, filter: filter });
+  if (cb) { cb(); }
 };
 
 /**
@@ -48,10 +156,35 @@ SimOperations.prototype.findModelsInDb = function(simState, query, cb) {
 };
 
 /**
+ * Add object with specified modelId to scene
+ * @param simState {SimState}
+ * @param modelIds {string[]}
+ * @param options {PlacementOption}
+ * @param cb
+ */
+SimOperations.prototype.addObjectWithId = function(simState, modelIds, options, cb) {
+  if (!_.isArray(modelIds)) { modelIds = [modelIds]; }
+  var scope = this;
+  // Let's just pick the first one
+  var objectSelector = options.objectSelector || SimOperations.selectFirst;
+  var selected = objectSelector(modelIds, { rng: this.rng} );
+  if (selected) {
+    var fullId = selected;
+    this.__sceneOperations.createObject(_.defaults({ sceneState: simState.sceneState, fullId: fullId,
+      callback: function(err, mi) {
+        cb(err, mi);
+      }
+    }, options));
+  } else {
+    cb(err || 'Cannot find any matching object models');
+  }
+};
+
+/**
  * Query and add object to scene
  * @param simState {SimState}
- * @param query
- * @param options
+ * @param query {string}
+ * @param options {PlacementOption}
  * @param cb
  */
 SimOperations.prototype.addQueriedObject = function(simState, query, options, cb) {
@@ -59,7 +192,7 @@ SimOperations.prototype.addQueriedObject = function(simState, query, options, cb
   // Let's just pick the first one
   var objectSelector = options.objectSelector || SimOperations.selectFirst;
   this.findModelsInDb(simState, query, function(err, res) {
-    var selected = objectSelector(res);
+    var selected = objectSelector(res, { rng: this.rng} );
     if (selected) {
       var fullId = selected.fullId;
       scope.__sceneOperations.createObject(_.defaults({ sceneState: simState.sceneState, fullId: fullId,
@@ -77,10 +210,11 @@ SimOperations.prototype.addQueriedObject = function(simState, query, options, cb
  * Add object to scene with specified category
  * @param simState {SimState}
  * @param categories {string[]}
- * @param options
+ * @param options {PlacementOption}
  * @param cb
  */
 SimOperations.prototype.addObjectWithCategory = function(simState, categories, options, cb) {
+  if (!_.isArray(categories)) { categories = [categories]; }
   var assetManager = this.simulator.assetManager;
   var query = assetManager.searchController.getQuery('category', categories.concat(_.map(categories, function(x) { return _.upperFirst(x); })));
   this.addQueriedObject(simState, query, options, cb);
@@ -90,10 +224,11 @@ SimOperations.prototype.addObjectWithCategory = function(simState, categories, o
  * Add object to scene with specified keywords
  * @param simState {SimState}
  * @param keywords {string[]}
- * @param options
+ * @param options {PlacementOption}
  * @param cb
  */
 SimOperations.prototype.addObjectWithKeywords = function(simState, keywords, options, cb) {
+  if (!_.isArray(keywords)) { keywords = [keywords]; }
   var assetManager = this.simulator.assetManager;
   var query = assetManager.searchController.getQuery('text', keywords);
   this.addQueriedObject(simState, query, options, cb);
@@ -142,7 +277,7 @@ SimOperations.prototype.findObjectsInViewByCategory = function(simState, sensedO
 /**
  * Moves object in the scene and places at targetPosition
  * @param simState {SimState}
- * @param obj
+ * @param obj {{node: THREE.Object3D, modelInstance: ModelInstance}}
  * @param movementOptions
  */
 SimOperations.prototype.move = function(simState, obj, movementOptions) {
@@ -158,7 +293,7 @@ SimOperations.prototype.move = function(simState, obj, movementOptions) {
 /**
  * Rotate object in the scene
  * @param simState {SimState}
- * @param obj
+ * @param obj {{node: THREE.Object3D, modelInstance: ModelInstance}}
  * @param rotateOptions
  */
 SimOperations.prototype.rotate = function(simState, obj, rotateOptions) {
@@ -183,7 +318,7 @@ SimOperations.prototype.look = function(simState, obj) {
 /**
  * Takes something from the scene and puts it into our agent bag
  * @param simState {SimState}
- * @param obj
+ * @param obj {{node: THREE.Object3D, modelInstance: ModelInstance}} Object to act on
  */
 SimOperations.prototype.take = function(simState, obj) {
   // TODO: Check if agent has space and can physically handle the object
@@ -198,7 +333,8 @@ SimOperations.prototype.take = function(simState, obj) {
 /**
  * Put something from agent bag back into the scene
  * @param simState {SimState}
- * @param obj
+ * @param obj {{node: THREE.Object3D, modelInstance: ModelInstance}} Object to act on
+ * @param targetPosition
  */
 SimOperations.prototype.putDown = function(simState, obj, targetPosition) {
   var modelInstance = obj.modelInstance;
@@ -216,7 +352,7 @@ SimOperations.prototype.putDown = function(simState, obj, targetPosition) {
 /**
  * Do something with object
  * @param simState {SimState}
- * @param obj
+ * @param obj {{node: THREE.Object3D, modelInstance: ModelInstance}} Object to act on
  * @param action
  * @returns {{capability, state}}
  */

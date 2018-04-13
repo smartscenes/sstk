@@ -1,0 +1,55 @@
+doctype html
+html(lang='en')
+  head
+    title='Instance Annotations'
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='https://cdn.datatables.net/1.10.11/css/jquery.dataTables.min.css')
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+  body
+    #main(style='padding:10px')
+      if query && query['modelId']
+
+        - var modelId = query['modelId']
+        - var instanceUrl = projUrl + '/instance-annotator?modelId=' + modelId + '&task=instance_annotation&condition=manual';
+        - var chairInstanceUrl = instanceUrl + '&category=chair';
+        - var partAnnotationsUrl = projUrl + '/part-annotations/list?modelId=' + modelId;
+        h2 Instance annotations #{modelId}
+        a(href=instanceUrl, target="_blank").btn.btn-primary Annotate instances (freeform)
+        a(href=chairInstanceUrl, target="_blank").btn.btn-primary Annotate instances (chair)
+        a(href=partAnnotationsUrl, target="_blank").btn.btn-primary Part annotations
+      else
+        h2 Instance annotations
+      table#resultTable
+        thead
+          th preview
+          th annId
+          th objectId
+          th label
+          th
+          th
+        tbody
+          - var annotationsByAnnId = _.groupBy(annotations, 'annId')
+          each segAnns, annId in annotationsByAnnId
+            each segAnn, i in segAnns
+              - var partsUrl = projUrl + '/part-annotator?modelId=' + segAnn.modelId + '&segAnnId=' + segAnn.id + '&task=part_annotation&condition=manual';
+              - var restrictedPartsUrl = partsUrl + '&restricted'
+              tr
+                td
+                  if i === 0
+                    img(src=baseUrl + '/annotations/preview/' + annId)
+                td #{segAnn.annId}
+                td #{segAnn.objectId}
+                td #{segAnn.label}
+                td
+                  a(href=restrictedPartsUrl, target="_blank") Annotate parts (prespecified)
+                td
+                  a(href=partsUrl, target="_blank") Annotate parts (freeform)
+    // Load require.js and start the app
+    script(src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src="https://datatables.net/release-datatables/media/js/jquery.dataTables.js")
+    script.
+      $("#resultTable").dataTable({
+        "order": [[ 1, "desc" ]]
+      });
+

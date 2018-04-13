@@ -1,0 +1,10 @@
+annotationChecks: './annotation-checks.yml'  # relative to proj/scannet/tasks/segment_annotation
+surveys: './survey.json'
+labels: './segment-labels.json'
+scansToAnnotate: '../../../../static/data/nyuv2/nyuv2.scans.txt'   # up to server directory
+idPrefix: 'nyuv2'
+percCompleteThreshold: 70
+annotationsPerWorker: 1
+doneThreshold: 2  # filter out anything with more than one annotations
+segmentType: 'surfaces'
+categoryParts: './category-parts.json'

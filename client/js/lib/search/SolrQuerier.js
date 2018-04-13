@@ -17,7 +17,7 @@ function SolrQuerier(opts) {
       url = url.substring(0, i);
     }
     this.schemaUrl = url + '/fields';
-    this.searchUrl = url + '/search';
+    this.searchUrl = url + '/select';
   }
   this.timeout = opts.timeout || 5000;
   this.limit = opts.limit || 100;

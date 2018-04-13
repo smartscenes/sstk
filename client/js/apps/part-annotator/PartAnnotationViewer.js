@@ -105,7 +105,7 @@ PartAnnotationViewer.prototype.createPanel = function () {
 };
 
 PartAnnotationViewer.prototype.updateLabels = function () {
-  PartViewer.prototype.updateLabels.call(this);
+  PartViewer.prototype.updateLabels.call(this, this.annotations);
   this.labelAllParts();
 };
 

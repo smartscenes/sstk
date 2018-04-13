@@ -141,13 +141,55 @@ SQLAnnotationDb.prototype.reportAnnotations = function(params, res, onSuccess, o
 };
 
 SQLAnnotationDb.prototype.queryParts = function(params, res, onSuccess, onError) {
-  var validParamFields = [ "id", "appId", "sessionId", "workerId", "modelId", "annId", "partSetId", "partId", "label", "labelType" ];
-  this.queryTableByCreatedAt({
+  var validParamFields = [ "id", "appId", "sessionId", "workerId", "modelId", "annId", "partSetId", "partId", "label", "labelType", "data"];
+  var myOnSuccess = function(rows) {
+    rows = rows.map( function (row) {
+      if (row.data ) {
+        try {
+          row.data = JSON.parse(row.data);
+        } catch (err) {
+          log.error('Error parsing data ' + row.id, err);
+        }
+      }
+      return row;
+    });
+    if (onSuccess) { onSuccess(rows); }
+    else {
+      res.json(rows);
+    }
+  };
+  if (params['$limitOnAnnotations']) {
+    if (!params['itemId']) {
+      params['itemId'] = params['modelId'];
+    }
+    var annParams = Object.assign({}, params);
+    annParams['$columns'] = ['id'];
+    var scope = this;
+    scope.queryAnnotations(annParams, res, function (rows) {
+      console.log('got rows', rows);
+      if (rows && rows.length) {
+        var annIds = rows.map(function (x) {
+          return x.id;
+        });
+        var f = scope.getQueryFilters(validParamFields, params);
+        scope.appendQueryFilter(f, 'annId', 'IN', '(' + annIds.join(',') + ')', true);
+        f.filters.push(params.label);
+        scope.queryTableByCreatedAt({
+          table: "part_annotations",
+          queryFilters: f
+        }, res, myOnSuccess, onError);
+      } else {
+        myOnSuccess([]);
+      }
+    }, onError);
+  } else {
+    this.queryTableByCreatedAt({
       table: "part_annotations",
       validParamFields: validParamFields,
       params: params,
       limit: params['$limit']
-    }, res, onSuccess, onError);
+    }, res, myOnSuccess, onError);
+  }
 };
 
 SQLAnnotationDb.prototype.querySegmentAnnotations = function(params, res, onSuccess, onError) {
@@ -228,6 +270,9 @@ SQLAnnotationDb.prototype.queryAnnotations = function(params, res, onSuccess, on
         var labelFilter = scope.getQueryFilters(params, ['label']);
         var labelFilterString = scope.formatQuery(labelFilter.filterString, labelFilter.filters);
         scope.appendQueryFilter(f, 'ann.id', 'IN', '(SELECT annId from ' + part_table + '  where ' + labelFilterString + ')', true);
+      }
+      if (params['$latest']) {
+        scope.appendQueryFilter(f, 'ann.id', 'IN', '(SELECT MAX(id) from annotations GROUP BY itemId)', true);
       }
       if (groupBy) {
         aggregate = _.defaults(Object.create(null), aggregate || {}, {

@@ -97,6 +97,7 @@ THREE.OutlinePass = function ( resolution, scene, camera, selectedObjects ) {
 	this.scene = new THREE.Scene();
 
 	this.quad = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2, 2 ), null );
+	this.quad.frustumCulled = false; // Avoid getting clipped
 	this.scene.add( this.quad );
 
 	this.tempPulseColor1 = new THREE.Color();
@@ -241,6 +242,9 @@ THREE.OutlinePass.prototype = Object.assign( Object.create( THREE.Pass.prototype
 		// Make selected objects invisible
 		this.changeVisibilityOfSelectedObjects( false );
 
+		// AXC: Save oldOverrideMaterial so it can be restored
+		var oldOverrideMaterial = this.renderScene.overrideMaterial;
+
 		// 1. Draw Non Selected objects in the depth buffer
 		this.renderScene.overrideMaterial = this.depthMaterial;
 		renderer.render( this.renderScene, this.renderCamera, this.renderTargetDepthBuffer, true );
@@ -258,7 +262,8 @@ THREE.OutlinePass.prototype = Object.assign( Object.create( THREE.Pass.prototype
 		this.prepareMaskMaterial.uniforms[ "depthTexture" ].value = this.renderTargetDepthBuffer.texture;
 		this.prepareMaskMaterial.uniforms[ "textureMatrix" ].value = this.textureMatrix;
 		renderer.render( this.renderScene, this.renderCamera, this.renderTargetMaskBuffer, true );
-		this.renderScene.overrideMaterial = null;
+		// AXC: Restore oldOverrideMaterial
+		this.renderScene.overrideMaterial = oldOverrideMaterial;
 		this.changeVisibilityOfNonSelectedObjects( true );
 
 		// 2. Downsample to Half resolution

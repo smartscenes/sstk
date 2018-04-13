@@ -22,8 +22,11 @@ build:
   # Read more about steps on our dev center:
   # http://devcenter.wercker.com/docs/steps/index.html
   steps:
-    # A step that executes `npm install` command
-    - npm-install
+    # A step that builds everything
+    - script:
+        name: build everything
+        code: |
+          ./build.sh
     # Generate relevant artifacts
     - script:
         name: build release code
@@ -39,12 +42,6 @@ build:
           mkdir dist
           cp client/build/STK.bundle.js dist/STK.bundle.js
           cp client/build-min/STK.bundle.js dist/STK.bundle.min.js
-    # npm install in ssc
-    - npm-install:
-        cwd: ssc/
-    # npm install in server
-    - npm-install:
-        cwd: server/
 
     # A custom script step, name value is used in the UI
     # and the code value contains the command that get executed

@@ -449,7 +449,7 @@ THREE.GPUPicker.prototype._addElementID = function (object, baseId) {
       var attributes = __pickingGeometry.attributes;
       var positions = attributes.position.array;
       var vertexCount = positions.length / 3;
-      var ids = new THREE.Float32Attribute(vertexCount, 1);
+      var ids = new THREE.Float32BufferAttribute(vertexCount, 1);
       //set vertex id color
 
       for (var i = 0, il = vertexCount / units; i < il; i++) {

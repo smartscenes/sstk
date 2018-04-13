@@ -7,6 +7,14 @@ function IndexedCounters(opts) {
   this.name = opts.name;
   this.filename = opts.filename || opts.name;
   this.indices = opts.indices;
+  if (opts.fieldnames) {
+    this.fieldnames = _.map(this.indices, function(x,i) {
+      var name = (opts.fieldnames[i] != undefined)? opts.fieldnames[i] : x.name;
+      return name;
+    });
+  } else {
+    this.fieldnames = _.map(this.indices, function(x) { return x.name; });
+  }
   this.counters = {};   // TODO: Consider changing to be NestedCounter
   this.depth = this.indices.length;
 }
@@ -57,6 +65,7 @@ IndexedCounters.prototype.get = function(keys, isIndexedKeys) {
       c = c[k];
     }
   }
+  return c;
 };
 
 IndexedCounters.prototype.filter = function(filter) {
@@ -123,7 +132,7 @@ IndexedCounters.prototype.parse = function(data, opts) {
   this.clear();
   var IOUtil = require('io/IOUtil');
   var parsed = IOUtil.parseDelimited(data, { header: true, skipEmptyLines: true, dynamicTyping: true });
-  var keyFields = _.map(this.indices, function(x) { return useSavedIndex? x.name + '_index':x.name; });
+  var keyFields = _.map(this.fieldnames, function(x) { return useSavedIndex? x + '_index':x; });
   for (var i = 0; i < parsed.data.length; i++) {
     var d = parsed.data[i];
     var keys = _.map(keyFields, function(f) { return d[f]; });
@@ -137,7 +146,7 @@ IndexedCounters.prototype.exportCsv = function(opts) {
   var callback = opts.callback;
 
   var scope = this;
-  var header = _.flatMap(this.indices, function(x) { return [x.name, x.name + '_index']; });
+  var header = _.flatMap(this.fieldnames, function(x) { return [x, x + '_index']; });
   header.push('count');
 
   function exportCounts(c, i, values, cb) {

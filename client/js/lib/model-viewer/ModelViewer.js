@@ -237,6 +237,12 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       var partsPanel = $('#partsPanel');
       if (partsPanel && partsPanel.length > 0) {
         var partsPanelParams = _.defaultsDeep(Object.create(null),
+            {
+              partType: this.urlParams['partType'],
+              labelType: this.urlParams['labelType'],
+              defaultPartType: this.urlParams['defaultPartType'],
+              defaultLabelType: this.urlParams['defaultLabelType']
+            },
             this.params.partsPanel || {},
             {
               container: partsPanel,
@@ -244,8 +250,6 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
                 container: $('#nameButtonsDiv'),
                 labels: []
               },
-              partType: this.urlParams['partType'],
-              labelType: this.urlParams['labelType'],
               getDebugNode: function () {
                 return this.debugNode;
               }.bind(this),

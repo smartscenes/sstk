@@ -124,12 +124,18 @@ THREE.OBJLoader.prototype = {
 
 	},
 
+	// AXC: loader options
+	setOptions: function(options) {
+  	this.options = options;
+	},
+
 	setMtlOptions: function (mtlOptions) {
   	this.mtlOptions = mtlOptions;
 	},
 
 	_createParserState : function () {
 
+		var options = this.options;
 		var state = {
 			objects  : [],
 			object   : {},
@@ -167,7 +173,8 @@ THREE.OBJLoader.prototype = {
 					geometry : {
 						vertices : [],
 						normals  : [],
-						uvs      : []
+						uvs      : [],
+						origVertIndices : []
 					},
 					materials : [],
 					smooth : true,
@@ -327,6 +334,13 @@ THREE.OBJLoader.prototype = {
 				dst.push( src[ c + 1 ] );
 				dst.push( src[ c + 2 ] );
 
+				// AXC: Add reference to original vertex positions
+				if (options && options.keepVertIndices) {
+					var vertIndices = this.object.geometry.origVertIndices;
+					vertIndices.push(Math.floor(a/3));
+					vertIndices.push(Math.floor(b/3));
+					vertIndices.push(Math.floor(c/3));
+				}
 			},
 
 			addVertexLine: function ( a ) {
@@ -338,6 +352,11 @@ THREE.OBJLoader.prototype = {
 				dst.push( src[ a + 1 ] );
 				dst.push( src[ a + 2 ] );
 
+				// AXC: Add reference to original vertex positions
+				if (options && options.keepVertIndices) {
+					var vertIndices = this.object.geometry.origVertIndices;
+					vertIndices.push(Math.floor(a/3));
+				}
 			},
 
 			addNormal : function ( a, b, c ) {
@@ -731,6 +750,11 @@ THREE.OBJLoader.prototype = {
 
 				buffergeometry.addAttribute( 'uv', new THREE.BufferAttribute( new Float32Array( geometry.uvs ), 2 ) );
 
+			}
+
+			// AXC: Add reference to original vertex positions
+			if (geometry.origVertIndices.length > 0) {
+				buffergeometry.addAttribute( 'vertIndices', new THREE.BufferAttribute( new Uint32Array( geometry.origVertIndices ), 1))
 			}
 
 			// Create materials

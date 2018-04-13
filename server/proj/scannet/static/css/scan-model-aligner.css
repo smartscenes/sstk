@@ -1,0 +1,37 @@
+#contextQueryResultsContainer {
+  position: fixed;
+  background-color: white;
+  height: 550px;
+  width: 300px;
+  visibility: hidden;
+  pointer-events: visibleFill;
+  padding: 10px;
+  border: 1px solid black;
+  z-index:2;
+}
+
+#contextQueryResultsContainer .close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index:3;
+}
+
+#contextQueryResultsContainer .searchPanel {
+  z-index:2;
+}
+
+#saveBtn {
+  top: 20px;
+  left: 45%;
+}
+
+#submitBtn {
+  bottom: 20px;
+  right: 20px;
+}
+
+#colorBtn {
+  top: 70px;
+  right: 20px;
+}

@@ -28,10 +28,33 @@ Materials.DefaultMaterialType = THREE.MeshPhongMaterial;
  * @param [params.delayedLoading] {boolean} Whether to delay loading and setting up of annotation target (scene/model) until later.
  *   Otherwise, scene/model is loaded during init.  Use if additional setup of scene/model is required.
  * @param [params.labelsPanel] {Object} Configuration for {@link LabelsPanel}
+ * @param [params.linkWordNet] Whether we should display links to WordNet synsets
  * @constructor
  * @extends Viewer3D
  */
 function BasePartViewer(params) {
+  // see http://swisnl.github.io/jQuery-contextMenu/demo/input.html
+  var customizeLabel = null;
+  var defaultContextMenuItems = {};
+  var linkWordNet = _.getUrlParam('linkWordNet', params.linkWordNet);
+  if (linkWordNet) {
+    // create wordnetLinker who will do magic!
+    var WordNetLinker = require('nlp/WordNetLinker');
+    var wordnetLinker = new WordNetLinker({
+      app: this,
+      allowLinking: this.isAnnotator,
+      contextMenuItems: defaultContextMenuItems
+    });
+    customizeLabel = function(labelInfo) {
+      wordnetLinker.indicateLinked(labelInfo);
+    }
+    this.wordnetLinker = wordnetLinker;
+  }
+  var defaultContextMenuOptions;
+  if (_.size(defaultContextMenuItems)) {
+    defaultContextMenuOptions = { items: defaultContextMenuItems };
+  }
+
   Constants.defaultPalette = Colors.palettes['d3_category19p'];
   var defaults = {
     appId: 'BasePartViewer.v1',
@@ -49,7 +72,9 @@ function BasePartViewer(params) {
     labelsPanel: {
       container: $('#nameButtonsDiv'),
       labels: [],
-      suggestions: []
+      suggestions: [],
+      contextMenu: defaultContextMenuOptions,
+      customizeLabel: customizeLabel
     },
     enableLookAt: false,
     uihookups: _.keyBy([
@@ -60,6 +85,11 @@ function BasePartViewer(params) {
           this.setTransparency(!this.isTransparent);
         }.bind(this),
         shortcut: 'c'
+      },
+      {
+        name: 'toggleWireframe',
+        click: this.toggleWireframe.bind(this),
+        shortcut: 'shift-w'
       },
       {
         name: 'Save image',
@@ -108,6 +138,7 @@ function BasePartViewer(params) {
   this.debugNode = new THREE.Group();
   this.debugNode.name = 'debugNode';
   this.useAmbientOcclusion = true;
+  this.__isWireframe = false;
 
   this.labelsPanel = null;
   this.excludeFromPicking = [];
@@ -297,10 +328,16 @@ BasePartViewer.prototype.getIntersectedMesh = function(event) {
   return intersect;
 };
 
-BasePartViewer.prototype.updateLabels = function() {
-  var partLabels = this.getInitialPartLabels() || [];
-  if (this.labelsPanel) {
-    this.labelsPanel.setLabels(partLabels);
+BasePartViewer.prototype.updateLabels = function(labelInfos) {
+  if (labelInfos) {
+    if (this.labelsPanel) {
+      this.labelsPanel.setLabels(labelInfos);
+    }
+  } else {
+    var partLabels = this.getInitialPartLabels() || [];
+    if (this.labelsPanel) {
+      this.labelsPanel.setLabels(partLabels);
+    }
   }
   this.labeler.updateLabels(this.labelsPanel.labelInfos);
 };
@@ -309,34 +346,55 @@ BasePartViewer.prototype.createLabeler = function() {
   console.error(this.constructor.name + '.createLabeler - Please implement me!!!');
 };
 
-BasePartViewer.prototype.lookAtPart = function (part) {
-  if (this.labeler.getPartBoundingBox) {
-    var bbox = this.labeler.getPartBoundingBox(part);
-    this.cameraControls.viewTarget({
-      targetBBox: bbox,
-      viewIndex: 0,
-      distanceScale: 1.5
-    });
+// toggle wireframe mode to see triangle
+BasePartViewer.prototype.toggleWireframe = function () {
+  this.__isWireframe = !this.__isWireframe;
+  var scene = this.getRenderScene();
+  if (!scene) { return; } // Not ready yet
+  //console.log('set wireframe', this.__isWireframe);
+  if (this.__isWireframe) {
+    this.__wireframeMaterial = this.__wireframeMaterial || new THREE.MeshBasicMaterial({color: new THREE.Color(0), wireframe: true, side: THREE.DoubleSide});
+    //console.log('wireframeMaterial', this.__wireframeMaterial);
+    //Object3DUtil.setMaterial(scene, this.__wireframeMaterial, Object3DUtil.MaterialsCompatible, true);
+    scene.overrideMaterial = this.__wireframeMaterial;
+  } else {
+    //Object3DUtil.revertMaterials(scene);
+    scene.overrideMaterial = null;
   }
 };
 
-BasePartViewer.prototype.lookAtParts = function (parts) {
-  console.log('parts', parts);
+BasePartViewer.prototype.lookAtPart = function (part) {
   if (this.labeler.getPartBoundingBox) {
-    if (parts && parts.length > 0) {
-      var bbox = new BBox();
-      for (var i = 0; i < parts.length; i++) {
-        var partBBox = this.labeler.getPartBoundingBox(parts[i]);
-        console.log('part', partBBox);
-        if (partBBox) {
-          bbox.includeBBox(partBBox);
-        }
-      }
+    var bbox = this.labeler.getPartBoundingBox(part);
+    if (bbox && bbox.valid()) {
       this.cameraControls.viewTarget({
         targetBBox: bbox,
         viewIndex: 0,
         distanceScale: 1.5
       });
+    }
+  }
+};
+
+BasePartViewer.prototype.lookAtParts = function (parts) {
+  //console.log('parts', parts);
+  if (this.labeler.getPartBoundingBox) {
+    if (parts && parts.length > 0) {
+      var bbox = new BBox();
+      for (var i = 0; i < parts.length; i++) {
+        var partBBox = this.labeler.getPartBoundingBox(parts[i]);
+        //console.log('part', partBBox);
+        if (partBBox) {
+          bbox.includeBBox(partBBox);
+        }
+      }
+      if (bbox && bbox.valid()) {
+        this.cameraControls.viewTarget({
+          targetBBox: bbox,
+          viewIndex: 0,
+          distanceScale: 1.5
+        });
+      }
     }
   }
 };

@@ -537,7 +537,8 @@ SUNCGExporter.prototype.convert = function (sceneState, opts) {
           node.bbox = bbox.toJSON();
         } else {
           if (node.valid) {
-            console.warn('Warning: No bbox for valid node ' + nodeType + ' in scene ' + json.id + ', item ' + item.id);
+            console.warn('Warning: No bbox for valid node ' + nodeType + ' in scene ' + json.id + ', item ' + item.id + '. Mark as invalid.');
+            node.valid = 0; // Mark as invalid
           } else {
             console.log('No bbox for invalid node ' + nodeType + ' in scene ' + json.id + ', item ' + item.id);
           }
@@ -579,6 +580,27 @@ SUNCGExporter.prototype.convert = function (sceneState, opts) {
       }
       return node;
     });
+    if (!omitBBox && nodes) {
+      var rooms = nodes.filter(function(x) { return x.type === 'Room'; });
+      for (var j = 0; j < rooms.length; j++) {
+        var room = rooms[j];
+        var indices = room.nodeIndices;
+        var roomBBox = room.bbox? Object3DUtil.toBBox(room.bbox) : new BBox();
+        for (var k = 0; k < indices.length; k++) {
+          var idx = indices[k];
+          var node = nodes[idx];
+          if (node && node.bbox) {
+            var bbox = Object3DUtil.toBBox(node.bbox);
+            if (bbox.valid()) {
+              roomBBox.includeBBox(bbox);
+            }
+          }
+        }
+        if (roomBBox.valid()) {
+          room.bbox = roomBBox.toJSON();
+        }
+      }
+    }
     var validNodes = nodes? nodes.filter(function(x) { return x.valid; }) : [];
     //console.log('validNodes=' + validNodes.length);
     if (validNodes.length === 0) {

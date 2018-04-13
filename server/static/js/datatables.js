@@ -206,6 +206,20 @@ function createDropDown(label, buttons) {
   return btnGroup;
 }
 
+function createGroup(elements, elementType) {
+  var group = $('<div></div>');
+  for (var i = 0; i < elements.length; i++) {
+    if (elementType) {
+      var wrapped = $('<' + elementType + '>' + '</' + elementType + ">");
+      wrapped.append(elements[i]);
+      group.append(wrapped);
+    } else {
+      group.append(elements[i]);
+    }
+  }
+  return group;
+}
+
 function getHtml(element) {
   if (typeof element === 'string') { return element; }
   else {
@@ -475,7 +489,7 @@ $.fn.dataTable.addColumnAggregations = function(opts) {
       }
 
       // Update footer
-      $( this.footer() ).html(
+      $( this.footer() ).prepend(
         aggregate
 //          pageTotal +' ( '+ total +' total)'
       );
@@ -493,7 +507,7 @@ $.fn.dataTable.getLazyImgLoadCallback = function() {
       var img = $(this);
       if (img.attr('src') !== img.attr('data-src')) {
         loadedCount += 1;
-        console.log('setting src ' + img.attr('data-src') + ' for ' + loadedCount);
+        //console.log('setting src ' + img.attr('data-src') + ' for ' + loadedCount);
         img.attr('src', img.attr('data-src'));
       }
     });

@@ -71,7 +71,7 @@ GeometryUtil.colorVertices = function(geometry, color, vertices) {
     if (vertices) {
       console.error('colorVertices for a specific subset of vertices not supported for THREE.Geometry');
     } else {
-      var nfaces = this.getGeometryFaceCount(geometry);
+      var nfaces = GeometryUtil.getGeometryFaceCount(geometry);
       for (var i = 0; i < nfaces; i++) {
         var face = geometry.faces[i];
         face.vertexColors = [color, color, color];
@@ -136,7 +136,7 @@ GeometryUtil.grayOutVertices = function(mesh, center, maxRadius, grayColor) {
 
 GeometryUtil.colorCylinderVertices = function(geometry, color1, color2) {
   if (geometry instanceof THREE.Geometry) {
-    var nfaces = this.getGeometryFaceCount(geometry);
+    var nfaces = GeometryUtil.getGeometryFaceCount(geometry);
     var verts = geometry.vertices;
     for (var i = 0; i < nfaces; i++) {
       var face = geometry.faces[i];
@@ -984,7 +984,7 @@ GeometryUtil.createVPTreeVertex = function (geometry) {
   return VPTreeFactory.build(GeometryUtil.getGeometryVertexCount(geometry), function(a,b) {
     var v1 = GeometryUtil.getGeometryVertex(geometry, a);
     var v2 = GeometryUtil.getGeometryVertex(geometry, b);
-    return v1.distanceToSquared(v2);
+    return v1.distanceTo(v2);
   });
 };
 
@@ -995,7 +995,7 @@ GeometryUtil.getVertexMapping = function (srcGeo, tgtGeo, maxDist) {
   var distFun = function(q, v) {
     var v1 = GeometryUtil.getGeometryVertex(srcGeo, q);
     var v2 = GeometryUtil.getGeometryVertex(tgtGeo, v);
-    return v1.distanceToSquared(v2);
+    return v1.distanceTo(v2);
   };
 
   var srcNumVerts = GeometryUtil.getGeometryVertexCount(srcGeo);
@@ -1007,6 +1007,24 @@ GeometryUtil.getVertexMapping = function (srcGeo, tgtGeo, maxDist) {
     }
   }
   return vertexMapping;
+};
+
+GeometryUtil.isMeshInOBB = function(mesh, obb) {
+  var nVerts = GeometryUtil.getGeometryVertexCount(mesh.geometry);
+  //console.log('check mesh in obb', mesh, obb, nVerts);
+  if (nVerts) {
+    var vert = new THREE.Vector3();
+    var transform = mesh.matrixWorld;
+    for (var i = 0; i < nVerts; i++) {
+      GeometryUtil.getGeometryVertex(mesh.geometry, i, transform, vert);
+      if (!obb.isPointContained(vert)) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    return false;
+  }
 };
 
 module.exports = GeometryUtil;

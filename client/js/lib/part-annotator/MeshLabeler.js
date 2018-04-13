@@ -1,5 +1,9 @@
 var BasePartLabeler = require('part-annotator/BasePartLabeler');
+var BBox = require('geo/BBox');
+var GeometryUtil = require('geo/GeometryUtil');
 var MeshHierarchyPanel = require('ui/MeshHierarchyPanel');
+var OBBFitter = require('geo/OBBFitter');
+var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 
 /**
@@ -117,7 +121,7 @@ MeshLabeler.prototype.hasParts = function (labelInfo) {
 MeshLabeler.prototype.labelFromExisting = function(labelsPanel, options) {
   var annotations = this.groupRawAnnotations(options);
   var labels = annotations.map(function(x) { return x.label; });
-  labelsPanel.setLabels(labels);
+  labelsPanel.setLabels(annotations);
   this.updateLabels(labelsPanel.labelInfos);
   //console.log('annotations', annotations, labels);
   this.labelAll(annotations);
@@ -150,6 +154,7 @@ MeshLabeler.prototype.groupRawAnnotations = function(options) {
     }));
     var ann = {
       label: anns[0].label,
+      data: anns[0].data,
       partIds: partIds,
       annotations: anns
     };
@@ -186,8 +191,140 @@ MeshLabeler.prototype.labelMeshes = function (labelInfo, meshIds) {
   for (var j in matched) {
     if (!matched.hasOwnProperty(j)) { continue; }
     var mesh = matched[j];
-    this.labelPart(mesh, labelInfo);
+    this.labelPart(mesh, labelInfo, {skipFitOBB: true});
   }
+  if (labelInfo) {
+    this.__updateLabelOBB(labelInfo);
+  }
+};
+
+MeshLabeler.prototype.merge = function(labelInfos, labels) {
+  if (labelInfos.length > 0) {
+    var first = labelInfos[0];
+    var meshes = this.__getMeshesByAnnId();
+    for (var i = 1; i < labelInfos.length; i++) {
+      var labelInfo = labelInfos[i];
+      // Find all parts for this label
+      var parts = meshes[labelInfo.id];
+      if (parts && parts.length > 0) {
+        for (var j = 0; j < parts.length; j++) {
+          var p = parts[j];
+          this.labelPart(p, first, {skipFitOBB: true});
+        }
+      }
+      labels.removeLabel(labelInfo);
+    }
+    this.__updateLabelOBB(first);
+    return first;
+  }
+};
+
+MeshLabeler.prototype.__label = function (part, labelInfo, opts) {
+  if (part && labelInfo) {
+    opts = opts || {};
+    if (!opts.skipFitOBB) {
+      this.__updateLabelOBB(labelInfo);
+    }
+  }
+};
+
+MeshLabeler.prototype.__unlabel = function (part, opts) {
+  if (part && part.userData.labelInfo) {
+    opts = opts || {};
+    if (!opts.skipFitOBB) {
+      this.__updateLabelOBB(part.userData.labelInfo, [part]);
+    }
+  }
+};
+
+MeshLabeler.prototype.__fitOBB = function(meshes) {
+  return OBBFitter.fitMeshOBB(meshes, { constrainVertical: true });
+};
+
+MeshLabeler.prototype.__updateLabelOBB = function(labelInfo, excludeParts) {
+  var parts = this.getMeshesForLabel(labelInfo);
+  if (excludeParts) {
+    parts = _.filter(parts, function(p) {
+      return !Object3DUtil.isDescendantOf(p, excludeParts);
+    });
+  }
+  if (parts && parts.length) {
+    labelInfo.obb = this.__fitOBB(parts)
+  }
+  return labelInfo.obb;
+}
+
+MeshLabeler.prototype.getLabelOBB = function(labelInfo) {
+  if (!labelInfo.obb) {
+    var parts = this.getMeshesForLabel(labelInfo);
+    if (parts && parts.length) {
+      labelInfo.obb = this.__fitOBB(parts)
+    }
+  }
+  return labelInfo.obb;
+}
+
+MeshLabeler.prototype.getPartOBB = function (part) {
+  var labelInfo = (part && part.userData)? part.userData.labelInfo : part;
+  if (labelInfo) {
+    return this.getLabelOBB(labelInfo);
+  } else if (part) {
+    if (part.userData) {
+      part.userData.obb = part.userData.obb || this.__fitOBB([part]);
+      return part.userData.obb;
+    }
+  }
+};
+
+MeshLabeler.prototype.getPartBoundingBox = function (part) {
+  var obb = this.getPartOBB(part);
+  if (obb) {
+    var minmax = obb.getMinMax();
+    return new BBox(minmax.min, minmax.max);
+  }
+};
+
+MeshLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
+  // Find all parts in obb and label them!
+  //console.log('label parts in OBB');
+  var scope = this;
+  var changed = {};
+  if (labelInfo) {
+    changed[labelInfo.index] = labelInfo;
+  }
+  var meshes = this.getMeshes();
+  meshes = _.filter(meshes, function(x) { return x.geometry; });
+  _.each(meshes, function(mesh) {
+    var inOBB = GeometryUtil.isMeshInOBB(mesh, obb);
+    // inOBB
+    if (inOBB) {
+      var part = mesh;
+      var oldLabelInfo = part.userData.labelInfo;
+      var changeOldLabelInfo = oldLabelInfo && !(oldLabelInfo.fixed || oldLabelInfo.frozen);
+      if (changeOldLabelInfo) {
+        changed[oldLabelInfo.index] = oldLabelInfo;
+      }
+      if (labelInfo) {
+        if (!oldLabelInfo || (changeOldLabelInfo && oldLabelInfo.id !== labelInfo.id)) {
+          scope.labelPart(part, labelInfo, {skipFitOBB: true});
+        }
+      } else {
+        if (changeOldLabelInfo) {
+          scope.unlabelPart(part, {skipFitOBB: true});
+        }
+      }
+    }
+  });
+  var meshesByAnnId = this.__getMeshesByAnnId();
+  _.each(changed, function(li) {
+    // Update OBBs
+    if (meshesByAnnId[li.id] && meshesByAnnId[li.id].length) {
+      scope.__updateLabelOBB(li);
+    } else {
+      // This label should be gone!
+      labels.removeLabel(li);
+    }
+  });
 };
 
 module.exports = MeshLabeler;
