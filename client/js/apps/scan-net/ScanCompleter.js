@@ -20,6 +20,7 @@ var _ = require('util');
  * @param params
  * @constructor
  * @extends SceneViewer
+ * @memberOf scannet
  */
 var ScanCompleter = function (params) {
   var defaults = {
@@ -31,7 +32,7 @@ var ScanCompleter = function (params) {
     drawAxes: true,
     autoLoadScene: true,
     allowEdit: true,
-    allowAny: false,
+    allowEditAny: false,
     editMode: true,
     addGround: false,
     useDatGui: true,

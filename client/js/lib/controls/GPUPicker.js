@@ -326,16 +326,18 @@ THREE.GPUPicker.prototype.__pickAt = function(index, raycaster) {
     }
     if (object.raycastWithID) {
       var intersect = object.raycastWithID(elementId, raycaster);
-      intersect.object = object.originalObject;
-      intersect.faceIndex = intersect.index;
-      if (object.originalObject.geometry.index) {  // also revert face vertex indices
-        var idx = object.originalObject.geometry.index.array;
-        var offset = intersect.faceIndex * 3;
-        intersect.face.a = idx[offset];
-        intersect.face.b = idx[offset+1];
-        intersect.face.c = idx[offset+2];
+      if (intersect) {
+        intersect.object = object.originalObject;
+        intersect.faceIndex = intersect.index;
+        if (object.originalObject.geometry.index) {  // also revert face vertex indices
+          var idx = object.originalObject.geometry.index.array;
+          var offset = intersect.faceIndex * 3;
+          intersect.face.a = idx[offset];
+          intersect.face.b = idx[offset + 1];
+          intersect.face.c = idx[offset + 2];
+        }
+        return intersect;
       }
-      return intersect;
     }
   }
 };

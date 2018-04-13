@@ -125,8 +125,9 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
   $(loadingMessageSelector).css('visibility', 'visible');
   var resultTable = $(resultTableSelector);
   var lazyImgLoadCallback = $.fn.dataTable.getLazyImgLoadCallback();
+  var buttons = ['csv', 'colvis', 'orderNeutral', 'selectAll', 'selectNone'];
 // Setup our editor
-  if (this.editUrl) {
+  if (this.editUrl && $.fn.dataTable.Editor) {
     var notes = getValues(annotations, 'notes', ['dup', 'replaced', 'bad', 'old'])
       .filter(function (x) {
         return x && x.length <= 20;
@@ -198,6 +199,8 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
         .set('verified', $(this).prop('checked') ? 1 : 0)
         .submit();
     });
+
+    buttons.push({ extend: "edit",   editor: editor });
   }
 
   function getViewUrl(ann) {
@@ -416,9 +419,7 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     "data": annotations,
     "ajax": ajaxOptions,
     "dom": 'BlfripFtip',
-    "buttons": [
-      'csv', 'colvis', 'orderNeutral', 'selectAll', 'selectNone'
-    ],
+    "buttons": buttons,
     "select": true,
     "columns": columns,
     "rowCallback": function( row, aData, iDisplayIndex ) {

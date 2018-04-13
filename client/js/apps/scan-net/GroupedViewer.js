@@ -19,11 +19,14 @@ require('jquery-lazy');
  * @param [params.viewerParams] {Object} Additional parameters for viewer
  * @param [params.parentViewerUrl=params.viewerUrl] {string} Link to go to when person clicks on the image
  * @param [params.segmentType=surfaces] {string} Segmentation type to use (for statistics)
+ * @param [params.parentType='scan'] {string} Name of group
+ * @param [params.childType='region'] {string} Name of scan in group
  * @param [params.sortBy] {string} Field to sort by
  * @constructor
+ * @memberOf scannet
  */
 function GroupedViewer(params) {
-  this.groupBy = params.groupBy || 'parentId';
+  this.groupBy = _.getUrlParam('groupBy', params.groupBy || 'parentId');
   this.segmentType = params.segmentType || 'surfaces';
   this.container = $(params.container);
   this.loadingElement = $(params.loadingMessageSelector || '#loadingMessage');
@@ -33,6 +36,8 @@ function GroupedViewer(params) {
   this.viewerParams = params.viewerParams;
   this.parentViewerUrl = params.parentViewerUrl || this.viewerUrl;
   this.assetIdField = params.assetIdField || 'modelId';
+  this.parentType = params.parentType || 'scan';
+  this.childType = params.childType || 'region';
   this.sortBy = params.sortBy || _.getUrlParam('sortBy');
   this.showId = (params.showId != undefined)? params.showId : true;
   this.assetManager = new AssetManager();
@@ -174,7 +179,7 @@ GroupedViewer.prototype.__init = function() {
         var aggregationStatistics = _.get(assetInfo, [segmentType, 'statistics']);
         var summaryPercentComplete = { aggr: aggregationStatistics? aggregationStatistics.percentComplete : 0 };
         return { assetInfo: assetInfo,
-          aggregationStatistics: aggregationStatistics, annotationsSummary: summaryPercentComplete
+          aggregationStatistics: aggregationStatistics, latestStatistics: aggregationStatistics, annotationsSummary: summaryPercentComplete
         };
       });
       var totalPercentComplete = 0;
@@ -268,11 +273,11 @@ GroupedViewer.prototype.__init = function() {
   }
   var c = stats.counts;
   summary.append(
-      $('<span></span>').append('Annotated scans: '
-        + c.totalParentsWithRegionsAnnotated+ '/' + c.totalParentsWithRegions
-        + ', scans without regions ' + c.totalParentsNoRegions
-        + ', annotated regions: ' + c.totalAssetsAnnotated + '/' + c.totalAssets
-        + ', percent complete: ' + (100*c.totalAnnotatedVertices/c.totalVertices).toFixed(2)));
+    $('<span></span>').append('Annotated ' + this.parentType + ': '
+      + c.totalParentsWithRegionsAnnotated+ '/' + c.totalParentsWithRegions
+      + ', ' + this.parentType + ' without ' + this.childType + ' ' + c.totalParentsNoRegions
+      + ', annotated ' + this.childType + ': ' + c.totalAssetsAnnotated + '/' + c.totalAssets
+      + ', percent complete: ' + (100*c.totalAnnotatedVertices/c.totalVertices).toFixed(2)));
   this.container.append(summary);
   this.container.append(table);
   table.find('img.lazy').lazy({

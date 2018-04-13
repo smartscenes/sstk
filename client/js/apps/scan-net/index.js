@@ -1,6 +1,8 @@
+/** @namespace scannet */
 
-module.exports = {
-  Constants: require('Constants'),
+var webapp = require('../webapp');
+
+module.exports = webapp.util.merge(webapp, {
   GroupedAnnotationsViewer: require('./GroupedAnnotationsViewer'),
   GroupedViewer: require('./GroupedViewer'),
   HouseViewer: require('./HouseViewer'),
@@ -11,4 +13,4 @@ module.exports = {
   SegmentAnnotator: require('./SegmentAnnotator'),
   SegmentAnnotationViewer: require('./SegmentAnnotationViewer'),
   util: require('util')
-};
+});

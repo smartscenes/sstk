@@ -1,6 +1,16 @@
 var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 
+/**
+ * Simple remapping of one label set to another
+ * @param opts
+ * @param opts.mapping {Map<string,Object>} Map of label to objects (object should contain `index` field)
+ * @param [opts.name] {string} Name for mapping
+ * @param [opts.maxIndex] {int} Max value of index
+ * @param [opts.defaultIndex] {int} Default index to return for a label if label not found
+ * @constructor
+ * @memberOf util
+ */
 function LabelMapping(opts) {
   this.name = opts.name;
   this.mapping = opts.mapping;

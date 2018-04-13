@@ -16,7 +16,7 @@ cmd
   .option('--ann_type <type>', 'Annotation type', 'scan-model-alignments')
   .option('-n, --ann_limit <num>', 'Limit on number of annotations to export', STK.util.cmd.parseInt, -1)
   .option('--labels <filename>', 'Labels file', __dirname + '/data/scannet-category-color-index.txt')
-  .option('--label_mapping <filename>', 'Label mappings file', __dirname + '/data/label-mappings.tsv')
+  .option('--label_mapping <filename>', 'Label mappings file', STK.Constants.assetsDir + '/data/labels/label-mappings.tsv')
   .option('--export_plys [flag]', 'Whether to export plys', STK.util.cmd.parseBoolean, false)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--include_annId [flag]', 'Whether to include ann id in output filename', STK.util.cmd.parseBoolean, false)

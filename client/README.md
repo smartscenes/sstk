@@ -40,7 +40,7 @@ Example of using `STK.SimpleModelViewer` from `STK.bundle.js`
   * Use `NODE_ENV=prod npm run build` to optimize (including minify) the JS assets.
 
 
-#### Building the jsdoc
+#### Building the [jsdoc](http://usejsdoc.org/index.html)
 - run `npm run jsdoc`
 - Open the generated `jsdoc/index.html` page with a browser
 

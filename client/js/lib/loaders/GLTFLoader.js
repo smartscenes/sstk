@@ -20,6 +20,11 @@ THREE.GLTFLoader = ( function () {
 
 		crossOrigin: 'Anonymous',
 
+    // AXC: loader options
+		setOptions: function(options) {
+			this.options = options;
+		},
+
 		load: function ( url, onLoad, onProgress, onError ) {
 
 			var scope = this;
@@ -132,13 +137,20 @@ THREE.GLTFLoader = ( function () {
 
 			console.time( 'GLTFLoader' );
 
-			var parser = new GLTFParser( json, extensions, {
-
+			// AXC: set options
+			var options = {
 				path: path || this.path || '',
 				crossOrigin: this.crossOrigin,
 				manager: this.manager
-
-			} );
+			};
+			if (this.options) {
+				for (var key in this.options) {
+					if (this.options.hasOwnProperty(key) && !options.hasOwnProperty(key)) {
+						options[key] = this.options[key];
+					}
+				}
+			}
+			var parser = new GLTFParser( json, extensions, options ); // AXC: set options
 
 			parser.parse( function ( scene, scenes, cameras, animations ) {
 
@@ -684,6 +696,7 @@ THREE.GLTFLoader = ( function () {
 			 * AND also updating `.onBeforeRender` on the parent mesh.
 			 *
 			 * @param  {THREE.ShaderMaterial} source
+			 * @private
 			 * @return {THREE.ShaderMaterial}
 			 */
 			cloneMaterial: function ( source ) {
@@ -1157,9 +1170,10 @@ THREE.GLTFLoader = ( function () {
 	/**
 	 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#default-material
 	 */
-	function createDefaultMaterial() {
-
-		return new THREE.MeshStandardMaterial( {
+	function createDefaultMaterial(materialType) {
+		//AXC: Have materialType as parameter
+		materialType = materialType || THREE.MeshStandardMaterial;
+		return new materialType( {
 			color: 0xFFFFFF,
 			emissive: 0x000000,
 			metalness: 1,
@@ -1890,7 +1904,7 @@ THREE.GLTFLoader = ( function () {
 	};
 
 	GLTFParser.prototype.loadGeometries = function ( primitives ) {
-
+		var computeNormals = this.options && this.options.computeNormals; // AXC: Compute normals
 		return this._withDependencies( [
 
 			'accessors',
@@ -1964,6 +1978,12 @@ THREE.GLTFLoader = ( function () {
 
 				}
 
+				// AXC: computeNormals
+				if (computeNormals) {
+					geometry.computeFaceNormals();
+					geometry.computeVertexNormals();
+				}
+
 				return geometry;
 
 			} );
@@ -1994,6 +2014,9 @@ THREE.GLTFLoader = ( function () {
 
 				var primitives = meshDef.primitives || [];
 
+				var defaultMaterial = scope.options? scope.options.defaultMaterial : null; // AXC: Default material
+				var defaultMaterialType = scope.options? scope.options.defaultMaterialType : null; // AXC: Default material
+
 				return scope.loadGeometries( primitives ).then( function ( geometries ) {
 
 					for ( var i = 0; i < primitives.length; i ++ ) {
@@ -2002,7 +2025,7 @@ THREE.GLTFLoader = ( function () {
 						var geometry = geometries[ i ];
 
 						var material = primitive.material === undefined
-							? createDefaultMaterial()
+							? defaultMaterial || createDefaultMaterial(defaultMaterialType)  // AXC: Default material
 							: dependencies.materials[ primitive.material ];
 
 						if ( material.aoMap

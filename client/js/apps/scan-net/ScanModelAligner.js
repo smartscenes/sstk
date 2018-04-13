@@ -23,6 +23,7 @@ var _ = require('util');
  * @param [params.skipLabelSet=['wall', 'floor', 'ceiling', 'window', 'door', 'unknown']] {string[]} List of labels not to attempt model alignment for
  * @param [params.minObjects=1] {int} Minimum of objects required
  * @constructor
+ * @memberOf scannet
  */
 function ScanModelAligner(params) {
   var defaults = {

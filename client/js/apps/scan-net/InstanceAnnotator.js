@@ -6,6 +6,7 @@ var _ = require('util');
  * @param params Configuration (see {@link SegmentAnnotator} for details)
  * @constructor
  * @extends SegmentAnnotator
+ * @memberOf scannet
  */
 function InstanceAnnotator(params) {
   var defaults = {

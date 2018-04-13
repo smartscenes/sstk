@@ -28,7 +28,7 @@ Sampler.prototype.sample = function(opts) {
     // Batch sampling
     if (opts.withReplacement) {
       if (opts.scorer) { //weighted
-        return this.__sampleWeightedWithReplacement({});
+        return this.__sampleWeightedWithReplacement(opts.elements, opts.nsamples, opts.scorer);
       } else {
         return this.__sampleWithReplacement(opts.elements, opts.nsamples);
       }

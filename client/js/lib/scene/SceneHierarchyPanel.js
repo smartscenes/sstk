@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var AssetLoader = require('assets/AssetLoader');
 var ConfigControls  = require('ui/ConfigControls');
 var Object3DUtil = require('geo/Object3DUtil');
@@ -378,24 +379,24 @@ SceneHierarchyPanel.prototype.__createSummaryInfo = function(object3D) {
   var nGround = _.sumBy(object3D.children, function(node) { return node.name === 'Ground'? 1:0; });
   var nBoxes = _.sumBy(object3D.children, function(node) { return node.name === 'Box'? 1:0; });
   var nWindows = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isWindow())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isWindow())? 1:0;
   });
   var nDoors = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isDoor())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isDoor())? 1:0;
   });
   var nPeople = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isPerson())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isPerson())? 1:0;
   });
   var nPlants = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isPlant())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isPlant())? 1:0;
   });
   var nStairs = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isStairs())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isStairs())? 1:0;
   });
   var nStruct = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isStructure())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isStructure())? 1:0;
   });
-  var nObjects = _.sumBy(object3D.children, function(node) { return node.userData.modelId? 1:0; });
+  var nObjects = _.sumBy(object3D.children, function(node) { return node.userData.type === 'ModelInstance'? 1:0; });
   nObjects = nObjects - nWindows - nDoors - nStruct - nStairs;
   var stats = { nRooms: nRooms, nStructure: nStruct, nStairs: nStairs,
     nWindows: nWindows, nDoors: nDoors, nPeople: nPeople, nPlants: nPlants,
@@ -621,7 +622,7 @@ SceneHierarchyPanel.prototype.__showBoundingBoxForNode = function(node, flag) {
     var mesh = new MeshHelpers.BoxMinMax(bbox.min, bbox.max, Object3DUtil.TransparentMat);
     var boxwf = new THREE.BoxHelper(mesh);
     var material = this.app.picker.highlightMaterial;
-    var boxwffat = new MeshHelpers.FatLines(boxwf, 5, material);
+    var boxwffat = new MeshHelpers.FatLines(boxwf, 0.05*Constants.metersToVirtualUnit, material);
 
     bboxMesh = boxwffat;
     this.__bbNodes.add(bboxMesh);
@@ -880,7 +881,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
               "separator_after": false,
               "label": "Identify attachment",
               "action": function (obj) {
-                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { maxCandidatesToCheck: 1 });
+                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { checkOpposite: true });
                 console.log(attachment);
               }
             };

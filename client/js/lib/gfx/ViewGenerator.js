@@ -248,11 +248,18 @@ ViewGenerator.prototype.getViewForPoint = function (name, target, theta, phi, di
   var camZ = target.z + (rz * Math.cos(theta));
 
   var eye = [camX, camY, camZ];
-  var up = [0, 1, 0];
+  var up = Constants.worldUp.clone();
+  var camVec = new THREE.Vector3(target.x - camX, target.y - camY, target.z - camZ);
+  var lookatUp;
+  var dot = Math.abs(camVec.normalize().dot(up));
+  if (dot > 0.95) {
+    lookatUp = Constants.worldFront.clone().negate();
+  }
   return {
     name: name,
     position: eye,
     target: target,
+    lookatUp: lookatUp,
     up: up,
     fov: fov,
     near: near,

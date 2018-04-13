@@ -56,7 +56,9 @@ html(lang="en")
     script(src='#{baseUrl}/STK.bundle.js')
     link(rel='stylesheet', href='#{baseUrl}/css/datgui-light.css')
     script.
-      STK.Constants.defaultPalette = STK.Colors.palettes['d3_category19p'];
+      var defaultPaletteName = 'd3_category19p';
+      var paletteName = STK.util.getUrlParam('palette') || defaultPaletteName;
+      STK.Constants.defaultPalette = STK.Colors.palettes[paletteName] || STK.Colors.palettes[defaultPaletteName];
       var canvas = document.getElementById('canvas');
       var modelViewer = new STK.ModelViewer({
         container: canvas,
@@ -65,18 +67,20 @@ html(lang="en")
         useNewImages: true,
         partsPanel: {
           partTypes: ['none', 'surfaces', 'voxels-solid', 'voxels-surface', 'voxels-labeled'],
-          defaultPartType: 'surfaces',
-          defaultLabelType: 'Category'
+          labelTypes: ['Raw', 'Category', 'Object'],
+          defaultPartType: 'none',
+          defaultLabelType: 'Object'
         }
       });
       modelViewer.Subscribe('Launch', modelViewer, function () {
         // Auto search for models
-        modelViewer.partsPanel.setLabelColorIndex('Category', STK.Constants.assetsDir + 'data/scannet/scannet-category-color-index.txt',
+        modelViewer.partsPanel.setLabelColorIndex('Category', STK.Constants.assetsDir + 'data/labels/label-mappings.tsv',
           function (index) {
             modelViewer.partsPanel.setLabelColorIndex('voxels-labeled', index);
             modelViewer.partsPanel.labeledVoxels.setLabelColorIndex(index);
             modelViewer.partsPanel.setLabelColorIndex('Label', index);
-          }
+          },
+          'category', 'index'
         );
       });
       var modelId = STK.util.getUrlParam('modelId');
@@ -94,6 +98,7 @@ html(lang="en")
         }
       });
 
+      $('#partsPanel').collapse('show')
       $('#images').on('shown.bs.collapse', function () {
         modelViewer.modelImagesPanel.onResize();
       });

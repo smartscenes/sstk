@@ -1,6 +1,7 @@
 'use strict';
 
 define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
+    'scene/SceneOperations',
     'controls/SceneEditControls', 'controls/Picker', 'ui/SceneAnnotate',
     'assets/AssetGroups', 'assets/AssetManager', 'search/SearchController',
     'search/SolrQuerySuggester', 'model/ModelSchema', 'scene/SceneSchema',
@@ -16,7 +17,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
     'util/Auth', 'controls/keymap', 'util',
     'physijs', 'jquery-console', 'jquery-lazy'],
   function (Constants, SceneGenerator, SceneHierarchyPanel,
-            SceneEditControls, Picker, SceneAnnotate,
+            SceneOperations, SceneEditControls, Picker, SceneAnnotate,
             AssetGroups, AssetManager, SearchController,
             SolrQuerySuggester, ModelSchema, SceneSchema,
             SceneState, SceneVoxels, VisualizeParts,
@@ -200,9 +201,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this.defaultSceneId = allParams.defaultSceneId;
 
       this.sceneState = null;
-      this.categoryList = new Set();
-      this.mouseX = 0;
-      this.mouseY = 0;
       this.assetManager = null;
       this.sceneSearchController = null;
       this.modelSearchController = null;
@@ -252,7 +250,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this.allowRotation = (params.allowRotation !== undefined) ? params.allowRotation : true;
       this.allowScaling = (params.allowScaling !== undefined) ? params.allowScaling : true;
       this.allowSelectGroups = (params.allowSelectGroups !== undefined) ? params.allowSelectGroups : false;
-      this.allowAny = (params.allowAny !== undefined) ? params.allowAny : false;
+      this.allowEditAny = (params.allowEditAny !== undefined) ? params.allowEditAny : false;
       this.rotateBy = params.rotateBy;
       // Filter queries (e.g. +category:xxx ) for restricting what model/scenes are shown the search panel
       this.restrictScenes = params.restrictScenes;
@@ -277,6 +275,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this._showModels = true;
       this._showScene = true;
       this._showScan = true;
+      this._isScanSupport = allParams.isScanSupport || false;
       this._scanOpacity = 0.5;
       this._headlight = false;
 
@@ -366,11 +365,21 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       }
     });
 
+    Object.defineProperty(SceneViewer.prototype, 'isScanSupport', {
+      get: function () {return this._isScanSupport; },
+      set: function (v) {
+        this._isScanSupport = v;
+        // TODO: dynamically change scan to be support object
+        // if (this.sceneState) {
+        // }
+      }
+    });
+
     Object.defineProperty(SceneViewer.prototype, 'scanOpacity', {
       get: function () {return this._scanOpacity; },
       set: function (v) {
         this._scanOpacity = v;
-        this.applyVfTransparency();
+        this.applyScanOpacity();
       }
     });
 
@@ -527,6 +536,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         var options = (this.useDatGui instanceof Object) ? this.useDatGui : {};
         // Set up dat gui;
         var gui = this.datgui.getFolder('view');
+        if (showAll || options['isScanSupport']) gui.add(this, 'isScanSupport').listen();
         if (showAll || options['scanOpacity']) gui.add(this, 'scanOpacity', 0, 1.0).listen();
         if (showAll || options['showScan']) gui.add(this, 'showScan').listen();
         if (showAll || options['showModels']) gui.add(this, 'showModels').listen();
@@ -787,6 +797,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
           'm3': 'trim'
         }
       });
+      this.sceneOperations = new SceneOperations({ assetManager: this.assetManager });
 
       //sceneSearchController
       this.sceneSearchController = new SearchController({
@@ -803,7 +814,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       });
       this.sceneSearchController.searchPanel.setAutocomplete(
         new SolrQuerySuggester({
-            schema: new SceneSchema()
+          schema: new SceneSchema()
         })
       );
       if (this.restrictScenes) {
@@ -814,7 +825,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       });
 
       //modelSearchController
-      this.modelSources = this.modelSources || _.concat(Constants.assetSources.model, ['vf']);
+      this.modelSources = this.modelSources || _.concat(Constants.assetSources.model, Constants.assetSources.scan);
       this.modelSearchController = new SearchController({
         searchSucceededCallback: this.modelSearchSucceeded.bind(this),
         getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
@@ -834,9 +845,9 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         entriesPerRow: 2
       });
       this.modelSearchController.searchPanel.setAutocomplete(
-          new SolrQuerySuggester({
-            schema: new ModelSchema()
-          })
+        new SolrQuerySuggester({
+          schema: new ModelSchema()
+        })
       );
       if (this.restrictModels) {
         this.modelSearchController.setFilter(Constants.assetTypeModel, this.restrictModels);
@@ -911,7 +922,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
           'Ctrl+I = Save image<br>' +
           'Shift+T = Toggle controller mode<br>' +
           'Ctrl+O = Reset camera<br>' +
-  //          'G = Generate URL<br>' +
+          //          'G = Generate URL<br>' +
           (this.allowHighlightMode? 'Ctrl+U = Toggle highlight mode<br>' : '') +
           'Shift+Ctrl+V = Toggle voxels<br>' +
           'Shift+A = Toggle axis';
@@ -941,9 +952,10 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         allowRotation: this.allowRotation,
         allowScaling: this.allowScaling,
         rotateBy: this.rotateBy,
-        allowAny: this.allowAny
+        allowAny: this.allowEditAny
       });
-      this.initContextQueryControls();
+      this.addControl(this.editControls);
+      this.__initContextQueryControls();
       this.Subscribe(Constants.EDIT_OPSTATE.INIT, this, this.onEditOpInit.bind(this));
       this.Subscribe(Constants.EDIT_OPSTATE.DONE, this, this.onEditOpDone.bind(this));
     };
@@ -1182,27 +1194,27 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       }
     };
 
-    SceneViewer.prototype.contextQueryControlsOnClickResult = function (source, id, result, elem, index) {
+    SceneViewer.prototype.__contextQueryControlsOnClickResult = function (source, id, result, elem, index) {
       this.uilog.log(UILog.EVENT.CONTEXT_QUERY_SELECT, null,
         { type: 'model', source: source, id: id, index: index }
       );
       this.loadModel(source, id);
     };
 
-    SceneViewer.prototype.initContextQueryControls = function () {
+    SceneViewer.prototype.__initContextQueryControls = function () {
       var options = _.assign(Object.create(null), this.__contextQueryOptions, {
-          scene: this.sceneState.fullScene,
-          sceneState: this.sceneState,
-          picker: this.picker,
-          camera: this.camera,
-          controls: this.cameraControls,
-          uilog: this.uilog,
-          container: this.container,
-          onCloseCallback: function () { this.setContextQueryActive(false); }.bind(this),
-          searchSucceededCallback: this.searchSucceededContextQuery.bind(this),
-          getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
-          onClickResultCallback: this.contextQueryControlsOnClickResult.bind(this)
-        });
+        scene: this.sceneState.fullScene,
+        sceneState: this.sceneState,
+        picker: this.picker,
+        camera: this.camera,
+        controls: this.cameraControls,
+        uilog: this.uilog,
+        container: this.container,
+        onCloseCallback: function () { this.setContextQueryActive(false); }.bind(this),
+        searchSucceededCallback: this.searchSucceededContextQuery.bind(this),
+        getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
+        onClickResultCallback: this.__contextQueryControlsOnClickResult.bind(this)
+      });
       this.contextQueryControls = new this.__contextQueryOptions.contextQueryControls(options);
       this.contextQueryControls.enabled = this.contextQueryIsEnabled;
       if (this.restrictModels) {
@@ -1627,7 +1639,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
 
     SceneViewer.prototype.createSceneWithOneModel = function (modelInstance, options) {
       this.removeAll();
-      this.applyVfTransparency([modelInstance]);
+      this.applyScanOpacity([modelInstance]);
       this.sceneType = modelInstance.model.getCategory();
       if (options && options.initModelInstance) {
         modelInstance.alignAndScale(this.sceneState.getUp(), this.sceneState.getFront(), this.sceneState.getVirtualUnit());
@@ -1704,33 +1716,14 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       // Let's create a special model instance for our box
       var model = new Model(obj, { id: shapeName, fullId: 'shape.' + shapeName, source: 'shape', unit: this.virtualUnitToMeters  });
       var modelInstance = model.newInstance(false);
-      if (transform) {
-        Object3DUtil.setMatrix(modelInstance.object3D, transform);
-      }
-      modelInstance.ensureNormalizedModelCoordinateFrame();
-      var objInfo = modelInstance.getUILogInfo(true);
-
-      // Update shadows
-      if (this.useShadows) {
-        Object3DUtil.setCastShadow(modelInstance.object3D, true);
-        Object3DUtil.setReceiveShadow(modelInstance.object3D, true);
-      }
-      // Whether to have mirrors
-      if (this.enableMirrors) {
-        var scope = this;
-        Object3DUtil.addMirrors(modelInstance.object3D, {
-          ignoreSelfModel: true,
-          renderer: scope.renderer.renderer,
-          assetManager: scope.assetManager,
-          camera: scope.camera,
-          width: scope.renderer.width,
-          height: scope.renderer.height
-        });
-      }
-
-      modelInstance.object3D.metadata = {
-        modelInstance: modelInstance
-      };
+      this.sceneOperations.prepareModelInstance(modelInstance, {
+        transform: opts.transform,
+        useShadows: this.useShadows,
+        enableMirrors: this.enableMirrors,
+        assetManager: this.assetManager,
+        renderer: this.renderer,
+        camera: this.camera
+      });
 
       this.Publish("ShapeInserted", modelInstance, {});
       this.sceneState.addObject(modelInstance, true);
@@ -1748,6 +1741,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         this.onSceneUpdated();
       } else {
         // Done
+        var objInfo = modelInstance.getUILogInfo(true);
         this.uilog.log(UILog.EVENT.MODEL_INSERT, null, objInfo);
         obj.visible = true;
         this.onSceneUpdated();
@@ -1768,38 +1762,25 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this.uilog.log(UILog.EVENT.MODEL_LOAD, null,
         { modelId: modelInstance.model.getFullID(), progress: 'finished', status: 'SUCCESS' });
 
-      var obj = modelInstance.object3D;
-      modelInstance.alignAndScale(this.sceneState.getUp(), this.sceneState.getFront(), this.sceneState.getVirtualUnit());
-      modelInstance.ensureNormalizedModelCoordinateFrame();
-      // Update shadows
-      if (this.useShadows) {
-        Object3DUtil.setCastShadow(modelInstance.object3D, true);
-        Object3DUtil.setReceiveShadow(modelInstance.object3D, true);
-      }
-      // Whether to have mirrors
-      if (this.enableMirrors) {
-        var scope = this;
-        Object3DUtil.addMirrors(modelInstance.object3D, {
-          ignoreSelfModel: true,
-          renderer: scope.renderer.renderer,
-          assetManager: scope.assetManager,
-          camera: scope.camera,
-          width: scope.renderer.width,
-          height: scope.renderer.height
-        });
-      }
-
-      modelInstance.object3D.metadata = {
-        modelInstance: modelInstance
-      };
+      this.sceneOperations.prepareModelInstance(modelInstance, {
+        alignTo: 'scene',
+        sceneState: this.sceneState,
+        useShadows: this.useShadows,
+        enableMirrors: this.enableMirrors,
+        assetManager: this.assetManager,
+        renderer: this.renderer,
+        camera: this.camera
+      })
 
       this.Publish("ModelLoaded", modelInstance, { loadTime: loadOptions.loadTime });
 
       if (modelInstance.model.isScan()) {
+        modelInstance.object3D.userData.isSupportObject = this.isScanSupport;
         this.createSceneWithOneModel(modelInstance, { initModelInstance: false, clearUILog: true, clearUndoStack: true });
         return;
       }
 
+      var obj = modelInstance.object3D;
       var objInfo = modelInstance.getUILogInfo(true);
       if (this.contextQueryControls && this.contextQueryControls.active) {
         // sceneState is updated by the contextQueryControls (old selected modelInstance is removed and new one is added)
@@ -1870,7 +1851,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       }
     };
 
-    SceneViewer.prototype.applyVfTransparency = function (modelInstances, transparency) {
+    SceneViewer.prototype.applyScanOpacity = function (modelInstances, transparency) {
       if (modelInstances === undefined) {
         modelInstances = this.sceneState.modelInstances;
       }
@@ -2092,7 +2073,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       loadOptions.loadTime.end = new Date().getTime();
       loadOptions.loadTime.duration = loadOptions.loadTime.end - loadOptions.loadTime.start;
       console.log('Load time for scene: ' + loadOptions.loadTime.duration);
-      
+
       // Errored abort!!!
       if (!sceneState) {
         if (loadOptions.onError) {
@@ -2104,7 +2085,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       console.time('onSceneLoad');
       var oldLights = this.sceneState.lights;
       this.sceneState = sceneState;
-      this.applyVfTransparency();
+      this.applyScanOpacity();
       var basicScene = sceneState.scene;
       var fullScene = sceneState.fullScene;
       this.sceneType = sceneState.sceneType ? sceneState.sceneType : this.sceneType;
@@ -2249,7 +2230,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         this.uilog.log(UILog.EVENT.SCENE_LOAD, null, {});
       }
 
-      this.populateCategoryList();
       if (loadOptions.onSuccess) {
         loadOptions.onSuccess(sceneState);
       }
@@ -2287,10 +2267,10 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         // Load first scene
         // Use special load options for text2scene (don't clearUndoStack)
         var loadOptions = {
-            keepCurrentCamera: false,
-            clearUndoStack: false,
-            pushToUndoStack: true
-          };
+          keepCurrentCamera: false,
+          clearUndoStack: false,
+          pushToUndoStack: true
+        };
         this.clearAndLoadScene(scenes[0], loadOptions);
       }
     };
@@ -2353,7 +2333,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         return !Object3DUtil.isDescendantOf(x, objs);
       });
     };
-    
+
     SceneViewer.prototype.showObject = function(obj, flag) {
       Object3DUtil.setState(obj, 'isHidden', !flag);
       this.__updateObjectSelection(obj);
@@ -2403,9 +2383,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       if (this.__perfStats) { this.__perfStats.begin(); }
       this.cameraControls.update();
       this.sceneVoxels.update();
-      if (this.editControls) {
-        this.editControls.update();
-      }
       this.updateAndRender();
       if (this.__perfStats) { this.__perfStats.end(); }
     };
@@ -2498,25 +2475,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this.undoStack.pushCurrentState(command, cmdParams);
     };
 
-    SceneViewer.prototype.deleteSelectedObjects = function () {
-      this.sceneState.removeSelected();
-      this.onSceneUpdated();
-    };
-
-    SceneViewer.prototype.deleteHighlightedModels = function () {
-      var removeIndices = [];
-      for (var i = 0; i < this.sceneState.modelInstances.length; i++) {
-        var mInst = this.sceneState.modelInstances[i];
-        if (mInst.object3D.isHighlighted) {
-          removeIndices.push(i);
-          var objInfo = mInst.getUILogInfo(true);
-          this.uilog.log(UILog.EVENT.MODEL_DELETE, null, objInfo);
-        }
-      }
-      this.sceneState.removeObjects(removeIndices);
-      this.onSceneUpdated();
-    };
-
     SceneViewer.prototype.deleteObject = function (obj, event) {
       this.editControls.detach();
       var mInst = Object3DUtil.getModelInstance(obj);
@@ -2592,7 +2550,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       } else {
         // Remove from list of selected models
         if (i >= 0) {
-            this.sceneState.selectedObjects.splice(i, 1);
+          this.sceneState.selectedObjects.splice(i, 1);
         }
         this.__updateObjectMaterial(object3D, this.falseBkMaterial);
       }
@@ -2606,7 +2564,14 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       // Select using scene hierarchy and group!
       var selected = this.sceneState.getSelectedObjects();
       if (selected.length > 0) {
-        this.sceneHierarchy.selectAndGroup(selected);
+        // Drop any nodes that are already children of selected nodes (so we can keep internal structure)
+        var selectedNoChildren = _.filter(selected, function(node) {
+          var anc = Object3DUtil.findFirstAncestor(node, function(anc) {
+            return _.contains(selected, anc);
+          });
+          return !anc;
+        });
+        this.sceneHierarchy.selectAndGroup(selectedNoChildren);
       }
     };
 
@@ -2732,22 +2697,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this.sceneSearchController.searchPanel.selectNext();
     };
 
-    SceneViewer.prototype.getHighlightedModels = function () {
-      var highlighted = [];
-      for (var i = 0; i < this.sceneState.modelInstances.length; i++) {
-        var mInst = this.sceneState.modelInstances[i];
-        if (mInst.object3D.isHighlighted) {
-          highlighted.push(mInst);
-        }
-      }
-      return highlighted;
-    };
-
-    SceneViewer.prototype.rotateHighlightedModels = function (axis, delta, bbfaceIndex) {
-      var highlighted = this.getHighlightedModels();
-      this.rotateModels(highlighted, axis, delta, bbfaceIndex);
-    };
-
     SceneViewer.prototype.rotateModels = function (modelInstances, axis, delta, bbfaceIndex) {
       for (var i = 0; i < modelInstances.length; i++) {
         var mInst = modelInstances[i];
@@ -2763,13 +2712,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         this.uilog.log(UILog.EVENT.MODEL_ROTATE, null, objInfo);
         //Object3DUtil.attachToParent(mInst.object3D, parent, this.sceneState.fullScene);
       }
-    };
-
-    SceneViewer.prototype.scaleHighlightedModels = function (scaleBy, bbfaceIndex) {
-      //console.time('scale');
-      var highlighted = this.getHighlightedModels();
-      this.scaleModels(highlighted, scaleBy, bbfaceIndex);
-      //console.timeEnd('scale');
     };
 
     SceneViewer.prototype.scaleModels = function (modelInstances, scaleBy, bbfaceIndex) {
@@ -2971,21 +2913,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         $('#loadingScene').css('visibility', 'visible');
       } else {
         $('#loadingScene').css('visibility', 'hidden');
-      }
-    };
-
-    SceneViewer.prototype.populateCategoryList = function () {
-      var modelInstances = this.sceneState.modelInstances;
-      this.categoryList.clear();
-      for (var i = 0; i < modelInstances.length; i++) {
-        var categories = modelInstances[i].model.info.category;
-        if (categories && categories.length > 0) {
-          var isRoom = modelInstances[i].model.hasCategory('Room');
-          var isScan = modelInstances[i].model.isScan();
-          if (!(isRoom || isScan)) {
-            this.categoryList.add(categories[0]);
-          }
-        }
       }
     };
 

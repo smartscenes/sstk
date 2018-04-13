@@ -7,9 +7,12 @@ var _ = require('util');
 
 // Defines fields we care about for models
 var fields = [
-  { name: 'id', type: 'categorical', excludeFromFacet: true },
-  { name: 'datasets', type: 'categorical' },
-  { name: 'source', type: 'categorical' },
+  { name: 'fullId', type: 'categorical', excludeFromFacet: true },
+  { name: 'id', type: 'categorical', excludeFromFacet: false },
+  { name: 'datasets', type: 'categorical',
+    description: 'Dataset that the model belongs to' },
+  { name: 'source', type: 'categorical',
+    description: 'Prefix indicating where the model originated from'},
   { name: 'category', type: 'categorical',
     description: 'Category of an object' +
       '(available for ShapeNetSem only, for ShapeNetCore, use wnhyperlemmas or wnlemmas).' +
@@ -22,23 +25,33 @@ var fields = [
       { query: 'pcaDim:2D', description:'Flat objects such as paintings, whiteboards, etc.' },
       { query: 'pcaDim:3D', description:'Other more 3D objects' }]
   },
-  { name: 'wnhyperlemmas', text: 'hypersynset', type: 'categorical', excludeFromFacet: true,
+  { name: 'wnhyperlemmas', text: 'hypersynset', type: 'categorical', excludeFromFacet: false,
     suggestMethod: 'solr',
     description: 'WordNet lemma (includes objects belonging to child WordNet synsets)',
     examples: [{ query: 'wnhyperlemmas:chair', description:'Objects identified as chairs' }]
   },
-  { name: 'wnlemmas', text: 'synset', type: 'categorical', excludeFromFacet: true,
+  { name: 'wnlemmas', text: 'synset', type: 'categorical', excludeFromFacet: false,
     suggestMethod: 'solr',
     description: 'WordNet lemma (exact synset)',
     examples: [{ query: 'wnlemmas:chair', description:'Objects identified as chairs' }]
   },
-  { name: 'nvertices', text: '# of vertices', type: 'numeric', min: 0 },
-  { name: 'nmaterials', text: '# of materials',  type: 'numeric', min: 0 },
-  { name: 'nfaces', text: '# of faces',  type: 'numeric', min: 0 },
+  { name: 'nvertices', text: '# of vertices', type: 'numeric', min: 0,
+    description: 'Number of vertices'
+  },
+  { name: 'nmaterials', text: '# of materials',  type: 'numeric', min: 0,
+    description: 'Number of materials'
+  },
+  { name: 'nfaces', text: '# of faces',  type: 'numeric', min: 0,
+    description: 'Number of faces'
+  },
   { name: 'popularity', type: 'numeric' },
   { name: 'modelQuality', type: 'numeric' },
-  { name: 'hasModel', type: 'boolean' },
-  { name: 'isAligned', text: 'aligned', type: 'boolean' },
+  { name: 'hasModel', type: 'boolean',
+    description: 'Whether a mesh exists for the model or not'
+  },
+  { name: 'isAligned', text: 'aligned', type: 'boolean',
+    description: 'Whether the model has been canonically aligned'
+  },
   { name: 'aligned.dims_0_d', text: 'width',  mainField: 'aligned.dims', type: 'numeric',
     description: 'aligned object width in centimeters',
     examples: [{ query: 'aligned.dims_0_d:[0 TO 100]', description: 'Object with width of up to 100 centimeters'}]
@@ -51,9 +64,13 @@ var fields = [
     description: 'aligned object depth in centimeters',
     examples: [{ query: 'aligned.dims_2_d:[10 TO 50]', description: 'Object with depth of 10 to 50 centimeters'}]
   },
-  { name: 'unit', type: 'numeric' },
+  { name: 'unit', type: 'numeric',
+    description: 'Estimated unit (in meters) that the model is represented in (e.g. 0.01 indicates that the model is represented in centimeters)'
+  },
   { name: 'unit.source', type: 'categorical' },
-  { name: 'weight', type: 'numeric' },
+  { name: 'weight', type: 'numeric',
+    description: 'Estimated weight of model in kg'
+  },
 
   // computed fields
   { name: 'volume', type: 'numeric',

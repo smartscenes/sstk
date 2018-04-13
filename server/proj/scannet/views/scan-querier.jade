@@ -46,10 +46,14 @@ html(lang='en')
     script(src='#{baseUrl}/STK.bundle.js')
     script.
       var scanQuerier = new STK.ScanQuerier({
+        entriesPerRow: 8,
         assetTypes: ['scan'],
+        sources: ['scannet'],
+        screenshots: ['original', 'category', 'instance', 'mpr40', 'nyu40'],
         viewerUrl: '#{baseUrl}/scans/simple-viewer',
         filterPanel: '#filters',
         filters: [{ field: 'datasets', values: [ 'ScanNet' ], required: true, limited: true }],
+        showAnimatedOnHover: false,
         searchPanel: '#searchPanel',
         searchButton: '#searchButton',
         searchTextElem: '#searchText',
@@ -60,8 +64,23 @@ html(lang='en')
         },
         initialQuery: '*:*'
       });
-      //scanQuerier.getViewResultUrl = function (fullId, result) {
-      //  return this.viewerUrl + '?modelId=' + fullId;
-      //};
+      scanQuerier.getViewResultUrl = function (fullId, result) {
+        var defaultPartType = 'surfaces';
+        var defaultLabelType = 'Object';
+        var palette = 'd3_unknown_category19p';
+        var imageType = scanQuerier.assetManager.previewImageIndex;
+        if (imageType === 'original') {
+          defaultPartType = 'none';
+        } else if (imageType === 'category') {
+          defaultLabelType = 'Category';
+        } else if (imageType === 'instance') {
+          defaultLabelType = 'Object';
+        } else if (imageType === 'nyu40') {
+          defaultLabelType = 'nyu40';
+        } else if (imageType === 'mpr40') {
+          defaultLabelType = 'mpr40';
+        }
+        return this.viewerUrl + '?palette=' + palette + '&modelId=' + fullId + '&defaultLabelType=' + defaultLabelType + '&defaultPartType=' + defaultPartType;
+      };
 
 

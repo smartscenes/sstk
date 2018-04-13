@@ -14,7 +14,7 @@ cmd
   .option('--source <source>', 'Model source [default: scan-checked]', 'scan-checked')
   .option('--labels <filename>', 'Labels file', 'none') //__dirname + '/data/scannet-category-color-index.txt')
   .option('--outlabels <filename>', 'Output labels file')
-  .option('--label_mapping <filename>', 'Label mappings file', __dirname + '/data/label-mappings.tsv')
+  .option('--label_mapping <filename>', 'Label mappings file', STK.Constants.assetsDir + '/data/labels/label-mappings.tsv')
   .option('--label_mapping_category <cat>', 'Label mapping category field', 'category')
   .option('--nyu40_colors <filename>', 'Color mapping for nyu40 colors', STK.Constants.assetsDir + '/data/labels/nyu40colors.csv')
   .option('--mpr40_colors <filename>', 'Color mapping for mpr40 colors', STK.Constants.assetsDir + '/data/labels/mpr40.tsv')

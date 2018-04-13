@@ -18,13 +18,28 @@ var __solrTypeMap = Object.freeze({
   strings: 'string',
   booleans: 'boolean',
   tlongs: 'long',
+  tlong: 'long',
   tdates: 'date',
-  tdoubles: 'double'
+  tdate: 'date',
+  tdoubles: 'double',
+  tdouble: 'double'
 });
 
 /**
- * Data schema (describes fields to our users)
- * @param params
+ * Data schema (describes fields to our users).  It currently supports querying of field information from Solr.
+ * @param params DataSchema configuration
+ * @param params.name {string} Schema name
+ * @param params.description {string} Schema description
+ * @param [params.assetType] {string} Asset type (default to `name`)
+ * @param [params.source] {string} Data source
+ * @param [params.schemaUrl] {string} Url from which to fetch the schema
+ * @param [params.searchUrl] {string} Url to use for searching the data source
+ * @param [params.defaultFilters] {string} Default filter string
+ * @param [params.defaultQuery] {string} Default query string
+ * @param [params.fields] {data.FieldDef[]} List of fields of interest
+ * @param [params.facetLimit=10000] {int} Maximum number of facet values to fetch
+ * @param [params.includeAll] {boolean} Include all fields (not just the subset we have some predefined information about)
+ * @param [params.doQueryFields=false] {boolean} Whether to query for field information
  * @constructor
  * @memberOf data
  */
@@ -60,7 +75,7 @@ function DataSchema(params) {
     this.__populateFieldsByName();
   }
   this.facetLimit = params.facetLimit || 10000;
-  // Include all fields (not just the subset we have some predefined information about
+  // Include all fields (not just the subset we have some predefined information about)
   this.includeAll = params.includeAll;
   // Whether Query solr for more info about the fields
   this.doQueryFields = params.doQueryFields;
@@ -270,10 +285,11 @@ DataSchema.prototype.queryFieldTypes = function () {
         var field = fields[i];
         if (map[field.name]) {
           var m = map[field.name];
+          //console.log(m);
           m.type = this.__normalizeSolrType(m.type);
           field.solrtype = m.type;
           if (m.type === 'string' || m.type.indexOf('text') >= 0) {
-            if (!m.excludeFromFacet) {
+            if (!field.excludeFromFacet) {
               stringFields.push(field.name);
             }
           } else if (m.type === 'double' || m.type === 'long' || m.type == 'int') {
@@ -282,10 +298,12 @@ DataSchema.prototype.queryFieldTypes = function () {
         }
       }
       this.stringFields = stringFields;
+      //console.log('stringFields', stringFields);
       if (stringFields.length > 0) {
         this.queryFieldValues(this.getDefaultQueryOptions(stringFields));
       }
       this.numberFields = numberFields;
+      //console.log('numberFields', numberFields);
       if (numberFields.length > 0) {
         this.queryFieldStats(this.getDefaultQueryOptions(numberFields));
       }
@@ -298,6 +316,7 @@ DataSchema.prototype.queryFieldTypes = function () {
 DataSchema.prototype.queryFieldValues = function (options) {
   //console.log('queryFieldValues', options);
   this.searchController.facetFieldSearch({
+    url: this.searchUrl,
     source: options.source,
     query: options.query,
     filter: options.filter,
@@ -335,6 +354,7 @@ DataSchema.prototype.queryFieldValues = function (options) {
 DataSchema.prototype.queryFieldStats = function (options) {
   //console.log('queryFieldStats', options);
   this.searchController.getStats({
+    url: this.searchUrl,
     source: options.source,
     query: options.query,
     filter: options.filter,
@@ -375,3 +395,28 @@ DataSchema.prototype.getFieldMetadata = function (options) {
 };
 
 module.exports = DataSchema;
+
+/**
+ * Data field filter
+ * @typedef data.FieldFilter
+ * @type {object}
+ * @property field {string} field name
+ * @property values {Array} List of possible values
+ * @property value {string|number} initial value
+ * @property required {boolean} Whether this filter is required
+ * @property limited {boolean}
+ */
+
+/**
+ * Data field definition
+ * @typedef data.FieldDef
+ * @type {object}
+ * @property name {string} field name
+ * @property type {string} field type (`categorical`,`numeric`,`boolean`)
+ * @property [text] {string} text label for field
+ * @property [mainField] {string} main fieldname in solr
+ * @property [min] {number} Minimum value for numeric field
+ * @property [max] {number} Maximum value for numeric field
+ * @property [description] {string} field description
+ * @property [examples] {data.QueryExample[]} List of examples for this field
+ */

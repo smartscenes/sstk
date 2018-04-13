@@ -2,6 +2,7 @@
 
 var _ = require('util');
 
+var AssetsDb = require('assets/AssetsDb');
 var AssetGroup = require('assets/AssetGroup');
 var Object3DUtil = require('geo/Object3DUtil');
 var Constants = require('Constants');
@@ -252,13 +253,17 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
   }
 
   var varsBasic = _.merge(new Object(null), options, defaultConstants );
+  var screenShotPaths = options.screenShotPaths;
+  var screenShotPathsByName = screenShotPaths? _.keyBy(screenShotPaths, 'name') : null;
   var assetGroupOptions = {
     name: options.source,
     type: options.assetType,
     supportedFormats: supportedFormats,
     getImageUrl: function (id, i, metadata) {
       metadata = metadata || {};
-      var index = (i !== undefined && (_.get(options, ['screenShotPaths', i]) || i >= 0)) ? i : options.defaultImageIndex;
+      var screenShotPath = (screenShotPaths)? screenShotPaths[i] || screenShotPathsByName[i] : null;
+      var index = (i !== undefined && (screenShotPath || i >= 0)) ? i : options.defaultImageIndex;
+      //console.log('getImageUrl', id, i, index, options, metadata);
       if (index == undefined && this.getOriginalImageUrl) {
         return this.getOriginalImageUrl(id, metadata);
       } else {
@@ -266,12 +271,10 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
         if (vars.baseVariantId == null || vars.baseVariantId === '') {
           vars.baseVariantId = id;
         }
-        if (options['screenShotPaths']) {
-          if (options['screenShotPaths'][index]) {
-            var path = options['screenShotPaths'][index];
-            if (typeof path !== 'string') { path = path.path; }
-            return _.replaceVars(path, vars);
-          }
+        if (screenShotPath) {
+          var path = screenShotPath;
+          if (typeof path !== 'string') { path = path.path; }
+          return _.replaceVars(path, vars);
         }
         return _.replaceVars(options['screenShotPath'], vars);
       }
@@ -283,6 +286,8 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
     getImageCount: function(id, metadata) {
       if (metadata && metadata.imageCount != null) {
         return metadata.imageCount;
+      } else if (screenShotPaths && screenShotPaths.length) {
+        return screenShotPaths.length;
       } else {
         return this.defaultImageCount;
       }
@@ -323,6 +328,15 @@ function _registerDefaultAssetGroups() {
         });
       }
       AssetGroups.registerAssetGroup(ag, { isDefault: true });
+      if (ag.idsFile) {
+        var assetsDb = new AssetsDb();
+        ag.setAssetDb(assetsDb);
+        assetsDb.loadAssetInfo(ag, ag.idsFile, function(err, assets) {
+          if (err) {
+            console.error('Error loading ids for ' + ag.name, err);
+          }
+        });
+      }
     }
   }
 

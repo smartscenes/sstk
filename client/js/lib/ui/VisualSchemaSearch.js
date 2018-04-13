@@ -2,6 +2,16 @@ var Backbone = require('backbone');
 var _ = require('util');
 require('visualsearch');
 
+/**
+ * Visual search UI with autocomplete and suggestions
+ * @param params Visual search configuration
+ * @param params.container {jQueryObject|string} jQuery object or selector for visual search panel
+ * @param params.schema {data.DataSchema} Schema to use for search
+ * @param [params.filters] {data.FieldFilter[]} Initial set of filters for search
+ * @param [params.debug=false] {boolean} Debug mode
+ * @constructor
+ * @memberOf ui
+ */
 function VisualSearch(params) {
   this.schema = params.schema;
   this.filters = params.filters;

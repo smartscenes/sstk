@@ -36,18 +36,22 @@ Object.defineProperty(MeshHierarchyPanel.prototype, 'maxHierarchyLevel', {
 });
 
 //Gets all the mesh nodes in the model
-MeshHierarchyPanel.prototype.getMeshes = function () {
+MeshHierarchyPanel.prototype.getNodes = function () {
   return this.partNodes;
 };
+
+// MeshHierarchyPanel.prototype.getMeshes = function () {
+//   return _.filter(this.partNodes, function(x) { return (x instance THREE.Mesh; }));
+// };
 
 //Gets the mesh Id
 MeshHierarchyPanel.prototype.getMeshId = function (mesh) {
   return Constants.meshPrefix + Object3DUtil.getSceneGraphPath(mesh, this.partsNode);
 };
 
-MeshHierarchyPanel.prototype.findMeshes = function (meshIds) {
+MeshHierarchyPanel.prototype.findNodes = function (meshIds) {
   var nonSGIds = [];
-  var matchedMeshes = [];
+  var matchedNodes = [];
   for (var i = 0; i < meshIds.length; i++) {
     var meshId = meshIds[i];
 
@@ -61,25 +65,25 @@ MeshHierarchyPanel.prototype.findMeshes = function (meshIds) {
     }
   }
   if (nonSGIds.length > 0) {
-    matchedMeshes = this.findMeshesSlow(nonSGIds, matchedMeshes);
+    matchedNodes = this.findNodesSlow(nonSGIds, matchedNodes);
   }
-  return matchedMeshes;
+  return matchedNodes;
 };
 
-MeshHierarchyPanel.prototype.findMeshesSlow = function (meshIds, matched) {
+MeshHierarchyPanel.prototype.findNodesSlow = function (ids, matched) {
   // Does brute force find (slow!)
-  var allMeshes = this.getMeshes();
-  var matchedMeshes = matched || [];
-  for (var j = 0; j < meshIds.length; j++) {
-    var meshId = meshIds[j];
-    for (var i = 0; i < allMeshes.length; i++) {
-      var thisId = this.getMeshId(allMeshes[i]);
-      if (thisId === meshId) {
-        matchedMeshes.push(allMeshes[i]);
+  var allNodes = this.getNodes();
+  var matchedNodes = matched || [];
+  for (var j = 0; j < ids.length; j++) {
+    var id = ids[j];
+    for (var i = 0; i < allNodes.length; i++) {
+      var thisId = this.getMeshId(allNodes[i]);
+      if (thisId === id) {
+        matchedNodes.push(allNodes[i]);
       }
     }
   }
-  return matchedMeshes;
+  return matchedNodes;
 };
 
 MeshHierarchyPanel.prototype.setPartsNode = function(partsNode) {
@@ -429,8 +433,8 @@ MeshHierarchyPanel.prototype.clear = function () {
   this.treePanel.empty();
 };
 
-MeshHierarchyPanel.prototype.setPartMaterial = function (part, mat) {
-  Object3DUtil.applyPartMaterial(part, mat, true, true);
+MeshHierarchyPanel.prototype.setPartMaterial = function (part, mat, filter) {
+  Object3DUtil.applyPartMaterial(part, mat, true, true, filter);
 };
 
 MeshHierarchyPanel.prototype.dehighlightPart = function (part) {
@@ -457,9 +461,9 @@ MeshHierarchyPanel.prototype.highlightPart = function (part) {
 };
 
 //Colors a particular part of the model
-MeshHierarchyPanel.prototype.colorPart = function (part, colorMaterial) {
+MeshHierarchyPanel.prototype.colorPart = function (part, colorMaterial, filter) {
   if (part) {
-    this.setPartMaterial(part, colorMaterial);
+    this.setPartMaterial(part, colorMaterial, filter);
     Object3DUtil.setVisible(this.partsNode, true);
   }
 };

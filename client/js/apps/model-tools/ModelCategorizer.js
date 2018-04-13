@@ -1,8 +1,8 @@
 'use strict';
 
 define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'search/SearchModule',
-    'io/FileUtil', 'ui/UIUtil', 'util', 'dragscrollable', 'jquery-lazy'],
-  function (Constants, AssetManager, SearchController, SearchModule, FileUtil, UIUtil, _) {
+    'ui/AnnotationsPanel', 'io/FileUtil', 'ui/UIUtil', 'util', 'dragscrollable', 'jquery-lazy'],
+  function (Constants, AssetManager, SearchController, SearchModule, AnnotationsPanel, FileUtil, UIUtil, _) {
     // Interface for categorizing models
     function ModelCategorizer(params) {
       // Keep our own copy of categories
@@ -44,6 +44,7 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
           var checked = checkBox.prop('checked');
           checkBox.prop('checked', !checked);
           this.updateNumberChecked();
+          this.updateAnnotationsPanel();
         }.bind(this),
         appendResultElemCallback: function (source, id, result, elem) {
           var fullId = AssetManager.toFullId(source, id);
@@ -57,6 +58,7 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
             .attr('data-id', fullId)
             .click(function (e) {
               this.updateNumberChecked();
+              this.updateAnnotationsPanel();
               e.stopPropagation();
             }.bind(this))
           );
@@ -177,8 +179,62 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
         this.searchController.setSearchText(initialQuery);
         this.searchController.startSearch();
       }
+
+      var annotationsPanel = $('#annotationsPanel');
+      if (annotationsPanel && annotationsPanel.length > 0) {
+        var modelAttributes = ['wnsynset'/*,  'category', 'color', 'material', 'shape', 'depicts',
+          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection'*/];
+        var readOnlyAttributes = [];
+        var attributeLinks = { "wnsynset": {
+            solrUrl: Constants.shapenetSearchUrl,
+            taxonomy: "shapenet",
+            linkType: "wordnet",
+            displayField: "wnsynsetkey",  // Field to display
+            // Mapping from our field names to linked fields
+            // These are also fields that we should populate if the wnsynset changes
+            fieldMappings: {
+              wnsynsetkey: "wn30synsetkey",
+              wnlemmas: "words",
+              wnsynset: "synsetid",
+              shapenetCoreSynset: "shapenetcoresynsetid",
+              //wnsynset: "wn30synsetid"
+              // Special fields
+              wnhyperlemmas: "wnhyperlemmas", //"ancestors.words",
+              wnhypersynsets: "wnhypersynsets", //"ancestors.synsetid"
+            }
+          }};
+        this.annotationsPanel = new AnnotationsPanel({
+          container: annotationsPanel,
+          attributes: modelAttributes,
+          attributesReadOnly: readOnlyAttributes,
+          attributeLinks: attributeLinks,
+          searchController: this.searchController,
+          onSubmittedCallback: this.clearChanges.bind(this)
+        });
+        this.updateAnnotationsPanel();
+      }
+
       // Resize
       window.addEventListener('resize', this.onWindowResize.bind(this), false);
+    };
+
+
+    ModelCategorizer.prototype.updateAnnotationsPanel = function() {
+      if (this.annotationsPanel) {
+        var checked = $('.modelCheckbox:checked');
+        var modelInfos = [];
+        checked.each(
+          function () {
+            var elem = $(this);
+            var fullId = elem.attr('data-id');
+            if (fullId) {
+              modelInfos.push({ fullId: fullId });
+            }
+          }
+        );
+        //console.log('set modelInfos', modelInfos);
+        this.annotationsPanel.setTarget(modelInfos, true);
+      }
     };
 
     ModelCategorizer.prototype.updateCategories = function (categories, source) {
@@ -207,6 +263,7 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
         });
       }
       this.updateNumberChecked();
+      this.updateAnnotationsPanel();
     };
 
     ModelCategorizer.prototype.updateNumberChecked = function () {
@@ -382,6 +439,7 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
         .attr('data-id', sid.source + '.' + sid.id)
         .click(function (e) {
           this.updateNumberChecked();
+          this.updateAnnotationsPanel();
           e.stopPropagation();
         }.bind(this))
       );
@@ -408,6 +466,7 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
     ModelCategorizer.prototype.searchSucceeded = function (source, resultList) {
       this.selectAll.prop('checked', false);
       this.updateNumberChecked();
+      this.updateAnnotationsPanel();
       //    this.assetManager.cacheModelInfos(source, resultList);
     };
 

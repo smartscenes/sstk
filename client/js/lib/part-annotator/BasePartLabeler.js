@@ -101,12 +101,15 @@ BasePartLabeler.prototype.labelParts = function (parts, labelInfo, opts) {
 BasePartLabeler.prototype.labelPart = function (part, labelInfo, opts) {
   // Clear if label information is saved in both the labelInfo and the part.userData
   if (part && part.userData.labelInfo !== labelInfo) {
-    if (part && part.userData.labelInfo) {
-      this.__unlabel(part, opts);
+    var isFixed = part.userData.labelInfo && (part.userData.labelInfo.fixed || part.userData.labelInfo.frozen);
+    if (!isFixed) {
+      if (part && part.userData.labelInfo) {
+        this.__unlabel(part, opts);
+      }
+      this.colorPart(part, labelInfo.colorMat);
+      part.userData.labelInfo = labelInfo;
+      this.__label(part, labelInfo, opts);
     }
-    this.colorPart(part, labelInfo.colorMat);
-    part.userData.labelInfo = labelInfo;
-    this.__label(part, labelInfo, opts);
   }
 };
 
@@ -145,12 +148,12 @@ BasePartLabeler.prototype.unlabelAll = function() {
  * @param parts {Object|Object[]} Array of parts or a single part
  * @param labelInfo {LabelInfo} What label to color the parts in with
  */
-BasePartLabeler.prototype.colorParts = function (parts, labelInfo) {
+BasePartLabeler.prototype.colorParts = function (parts, labelInfo, opts) {
   if (!Array.isArray(parts)) {
     parts = [parts];
   }
   for (var i = 0; i < parts.length; i++) {
-    this.colorPart(parts[i], labelInfo);
+    this.colorPart(parts[i], labelInfo, opts);
   }
 };
 
@@ -161,6 +164,16 @@ BasePartLabeler.prototype.colorParts = function (parts, labelInfo) {
  */
 BasePartLabeler.prototype.colorPart = function (part, colorMaterial) {
   console.error(this.constructor.name + '.colorPart - Please implement me!!!');
+};
+
+BasePartLabeler.prototype.colorLabelablePart = function (part, colorMaterial) {
+  this.colorPart(part, colorMaterial, {
+    filter: function (p) {
+      var info = p.userData.labelInfo;
+      var isFixed = info && (info.fixed || info.frozen);
+      return !isFixed;
+    }
+  });
 };
 
 /**
@@ -195,7 +208,7 @@ BasePartLabeler.prototype.highlightPart = function (part, labelInfo, highlightMa
   }
   if (part && labelInfo) {
     // Highlight part
-    this.colorPart(part, highlightMat || labelInfo.hoverMat);
+    this.colorLabelablePart(part, highlightMat || labelInfo.hoverMat);
     this.highlightedPart = part;
   }
 };

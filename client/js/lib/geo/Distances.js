@@ -10,6 +10,7 @@
  *    -----   B
  *
  * @author Angel Chang
+ * @private
  */
 
 var ZERO_TOLERANCE = 0.0000000001;
@@ -20,6 +21,7 @@ var ZERO_TOLERANCE = 0.0000000001;
  * @param segment {{origin: THREE.Vector3, direction: THREE.Vector3, extent: number}}
  * @param opts
  * @returns {{distanceSq: number}}
+ * @private
  */
 function LineSegmentDistanceSquared(line, segment, opts) {
   function computeDistanceSquared() {
@@ -103,6 +105,7 @@ function LineSegmentDistanceSquared(line, segment, opts) {
  * @param triangle {THREE.Triangle}
  * @param opts
  * @returns {{distanceSq: number}}
+ * @private
  */
 function PointTriangleDistanceSquared(point, triangle, opts) {
   var v1 = triangle.a;
@@ -335,6 +338,7 @@ function PointTriangleDistanceSquared(point, triangle, opts) {
  * @param line {{origin: THREE.Vector3, direction: THREE.Vector3}}
  * @param triangle {THREE.Triangle}
  * @returns {{distanceSq: number}}
+ * @private
  */
 function LineTriangleDistanceSquared(line, triangle, opts) {
   var lineParameter;
@@ -463,6 +467,7 @@ function LineTriangleDistanceSquared(line, triangle, opts) {
  * Computes the distance between a line segment and a triangle
  * @param segment
  * @param triangle
+ * @private
  */
 function LineSegmentTriangleDistanceSquared(segment, triangle, opts) {
   function computeDistanceSquared() {

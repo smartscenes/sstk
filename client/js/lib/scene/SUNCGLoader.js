@@ -51,7 +51,7 @@ function SUNCGLoader(params) {
   this.verbose = params.verbose;  // verbose logging
   if (params.emptyRoom) {
     this.loadModelsFilter = getHasCategoryInFilter(SUNCGLoader.PortalCategories);
-    this.skipElements = ['Object'];
+    this.skipElements = ['Box'];
   } else if (params.archOnly) {
     this.loadModelsFilter = getHasCategoryInFilter(SUNCGLoader.ArchCategories);
   } else if (params.loadModelsFilter && params.loadModelsFilter.categories) {
@@ -90,6 +90,58 @@ SUNCGLoader.prototype.constructor = SUNCGLoader;
 
 SUNCGLoader.textureRepeat = new THREE.Vector2(1, 1);
 
+SUNCGLoader.prototype.__createArch = function(context, loadOpts) {
+  var scope = this;
+  var archIds;
+  //console.log('useArchModelId', scope.useArchModelId);
+  if (scope.useArchModelId) {
+    var archMappings = {};
+    var archRegex = /[a-zA-Z]+_(\d+)[a-zA-Z]+_(\d+)/;
+    var rooms = _.flatten(_.map(json.levels, function(level) {
+      return _.filter(level.nodes, function(x) { return x.type === 'Room' || x.type === 'Ground'; }) }
+    ));
+    _.each(rooms, function(arch) {
+      var archId = arch.id;
+      if (arch.modelId) {
+        // Get archId from modelId
+        var match = arch.modelId.match(archRegex);
+        if (match) {
+          archId = match[1] + '_' + match[2];
+        }
+      }
+      archMappings[arch.id] = archId;
+    });
+    context.archMappings = archMappings;
+    //console.log('create archMappings', rooms, archMappings);
+    archIds = _.values(archMappings);
+  }
+
+  context.arch = this.archCreator.createArch(loadOpts.arch.data, {
+    filterElements: function(element) {
+      var include = true;
+      if (!scope.includeCeiling) {
+        include = (element.type !== 'Ceiling');
+      }
+      if (!include) { return false; }
+      if (scope.room != undefined && scope.level != undefined) {
+        return element.roomId === (scope.level + '_' + scope.room);
+      } else if (scope.level != undefined) {
+        return element.roomId && element.roomId.startsWith(scope.level + '_');
+      } else if (archIds) {
+        return archIds.indexOf(element.roomId) >= 0 || archIds.indexOf(element.id) >= 0;
+      } else {
+        return true;
+      }
+    },
+    getMaterials: function(w) {
+      return _.map(w.materials, function(m) {
+        return scope.__getMaterial(m.diffuse, m.texture);
+      });
+    },
+    groupWalls: false
+  });
+}
+
 // Parses json of P5D scene
 SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
   //console.log(json);
@@ -104,52 +156,8 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
     sceneHash: json.id
   };
   if (this.archCreator && loadOpts.arch && loadOpts.arch.data) {
-    var scope = this;
-    var archIds;
-    //console.log('useArchModelId', scope.useArchModelId);
-    if (scope.useArchModelId) {
-      var archMappings = {};
-      var archRegex = /[a-zA-Z]+_(\d+)[a-zA-Z]+_(\d+)/;
-      var rooms = _.flatten(_.map(json.levels, function(level) {
-        return _.filter(level.nodes, function(x) { return x.type === 'Room' || x.type === 'Ground'; }) }
-      ));
-      _.each(rooms, function(arch) {
-        var archId = arch.id;
-        if (arch.modelId) {
-          // Get archId from modelId
-          var match = arch.modelId.match(archRegex);
-          if (match) {
-            archId = match[1] + '_' + match[2];
-          }
-        }
-        archMappings[arch.id] = archId;
-      });
-      context.archMappings = archMappings;
-      //console.log('create archMappings', rooms, archMappings);
-      archIds = _.values(archMappings);
-    }
-    context.arch = this.archCreator.createArch(loadOpts.arch.data, {
-      filterElements: function(element) {
-        if (!scope.includeCeiling) { return element.type !== 'Ceiling'; }
-        else {
-          if (scope.room != undefined && scope.level != undefined) {
-            return element.roomId === (scope.level + '_' + scope.room);
-          } else if (scope.level != undefined) {
-            return element.roomId && element.roomId.startsWith(scope.level + '_');
-          } else if (archIds) {
-            return archIds.indexOf(element.roomId) >= 0 || archIds.indexOf(element.id) >= 0;
-          } else {
-            return true;
-          }
-        }
-      },
-      getMaterials: function(w) {
-        return _.map(w.materials, function(m) {
-          return scope.__getMaterial(m.diffuse, m.texture);
-        });
-      },
-      groupWalls: false
-    });
+    context.hasArch = true;
+    this.__createArch(context, loadOpts);
   }
   if (json.camera) {
     this.__parseCamera(json.camera, sceneResult);
@@ -213,13 +221,13 @@ SUNCGLoader.prototype.__parseItemDeferred = function (json, items, context, allo
     if (!this.keepInvalid) {
       processChild = processChild && (child.valid == null || child.valid);
     }
-    if (this.skipElements && this.skipElements.indexOf(child.className) >= 0) {
+    if (this.skipElements && this.skipElements.indexOf(child.type) >= 0) {
       processChild = false;
     }
     if (!processChild) {
       deferred.defer(this.__parseItemSimple.bind(this, child, { parent: parsed }));
     } else if (allowed && allowed.indexOf(child.type) < 0) {
-      console.warn('Disallowed className ' + child.type + ' when processing ' + parsed.id, child);
+      console.warn('Disallowed type ' + child.type + ' when processing ' + parsed.id, child);
       deferred.defer(this.__parseItemSimple.bind(this, child, { parent: parsed }));
     } else {
       var func = this.__lookupParseFn(child.type);
@@ -232,7 +240,7 @@ SUNCGLoader.prototype.__parseItemDeferred = function (json, items, context, allo
       if (func) {
         deferred.defer(func.bind(this, child, childCtx));
       } else {
-        console.warn('Unknown className ' + child.className + ' when processing ' + parsed.id, child);
+        console.warn('Unknown type ' + child.type + ' when processing ' + parsed.id, child);
         deferred.defer(this.__parseItemSimple.bind(this, child, { parent: parsed }));
       }
     }
@@ -264,7 +272,7 @@ SUNCGLoader.prototype.__parseItemDeferred = function (json, items, context, allo
 };
 
  SUNCGLoader.prototype.__parseItemSimple = function (item, context, callback) {
-   //console.log(item.className);
+   //console.log(item.type);
    //console.log(item);
    var parsed = { json: item, parent: context.parent, floor: context.floor, id: context.id, index: context.index };
    if (callback) {
@@ -303,6 +311,7 @@ SUNCGLoader.prototype.__parseLevel = function (json, context, callback) {
       // add children into group and callback
       var group = new THREE.Group();
       group.name = 'Level#' + context.floor;
+      group.userData.type = 'Level';
       __addChildren(group, results);
       parsed.object3D = group;
 
@@ -749,8 +758,8 @@ SUNCGLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
   }
 };
 
-SUNCGLoader.prototype.__lookupParseFn = function (className) {
-  return this['__parse' + className];
+SUNCGLoader.prototype.__lookupParseFn = function (type) {
+  return this['__parse' + type];
 };
 
 // Utility function

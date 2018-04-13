@@ -645,7 +645,7 @@ SceneUtil.recolorWithCompatibleMaterials = function(sceneState, opts) {
       return material;
     }
     var key = remapTextureOnly? ss.getTextureKey(mat) : ss.getMaterialKey(mat);
-    if (!key || !mat.color) {
+    if (!key || !mat.color || material.name === 'video') {
       return material;
     }
     var ckey = cacheType + '-' + key;

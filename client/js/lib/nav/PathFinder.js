@@ -10,7 +10,7 @@ function SearchState(steps, current, frontier, neighbors) {
   this.neighbors = neighbors;
 }
 
-function SearchOptions(starts, exit_now, sort_key) {
+function SearchOptions(starts, exit_now, sort_key, total_cost_fn) {
   if (starts === void 0) { starts = []; }
   this.starts = starts;
   this.exit_now = exit_now;
@@ -22,6 +22,7 @@ function SearchOptions(starts, exit_now, sort_key) {
   this.allow_reprioritize = true;
   this.exit_now = this.exit_now || (function (_) { return false; });
   this.sort_key = this.sort_key || (function (id, node) { return node.cost_so_far; });
+  this.total_cost_fn = total_cost_fn || compute_cost_basic;
 }
 
 SearchOptions.getSearchOptions = function(graph, starts, exit, algorithm, early_stop, heuristic) {
@@ -59,6 +60,15 @@ SearchOptions.getSearchOptions = function(graph, starts, exit, algorithm, early_
         node.h_exit = exit.id; // for debugging
         return node.cost_so_far + 1.01 * node.h;
       });
+      break;
+    case 'Theta*':
+      // See http://aigamedev.com/open/tutorial/lazy-theta-star/
+      heuristic = heuristic || manhattan_grid_heuristic;
+      searchOpts = new SearchOptions(starts, stopCondition, function (id, node) {
+        node.h = heuristic(graph, exit.id, id);
+        node.h_exit = exit.id; // for debugging
+        return node.cost_so_far + 1.01 * node.h;
+      }, compute_cost_theta_star);
       break;
     default:
       console.error("Unsupported search algorithm: " + algorithm);
@@ -120,6 +130,27 @@ function euclidean_heuristic(graph, goal, current) {
   var dy = pos1[1] - pos2[1];
   var dz = pos1[2] - pos2[2];
   return Math.sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+// When considering cell si, compute the cost of going from start to its neighbor ni by going through si
+function compute_cost_basic(graph, map, si, ni) {
+  var new_cost_so_far = map[si].cost_so_far + graph.edgeWeight(si, ni);
+  return new_cost_so_far;
+}
+
+// When considering cell si, compute the cost of going from start to its neighbor ni by
+//  going through si         (path1)
+//  going through parent(si) (path2)
+function compute_cost_theta_star(graph, map, si, ni) {
+  var new_cost_so_far;
+  var pi = map[si].parent;
+  var lineOfSightInfo = (pi != undefined)? graph.getLinePathInfoById(pi, ni) : null;
+  if (lineOfSightInfo && lineOfSightInfo.isTraversable) {
+    new_cost_so_far = map[pi].cost_so_far + lineOfSightInfo.weight;
+  } else {
+    new_cost_so_far = map[si].cost_so_far + graph.edgeWeight(si, ni);
+  }
+  return new_cost_so_far;
 }
 
 function PathFinder(options) {
@@ -199,7 +230,8 @@ PathFinder.prototype.__search = function(options, graph, map) {
       break;
     }
     s.neighbors.forEach(function (next) {
-      var new_cost_so_far = (map[s.current].cost_so_far + graph.edgeWeight(s.current, next));
+      //var new_cost_so_far = (map[s.current].cost_so_far + graph.edgeWeight(s.current, next));
+      var new_cost_so_far = options.total_cost_fn(graph, map, s.current, next);
       if (!map[next]) {
         map[next] = { id: next };
       }

@@ -30,7 +30,7 @@ html(lang="en")
         script(src='#{baseUrl}/scanNet.bundle.js')
         script.
             var assetPath = '#{baseUrl}/resources/data/scannet/scannet';
-            var viewerParams = { condition: 'manual' };
+            var viewerParams = { palette: 'd3_unknown_category19p' };
             var annotationsViewer = new STK.GroupedViewer({
                 container: '#container',
                 loadingMessageSelector: '#loading',

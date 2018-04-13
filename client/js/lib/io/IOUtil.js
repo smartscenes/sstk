@@ -30,4 +30,24 @@ function parseDelimited(data, opts) {
 
 IOUtil.parseDelimited = parseDelimited;
 
+function indexLines(data, opts) {
+  opts = opts || {};
+  var lines = data.split('\n');
+  var labelToIndex = {};
+  for (var i = 0; i < lines.length; i++) {
+    lines[i] = lines[i].trim();
+    if (lines[i]) {
+      var fields = opts.delimiter? lines[i].split(opts.delimiter) : [lines[i]];
+      if (fields.length > 1) {
+        labelToIndex[fields[0]] = parseInt(fields[1]);
+      } else {
+        labelToIndex[fields[0]] = i;
+      }
+    }
+  }
+  return labelToIndex;
+}
+
+IOUtil.indexLines = indexLines;
+
 module.exports = IOUtil;

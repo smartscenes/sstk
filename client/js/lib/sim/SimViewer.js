@@ -11,6 +11,7 @@ var Renderer = require('gfx/Renderer');
 var SearchController = require('search/SearchController');
 var Simulator = require('sim/Simulator');
 var SimDialog = require('sim/SimDialog');
+var SimEditUI = require('sim/SimEditUI');
 var Viewer3D = require('Viewer3D');
 var _ = require('util');
 require('jquery-console');
@@ -18,12 +19,17 @@ require('jquery-console');
 Constants.defaultPalette = Colors.palettes.d3_unknown_category18;
 
 var simConfig = Constants.config.sim || {};
-var defaultSensorConfig = simConfig.sensors;
+var sensorConfigs = simConfig.sensors;
 var agentConfigs = simConfig.agents;
 var replaceModels = simConfig.replaceModels;
 
-_.each(defaultSensorConfig, function (s) {
-  s.includeIndex = true;
+if (_.isArray(sensorConfigs)) {
+  sensorConfigs = { 'default': sensorConfigs };
+}
+_.each(sensorConfigs, function (sensors) {
+  _.each(sensors, function(s) {
+    s.includeIndex = true;
+  });
 });
 
 /**
@@ -50,6 +56,14 @@ function SimViewer(params) {
     frameSkip: 1,
     observations: { objectId: true, objectType: false, forces: true, normal: true, depth: true, map: true },
     uihookups: _.keyBy([
+      {
+        name: 'toggleEdit',
+        click: function() {
+          scope.showEdit = !scope.showEdit;
+        },
+        shortcut: 'f3',
+        keyopts: { filter: function(event) { return true; }}
+      },
       {
         name: 'toggleConsole',
         click: function() {
@@ -206,6 +220,7 @@ function SimViewer(params) {
 
   this.simulator = null;
   this.simDialog = null;
+  this.simEdit = null;
   this.mapModeIndex = 0;
   this.__autoUpdateObservations = false;
   this.__initialized  = false;
@@ -213,6 +228,19 @@ function SimViewer(params) {
 
 SimViewer.prototype = Object.create(Viewer3D.prototype);
 SimViewer.prototype.constructor = SimViewer;
+
+Object.defineProperty(Viewer3D.prototype, 'showEdit', {
+  get: function () { return this.simEdit.isVisible; },
+  set: function (v) {
+    if (this.simEdit) {
+      if (v) {
+        this.simEdit.show();
+      } else {
+        this.simEdit.hide();
+      }
+    }
+  }
+});
 
 Object.defineProperty(Viewer3D.prototype, 'showConsole', {
   get: function () { return this.console? this.console.is(':visible') : false; },
@@ -245,11 +273,13 @@ SimViewer.prototype.init = function () {
       defaultLightState: this.allParams.defaultLightState
     });
     assetManager.setSearchController(new SearchController());
-    //assetManager.searchController.setFilter('model', '+source:(wss OR p5d)');
+    assetManager.searchController.setFilter('model', '+source:(wss OR p5d)');
     assetManager.Subscribe('dynamicAssetLoaded', this, function(d) {
       //console.log('adding to dynamic assets', d);
       this._dynamicAssets.push(d);
     }.bind(this));
+    var sensorConfigName = this.allParams.sensors || 'default';
+    var sensorConfig = sensorConfigs[sensorConfigName] || sensorConfigs.default;
     this.simulator = new Simulator({
       renderer: this.renderer,
       useLights: this.useLights,
@@ -262,7 +292,7 @@ SimViewer.prototype.init = function () {
       collisionDetection: this.allParams.collisionDetection,
       scene: this.allParams.scene,
       agent: this.allParams.agent,
-      sensors: defaultSensorConfig,
+      sensors: sensorConfig,
       visualizeSensors: true,
       observations: this.allParams.observations,
       start: this.allParams.start,
@@ -272,8 +302,21 @@ SimViewer.prototype.init = function () {
       colorEncoding: 'screen',
       fs: fs
     });
-    this.simDialog = new SimDialog({ simulator: this.simulator });
     this.camera = this.simulator.getAgent().getCamera();
+    this.simDialog = new SimDialog({ simulator: this.simulator });
+    this.simEdit = new SimEditUI({ app: this,
+      editPanel: $('#editPanel'),
+      allowEdit: true,
+      editMode: false,
+      modelSources: ['models3d', 'wss', 'p5d'],
+      restrictModels: '+source:(wss OR p5d)',
+      simulator: this.simulator,
+      assetManager: assetManager,
+      sceneState: this.simulator.state.sceneState,
+      cameraControls: { camera: this.camera },
+    });
+    this.simEdit.init();
+    this.showEdit = false;
     //this.simulator.assetManager.maxAnisotropy = this.renderer.getMaxAnisotropy();
 
     this.setupConsole();
@@ -421,6 +464,7 @@ SimViewer.prototype.onWindowResize = function (options) {
   var r = targetWidth? targetWidth/width : 1;
   var rescaledShape = [Math.round(width*r), Math.round(height*r)];
   this.simulator.getAgent().resizeCameraSensors(width, height, rescaledShape[0], rescaledShape[1]);
+  this.simEdit.onResize(options);
 };
 
 SimViewer.prototype.observe = function(cb) {
@@ -541,7 +585,7 @@ SimViewer.prototype.setupConsole = function () {
       promptHistory: true,
       welcomeMessage: 'Enter interactive text commands'
     });
-    controller.promptText('toggle door');
+    //controller.promptText('toggle door');
     this.console = textConsole;
   }
 };

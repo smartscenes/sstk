@@ -21,6 +21,7 @@ app.get('/nyuv2', function (req, res) { res.render('nyuv2-annotations'); });
 app.get('/nyuv2-parts', function (req, res) { res.render('nyuv2-part-annotations'); });
 
 // ScanNet (official anonymized)
+app.get('/scannet/', function (req, res) { res.render('scannet'); });
 app.get('/scannet/grouped', function (req, res) {
   if (req.query['annotate']) {
     res.render('grouped-annotator');

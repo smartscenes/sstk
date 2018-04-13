@@ -43,14 +43,15 @@ html(lang="en")
               <br/><br/>
               | Use the sliders below to set the angle by which to rotate when the arrow keys are pressed.
               <br/><br/>
-            label(for="rotateZ") Rotate about <span style='color:blue'>Up-axis</span> by:
-            input#rotateZ(type="number", min="1", max="90", value="90", maxLength="2")
-            #sliderRotateZ
-            <br/>
-            label(for="rotateX") Rotate about <span style='color:red'>Right-axis</span> by:
-            input#rotateX(type="number", min="1", max="90", value="90", maxLength="2")
-            #sliderRotateX
-            <br/>
+            div
+              label(for="rotateZ") Rotate about <span style='color:green'>Up-axis</span> by:
+              input#rotateZ(type="number", min="1", max="90", value="90", maxLength="2")
+              #sliderRotateZ
+            div
+              label(for="rotateX") Rotate about <span style='color:red'>Right-axis</span> by:
+              input#rotateX(type="number", min="1", max="90", value="90", maxLength="2")
+              #sliderRotateX
+            div
             | Up: <span id="alignUp"></span>
             <br/>
             | Front: <span id="alignFront"></span>

@@ -134,3 +134,13 @@ CameraSensor.prototype.createPixelBuffer = function() {
 };
 
 module.exports = CameraSensor;
+
+/**
+ * Frame of 2D data from a camera sensor
+ * @typedef sim.sensors.CameraSensor.Frame
+ * @type {object}
+ * @property type {string} Sensor type
+ * @property data {Array|TypedArray} pixels from the camera sensor (can be color, depth, semantic mask)
+ * @property encoding {string} Encoding indicating how the data should be interpreted
+ * @property shape {Array} Array indicating the width, height, and number of channels of the data
+ */

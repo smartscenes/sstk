@@ -53,6 +53,7 @@
     "mocha": "^2.3.3",
     "optimist": "^0.6.1",
     "pngjs": "^3.3.0",
+    "raw-loader": "^0.5.1",
     "rimraf": "^2.5.0",
     "script-loader": "^0.6.1",
     "shelljs": "^0.7.0",

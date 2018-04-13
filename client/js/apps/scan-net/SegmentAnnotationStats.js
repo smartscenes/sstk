@@ -18,6 +18,7 @@
  * @param [param.segsWeight=0] {number} Weight given to segments annotated when computing percentComplete.
  * @param [param.vertWeight=1] {number} Weight given to vertices annotated when computing percentComplete.
  * @constructor
+ * @memberOf scannet
  */
 function SegmentAnnotationStats(params) {
   params = params || {};

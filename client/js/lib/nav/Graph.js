@@ -173,6 +173,52 @@ Graph.prototype.edgeWeight = function (id1, id2) {
     return this._weights[id2];
   }
 };
+Graph.prototype.checkCellsTraversable = function(cellIds, filter) {
+  var scope = this;
+  filter = filter || function(cellId) {
+    var tileWeight = scope.tileWeight(cellId);
+    //console.log('got tileWeight', cellId, tileWeight);
+    return _.isFinite(tileWeight);
+  }
+  for (var i = 0; i < cellIds.length; i++) {
+    var okay = filter(cellIds[i]);
+    if (!okay) {
+      return false;
+    }
+  }
+  return true;
+};
+Graph.prototype.getLinePathById = function(id1, id2) {
+  var startCell = this.idToCell(id1);
+  var endCell = this.idToCell(id2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+Graph.prototype.getLinePathByPosition = function(p1, p2) {
+  var startCell = this.positionToCell(p1);
+  var endCell = this.positionToCell(p2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+Graph.prototype.getLinePathInfoById = function(id1, id2) {
+  var info = {};
+  var startCell = this.idToCell(id1);
+  var endCell = this.idToCell(id2);
+  info.cellIds = this.getLinePath(startCell, endCell);
+  if (info.cellIds) {
+    info.isTraversable = this.checkCellsTraversable(info.cellIds);
+    if (info.isTraversable) {
+      // Weight distance by distance in cell
+      //var pos1 =  this.idToPosition(id1);
+      //var pos2 =  this.idToPosition(id2);
+      var dir = [startCell.i - endCell.i, startCell.j - endCell.j];
+      info.weight = Math.sqrt(dir[0]*dir[0] + dir[1]*dir[1])*this._weights[endCell.id];
+    } else {
+      info.weight = Infinity;
+    }
+  }
+  return info;
+};
 Graph.prototype.distance = function (id1, id2) {
   // Assume edge weight is same as distance (not true!!!)
   return this.edgeWeight(id1, id2);
@@ -325,7 +371,7 @@ SquareGrid.prototype.__populateEdges = function() {
 };
 
 SquareGrid.prototype.__computeEdgeWeight = function(dir, targetTileWeight) {
-  return Math.sqrt((dir[0]*dir[0] + dir[1]*dir[1])*targetTileWeight);
+  return Math.sqrt(dir[0]*dir[0] + dir[1]*dir[1])*targetTileWeight;
 };
 
 SquareGrid.prototype.__onTileWeightUpdated = function(id, w, oldWeight) {

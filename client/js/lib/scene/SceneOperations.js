@@ -13,29 +13,32 @@ function SceneOperations(params) {
 }
 
 /**
- * Default method for preparing a model instance for placement in a scene
- * @param modelInstance
- * @param opts
- * @param [opts.alignTo=world] {string} What to align to (`scene`|`world`)
- * @param [opts.sceneState] {SceneState} SceneState for which to prepare placement (required if `opts.alignTo` is `scene`_
- * @param [opts.useShadows] {boolean} Whether shadow effects need to be enabled to model instance
- * @param [opts.enableMirrors] {boolean} Whether mirror effects need to be enabled to model instance
- *   (if true, requires specification of `opts.renderer`, `opts.assetManager`, `opts.camera`.
- * @param [opts.assetManager] {AssetManager} Used for mirror effects
- * @param [opts.renderer] {Renderer} Used for mirror effects
- * @param [opts.camera] {THREE.Camera} Used for mirror effects
- * @returns {*}
+ * Prepares a new model instance for placement into a scene
+ * @param modelInstance {model.ModelInstance}
+ * @param [opts] Additional options on how the model would be preprocessed
+ * @param [opts.transform=null] {THREE.Matrix4} Explicit transform matrix to use for the object
+ * @param [opts.alignTo] {string} What the model instance should be aligned to (`scene|world`) if `transform` is not specified.
+ * @param [opts.sceneState] {scene.SceneState} If `alignTo=scene`, the scene state to align to.
+ * @param [opts.useShadows] {boolean} Whether shadows need to be enabled
+ * @param [opts.enableMirrors] {boolean} Whether mirror should be enabled.
+ *    (if true, requires specification of `opts.renderer`, `opts.assetManager`, `opts.camera`)
+ * @param [opts.renderer] {gfx.Renderer} If `opts.enableMirrors` is set, used for rendering textures for the mirror
+ * @param [opts.assetManager] {assets.AssetManager} If `opts.enableMirrors` is set, used to indicate dynamic asset is loaded.  If not specified, default `assetManager` is used
+ * @param [opts.camera] {THREE.Camera} If `opts.enableMirrors` is set,  used for rendering textures for the mirror
+ * @returns {model.ModelInstance}
  */
 SceneOperations.prototype.prepareModelInstance = function(modelInstance, opts) {
   opts = opts || {};
   // Prepares model instance for inclusion into a scene
-  if (opts.alignTo === 'scene') {
+  if (opts.transform) {
+    Object3DUtil.setMatrix(modelInstance.object3D, opts.transform);
+  } else if (opts.alignTo === 'scene') {
     var sceneState = opts.sceneState;
     modelInstance.alignAndScale(sceneState.getUp(), sceneState.getFront(), sceneState.getVirtualUnit());
-  } else {
+  } else if (opts.alignTo === 'world') {
     modelInstance.alignAndScale(Constants.worldUp, Constants.worldFront, Constants.virtualUnitToMeters);
-    modelInstance.ensureNormalizedModelCoordinateFrame();
   }
+  modelInstance.ensureNormalizedModelCoordinateFrame();
   // Update shadows
   if (opts.useShadows) {
     Object3DUtil.setCastShadow(modelInstance.object3D, true);
@@ -43,10 +46,11 @@ SceneOperations.prototype.prepareModelInstance = function(modelInstance, opts) {
   }
   // Whether to have mirrors
   if (opts.enableMirrors) {
+    var assetManager = this.assetManager;
     Object3DUtil.addMirrors(modelInstance.object3D, {
       ignoreSelfModel: true,
       renderer: opts.renderer.renderer,
-      assetManager: opts.assetManager,
+      assetManager: opts.assetManager || assetManager,
       camera: opts.camera,
       width: opts.renderer.width,
       height: opts.renderer.height
@@ -80,7 +84,7 @@ SceneOperations.prototype.createObject = function(opts) {
       if (opts.prepareModelInstance) {
         opts.prepareModelInstance(modelInstance);
       } else {
-        scope.prepareModelInstance(modelInstance);
+        scope.prepareModelInstance(modelInstance, { alignTo: 'world'});
       }
       //console.log('got modelInstance', Object3DUtil.getBoundingBox(modelInstance.object3D));
       scope.placeObject(_.defaults({ modelInstance: modelInstance }, opts));

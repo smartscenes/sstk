@@ -1,7 +1,7 @@
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(factory((global.THREE = global.THREE || {})));
+	(factory((global.THREE = {})));
 }(this, (function (exports) { 'use strict';
 
 	// Polyfills
@@ -51,8 +51,6 @@
 		( function () {
 
 			Object.assign = function ( target ) {
-
-				'use strict';
 
 				if ( target === undefined || target === null ) {
 
@@ -25236,8 +25234,6 @@
 
 		var vertex = new Vector3();
 		var normal = new Vector3();
-		var uv = new Vector2();
-
 		var P1 = new Vector3();
 		var P2 = new Vector3();
 
@@ -27756,7 +27752,6 @@
 		// helper variables
 
 		var index = 0;
-		var indexOffset = 0;
 		var indexArray = [];
 		var halfHeight = height / 2;
 		var groupStart = 0;
@@ -35283,13 +35278,7 @@
 									cpx0 = laste.x;
 									cpy0 = laste.y;
 
-									for ( var i2 = 1; i2 <= divisions; i2 ++ ) {
-
-										var t = i2 / divisions;
-										QuadraticBezier( t, cpx0, cpx1, cpx );
-										QuadraticBezier( t, cpy0, cpy1, cpy );
-
-									}
+									
 
 								}
 
@@ -35313,13 +35302,7 @@
 									cpx0 = laste.x;
 									cpy0 = laste.y;
 
-									for ( var i2 = 1; i2 <= divisions; i2 ++ ) {
-
-										var t = i2 / divisions;
-										CubicBezier( t, cpx0, cpx1, cpx2, cpx );
-										CubicBezier( t, cpy0, cpy1, cpy2, cpy );
-
-									}
+									
 
 								}
 
@@ -39313,12 +39296,12 @@
 
 		setFromCamera: function ( coords, camera ) {
 
-			if ( (camera && camera.isPerspectiveCamera) ) {
+			if ( (camera && (camera.isPerspectiveCamera || camera.inPerspectiveMode)) ) {
 
 				this.ray.origin.setFromMatrixPosition( camera.matrixWorld );
 				this.ray.direction.set( coords.x, coords.y, 0.5 ).unproject( camera ).sub( this.ray.origin ).normalize();
 
-			} else if ( (camera && camera.isOrthographicCamera) ) {
+			} else if ( (camera && (camera.isOrthographicCamera || camera.inOrthographicMode)) ) {
 
 				this.ray.origin.set( coords.x, coords.y, ( camera.near + camera.far ) / ( camera.near - camera.far ) ).unproject( camera ); // set origin in plane of camera
 				this.ray.direction.set( 0, 0, - 1 ).transformDirection( camera.matrixWorld );

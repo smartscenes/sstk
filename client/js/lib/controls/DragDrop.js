@@ -93,7 +93,7 @@ define(['Constants', 'controls/Picker', 'model/ModelInstance', 'geo/Object3DUtil
       // The plane that we will move in
       // NOTE: Starting from THREE.js r72, we need to make the material not visible
       //       so the object is not displayed, but still intersectable by the RayCaster
-      this.plane = new THREE.Mesh(new THREE.PlaneBufferGeometry(this.pickerPlaneSize, this.pickerPlaneSize, 8, 8),
+      this.plane = this.plane || new THREE.Mesh(new THREE.PlaneBufferGeometry(this.pickerPlaneSize, this.pickerPlaneSize, 8, 8),
         new THREE.MeshBasicMaterial({
           color: 0x000000,
           opacity: 0.25,
@@ -103,7 +103,9 @@ define(['Constants', 'controls/Picker', 'model/ModelInstance', 'geo/Object3DUtil
         }));
       this.plane.name = 'FloatPickingPlane';
       this.ignore = [this.plane];
-      this.scene.add(this.plane);
+      if (this.scene) {
+        this.scene.add(this.plane);
+      }
 
       this.mouse = new THREE.Vector2();
       this.placementInfo = {

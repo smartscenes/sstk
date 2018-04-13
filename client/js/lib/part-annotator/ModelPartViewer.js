@@ -2,6 +2,7 @@
 
 var Constants = require('lib/Constants');
 var BasePartViewer = require('part-annotator/BasePartViewer');
+var BBox = require('geo/BBox');
 var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 
@@ -63,7 +64,7 @@ ModelPartViewer.prototype.getAnnotationItemId = function() {
 
 ModelPartViewer.prototype.setupScene = function () {
   this.createScene();
-  var light = new THREE.HemisphereLight(0xffffff, 0xaaaaaa, 1);
+  var light = new THREE.HemisphereLight(0xffffff, 0x202020, 1);
   this.scene.add(light);
 
   var mId = this.getAnnotationItemId();
@@ -144,6 +145,7 @@ ModelPartViewer.prototype.onModelLoad = function (modelInstance) {
     this.addTransparentGround(groundCenter, new THREE.Vector3(d, d, d/50));
   }
 
+  this.onSceneChanged();
   var cameraParams = _.defaults( { targetBBox: bb }, this.defaultCameraSettings );
   this.resetCamera(cameraParams);
   this.cameraControls.saveCameraState(true);
@@ -152,6 +154,17 @@ ModelPartViewer.prototype.onModelLoad = function (modelInstance) {
   this.setTransparency(false, true);
   //console.log(modelInstance);
   //console.log('Finished loading model: ' + JSON.stringify(modelInstance.model.info));
+};
+
+ModelPartViewer.prototype.getSceneBoundingBox = function() {
+  //return Object3DUtil.getBoundingBox(this.scene);
+  var target = this.__modelInstance;
+  if (target) {
+    return Object3DUtil.getBoundingBox(target.object3D);
+  } else {
+    var bbox = new BBox();
+    bbox.includePoint(new THREE.Vector3());
+  }
 };
 
 // ModelPartViewer.prototype.resetCamera = function () {

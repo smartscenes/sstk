@@ -277,7 +277,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         if (!m) { continue; }
         var candidateAttachments = this.identifyCandidateAttachments(m, allCandidateSupportObjects,
           { aggregatedSceneStatistics: opts.aggregatedSceneStatistics, includeCandidates: true,
-            maxCandidatesToCheck: 1, keepSameLevel: true, disallowSameModelHorizontalAttachment: true });
+            keepSameLevel: true, disallowSameModelHorizontalAttachment: true });
         if (candidateAttachments) {
           attachments[i] = candidateAttachments.best;
           candidates[i] = candidateAttachments.candidates;
@@ -852,10 +852,10 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           // Set depthWrite to false so the other objects always appear on top
           //Object3DUtil.setDepthWrite(modelInstance.object3D, false);
           // Make the object not pickable, selectable, and not a support object
-          modelInstance.object3D.userData.isPickable = false;
-          modelInstance.object3D.userData.isSelectable = false;
+          modelInstance.object3D.userData.isPickable = modelInstance.object3D.userData.isPickable ||false;
+          modelInstance.object3D.userData.isSelectable = modelInstance.object3D.userData.isSelectable || false;
           modelInstance.object3D.userData.isEditable = modelInstance.object3D.userData.isSelectable;
-          modelInstance.object3D.userData.isSupportObject = false;
+          modelInstance.object3D.userData.isSupportObject = modelInstance.object3D.userData.isSupportObject || false;
           // Set the current scene type to be the category of the vf model
           this.rootModelInstance = modelInstance;
           this.sceneType = modelInstance.model.getCategory();

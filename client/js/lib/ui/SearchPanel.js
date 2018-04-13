@@ -1,5 +1,6 @@
 'use strict';
 
+var AssetGroups = require('assets/AssetGroups');
 var AssetLoader = require('assets/AssetLoader');
 var Constants = require('Constants');
 var PubSub = require('PubSub');
@@ -12,9 +13,36 @@ require('jquery-pagination');
 /**
  * Panel that shows search results in a grid layout (uses jquery-pagination for pagination)
  * @param params Panel configuration
+ * @param params.searchModule {search.SearchModule} Search module to use
+ * @param [params.source] {string} Data source to use for search
+ * @param [params.sources] {string[]} Data sources to allow
  * @param [params.entriesPerRow=3] {int} Number of results to show per row
  * @param [params.nRows=33] {int} Limit on number of rows to query/display
  * @param [params.padding=50] {int} Amount of padding (in pixels) to have between result entries
+ * @param [params.searchSucceededCallback] {function(resultList)} Application callback when search has succeeded
+ * @param [params.searchFailedCallback] {function(errorMessage)}  Application callback when search has failed
+ * @param [params.getImagePreviewUrlCallback] {function(id)} Application callback to get url of preview image
+ * @param [params.onClickResultCallback] {function(source,id,result)}  Application callback when search result is clicked on
+ * @param [params.onMousedownResultCallback] {function(source,id,result)} Application callback when search result has mouse down on it
+ * @param [params.onHoverResultCallback] {function(source,id,result)} Application callback when search result is hovered over
+ * @param [params.appendResultElemCallback] {function(source,id,result,element)} Application callback to add more stuff to result element
+ * @param [params.sourceChangedCallback] {function(source)} Application callback for when source changed
+ * @param [params.expandGroupCallback] {function(groupName)} Application callback for expanding grouped nodes
+ * @param [params.allowGroupExpansion=false] {boolean} If true, and `expandGroupCallback` is not specified, `expandCategory` is used for `expandGroupCallback`
+ * @param [params.tooltipIncludeAll=true] {boolean} Whether to include all returned fields in tooltip or just name
+ * @param [params.tooltipIncludeFields] {string[]} List of fields to include in tooltip
+ * @param [params.tooltipIncludeExtraFields] {string[]} More fields to include in tooltip (appended to `tooltipIncludeFields`)
+ * @param [params.showSearchOptions=true] {boolean} Whether to show search options (search text box, sort, sources, etc)
+ * @param [params.showSearchSortOption=true] {boolean} Whether to show option to sort search results
+ * @param [params.showSearchSourceOption=true] {boolean} Whether to show option to select data source
+ * @param [params.showRowOptions=false] {boolean} Whether to show options controlling number of entries per row and number of rows
+ * @param [params.showAnimatedOnHover=true] {boolean} Whether to show animiated gif on hover
+ * @param [params.showLoadFile=false] {boolean} Whether option to load file of ids is shown
+ * @param [params.allowSave=false] {boolean} Whether option to save list of ids of shown
+ * @param [params.loadImagesLazy=false] {boolean} Whether to do lazy loading of images
+ * @param [params.sortOrder] {string} Sort order to use
+ * @param [params.additionalSortOrder] {string} Additional sort order to use
+ * @param [params.previewImageIndex] {int|string} What image to display in the search results
  * @constructor
  * @memberOf ui
  */
@@ -38,6 +66,7 @@ function SearchPanel(params) {
   this.showSearchSourceOption = true;
   this.loadImagesLazy = false;
   this.previewImageIndex = undefined;
+  this.__id = 'sp_' + _.generateRandomId();
 
   if (params) {
     // Application callback when search has succeeded
@@ -49,7 +78,7 @@ function SearchPanel(params) {
     // Application callback to get url of preview image
     // Parameters: result.id
     this.getImagePreviewUrlCallback = params.getImagePreviewUrlCallback;
-    // Application callback when search result if clicked on
+    // Application callback when search result is clicked on
     // Parameters: source, result.id, result
     this.onClickResultCallback = params.onClickResultCallback;
     this.onMousedownResultCallback = params.onMousedownResultCallback;
@@ -81,6 +110,7 @@ function SearchPanel(params) {
     // If include all returned fields in tooltip or just name
     if (params.tooltipIncludeAll !== undefined) this.tooltipIncludeAll = params.tooltipIncludeAll;
     if (params.tooltipIncludeFields !== undefined) this.tooltipIncludeFields = params.tooltipIncludeFields;
+    this.tooltipIncludeLimits = params.tooltipIncludeLimits;
     if (params.tooltipIncludeExtraFields !== undefined) {
       this.tooltipIncludeFields = this.tooltipIncludeFields.concat(params.tooltipIncludeExtraFields);
     }
@@ -89,6 +119,7 @@ function SearchPanel(params) {
     if (params.showSearchSortOption !== undefined) this.showSearchSortOption = params.showSearchSortOption;
     if (params.showSearchSourceOption !== undefined) this.showSearchSourceOption = params.showSearchSourceOption;
     if (params.showSearchBySize !== undefined) this.showSearchBySize = params.showSearchBySize;
+    if (params.showRowOptions !== undefined) this.showRowOptions = params.showRowOptions;
     // Show animated gif onhover?
     if (params.showAnimatedOnHover !== undefined) this.showAnimatedOnHover = params.showAnimatedOnHover;
 
@@ -191,6 +222,32 @@ function SearchPanel(params) {
 
         this.searchOptionsElem.append(sortDiv);
       }
+      if (this.showRowOptions) {
+        var div = $('<div></div>');
+        var spinner = UIUtil.createNumberSpinner({
+          id: this.__id + '_entriesPerRow', label: 'entries per row', min: 1, max: 20, value: this.entriesPerRow,
+          change: function(v) {
+            scope.entriesPerRow = v;
+            scope.limit = scope.nRows*scope.entriesPerRow;
+            scope.refreshSearch();
+          }
+        });
+        spinner.input.css('width', '30px');
+        div.append(spinner.div);
+        this.entriesPerRowInput = spinner.input;
+        spinner = UIUtil.createNumberSpinner(
+        { id: this.__id +  '_rows', label: 'rows', min: 1, value: this.nRows,
+          change: function(v) {
+            scope.nRows = v;
+            scope.limit = scope.nRows*scope.entriesPerRow;
+            scope.refreshSearch();
+          }
+        });
+        div.append(spinner.div);
+        spinner.input.css('width', '30px');
+        this.numRowsInput = spinner.input;
+        this.searchOptionsElem.append(div);
+      }
 
       if (this.showSearchBySize) {
         this.searchBySizeElem = $('<input/>').attr('type', 'checkbox');
@@ -215,7 +272,7 @@ function SearchPanel(params) {
     }
     if (this.showLoadFile) {
       var loadFileInput = UIUtil.createFileInput({
-        id: 'search-loadFile',
+        id: this.__id + '_loadFile',
         label: 'Load Ids',
         hideFilename: true,
         inline: true,
@@ -296,9 +353,10 @@ SearchPanel.prototype.loadIdsFromFile = function(file) {
   var scope = this;
   var loader = new AssetLoader();
   loader.load(file, 'UTF-8', function(data) {
-      var ids = data.split('\n');
-      var options = {};//{ ordering: ids };
-      scope.searchModule.queryIds(ids, function(err, res) {
+    var ids = data.split('\n');
+    var options = {};//{ ordering: ids };
+    //console.log('load ids', ids.length);
+    scope.searchModule.queryIds(ids, function(err, res) {
         if (err) {
           scope.searchFailed(err);
         } else {
@@ -360,14 +418,22 @@ SearchPanel.prototype.getSearchText = function (defaultValue) {
 };
 
 SearchPanel.prototype.showResultList = function (start) {
-  this.showSearchResults(this.resultList, start);
-  this.updatePaging(start, this.resultList.length, this.showResultList.bind(this));
+  var scope = this;
+  this.showSearchResults(this.resultList, start, this.resultListStart);
+  this.updatePaging(start, this.resultList.length, function(index) {
+    scope.showResultList(index);
+    if (scope.__selectIndexOnSearchSucceeded != undefined) {
+      scope.selectOnPage(scope.__selectIndexOnSearchSucceeded);
+      scope.__selectIndexOnSearchSucceeded = undefined;
+    }
+  });
 };
 
 SearchPanel.prototype.setResultList = function (source, ids) {
   var showResultsFrom = this.showResultList.bind(this);
   this.source = source;
   this.resultList = [];
+  this.resultListStart = 0;
   for (var i = 0; i < ids.length; i++) {
     this.resultList.push({ id: ids[i], name: ids[i] });
   }
@@ -386,17 +452,17 @@ SearchPanel.prototype.setResultMessage = function (message) {
 
 SearchPanel.prototype.updatePreviewImages = function (previewImageIndex) {
   if (!this.resultsElem) return;
-  var SearchPanel = this;
+  var scope = this
   var searchResults = this.resultsElem.find('.searchResult');
   this.previewImageIndex = previewImageIndex;
   searchResults.each(function (index, elem) {
     var resId = $(this).attr('id');
     var idfields = resId.split('_');
     var source = idfields[1];
-    var id = idfields[2];
+    var id = idfields.slice(2).join('_');
     var img = $(this).find('img.resultImg');
     var metadata = img.data('metadata');
-    var imagePreviewUrl = SearchPanel.getImagePreviewUrlCallback(source, id, previewImageIndex, metadata);
+    var imagePreviewUrl = scope.getImagePreviewUrlCallback(source, id, previewImageIndex, metadata);
     var fields = ['src', 'data-src'];
     for (var i = 0; i < fields.length; i++) {
       var field = fields[i];
@@ -422,12 +488,25 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
     title = group.name;
   }
   if (this.tooltipIncludeAll) {
-    title = JSON.stringify(result, this.tooltipIncludeFields, ' ');
+    var r = result;
+    if (this.tooltipIncludeLimits) {
+      r = _.clone(result);
+      _.each(this.tooltipIncludeLimits, function(limits, key) {
+        var v = r[key];
+        if (v != undefined) {
+          var length = limits.length;
+          if (length && v.length > length) {
+            r[key] = v.substring(0, length) + '...';
+          }
+        }
+      });
+    }
+    title = JSON.stringify(r, this.tooltipIncludeFields, ' ');
   }
   var source = (result.source) ? result.source : this.source;
   var elem = $('<div></div>')
     .attr('class', 'searchResult')
-    .attr('id', 'model_' + source + '_' + result.id)
+    .attr('id', this.__id + '_result_' + index)
     .attr('title', title)
     .data('result', result);
   var imgElem;
@@ -468,13 +547,21 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
   }
   if (Constants.assetSources.model.indexOf(source) >= 0 || Constants.assetSources.scan.indexOf(source) >= 0) {
     // Models?
+    var assetGroup = AssetGroups.getAssetGroup(source);
+    if (assetGroup) {
+      // TODO: generalize
+      _.defaults(result, _.pick(assetGroup, ['hasModel']));
+    }
     if (!result.hasModel) {
       elem.addClass('searchResultNoModel');
     }
   }
   if (this.onClickResultCallback) {
     elem.click(function () {
-      this.unselectOnPage(this.curSelectedIndex);
+      //console.log('clicked', index, this.curSelectedIndex);
+      if (index !== this.curSelectedIndex) {
+        this.unselectOnPage(this.curSelectedIndex);
+      }
       elem.addClass('searchResultClicked');
       this.curSelectedIndex = index;
       this.onClickResultCallback(source, result.id, result, elem, index);
@@ -505,6 +592,7 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
   if (this.appendResultElemCallback) {
     this.appendResultElemCallback(source, result.id, result, elem);
   }
+  this.Publish('ResultCreated', result, index);
   return elem;
 };
 
@@ -521,9 +609,12 @@ SearchPanel.prototype.__getEntryWidth = function () {
   return Math.max(10, (this.resultsElem.width() - this.padding) / this.entriesPerRow - 10);
 };
 
-SearchPanel.prototype.showSearchResults = function (resultList, start) {
+SearchPanel.prototype.showSearchResults = function (resultList, start, resultListStart) {
   if (!this.resultsElem) return;  // No place to put results!!!
   if (!start || start < 0) start = 0;
+  if (resultListStart == undefined) {
+    resultListStart = start;
+  }
 
   this.__setResultsElemSize();
   this.resultsElem.empty();
@@ -542,7 +633,7 @@ SearchPanel.prototype.showSearchResults = function (resultList, start) {
   for (var i = start; i < limit; i++) {
     var result = resultList[i];
     if (result) {
-      var elem = this.createSearchResult(resultList[i], this.curStart + i, dimstr, this.loadImagesLazy);
+      var elem = this.createSearchResult(resultList[i], resultListStart + i, dimstr, this.loadImagesLazy);
       var tdElem = $('<td></td>').append(elem);
       if ((i % this.entriesPerRow) === 0) {
         row = $('<tr></tr>');
@@ -606,9 +697,7 @@ SearchPanel.prototype.onResize = function (options) {
     var paginationDiv = this.pageElem.find('div.pagination');
     if (paginationDiv.length) {
       if (this.pageElem.width() !== paginationDiv.width()) {
-        // TODO: This logic don't seem right, the callback may change!!!
-        var showResultsFrom = this.showMoreSearchResults.bind(this);
-        this.updatePaging(this.curStart, this.totalResults, showResultsFrom);
+        this.updatePaging(this.curStart, this.totalResults, this.__pagingCallback);
       }
     }
   }
@@ -619,23 +708,27 @@ SearchPanel.prototype.getTotalResults = function () {
 };
 
 SearchPanel.prototype.unselectOnPage = function (index) {
+  if (!this.resultsElem) return;
+  //console.log('unselectOnPage', index);
   if (index >= this.curStart && index < this.curEnd) {
-    var i = index - this.curStart;
+    var i = index - this.resultListStart;
     var result = this.resultList[i];
-    var source = (result.source) ? result.source : this.source;
-    var elem = $('#' + 'model_' + source + '_' + result.id);
+    var elem = this.resultsElem.find('#' + this.__id + '_result_' + index);
     elem.removeClass('searchResultClicked');
   }
 };
 
 SearchPanel.prototype.selectOnPage = function (index) {
+  //console.log('selectOnPage', index);
   if (index >= this.curStart && index < this.curEnd) {
     // On this current page - select
-    var i = index - this.curStart;
+    var i = index - this.resultListStart;
     var result = this.resultList[i];
     var source = (result.source) ? result.source : this.source;
-    var elem = $('#' + 'model_' + source + '_' + result.id);
+    var elem = this.resultsElem? this.resultsElem.find('#' + this.__id + '_result_' + index) : [];
     if (elem.length > 0) {
+      this.unselectOnPage(this.curSelectedIndex);
+      this.curSelectedIndex = index;
       elem.click();
     } else if (this.onClickResultCallback) {
       this.unselectOnPage(this.curSelectedIndex);
@@ -647,6 +740,7 @@ SearchPanel.prototype.selectOnPage = function (index) {
 };
 
 SearchPanel.prototype.selectResult = function (index) {
+  //console.log('selectResult', index, this.totalResults, this.curStart, this.curEnd, this.curSelectedIndex);
   if (index >= 0 && index < this.totalResults) {
     if (index >= this.curStart && index < this.curEnd) {
       this.selectOnPage(index);
@@ -662,8 +756,12 @@ SearchPanel.prototype.selectResult = function (index) {
           start = start + this.limit;
         }
       }
-      this.selectIndexOnSearchSucceeded = index;
-      this.showMoreSearchResults(start);
+      this.__selectIndexOnSearchSucceeded = index;
+      if (this.__pagingCallback) {
+        this.__pagingCallback(start);
+      } else {
+        this.showMoreSearchResults(start);
+      }
     }
   }
 };
@@ -680,12 +778,8 @@ SearchPanel.prototype.selectPrev = function () {
   }
 };
 
-SearchPanel.prototype.__handlePaginationClick = function (callback, page, paginationContainer) {
-  callback(page * this.limit);
-  return false;
-};
-
 SearchPanel.prototype.updatePaging = function (start, numFound, callback) {
+  this.__pagingCallback = callback;
   this.totalResults = numFound;
   this.curStart = start;
   this.curEnd = Math.min(this.totalResults, this.limit + this.curStart);
@@ -701,10 +795,11 @@ SearchPanel.prototype.updatePaging = function (start, numFound, callback) {
     var paginationElem = $('<div></div>').attr('class', 'pagination');
     paginationElem.width(this.pageElem.width());
     paginationElem.height('40px');
+    var pageSize = this.limit;
     var nDisplayEntries = Math.ceil(paginationElem.width() / 60);
-    var curPage = Math.floor(this.curStart / this.limit);
+    var curPage = Math.floor(this.curStart / pageSize);
     paginationElem.pagination(this.totalResults, {
-      items_per_page: this.limit,
+      items_per_page: pageSize,
       current_page: curPage,
       load_first_page: false,
       num_edge_entries: 1,
@@ -713,7 +808,7 @@ SearchPanel.prototype.updatePaging = function (start, numFound, callback) {
       next_text: '>',
       //prev_show_always: false,
       //next_show_always: false,
-      callback: this.__handlePaginationClick.bind(this, callback)
+      callback: function(page) { callback(page*pageSize); }
     });
     this.pageElem.append(paginationElem);
   } else {
@@ -833,6 +928,7 @@ SearchPanel.prototype.__searchSucceededWithDocs = function (doclist, options) {
 
   // Save resultList...
   this.resultList = resultList;
+  this.resultListStart = doclist.start;
   if (!doclist.start && doclist.numFound === doclist.docs.length) {
     // Everything is already here
     //console.log("Show results with all results");
@@ -841,13 +937,13 @@ SearchPanel.prototype.__searchSucceededWithDocs = function (doclist, options) {
   } else {
     var showResultsFrom = this.showMoreSearchResults.bind(this);
     this.updatePaging(doclist.start, doclist.numFound, showResultsFrom);
-    this.showSearchResults(resultList);
+    this.showSearchResults(resultList, 0, this.resultListStart);
   }
   if (typeof (callback) === 'function') {
     callback(this.source, resultList);
-  } else if (this.selectIndexOnSearchSucceeded !== undefined) {
-    this.selectOnPage(this.selectIndexOnSearchSucceeded);
-    this.selectIndexOnSearchSucceeded = undefined;
+  } else if (this.__selectIndexOnSearchSucceeded !== undefined) {
+    this.selectOnPage(this.__selectIndexOnSearchSucceeded);
+    this.__selectIndexOnSearchSucceeded = undefined;
   } else if (this.searchSucceededCallback) {
     this.searchSucceededCallback(this.source, resultList);
   } else {

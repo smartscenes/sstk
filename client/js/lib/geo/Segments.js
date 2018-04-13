@@ -203,8 +203,8 @@ Segments.prototype.__loadSegments = function (opts) {
   if (this.modelInstance && this.modelInstance.model.info) {
     var info = this.modelInstance.model.info;
     var segmentsInfo = _.cloneDeepWithReplaceVars(info[segmentType], info, { optionalPrefix: 'vars'});
-    this.dropMissingSegments = segmentsInfo.dropMissingSegments;
     if (segmentsInfo) {
+      this.dropMissingSegments = segmentsInfo.dropMissingSegments;
       if (typeof segmentsInfo === 'string') {
         _.getJSON(segmentsInfo)
           .done( this.__setSegments.bind(this, callback, segmentsDataField, 'trimesh'))
@@ -759,7 +759,17 @@ Segments.prototype.createObbMeshes = function (obj, segs, obbMatrixIsRowMajor) {
   return obbs;
 };
 
-Segments.prototype.colorSegments = function (type, labelToIdxFn, getLabelFn, getMaterialFn, defaultIdx) {
+/**
+ * Color segments
+ * @param type {string} Type of coloring
+ * @param labelToIdxFn {Map<string,int>|function(string):int} Mapping from label to index
+ * @param [getLabelFn] {function(string): string} Remapping of labels
+ * @param [getMaterialFn] {function(int,THREE.color): THREE.Material} Material to use for segment
+ * @param [defaultIdx] {int} Default index
+ * @param [sortByIdx] {boolean} Whether to sort final labels by index
+ * @returns {{}}
+ */
+Segments.prototype.colorSegments = function (type, labelToIdxFn, getLabelFn, getMaterialFn, defaultIdx, sortByIdx) {
   var labelColorIndex = {};
   var materials = {};
   getMaterialFn = getMaterialFn || Object3DUtil.getSimpleFalseColorMaterial;
@@ -894,6 +904,14 @@ Segments.prototype.colorSegments = function (type, labelToIdxFn, getLabelFn, get
         console.error('Cannot color segments if there are not segment groups');
       }
     }
+  }
+  if (sortByIdx && this.labels.length > 1) {
+    var zipped = _.zip(this.labels, this.labelData);
+    zipped = _.sortBy(zipped, function(p) { return indexOf(p[0]); });
+    var unzipped = _.unzip(zipped);
+    //console.log('unzipped', unzipped);
+    this.labels = unzipped[0];
+    this.labelData = unzipped[1];
   }
   //console.log(labelColorIndex);
   return labelColorIndex;

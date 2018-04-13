@@ -220,7 +220,8 @@ Simulator.prototype.__preloadData = function(opts) {
     this.__aggregatedSceneStatistics = new SceneStatistics();
     this.__aggregatedSceneStatistics.importCsvs({
       fs: this.opts.fs,
-      basename: assetGroup.rootPath + '/stats/suncg',
+      basename: assetGroup.rootPath + '/stats/v4/suncg',
+      stats: opts.stats || ['materials', 'relations'],
       callback: function(err, data) {
         if (err) {
           console.warn('Error loading scene statistics', err);
@@ -849,6 +850,7 @@ Simulator.prototype.__loadScene = function (opts, callback) {
   }
   //console.log('got preloads', preloads);
   var defaults = { includeCeiling: true, preload: preloads,
+    modelMetadata: { userData: { isSupportObject: true } },
     textureSet: 'all', texturedObjects: Constants.defaultTexturedObjects };
   var sceneOpts = _.defaultsDeep({}, opts.scene, defaults);
   console.time('Timing loadScene');
@@ -914,9 +916,11 @@ Simulator.prototype.__loadScene = function (opts, callback) {
         scope.audioSim.start(function () {
           //TODO(MS): improve error handling
           console.timeEnd('Timing startAudio');
+          scope.Publish('SceneLoaded', sceneState);
           callback(err, sceneState);
         });
       } else {
+        scope.Publish('SceneLoaded', sceneState);
         callback(err, sceneState);
       }
     });

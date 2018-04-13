@@ -11,6 +11,10 @@ var ModelInstance = require('model/ModelInstance');
 /**
  * Combined controls for scene editing (includes movement using drag drop, and scaling/rotation via Manipulator)
  * @param params
+ * @param params.enabled {boolean} If this scene edit controls is enabled
+ * @param params.allowRotation {boolean} Whether to allow rotation
+ * @param params.allowScaling {boolean} Whether to allow scaling
+ * @param params.useThreeTransformControls {boolean} Whether to use three.js transform controls
  * @constructor
  * @memberOf controls
  */
@@ -255,6 +259,16 @@ SceneEditControls.prototype.pick = function (event) {
   return null;
 };
 
+SceneEditControls.prototype.getIntersected = function (event, object3Ds) {
+  object3Ds = object3Ds || this.scene.children;
+  var mouse = this.picker.getCoordinates(this.container, event);
+  var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, object3Ds, this.dragdrop.ignore);
+  if (intersects.length > 0) {
+    return intersects[0];
+  }
+  return null;
+};
+
 SceneEditControls.prototype.onMouseDown = function (event) {
   if (this.transformControls && this.transformControls.axis) {
     // transform controls in effect...
@@ -381,7 +395,9 @@ SceneEditControls.prototype.onKeyDown = function (event) {
         this.app.deleteObject(obj, event);
       }
       this.container.style.cursor = 'initial';
-      this.cameraControls.controls.enabled = true;
+      if (this.cameraControls.controls) {
+        this.cameraControls.controls.enabled = true;
+      }
       return true;
     // case 17: // ctrl
     //   this.dragdrop.yTranslateOn = true;

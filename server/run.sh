@@ -13,6 +13,11 @@ then
   source $ENV
 fi
 
+if [ ! -d logs ]
+then
+  mkdir logs
+fi
+
 npm install
 npm start
 

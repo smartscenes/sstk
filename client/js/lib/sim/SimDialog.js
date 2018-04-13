@@ -15,6 +15,7 @@ function SimDialog(opts) {
 }
 
 var nounRemap = {
+  'float': null,
   'door': ['door', 'arch', 'garage_door'],
   'lamp': ['indoor_lamp', 'outdoor_lamp'],
   'light': ['indoor_lamp', 'outdoor_lamp'],
@@ -42,15 +43,14 @@ SimDialog.prototype.process = function(lastActionResult, text, callback) {
   var action = verbRemap[verb] || verb;
   var simState = this.simulator.getState();
   // use lastObservation to see what is up!
-  var sensedObjects = lastActionResult.observation.sensors.objectId;
-  var normalFrame = lastActionResult.observation.sensors.normal;
+  var observations = lastActionResult.observation.sensors;
   var operations = this.simulator.__simOperations;
 
   if (action === 'help') {
     // TODO: flesh out help
-    callback("Please try 'list', 'take sofa', 'put sofa', 'toggle door'");
-  } if (action === 'list') {
-    var counts = SimUtil.getCategoryCounts(simState, sensedObjects);
+    callback("Please try 'list', 'add apple sofa', 'take picture_frame', 'put picture_frame bed', 'turnOn tv', 'toggle door'");
+  } else if (action === 'list') {
+    var counts = SimUtil.getCategoryCounts(simState, observations.objectId);
     if (_.size(counts) > 0) {
       var countsMsg = _.map(_.sortBy(_.toPairs(counts), function (c, k) {
         return -c[1];
@@ -65,67 +65,94 @@ SimDialog.prototype.process = function(lastActionResult, text, callback) {
     // Find closest door in image
     var nouns = noun + 's';
     var categories = nounRemap[noun] || [noun];
-    var targetCategories = target? (nounRemap[target]) || [target] : null;
+    var targetCategories = target ? (nounRemap[target]) || [target] : 'floor';
 
     if (action === 'add') {
       // Let's get a new object
       var objPosition = simState.agent.localToWorldPosition(Agent.DIRS.forward.clone().multiplyScalar(2));
       var simulator = this.simulator;
-      var prepareModelInstance = function(modelInstance) {
+      var prepareModelInstance = function (modelInstance) {
         operations.__sceneOperations.prepareModelInstance(modelInstance, {
+          alignTo: 'world',
           useShadows: simulator.useShadows,
           enableMirrors: simulator.enableMirrors // TODO: these are scene options
         });
-        // Have attachment point
-        modelInstance.setAttachmentPoint({ position: new THREE.Vector3(0.5, 0, 0.5), coordFrame: 'childBB' });
+        // TODO: Get attachment point from support priors
+        modelInstance.setAttachmentPoint({position: new THREE.Vector3(0.5, 0, 0.5), coordFrame: 'childBB'});
       };
-      if (targetCategories) {
-        var targetPlacement = operations.findPlacementPosition(simState, sensedObjects, normalFrame, targetCategories);
-        if (targetPlacement.error) {
-          callback(targetPlacement.error);//"I can't find any " + target);
-          return;
+      var query = operations.getQueryForCategories(categories);
+      var scope = this;
+      operations.selectModelInDb(simState, query, null, function (err, modelInfo) {
+        //console.log('model is', modelInfo);
+        if (modelInfo) {
+          if (targetCategories) {
+            var targetPlacement = operations.findPlacementPosition(simState, observations, {
+              supportCategories: targetCategories,
+              childModelInfo: modelInfo
+            });
+            if (targetPlacement.error) {
+              callback(targetPlacement.error);//"I can't find any " + target);
+              return;
+            } else {
+              objPosition.copy(targetPlacement.position);
+            }
+          }
+          var addOptions = {
+            anchorFrame: 'objectOrigin',
+            positionAt: objPosition,
+            prepareModelInstance: prepareModelInstance
+          };
+          operations.addObjectWithId(simState, modelInfo.fullId, addOptions,
+            function (err, res) {
+              if (err) {
+                callback(err);
+                // Try to add with keywords (disabled for now)
+                // operations.addObjectWithKeywords(simState, categories, addOptions,
+                //   function(err, res) {
+                //     if (err) {
+                //       callback(err);
+                //     } else {
+                //       callback('Ok!');
+                //     }}
+                //  );
+              } else {
+                callback('Ok!');
+              }
+            });
         } else {
-          objPosition.copy(targetPlacement.position);
-        }
-      }
-      var addOptions = { anchorFrame: 'objectOrigin', positionAt: objPosition, prepareModelInstance: prepareModelInstance };
-      operations.addObjectWithCategory(simState, categories, addOptions,
-        function(err, res) {
           if (err) {
             callback(err);
-            // Try to add with keywords (disabled for now)
-            // operations.addObjectWithKeywords(simState, categories, addOptions,
-            //   function(err, res) {
-            //     if (err) {
-            //       callback(err);
-            //     } else {
-            //       callback('Ok!');
-            //     }}
-            //  );
           } else {
-            callback('Ok!');
+            callback("I can't find any " + nouns);
           }
+        }
       });
     } else if (action === 'put') {
       var objs = operations.findObjectsInBagByCategory(simState, categories);
       if (objs.length > 0) {
         var placeOptions;
-        if (targetCategories) {
-          var targetPlacement = operations.findPlacementPosition(simState, sensedObjects, normalFrame, targetCategories);
+        var modelInstance = objs[0];
+        if (targetCategories && target != 'back') {
+          var targetPlacement = operations.findPlacementPosition(simState, observations, {
+            supportCategories: targetCategories,
+            object: modelInstance
+          });
           if (targetPlacement.error) {
             callback(targetPlacement.error);//"I can't find any " + target);
+            return;
           } else {
-            placeOptions = { anchorFrame: 'objectOrigin', positionAt: targetPlacement.position };
+            // TODO: Get attachment point from support priors
+            modelInstance.setAttachmentPoint({position: new THREE.Vector3(0.5, 0, 0.5), coordFrame: 'childBB'});
+            placeOptions = {anchorFrame: 'objectOrigin', positionAt: targetPlacement.position};
           }
         }
-        var modelInstance = objs[0];
         operations.putDown(simState, {modelInstance: modelInstance}, placeOptions);
         callback("Ok!");
       } else {
         callback("I don't have any " + nouns);
       }
     } else {
-      var objs = operations.findObjectsInViewByCategory(simState, sensedObjects, categories);
+      var objs = operations.findObjectsInViewByCategory(simState, observations.objectId, categories);
       if (objs.length > 0) {
         console.log(noun, objs);
         var obj = objs[0];

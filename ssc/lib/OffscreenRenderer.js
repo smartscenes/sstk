@@ -25,6 +25,8 @@ function OffscreenRendererFactory (baseRendererClass) {
     this.__debugCount = 0; // For debug output
     this.__debugFilename = params.debugFilename;
     baseRendererClass.call(this, params);
+    this.__needFlipY = true;
+    this.__maxViewportDims = [1000, 1000];
     this.canvas = params.canvas;  // Reference to dummy canvas
   };
   OffscreenRenderer.prototype = Object.create(baseRendererClass.prototype);
@@ -49,7 +51,6 @@ function OffscreenRendererFactory (baseRendererClass) {
   // Renders scene from given camera into raw RGBA pixels
   OffscreenRenderer.prototype.render = function (scene, camera) {
     var pixels = this.super.render.call(this, scene, camera);
-    this.__flipY(pixels);
     if (this.__debugFilename) {
       this.writePNG(this.__debugFilename + '-' + this.__debugCount + '.png', this.width, this.height, pixels);
       this.__debugCount++;
@@ -132,26 +133,6 @@ function OffscreenRendererFactory (baseRendererClass) {
     }, function () {
       onDone();
     });
-  };
-
-  // handle y flip due to WebGL render target
-  OffscreenRenderer.prototype.__flipY = function (p) {
-    var t;
-    var numElementsPerRow = 4 * this.width;
-    for (var row = 0; row < this.height / 2; row++) {
-      var yOut = this.height - row - 1;
-      var base = numElementsPerRow * row;
-      var baseOut = numElementsPerRow * yOut;
-      for (var col = 0; col < this.width; col++) {
-        var step = col << 2;  // 4*x
-        var idx = base + step;
-        var idxOut = baseOut + step;
-        t = p[idxOut    ]; p[idxOut    ] = p[idx    ]; p[idx    ] = t;  // R
-        t = p[idxOut + 1]; p[idxOut + 1] = p[idx + 1]; p[idx + 1] = t;  // G
-        t = p[idxOut + 2]; p[idxOut + 2] = p[idx + 2]; p[idx + 2] = t;  // B
-        t = p[idxOut + 3]; p[idxOut + 3] = p[idx + 3]; p[idx + 3] = t;  // A
-      }
-    }
   };
 
   // Flip XY with respect to upper left corner

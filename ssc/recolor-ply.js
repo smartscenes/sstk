@@ -13,7 +13,7 @@ cmd
   .option('--outlabels <filename>', 'Output labels file')
   .option('--nyu40_colors <filename>', 'Color mapping for nyu40 colors', STK.Constants.assetsDir + '/data/labels/nyu40colors.csv')
   .option('--mpr40_colors <filename>', 'Color mapping for mpr40 colors', STK.Constants.assetsDir + '/data/labels/mpr40.tsv')
-  .option('--label_mapping <filename>', 'Label mappings file', __dirname + '/data/label-mappings.tsv')
+  .option('--label_mapping <filename>', 'Label mappings file', STK.Constants.assetsDir + '/data/labels/label-mappings.tsv')
   .parse(process.argv);
 var argv = cmd;
 

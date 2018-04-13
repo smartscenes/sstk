@@ -6,6 +6,7 @@ function VideoPlayer(params) {
   this.videoMaterials = params.videoMaterials;
   this.assetManager = params.assetManager;
   this.isOn = false;
+  this.isPaused = false;
 
   var scope = this;
 
@@ -23,8 +24,13 @@ function VideoPlayer(params) {
     scope.videoMaterial.video = scope.videoTexture.video;
   };
 
-  this.pause = function() {
+  this.__pause = function() {
     scope.videoTexture.video.pause();
+  };
+
+  this.pause = function() {
+    scope.__pause();
+    scope.isPaused = true;
   };
 
   this.play = function(path) {
@@ -32,12 +38,13 @@ function VideoPlayer(params) {
       scope.load(path);
     }
     if (!scope.isOn) {
-      scope.turnOn();
+      scope.__turnOn();
     }
     scope.videoTexture.video.play();
+    scope.isPaused = false;
   };
 
-  this.turnOn = function() {
+  this.__turnOn = function() {
     _.each(scope.videoMaterials, function(mat) {
       mat.setMaterial(scope.videoMaterial);
     });
@@ -45,8 +52,14 @@ function VideoPlayer(params) {
     return scope.isOn;
   };
 
+  this.turnOn = function() {
+    if (!scope.isOn) {
+      scope.play();
+    }
+  };
+
   this.turnOff = function() {
-    scope.pause();
+    scope.__pause();
     _.each(scope.videoMaterials, function(mat) {
       mat.setMaterial(mat.material);
     });
@@ -58,7 +71,7 @@ function VideoPlayer(params) {
     if (scope.isOn) {
       scope.turnOff();
     } else {
-      scope.play();
+      scope.turnOn();
     }
     return scope.isOn;
   };

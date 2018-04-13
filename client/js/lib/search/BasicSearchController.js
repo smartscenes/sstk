@@ -22,6 +22,7 @@ function BasicSearchController(params) {
     boostFields: ['name'],  // Fields to boost score when returning search results
     encodeQuery: false,     // Whether query should be encoded or not
     source: Constants.defaultModelSource,
+    deferInit: false,
     searchTimeout: 10000    // Timeout in milliseconds
   };
   params = _.defaults(Object.create(null), params, defaults);
@@ -48,10 +49,18 @@ function BasicSearchController(params) {
   this.defaultSearchModule = new SolrQuerier({
     timeout: this.searchTimeout
   });
+
+  if (!params.deferInit) {
+    this.init();
+  }
 }
 
 BasicSearchController.prototype = Object.create(PubSub.prototype);
 BasicSearchController.prototype.constructor = BasicSearchController;
+
+BasicSearchController.prototype.init = function() {
+  this.__registerSearchModules();
+};
 
 BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOptions) {
   assetTypeFilterOptions = assetTypeFilterOptions || {};
@@ -160,6 +169,21 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
   this.enableFiltering(this.useFiltered);
 };
 
+BasicSearchController.prototype.__registerSearchModules = function() {
+  var assetGroups = AssetGroups.getAssetGroups();
+  //console.log('got sources', this.sources);
+  for (var i = 0; i < this.sources.length; i++) {
+    var name = this.sources[i];
+    var assetGroup = assetGroups[name];
+    //console.log('got asset group', assetGroup);
+    if (assetGroup && assetGroup.assetDb) {
+      if (!this.searchModulesBySource[assetGroup.name]) {
+        this.registerSearchModule(assetGroup.name, assetGroup.assetDb);
+      }
+    }
+  }
+};
+
 BasicSearchController.prototype.enableFiltering = function (filter) {
     this.useFiltered = filter;
     if (filter) {
@@ -251,7 +275,7 @@ BasicSearchController.prototype.registerSearchModule = function (source, searchM
 // Faceted search for a field with search succeeded/failed callbacks
 BasicSearchController.prototype.facetFieldSearch = function (params, callback) {
   var source = params.source || this.source;
-  var solrUrl = this.__getSearchUrl(source);
+  var solrUrl = params.url || this.__getSearchUrl(source);
   var defaultOptions = this.defaultSearchOptions[source];
   params = _.defaults(Object.create(null), params, defaultOptions || {},
     { url: solrUrl, facetSort: SearchModule.facetOrderCount });
@@ -261,7 +285,7 @@ BasicSearchController.prototype.facetFieldSearch = function (params, callback) {
 // Stats search for a field with search succeeded/failed callbacks
 BasicSearchController.prototype.getStats = function (params, callback) {
   var source = params.source || this.source;
-  var solrUrl = this.__getSearchUrl(source);
+  var solrUrl = params.url || this.__getSearchUrl(source);
   var defaultOptions = this.defaultSearchOptions[source];
   params = _.defaults(Object.create(null), params, defaultOptions || {}, { url: solrUrl });
   return this.defaultSearchModule.getStats(params, callback);
@@ -302,11 +326,12 @@ BasicSearchController.prototype.__createQueryOptions = function (queryOpts) {
   }
 
   var source = queryOpts.source || this.source;
-  var solrUrl = this.__getSearchUrl(source);
+  var solrUrl = queryOpts.url || this.__getSearchUrl(source);
   var solrQuery = queryOpts.query;
   // Create query data object
   // Add default options to query data
   var defaultOptions = this.defaultSearchOptions[source];
+  //console.log('got defaultOptions', defaultOptions, source, this);
   if (defaultOptions) {
     // Skip additional filtering of query if only looking for single fullId model
     var skipFilter = solrQuery.indexOf('fullId:') >= 0;
@@ -314,6 +339,7 @@ BasicSearchController.prototype.__createQueryOptions = function (queryOpts) {
       defaultOptions = _.omit(defaultOptions, 'filter');
     }
   }
+  //console.log('got defaultOptions', defaultOptions);
   return _.defaults(Object.create(null), queryOpts, defaultOptions || {}, { url: solrUrl });
 };
 

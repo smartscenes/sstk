@@ -5,6 +5,8 @@
  * @author mrdoob / http://mrdoob.com/
  * @author angelxuanchang
  * @license MIT License <http://www.opensource.org/licenses/mit-license.php>
+ * @constructor
+ * @memberOf loaders
  */
 
 THREE.OBJMTLLoader = function ( manager ) {
@@ -22,6 +24,7 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 	 * @param url - Location of OBJ file to load
 	 * @param mtlurl - MTL file to load (optional, if not specified, attempts to use MTL specified in OBJ file)
 	 * @param options - Options on how to interpret the material (see THREE.MTLLoader.MaterialCreator )
+	 * @private
 	 */
 	load: function ( url, mtlurl, options, onLoad, onProgress, onError ) {
 
@@ -109,6 +112,7 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 	 * @param data - content of .obj file
 	 * @param mtllibCallback - callback to handle mtllib declaration (optional)
 	 * @return {THREE.Object3D} - Object3D (with default material)
+	 * @private
 	 */
 
 	parse: function ( data, mtllibCallback, options) {

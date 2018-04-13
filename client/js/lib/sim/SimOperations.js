@@ -1,3 +1,4 @@
+var Constants = require('Constants');
 var SceneOperations = require('scene/SceneOperations');
 var SimUtil = require('sim/SimUtil');
 var ImageUtil = require('util/ImageUtil');
@@ -144,7 +145,7 @@ SimOperations.prototype.removeObjects = function(simState, filter, cb) {
 /**
  * Find and returns modelids from database
  * @param simState {SimState}
- * @param query
+ * @param query {string}
  * @param cb
  */
 SimOperations.prototype.findModelsInDb = function(simState, query, cb) {
@@ -152,6 +153,28 @@ SimOperations.prototype.findModelsInDb = function(simState, query, cb) {
   assetManager.searchController.search(query, function(source, res) {
     console.log('objects found for ' + query, res, source);
     cb(null, res);
+  });
+};
+
+/**
+ * Select model from from database
+ * @param simState {SimState}
+ * @param query {string}
+ * @param options
+ * @param cb
+ */
+SimOperations.prototype.selectModelInDb = function(simState, query, options, cb) {
+  options = options || {};
+  var scope = this;
+  var objectSelector = options.objectSelector || SimOperations.selectFirst;
+  this.findModelsInDb(simState, query, function(err, res) {
+    var selected = objectSelector(res, { rng: scope.rng} );
+    //console.log('selected', selected, res);
+    if (selected) {
+      cb(null, selected);
+    } else {
+      cb(err || 'Cannot find any matching object models');
+    }
   });
 };
 
@@ -165,7 +188,6 @@ SimOperations.prototype.findModelsInDb = function(simState, query, cb) {
 SimOperations.prototype.addObjectWithId = function(simState, modelIds, options, cb) {
   if (!_.isArray(modelIds)) { modelIds = [modelIds]; }
   var scope = this;
-  // Let's just pick the first one
   var objectSelector = options.objectSelector || SimOperations.selectFirst;
   var selected = objectSelector(modelIds, { rng: this.rng} );
   if (selected) {
@@ -189,10 +211,9 @@ SimOperations.prototype.addObjectWithId = function(simState, modelIds, options, 
  */
 SimOperations.prototype.addQueriedObject = function(simState, query, options, cb) {
   var scope = this;
-  // Let's just pick the first one
   var objectSelector = options.objectSelector || SimOperations.selectFirst;
   this.findModelsInDb(simState, query, function(err, res) {
-    var selected = objectSelector(res, { rng: this.rng} );
+    var selected = objectSelector(res, { rng: scope.rng} );
     if (selected) {
       var fullId = selected.fullId;
       scope.__sceneOperations.createObject(_.defaults({ sceneState: simState.sceneState, fullId: fullId,
@@ -206,6 +227,13 @@ SimOperations.prototype.addQueriedObject = function(simState, query, options, cb
   });
 };
 
+SimOperations.prototype.getQueryForCategories = function(categories) {
+  if (!_.isArray(categories)) { categories = [categories]; }
+  var assetManager = this.simulator.assetManager;
+  var query = assetManager.searchController.getQuery('category', categories.concat(_.map(categories, function(x) { return _.upperFirst(x); })));
+  return query;
+}
+
 /**
  * Add object to scene with specified category
  * @param simState {SimState}
@@ -214,9 +242,7 @@ SimOperations.prototype.addQueriedObject = function(simState, query, options, cb
  * @param cb
  */
 SimOperations.prototype.addObjectWithCategory = function(simState, categories, options, cb) {
-  if (!_.isArray(categories)) { categories = [categories]; }
-  var assetManager = this.simulator.assetManager;
-  var query = assetManager.searchController.getQuery('category', categories.concat(_.map(categories, function(x) { return _.upperFirst(x); })));
+  var query = this.getQueryForCategories(categories);
   this.addQueriedObject(simState, query, options, cb);
 };
 
@@ -250,14 +276,14 @@ SimOperations.prototype.findObjectsInBag = function(simState, filter) {
  */
 SimOperations.prototype.findObjectsInBagByCategory = function(simState, categories) {
   return simState.agent.checkBag(function(mInst) {
-    return mInst.model.hasCategoryIn(categories);
+    return mInst.model.hasCategoryIn(categories, true);
   });
 };
 
 /**
  * Find object in view matching filter
  * @param simState {SimState}
- * @param sensedObjects
+ * @param sensedObjects {sim.sensors.SemanticSensor.Frame}
  * @param filter {Function}
  */
 SimOperations.prototype.findObjectsInView = function(simState, sensedObjects, filter) {
@@ -267,8 +293,9 @@ SimOperations.prototype.findObjectsInView = function(simState, sensedObjects, fi
 /**
  * Find object in view matching category
  * @param simState {SimState}
- * @param sensedObjects
+ * @param sensedObjects {sim.sensors.SemanticSensor.Frame}
  * @param categories {string[]}
+ * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance, count: number}>}
  */
 SimOperations.prototype.findObjectsInViewByCategory = function(simState, sensedObjects, categories, includeOtherObjects) {
   return SimUtil.findObjectsByCategory(simState, sensedObjects, categories, includeOtherObjects);
@@ -383,17 +410,33 @@ function scoreObjectByIds(sensedObjects, objs) {
   return function(v) { return (objIndices.indexOf(v) >= 0)? 1 : 0; };
 }
 
-SimOperations.prototype.samplePositionOnObjects = function(simState, sensedObjects, normals, objs, objectScorer) {
+/**
+ * Sample a reasonable position for object
+ * @param simState {SimState}
+ * @param observations Set of visual observations as context for placement
+ * @param observations.objectId {sim.sensors.SemanticSensor.Frame} observations by object id
+ * @param observations.normal {sim.sensors.NormalSensor.Frame} normal observations
+ * @param objs {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance, count: number}>}
+ * @param constraints Additional constraints on the placement of the objects
+ * @param constraints.supportSurfaceNormal {THREE.Vector3} Target support surface normal
+ * @param [constraints.childBoundingBoxDims] estimated object bounding box dimensions for child object
+ * @param objectScorer {function(string): number} Scores a object by the object id
+ * @returns {*}
+ */
+SimOperations.prototype.samplePositionOnObjects = function(simState, observations, objs, constraints, objectScorer) {
+  var sensedObjects = observations.objectId;
   var sampler = this.simulator.sampler;
-  var normalPixels = new Uint8Array(normals.data);
+  var normalPixels = new Uint8Array(observations.normal.data);
   var objectPixels = new Uint8Array(sensedObjects.data);
-  var targetNormal = new THREE.Vector3(0,1,0);
-  var sampled = sampler.sample({
+  var samples = sampler.sample({
     elements: _.getIterator(0, objectPixels.length, 4),
+    nsamples: 20,
     scorer: function(i) {
-      return scoreObjectSupport(objectPixels, normalPixels, i, targetNormal, objectScorer);
+      return scoreObjectSupport(objectPixels, normalPixels, i, constraints.supportSurfaceNormal, objectScorer);
     }
   });
+  //console.log('samples', samples);
+  var sampled = samples[0];
   var sampledPixelBufferOffset = sampled.value;
   var sampledObjectIndex = ImageUtil.decodePixelValue(objectPixels, sampledPixelBufferOffset);
   var sampledNormal = ImageUtil.decodeNormal(normalPixels, sampledPixelBufferOffset);
@@ -412,14 +455,33 @@ SimOperations.prototype.samplePositionOnObjects = function(simState, sensedObjec
   }
 };
 
-SimOperations.prototype.findPlacementPosition = function(simState, sensedObjects, normals, categories) {
-  var targetObjs = this.findObjectsInViewByCategory(simState, sensedObjects, categories, true);
+/**
+ * Find a reasonable position for object
+ * @param simState {SimState}
+ * @param observations Set of visual observations as context for placement
+ * @param observations.objectId {sim.sensors.SemanticSensor.Frame} observations by object id
+ * @param observations.normal {sim.sensors.NormalSensor.Frame} normal observations
+ * @param constraints Additional constraints specifying what the object to be placed is and where it should be positioned
+ * @param constraints.supportCategories {string[]} List of valid support categories for placement
+ * @param constraints.childModelInfo {Object} information about child to be placed
+ * @returns {*}
+ */
+SimOperations.prototype.findPlacementPosition = function(simState, observations, constraints) {
+  var targetObjs = this.findObjectsInViewByCategory(simState, observations.objectId, constraints.supportCategories, true);
   if (targetObjs.length <= 0) {
-    return { error: "No matching " + categories };
+    return { error: "No matching " + constraints.supportCategories };
   } else {
     // TODO: Sample pixel point with given targetObj and try to place object there
-    var objectScorer = scoreObjectByIds(sensedObjects, targetObjs);
-    var sampled = this.samplePositionOnObjects(simState, sensedObjects, normals, targetObjs, objectScorer);
+    var objectScorer = scoreObjectByIds(observations.objectId, targetObjs);
+    var supportSurfaceNormal = new THREE.Vector3(0,1,0);
+    var childBoundingBoxDims = null;
+    if (constraints.childModelInfo && constraints.childModelInfo['aligned.dims']) {
+      var scale = Constants.virtualUnitToMeters / 0.01;
+      childBoundingBoxDims = constraints.childModelInfo['aligned.dims'];
+      childBoundingBoxDims = childBoundingBoxDims.split(',').map(function(x) { return x*scale; });
+    }
+    var sampled = this.samplePositionOnObjects(simState, observations, targetObjs,
+      { supportSurfaceNormal: supportSurfaceNormal, childBoundingBoxDims: childBoundingBoxDims }, objectScorer);
     if (sampled) {
       return { object: sampled.targetObject, position: sampled.point };
     } else {

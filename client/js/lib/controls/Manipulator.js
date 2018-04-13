@@ -155,8 +155,8 @@ Manipulator.prototype.addRotationCircle = function () {
 
   if (!this.allowRotation) return; // rotation not allowed
 
-  var circleRad = this.getTileDimension(50) / 2;
-  var circleGeo = new THREE.CircleGeometry(circleRad, 20);
+  var circleRad = this.getTileDimension(0.05*Constants.metersToVirtualUnit) / 2;
+  var circleGeo = new THREE.CircleGeometry(circleRad, 0.02*Constants.metersToVirtualUnit);
   var material = new THREE.MeshBasicMaterial({
     map: this.rotationCircleTexture,
     //color: new THREE.Color("green"),
@@ -191,7 +191,7 @@ Manipulator.prototype.addScaleTile = function () {
 
   if (!this.allowScaling) return; // scaling not allowed
 
-  var tileDim = this.getTileDimension(50);
+  var tileDim = this.getTileDimension(0.05*Constants.metersToVirtualUnit);
   var planeGeo = new THREE.PlaneBufferGeometry(tileDim, tileDim);
 
   var material = new THREE.MeshBasicMaterial({

@@ -85,3 +85,17 @@ SemanticSensor.prototype.setSize = function(width, height) {
 };
 
 module.exports = SemanticSensor;
+
+/**
+ * Semantic mask from a camera sensor
+ * @typedef sim.sensors.Semantic.Frame
+ * @type {object}
+ * @extends {sim.sensors.CameraSensor.Frame}
+ * @property type {string} Sensor type
+ * @property data {Array|TypedArray} pixels from the camera sensor for semantic mask
+ * @property encoding {string} Encoding indicating how the data should be interpreted
+ * @property shape {Array} Array indicating the width, height, and number of channels of the data
+ * @property counts {Map<int,int>} Mapping of semantic index to number of pixels.  Populated if `countPixels` is set.
+ * @property index {Array} Array mapping index to semantic label (category or object id).  Populated if `includeIndex` is set.
+ * @property data_viz {Array|TypedArray} Colored pixels for visualization.   Populated if `visualize` is set.
+ */

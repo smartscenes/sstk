@@ -658,6 +658,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.__loadModel = function (modelinfo, callback, onerror) {
       // check whether we really want to load, or just filter out this model
+      //console.log("loading model", modelinfo);
       onerror = onerror || function (err) { console.error(err); };
       var isValidModel = this.modelFilter ? this.modelFilter(modelinfo) : true;
       if (!isValidModel) {
@@ -849,7 +850,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       var objFile = modelInfo.file;
       var mtlFile = modelInfo.mtl;
       // TODO: Move this material options to be less format specific
-      var options = modelInfo.options || {};
+      var side = this.__getMaterialSide(modelInfo);
+      var options = _.defaults(Object.create(null), { side: side }, modelInfo.options || {});
       if (options) {
         options.materialBase = options.materialBase || options.texturePath || modelInfo.materialBase || modelInfo.texturePath;
         var materialType = options.defaultMaterialType || modelInfo.defaultMaterialType || Materials.DefaultMaterialType;
@@ -887,12 +889,32 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           return THREE.FrontSide;
         } else if (sidedness === "back") {
           return THREE.BackSide;
+        } else if (sidedness === "double") {
+          return THREE.DoubleSide;
         } else {
           console.warn('Unknown sidedness: ' + sidedness);
         }
       }
       return THREE.DoubleSide;
     };
+
+    AssetManager.prototype.__getDefaultMaterial = function(modelInfo, defaultMaterialType) {
+      var materialType = this.__getDefaultMaterialType(modelInfo, defaultMaterialType);
+      var options = modelInfo.options || {};
+      var side = this.__getMaterialSide(modelInfo);
+      var material = (options.defaultMaterial) ? options.defaultMaterial : new materialType(
+        { name: 'defaultMaterial', side: side });;
+      return material;
+    };
+
+    AssetManager.prototype.__getDefaultMaterialType = function(modelInfo, defaultMaterialType) {
+      var materialType = modelInfo.options? modelInfo.options.defaultMaterialType : null;
+      materialType = materialType || modelInfo.defaultMaterialType || defaultMaterialType;
+      if (_.isString(materialType)) {
+        materialType = Materials.getMaterialType(materialType);
+      }
+      return materialType;
+    }
 
     AssetManager.prototype.__loadPlyModel = function (modelInfo, callback, onerror) {
       // Tested to work for ASCII and BINARY ply files
@@ -936,15 +958,16 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     AssetManager.prototype.__loadObjModel = function (modelInfo, callback, onerror) {
       var objFile = modelInfo.file;
       var textureFile = modelInfo.texture;
+      var side = this.__getMaterialSide(modelInfo);
       var material;
       if (textureFile) {
         material = new Materials.DefaultMaterialType({
-          map: Object3DUtil.loadTexture(textureFile)
+          map: Object3DUtil.loadTexture(textureFile), side: side
         });
       } else if (modelInfo.options && modelInfo.options.defaultMaterial) {
         material = modelInfo.options.defaultMaterial;
       } else {
-        material = new Materials.DefaultMaterialType({});
+        material = new Materials.DefaultMaterialType({ side: side });
       }
 
       // model
@@ -1062,6 +1085,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
       var file = modelInfo.file;
       modelInfo.formatOptions = {};
+      loader.options.defaultMaterial = this.__getDefaultMaterial(modelInfo, Materials.DefaultMaterialType);
       if (!modelInfo.source) {
         loader.options.convertUpAxis = true;
         modelInfo.formatOptions['applyUp'] = true;
@@ -1076,9 +1100,11 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       var texture = modelInfo.texture;
       var metadata = modelInfo.metadata;
       var loader = new THREE.UTF8Loader();
+      var side = this.__getMaterialSide(modelInfo);
       return loader.load(file, function (geometry) {
         var material = new Materials.DefaultMaterialType({
-          map: Object3DUtil.loadTexture(texture)
+          map: Object3DUtil.loadTexture(texture),
+          side: side
         });
 
         var object = new THREE.Mesh(geometry, material);
@@ -1088,13 +1114,18 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.__loadUTF8v2Model = function (modelInfo, callback, onerror) {
       var loader = new THREE.UTF8Loader();
+      var side = this.__getMaterialSide(modelInfo);
       return loader.load(modelInfo.file, function (object) {
         callback(object);
-      }, onerror, modelInfo.options);
+      }, onerror, _.defaults(Object.create(null), { side: side }, modelInfo.options));
     };
 
     AssetManager.prototype.__loadGLTFModel = function (modelInfo, callback, onerror) {
       var loader = new THREE.GLTFLoader();
+      var options = modelInfo.options || {};
+      var computeNormals = (options.computeNormals != undefined) ? options.computeNormals : modelInfo.computeNormals;
+      var defaultMaterialType = this.__getDefaultMaterialType(modelInfo);
+      loader.setOptions({ computeNormals: computeNormals, defaultMaterialType: defaultMaterialType })
       return loader.load(modelInfo.file, function (object) {
         //console.log(object);
         callback(object.scene);
@@ -1180,12 +1211,12 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           sceneInfo.data = {
             "format": "sceneState",
             "object": [
-              {
+              _.defaults({
                 "modelId": sceneInfo.fullId,
                 "index": 0,
                 "parentIndex": -1,
                 "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-              }
+              }, modelLoadInfo.modelMetadata || {})
             ]
           };
         }

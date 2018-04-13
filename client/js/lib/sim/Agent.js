@@ -206,6 +206,15 @@ Agent.prototype.localToWorldDirection = function(direction, out) {
   return out;
 };
 
+Agent.prototype.worldToLocalDirection = function(direction, out) {
+  out = out || new THREE.Vector3();
+  // Assumes agent is already in world coordinate!
+  // Use getWorldQuaternion (if our agent no longer in world space)
+  out.copy(direction);
+  out.applyQuaternion(this.__object3D.quaternion.clone().inverse());
+  return out;
+};
+
 Agent.prototype.worldToLocalPositionNoScaling = function(position, out) {
   // Assumes agent is already in world coordinate!
   // Use getWorldQuaternion and getWorldPosition (if our agent no longer in world space)
@@ -216,9 +225,15 @@ Agent.prototype.worldToLocalPositionNoScaling = function(position, out) {
 };
 
 Agent.prototype.moveTo = function (opts) {
-  this.position.copy(Object3DUtil.toVector3(opts.position));
+  if (opts.position != undefined) {
+    this.position.copy(Object3DUtil.toVector3(opts.position));
+  }
   if (opts.angle != undefined) {
     this.rotation = opts.angle;
+  }
+  if (opts.tilt != undefined) {
+    this.__pitchObject3D.rotation.x = opts.tilt;
+    this.__pitchObject3D.rotation.x = Math.max(-this.__PI_2, Math.min(this.__PI_2, this.__pitchObject3D.rotation.x));
   }
   if (!opts.isTemporary) {
     this.velocity.set(0, 0, 0);

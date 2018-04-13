@@ -253,11 +253,25 @@ function ViewOptimizer(params) {
   this.scorer = createScorer(params);
 }
 
+/**
+ * Find and returns the best view parameters
+ * @param options
+ * @param options.targetBBox {geo.BBox}
+ * @param options.sceneState
+ * @param options.target
+ * @param [options.phiStart=0] {number}
+ * @param [options.phiEnd=Math.PI*2] {number}
+ * @param [options.theta] {number}
+ * @param [options.nViews] {int}
+ * @param [options.keepTargetsVisible] {boolean}
+ * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
+ */
 ViewOptimizer.prototype.optimize = function(options) {
   // For now, just iterate on phi (and we cover 0 to 360)
   this.scorer.init(this.cameraControls.camera);
-  var phi = options.phiStart || 0;
-  var phiDelta = Math.PI*2 / options.nViews;
+  var phi = (options.phiStart != undefined)? options.phiStart : 0;
+  var phiEnd = (options.phiEnd != undefined)? options.phiEnd : (Math.PI*2);
+  var phiDelta = (phiEnd-phi) / options.nViews;
   var best = undefined;
   for (var i = 0; i < options.nViews; i++) {
     var opts = {
@@ -299,6 +313,7 @@ ViewOptimizer.prototype.lookAt = function(sceneState, objects) {
   // TODO: Find a good view point of looking at the object
   console.time('lookAt');
   var bbox = Object3DUtil.getBoundingBox(objects);
+  // Limit this by the size of the scene
   bbox = bbox.scaleBy(2.0);
   var opt = this.optimize({
     sceneState: sceneState,

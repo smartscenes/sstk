@@ -384,11 +384,22 @@ function parseList(string, delimiter) {
 
 _.parseList = parseList;
 
+function parseVector(string, delimiter) {
+  delimiter = delimiter || ',';
+  if (string) {
+    var list = string.split(delimiter).map(function(x) { return parseFloat(x.trim()); });
+    return list;
+  }
+}
+
+_.parseVector = parseVector;
+
 _.cmd = {
   parseBoolean: function(x, accum) { return parseBoolean(x); },
   parseList: function(x, accum) { return parseList(x); },
   parseFloat: function(x, accum) { return parseFloat(x); },
   parseInt: function(x, accum) { return parseInt(x); },
+  parseVector: function(x, accum) { return parseVector(x); },
   collect: function(x, accum) {
     accum.push(x);
     return accum;

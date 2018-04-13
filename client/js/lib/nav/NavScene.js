@@ -574,6 +574,25 @@ MultiLevelGrid.prototype.getLinePath = function(cell1, cell2) {
     return levelGrid.getLinePath(cell1, cell2);
   }
 };
+// TODO: reduce duplication with Graph
+MultiLevelGrid.prototype.getLinePathByPosition = function(p1, p2) {
+  var startCell = this.positionToCell(p1);
+  var endCell = this.positionToCell(p2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+MultiLevelGrid.prototype.getLinePathById = function(id1, id2) {
+  var startCell = this.idToCell(id1);
+  var endCell = this.idToCell(id2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+MultiLevelGrid.prototype.getLinePathByPosition = function(p1, p2) {
+  var startCell = this.positionToCell(p1);
+  var endCell = this.positionToCell(p2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
 
 /**
  * Navigation structure for a scene - includes support for visualization, graph for path planning, and precomputed paths
@@ -751,7 +770,9 @@ NavScene.prototype.update = function(agent) {
     this.__currentPosition.copy(position);
   }
   if (this.__shortestPath && this.__shortestPath.next) {
-    this.__shortestPath.direction = this.__getDirection(this.grid, agent, this.__shortestPath.next.id);
+    var directions = this.__getDirection(this.grid, agent, this.__shortestPath.start.id, this.__shortestPath.next.id);
+    this.__shortestPath.direction = directions.local;
+    this.__shortestPath.worldDirection = directions.world;
   }
 };
 
@@ -873,11 +894,15 @@ NavScene.prototype.getCellId = function(p, saveCell) {
 };
 
 
+/**
+ * Return list of cellIds in line path
+ * @param start {THREE.Vector3} Start position (world coordinates)
+ * @param end {THREE.Vector3} End position (world coordinates)
+ * @returns {int[]}
+ * @private
+ */
 NavScene.prototype.__getLinePathCellIds = function(start, end) {
-  var startCell = this.grid.positionToCell(start);
-  var endCell = this.grid.positionToCell(end);
-  var cellIds = this.grid.getLinePath(startCell, endCell);
-  return cellIds;
+  return this.grid.getLinePathByPosition(start, end);
 };
 
 /**
@@ -892,15 +917,7 @@ NavScene.prototype.checkLinePathUnoccupied = function(start, end, radius, filter
   //console.log('checkLinePath', startCell, endCell, cellIds);
   var cellIds = this.__getLinePathCellIds(start, end);
   if (!cellIds) { return false; }
-  for (var i = 0; i < cellIds.length; i++) {
-    var cellId = cellIds[i];
-    var tileWeight = this.grid.tileWeight(cellId);
-    //console.log('got tileWeight', cellId, tileWeight);
-    // TODO: use filter function instead of hardcoded weight comparison
-    var okay = _.isFinite(tileWeight);
-    if (!okay) { return false; }
-  }
-  return true;
+  return this.grid.checkCellsTraversable(cellIds);
 };
 
 /**
@@ -934,15 +951,26 @@ NavScene.prototype.getRoom = function(pos) {
 };
 
 NavScene.prototype.__getDirection = (function() {
+  var currPos = new THREE.Vector3();
   var nextPos = new THREE.Vector3();
-  var localPos = new THREE.Vector3();
-  return function(graph, agent, cellId) {
+  var worldDir = new THREE.Vector3();
+  var localDir = new THREE.Vector3();
+  return function(graph, agent, currCellId, nextCellId) {
     if (agent) {
-      var pos2 = graph.idToPosition(cellId);
-      nextPos.set(pos2[0], pos2[1] + agent.originHeight * Constants.metersToVirtualUnit, pos2[2]);
-      agent.worldToLocalPositionNoScaling(nextPos, localPos);
-      localPos.normalize();
-      return localPos.toArray();
+      // nextPos.set(pos2[0], pos2[1] + agent.originHeight * Constants.metersToVirtualUnit, pos2[2]);
+      // agent.worldToLocalPositionNoScaling(nextPos, localPos);
+      var pos1 = graph.idToPosition(currCellId);
+      var pos2 = graph.idToPosition(nextCellId);
+      currPos.set(pos1[0], pos1[1], pos1[2]);
+      nextPos.set(pos2[0], pos2[1], pos2[2]);
+      worldDir.copy(nextPos).sub(currPos);
+      worldDir.normalize();
+      agent.worldToLocalDirection(worldDir, localDir);
+      localDir.normalize();
+      //console.log('[DEBUG __getDirection]', 'agentPos', agent.position, 'agentOri', agent.orientation,
+      //  'currCell', currCellId, 'currPos', currPos, 'nextCell', nextCellId, 'nextPos', nextPos,
+      //  'localDir', localDir, 'worldDir', worldDir);
+      return { local: localDir.toArray(), world: worldDir.toArray() };
     }
   };
 })();
@@ -1102,6 +1130,7 @@ NavScene.defaultTileColors = {
   'start': new THREE.Color('purple'),
   'goal': new THREE.Color('green'),
   'shortestPath': new THREE.Color('blue'),
+  'shortestPathDirection': new THREE.Color('goldenrod'),
   'trace': new THREE.Color('red'),
   'position': new THREE.Color('darkred')
 };
@@ -1389,11 +1418,23 @@ NavScene.prototype.__getEncodedMap = function(opts) {
   if (opts.overlays.indexOf('position') >= 0) {
     // Add current position
     if (this.__currentPosition) {
-      //var currCell = this.grid.positionToCell(this.__currentPosition);
-      //this.__setPixelColors(pixels, [currCell.id], opts.colors['position']);
+      var currCell = this.grid.positionToCell(this.__currentPosition);
+      this.__setPixelColors(pixels, [currCell.id], opts.colors['position']);
       this.__tmpPosition.copy(this.__currentPosition).addScaledVector(this.__currentOrientation, 5*this.cellSize);
       var cellIds =  this.__getLinePathCellIds(this.__currentPosition, this.__tmpPosition);
       this.__setPixelColors(pixels, cellIds, opts.colors['position']);
+
+      //var d = this.__shortestPath.direction;
+      var d = this.__shortestPath.worldDirection;
+      if (d && opts.overlays.indexOf('shortestPath') >= 0) {
+        var v = new THREE.Vector3(d[0], d[1], d[2]);
+        //var ang = this.__currentOrientation.angleTo(new THREE.Vector3(1, 0, 0));
+        //v.applyAxisAngle(new THREE.Vector3(0, 1, 0), -ang);
+        this.__tmpPosition.copy(this.__currentPosition).addScaledVector(v, 5 * this.cellSize);
+        var cellIds = this.__getLinePathCellIds(this.__currentPosition, this.__tmpPosition);
+        this.__setPixelColors(pixels, cellIds, opts.colors['shortestPathDirection']);
+        //console.log('[DEBUG NavScene shortestPath] direction:', v);
+      }
     }
   }
   return pixels;
