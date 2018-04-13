@@ -34,6 +34,7 @@
     "papaparse": "^4.3.6",
     "promise": "^8.0.1",
     "request": "^2.83.0",
+    "sstk-metadata": "git+https://github.com/smartscenes/sstk-metadata.git",
     "winston": "^2.4.0",
     "winston-context": "0.0.7",
     "yamljs": "^0.3.0"
