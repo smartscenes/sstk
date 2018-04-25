@@ -72,3 +72,4 @@ jsdoc
 .DS_Store
 *~
 env.sh
+metadata/
