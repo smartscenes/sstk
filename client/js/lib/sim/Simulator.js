@@ -561,13 +561,13 @@ Simulator.prototype.getObservations = function (callback) {
         })
       },
       roomInfo: roomInfo
-    }//,
+    },
     //reward: 1.0,
     //done: false//,
-    // info: {
-    //   agent_state: this.getAgent().getState(),
-    //   goal: this.state.getSerializableGoals()
-    // }
+    info: {
+      agent_state: this.getAgent().getState(),
+      goal: this.state.getSerializableGoals()
+    }
   };
 
   if (this.state.navscene) {
