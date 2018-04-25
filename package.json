@@ -1,6 +1,6 @@
 {
   "name": "sstk",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "stk-ssc",
   "dependencies": {
