@@ -54,7 +54,9 @@ AssetCache.prototype.set = function (id, asset, aSize, disposeCb) {
   // Evict, if necessary.
   while (this.maxSize > 0 && this.computeSize() + aSize > this.maxSize) {
     var lru = this.findLRU();
-    this.__remove(lru.id);
+    if (lru) {
+      this.__remove(lru.id);
+    }
   }
 
   this.cache[id] = new CacheEntry(id, asset, aSize, disposeCb);
