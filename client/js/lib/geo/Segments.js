@@ -415,7 +415,11 @@ Segments.prototype.colorRawSegmentsOriginal = function() {
     var origMeshes = Object3DUtil.getMeshes(this.origObject3D);
     // Assumes just one mesh
     var origMesh = origMeshes.list[0];
-    geometry.attributes.color.array.set(origMesh.geometry.attributes.color.array);
+    if (origMesh.geometry.attributes.color) {
+      geometry.attributes.color.array.set(origMesh.geometry.attributes.color.array);
+    } else {
+      console.log('No vertex color information')
+    }
   }
   geometry.colorsNeedUpdate = true;
   geometry.elementsNeedUpdate = true;
