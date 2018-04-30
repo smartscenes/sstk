@@ -22,11 +22,22 @@ build:
   # Read more about steps on our dev center:
   # http://devcenter.wercker.com/docs/steps/index.html
   steps:
-    # A step that builds everything
+    # A custom script step, name value is used in the UI
+    # and the code value contains the command that get executed
+    # Output our Node.js and npm versions
     - script:
-        name: build everything
+        name: echo nodejs information
         code: |
-          ./build.sh
+          echo "node version $(node -v) running"
+          echo "npm version $(npm -v) running"
+    # Configure npm to allow root scripts
+    - script:
+        name: enable root/sudo for npm
+        code: |
+          # https://docs.npmjs.com/misc/config#unsafe-perm
+          npm config set unsafe-perm true
+    # A step that executes `npm install` command
+    - npm-install
     # Generate relevant artifacts
     - script:
         name: build release code
@@ -42,14 +53,6 @@ build:
           mkdir dist
           cp client/build/STK.bundle.js dist/STK.bundle.js
           cp client/build-min/STK.bundle.js dist/STK.bundle.min.js
-
-    # A custom script step, name value is used in the UI
-    # and the code value contains the command that get executed
-    - script:
-        name: echo nodejs information
-        code: |
-          echo "node version $(node -v) running"
-          echo "npm version $(npm -v) running"
 
 test-client:
   steps:

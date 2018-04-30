@@ -11,5 +11,8 @@ then
 fi
 
 npm install
+exit_code=$?
 
 cd $OLD_PATH
+
+exit "$exit_code"

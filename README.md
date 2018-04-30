@@ -10,6 +10,8 @@ The (S)STK provides:
 
 # Getting Started
 
+0. The SSTK can be used on Linux, MacOS and Windows systems.
+
 1. Install [node.js](https://nodejs.org/).  Using the Node Version Manager ([nvm](https://github.com/creationix/nvm)) is the easiest way to install node.js on most systems.
 ```
 curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.1/install.sh | bash
@@ -26,6 +28,8 @@ Confirm above works using `node -v` at the terminal.
   cd server
   ./run.sh
 ```
+There are some prerequisites for the build process in Ubuntu, they can be installed using `sudo apt-get install build-essential libxi-dev libglu1-mesa-dev libglew-dev libvips`.
+
 3. Visit http://localhost:8010 in your browser (Chrome is recommended)!
 
 
