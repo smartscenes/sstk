@@ -1,8 +1,8 @@
 [
   {
     "name": "nyuv2",
-    "metadata": "${assetsDir}/data/scannet/nyuv2.json",
-    "ids": "${assetsDir}/data/scannet/nyuv2.csv"
+    "metadata": "${assetsDir}/data/nyuv2/nyuv2.json",
+    "ids": "${assetsDir}/data/nyuv2/nyuv2.csv"
   },
   {
     "name": "mp3d",
