@@ -89,6 +89,11 @@ For routine local development, here are the usual steps:
 * Go to a browser window and pull up `localhost:8010/index.html` or any other entry point (such as `scene-viewer.html`).
 * If you just need a one-time build of the toolkit, copy out the `client/build/STK.bundle.js` (after `npm run build`) to the `vendor/assets/javascripts` directory of SceneStudio.
 
+Versioning conventions:
+- The `master` branch contains latest mainstream (with potential bug fixes over latest release)
+- The `dev` branch contains large (potentially breaking) changes
+- The `v0.5.x` branch (and similar future versioned branches) contain the latest release of that form
+
 Building the documentation
 ==========================
 - `cd client` from the repository root
