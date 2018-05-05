@@ -13,6 +13,9 @@ else
   git clone $EXAMPLES_REPO $EXAMPLES_DIR
 fi
 
+NYUV2_DIR='server/static/data/nyuv2'
+ln -s ../../../$EXAMPLES_DIR/data/nyuv2/scans $NYUV2_DIR
+
 exit_code=$?
 cd $OLD_PATH
 exit "$exit_code"
