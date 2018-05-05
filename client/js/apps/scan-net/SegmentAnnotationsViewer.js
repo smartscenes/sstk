@@ -78,14 +78,8 @@ SegmentAnnotationsViewer.prototype.createCommon = function() {
     [
       createLink('All', getFilterLink(this.listUrl, {}, paramsNoItemId))
         .attr('title', 'All'),
-      createLink('ScanNet', getFilterLink(this.listUrl, {itemId: {'$regex': 'scan-checked.*'}}, paramsNoItemId))
-        .attr('title', 'ScanNet'),
       createLink('NYU', getFilterLink(this.listUrl, {itemId: {'$regex': 'nyu.*'}}, paramsNoItemId))
-        .attr('title', 'NYU'),
-      createLink('MPR', getFilterLink(this.listUrl, {itemId: {'$regex': 'mpr[.].*'}}, paramsNoItemId))
-        .attr('title', 'MPR'),
-      createLink('MPRM', getFilterLink(this.listUrl, {itemId: {'$regex': 'mprm[.].*'}}, paramsNoItemId))
-        .attr('title', 'MPRM')
+        .attr('title', 'NYU')
     ]
   );
   buttonsPanel.append(datasetsDropDown);
