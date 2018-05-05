@@ -1,5 +1,10 @@
 [
   {
+    "name": "nyuv2",
+    "metadata": "../server/static/data/nyuv2/nyuv2.json",
+    "ids": "../server/static/data/nyuv2/nyuv2.csv"
+  },
+  {
     "name": "mp3d",
     "metadata": "../server/static/data/matterport/matterport3d.json",
     "ids": "../server/static/data/matterport/matterport3d.csv"
