@@ -195,7 +195,12 @@ SSCServer.prototype.__loadAndRender = function(opts, callback) {
             var opt = viewOptimizer.lookAt(sceneState, targetObjects);
             cameraControls.viewTarget(opt);
           } else if (camParams.view) {
-            cameraControls.viewTarget(camParams.view);
+            var viewOpts = camParams.view;
+            if (camParams.view.coordinate_frame === 'scene') {
+              viewOpts = sceneState.convertCameraConfig(camParams.view);
+            }
+            viewOpts = _.defaults({targetBBox: sceneBBox}, viewOpts);
+            cameraControls.viewTarget(viewOpts);
           } else if (viewIndex != undefined) {
             var views = cameraControls.generateViews(sceneBBox, width, height);
             viewIndex = THREE.Math.clamp(viewIndex, 0, views.length - 1);

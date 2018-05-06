@@ -24,14 +24,10 @@ HighlightControls.prototype = Object.create(PubSub.prototype);
 HighlightControls.prototype.constructor = HighlightControls;
 
 HighlightControls.prototype.onMouseMove = function (event) {
-  this.mouse = this.picker.getCoordinates(this.container, event);
-
-  var x = this.mouse.x;
-  var y = this.mouse.y;
-
   // Highlight model on mouseover
   var pickables = (this.scene.pickables) ? this.scene.pickables : this.scene.children;
-  var intersected = this.picker.getFirstIntersected(x, y, this.camera, pickables);
+  this.mouse = this.picker.getCoordinates(this.container, event);
+  var intersected = this.picker.getFirstIntersected(this.mouse.x, this.mouse.y, this.camera, pickables);
 
   if (intersected) {
     if (this.intersected !== intersected.object) {

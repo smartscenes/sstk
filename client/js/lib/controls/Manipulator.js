@@ -245,7 +245,7 @@ Manipulator.prototype.addManipulatorPlane = function () {
  onto the plane of the manipulator.  This location is used for scaling/rotation via
  mouse interaction
  */
-Manipulator.prototype.getProjectedMouseLocation = function (x, y) {
+Manipulator.prototype.__getProjectedMouseLocation = function (x, y) {
   var proj2DIntersects = this.picker.getIntersected(x, y, this.camera, [this.manipulatorPlane]);
   if (proj2DIntersects.length > 0) {
     return proj2DIntersects[0].point;
@@ -316,7 +316,7 @@ Manipulator.prototype.onMouseDown = function (event, intersected) {
   this.mouseDown = true;
   if (this.active) {
     var mouse = this.picker.getCoordinates(this.container, event);
-    this.prevProjMouse = this.getProjectedMouseLocation(mouse.x, mouse.y);
+    this.prevProjMouse = this.__getProjectedMouseLocation(mouse.x, mouse.y);
     if (intersected === undefined) {
       // Need to figure out intersected for myself
       var pickables = (this.scene.pickables) ? this.scene.pickables : this.scene.children;
@@ -361,7 +361,7 @@ Manipulator.prototype.onMouseMove = function (event) {
     }
     if (this.componentClicked) {
       var mouse = this.picker.getCoordinates(this.container, event);
-      this.currProjMouse = this.getProjectedMouseLocation(mouse.x, mouse.y);
+      this.currProjMouse = this.__getProjectedMouseLocation(mouse.x, mouse.y);
 
       if (this.prevProjMouse && this.currProjMouse) {
         if (this.componentClicked === this.scaleTile) {

@@ -237,26 +237,20 @@ SceneEditControls.prototype.onMouseUp = function (event) {
 };
 
 SceneEditControls.prototype.select = function (event) {
-  var mouse = this.picker.getCoordinates(this.container, event);
   var fullScene = this.scene;
   var selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
-  var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, selectables, this.dragdrop.ignore);
-  if (intersects.length > 0) {
-    console.log('selected point', intersects[0].point);
-    return intersects[0].object;
+  var picked = this.getIntersected(event, selectables);
+  if (picked) {
+    console.log('selected point', picked.point);
   }
-  return null;
+  return picked? picked.object : null;
 };
 
 SceneEditControls.prototype.pick = function (event) {
-  var mouse = this.picker.getCoordinates(this.container, event);
   var fullScene = this.scene;
   var pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
-  var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, pickables, this.dragdrop.ignore);
-  if (intersects.length > 0) {
-    return intersects[0].object;
-  }
-  return null;
+  var picked = this.getIntersected(event, pickables);
+  return picked? picked.object : null;
 };
 
 SceneEditControls.prototype.getIntersected = function (event, object3Ds) {
@@ -267,6 +261,15 @@ SceneEditControls.prototype.getIntersected = function (event, object3Ds) {
     return intersects[0];
   }
   return null;
+  // var intersects = this.picker.pick({
+  //   targetType: 'object',
+  //   container: container,
+  //   position: { clientX: event.clientX, clientY: event.clientY },
+  //   camera: this.cameraControls.camera,
+  //   objects: object3Ds,
+  //   ignore: this.dragdrop.ignore
+  // });
+  // return intersects;
 };
 
 SceneEditControls.prototype.onMouseDown = function (event) {
@@ -277,11 +280,10 @@ SceneEditControls.prototype.onMouseDown = function (event) {
   if (this.enabled) {
     event.preventDefault();
 
-    var mouse = this.picker.getCoordinates(this.container, event);
     var fullScene = this.scene;
 
     var pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
-    var intersected = this.picker.getFirstIntersected(mouse.x, mouse.y, this.cameraControls.camera, pickables, this.dragdrop.ignore);
+    var intersected = this.getIntersected(event, pickables);
 
     if (!this.dragdrop.insertMode) {
       var notHandled = this.manipulator.onMouseDown(event, intersected);

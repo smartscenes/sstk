@@ -32,6 +32,7 @@ Form.prototype.form = function(cb) {
   return bootbox.form({
     title: this.title,
     inputs: this.questions,
+    submitOnEnter: true,
     callback: function(results) {
       if (results) {
         _.each(scope.questions, function(q,i) {

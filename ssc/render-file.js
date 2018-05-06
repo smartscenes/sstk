@@ -103,7 +103,7 @@ function processFiles() {
 
     } else {
 
-      shell.mkdir('-p', path.dirname(file));
+      shell.mkdir('-p', path.dirname(pngfilename));
 
       console.log('Processing ' + file + '(' + index + '/' + files.length + ')');
       var info = { file: file, format: cmd.format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };

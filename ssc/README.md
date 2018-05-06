@@ -7,6 +7,8 @@ Then, install all necessary dependencies by running `npm install`.  After that, 
 
 Use `--help` to get help for specific scripts.
 
+See [`config`](config/README.md) for example configuration files and how to use `--config_file` option.
+
 Rendering scripts:
 
 1. `./render  --id <id> --dir=<baseDir> [--source p5d|p5dScene] [--width w] [--height h]` - Renders model or scene using default cameras
@@ -55,18 +57,19 @@ Annotation tools:
 
 1. `./export-annotated-ply` - Takes semantically annotated segments and outputs a PLY with semantic data on vertices
 
-2. `./recolor-ply` - Recolors ply with face annotations using prettier colors
-   `./transfer-property.ply` - Transfers face annotation in ply directly onto vertex colors
+1. `./recolor-ply` - Recolors ply with face annotations using prettier colors
 
-3. `./export-annotated-parts` - Export part annotations
+1. `./transfer-property.ply` - Transfers face annotation in ply directly onto vertex colors
 
-4. `./clean-segment-annotations` - Cleans aggregated segment annotations
+1. `./clean-segment-annotations` - Cleans aggregated segment annotations
 
-5. `./compare-segment-annotations` - Compares two sets of segment annotations
+1. `./compare-segment-annotations` - Compares two sets of segment annotations
 
-6. `./project-annotations` - Project segment annotations from one mesh to another mesh
+1. `./project-annotations` - Project segment annotations from one mesh to another mesh
 
-7. `./export-scan-model-alignments` - Export scan to model alignment provided by turkers
+1. `./export-scan-model-alignments` - Export scan to model alignment provided by turkers
+
+1. `./export-annotated-parts` - Export part annotations
 
 Known Issues:
 

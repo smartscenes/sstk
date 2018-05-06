@@ -19,8 +19,8 @@ function NRRDExporter(options) {
 NRRDExporter.prototype.export = function(volume, opts) {
   var fileutil = this.__fs;
   opts = opts || {};
-  opts.name = opts.name || 'scene';
-  opts.dir = opts.dir ? opts.dir + '/' : '';
+  opts.name = (opts.name != undefined)? opts.name : 'scene';
+  opts.dir = (opts.dir != undefined)? opts.dir + '/' : '';
   var filename = opts.dir + opts.name + '.nrrd';
   var callback = opts.callback;
   var compress = this.encoding === 'gzip' || this.encoding === 'gz';

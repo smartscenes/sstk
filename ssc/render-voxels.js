@@ -7,6 +7,7 @@ var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
 var THREE = global.THREE;
+var _ = STK.util;
 
 cmd
   .version('0.0.1')
@@ -16,7 +17,8 @@ cmd
   .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, true)
   .option('--mesher <mesher>', 'Mesher to use for visualization' , /^(greedy|stupid|monotone|culled)$/i, 'stupid')
   .option('--size <size>', 'Size to use for voxels when using stupid mesher (default: alpha)', STK.util.cmd.parseFloat)
-  .optionGroups(['render_views'])
+  .optionGroups(['config_file', 'render_views'])
+  .option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt)
   .option('--voxel_threshold <threshold>', 'Threshold (from 0 to 1) on alpha channel for showing voxel [0]', STK.util.cmd.parseFloat, 0)
   .option('--width <width>', 'Image width [default: 1000]', STK.util.cmd.parseInt, 1000)
   .option('--height <height>', 'Image height [default: 1000]', STK.util.cmd.parseInt, 1000)
@@ -41,6 +43,12 @@ var renderer = new STK.PNGRenderer({
   compress: cmd.compress_png, skip_existing: cmd.skip_existing, reuseBuffers: true
 });
 
+var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
+  type: 'perspective',
+  fov: 50,
+  near: 0.1*STK.Constants.metersToVirtualUnit,
+  far: 10*STK.Constants.metersToVirtualUnit
+});
 
 function processFiles() {
   var memcheckOpts = { heapdump: { limit: cmd.heapdump } };
@@ -76,7 +84,7 @@ function processFiles() {
       // Create THREE scene
       var scene = new THREE.Scene();
       var light = STK.gfx.Lights.getDefaultHemisphereLight(false);
-      var camera = new THREE.PerspectiveCamera(50, cmd.width / cmd.height, 0.1*STK.Constants.metersToVirtualUnit, 10*STK.Constants.metersToVirtuanUnit);
+      var camera = STK.gfx.Camera.fromJson(cameraConfig, cmd.width, cmd.height);
       scene.add(light);
       scene.add(camera);
       var cameraControls = new STK.controls.CameraControls({
@@ -125,6 +133,16 @@ function processFiles() {
               renderer.renderAllViews(scene, renderOpts);
             } else if (cmd.render_turntable) {
               renderer.renderTurntable(scene, renderOpts);
+            } else if (cmd.view_index != undefined) {
+              var views = cameraControls.generateViews(sceneBBox, cmd.width, cmd.height);
+              cameraControls.viewTarget(views[cmd.view_index]);  // default
+            } else if (cmd.view) {
+              var viewOpts = cmd.view;
+              if (cmd.view.coordinate_frame === 'scene') {
+                viewOpts = sceneState.convertCameraConfig(cmd.view);
+              }
+              viewOpts = _.defaults({targetBBox: sceneBBox}, viewOpts);
+              cameraControls.viewTarget(viewOpts);
             } else {  // top down view is default
               cameraControls.viewTarget({
                 targetBBox: sceneBBox,

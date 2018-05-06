@@ -144,8 +144,8 @@ var getObjMtl = function (root, params, data) {
 OBJMTLExporter.prototype.export = function (objects, opts) {
   var fileutil = this.__fs;
   opts = opts || {};
-  opts.name = opts.name || 'scene';
-  opts.dir = opts.dir ? opts.dir + '/' : '';
+  opts.name = (opts.name != undefined)? opts.name : 'scene';
+  opts.dir = (opts.dir != undefined)? opts.dir + '/' : '';
   var callback = opts.callback;
   var objfilename = opts.dir + opts.name + '.obj';
   var objfile = objfilename;

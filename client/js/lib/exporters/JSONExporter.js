@@ -15,8 +15,8 @@ function JSONExporter(options) {
 JSONExporter.prototype.export = function(obj, opts) {
   var fileutil = this.__fs;
   opts = opts || {};
-  opts.name = opts.name || 'scene';
-  opts.dir = opts.dir ? opts.dir + '/' : '';
+  opts.name = (opts.name != undefined)? opts.name : 'scene';
+  opts.dir = (opts.dir != undefined)? opts.dir + '/' : '';
   var filename = opts.dir + opts.name + '.js';
   var callback = opts.callback;
 
