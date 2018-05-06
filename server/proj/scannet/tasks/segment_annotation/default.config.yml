@@ -1,7 +1,7 @@
 annotationChecks: './annotation-checks.yml'  # relative to proj/scannet/tasks/segment_annotation
 surveys: './survey.json'
 labels: './segment-labels.json'
-scansToAnnotate: '../../../../static/data/nyuv2/nyuv2.scans.txt'   # up to server directory
+scansToAnnotate: '../../../../static/data/nyuv2/nyuv2.csv'   # up to server directory
 idPrefix: 'nyuv2'
 percCompleteThreshold: 70
 annotationsPerWorker: 1
