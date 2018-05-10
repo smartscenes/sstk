@@ -11,6 +11,7 @@ var _ = STK.util;
 
 cmd
   .version('0.0.1')
+  .description('Renders asset file')
   .option('--input <filename>', 'Input path')
   .option('--format <format>', 'File format to use')
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')

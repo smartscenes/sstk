@@ -523,6 +523,16 @@ BVH.prototype.getNodeArray = function () {
   return nodes;
 };
 
+BVH.prototype.getInternalNodes = function () {
+  var nodes = [];
+  this.root.traverse(function (node) {
+    if (!node.isLeaf) {
+      nodes.push(node);
+    }
+  });
+  return nodes;
+};
+
 BVH.prototype.getLeaves = function () {
   var nodes = [];
   this.root.traverse(function (node) {

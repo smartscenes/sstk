@@ -9,6 +9,7 @@ var THREE = global.THREE;
 
 cmd
   .version('0.0.1')
+  .description('Renders asset by id')
   .option('--id <id>', 'Scene or model id [default: 0020d9dab70c6c8cfc0564c139c82dce]', '0020d9dab70c6c8cfc0564c139c82dce')
   .option('--ids_file <file>', 'File with model ids')
   .option('--source <source>', 'Scene or model source [default: p5dScene]', 'p5dScene')

@@ -8,6 +8,7 @@ var shell = require('shelljs');
 
 cmd
   .version('0.0.1')
+  .description('Project segment annotations from one mesh to another mesh')
   .option('--source <id>', 'Source ply')
   .option('--target <id>', 'Target ply')
   .option('-n, --ann_limit <num>', 'Limit on number of annotations to export', STK.util.cmd.parseInt, -1)

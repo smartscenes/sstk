@@ -1,4 +1,5 @@
 var Object3DUtil = require('geo/Object3DUtil');
+var Sampler = require('math/Sampler');
 var SceneUtil = require('scene/SceneUtil');
 var RendererFactory = require('gfx/RendererFactory');
 var _ = require('util');
@@ -254,6 +255,69 @@ function ViewOptimizer(params) {
 }
 
 /**
+ * Samples some views
+ * @param options
+ * @param options.targetBBox {geo.BBox}
+ * @param options.sceneState
+ * @param options.target
+ * @param options.nsamples {int} Number of samples
+ * @param options.rng {math.RNG} Random number generator
+ * @param [options.viewGenerator] Generator with generate() function for generating stream of views
+ * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
+ */
+ViewOptimizer.prototype.sample = function(options) {
+  var scope = this;
+  function scorer(view) {
+    if (view.score == undefined) {
+      scope.cameraControls.viewTarget(view);
+      view.score = scope.scorer.score(scope.cameraControls.camera, options.sceneState, options.target);
+    }
+    return view.score;
+  }
+
+  this.scorer.init(this.cameraControls.camera);
+  var views = options.viewGenerator.generate();
+  var sampler = new Sampler({ rng: options.rng });
+  return sampler.sample(_.merge({ elements: views, scorer: scorer }, _.pick(options, ['nsamples'])));
+};
+
+/**
+ * Find and returns the best view parameters
+ * @param options
+ * @param options.targetBBox {geo.BBox}
+ * @param options.sceneState
+ * @param options.target
+ * @param [options.viewGenerator] Generator with generate() function for generating stream of views
+ * @param [options.phiStart=0] {number}
+ * @param [options.phiEnd=Math.PI*2] {number}
+ * @param [options.theta] {number}
+ * @param [options.nViews] {int}
+ * @param [options.keepTargetsVisible] {boolean}
+ * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
+ */
+ViewOptimizer.prototype.optimize = function(options) {
+  if (options.viewGenerator) {
+    this.scorer.init(this.cameraControls.camera);
+    var views = options.viewGenerator.generate();
+    var next = views.next();
+    var best = undefined;
+    while (next && !next.done) {
+      var opts = next.value;
+      this.cameraControls.viewTarget(opts);
+      opts.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target);
+      //console.log('Got score: ' + opts.score + ', best so far ', best);
+      if (!best || opts.score > best.score) {
+        best = opts;
+      }
+      next = views.next();
+    }
+    return best;
+  } else {
+    return this.__optimizeRotatingViews(options);
+  }
+};
+
+/**
  * Find and returns the best view parameters
  * @param options
  * @param options.targetBBox {geo.BBox}
@@ -266,7 +330,7 @@ function ViewOptimizer(params) {
  * @param [options.keepTargetsVisible] {boolean}
  * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
  */
-ViewOptimizer.prototype.optimize = function(options) {
+ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
   // For now, just iterate on phi (and we cover 0 to 360)
   this.scorer.init(this.cameraControls.camera);
   var phi = (options.phiStart != undefined)? options.phiStart : 0;

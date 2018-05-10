@@ -8,6 +8,7 @@ var STK = require('./stk-ssc');
 
 cmd
   .version('0.0.1')
+  .description('Recolors ply with face annotations using prettier colors')
   .option('--input <filename>', 'Input path')
   .option('--labels <filename>', 'Labels file', __dirname + '/data/scannet-category-color-index.txt')
   .option('--outlabels <filename>', 'Output labels file')

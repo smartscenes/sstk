@@ -7,6 +7,7 @@ var THREE = global.THREE;
 var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Renders images for scene given a set of camera viewpoints')
   .option('--id <id>', 'Scene or model id [default: 0004dd3cb11e50530676f77b55262d38]', '0004dd3cb11e50530676f77b55262d38')
   .option('--source <source>', 'Scene or model source [default: p5dScene]', 'p5dScene')
   .option('--level <level>', 'Scene level to render', STK.util.cmd.parseInt)

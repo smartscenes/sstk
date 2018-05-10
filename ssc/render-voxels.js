@@ -11,6 +11,7 @@ var _ = STK.util;
 
 cmd
   .version('0.0.1')
+  .description('Renders voxels (size of voxel determined by alpha channel, use --size 0.8 to render fixed size voxels)')
   .option('--input <filename>', 'Input voxels')
   .option('--output <filename>', 'Output filename base')
   .option('--output_dir <dir>', 'Base directory for output files')

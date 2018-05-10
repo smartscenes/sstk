@@ -8,6 +8,7 @@ var THREE = global.THREE;
 var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Create colored voxels for a model')
   .option('--id [id]', 'Model id [default: 26d98eed64a7f76318a93a45bf780820]', '26d98eed64a7f76318a93a45bf780820')
   .option('--source [source]', 'Model source (p5d, 3dw, wss) [default: 3dw]', '3dw')
   .option('--format [format]', 'Model format')

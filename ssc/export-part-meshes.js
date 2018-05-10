@@ -11,6 +11,7 @@ var _ = STK.util;
 
 cmd
   .version('0.0.1')
+  .description('Export parts as separate objs')
   .option('--input <filename>', 'Input path')
   .option('--filter_empty [flag]', STK.util.cmd.parseBoolean, false)
   .option('--collapse_nested [flag]', STK.util.cmd.parseBoolean, false)

@@ -8,6 +8,7 @@ var STK = require('./stk-ssc');
 
 cmd
   .version('0.0.1')
+  .description('Transfers face annotation in ply directly onto vertex colors')
   .option('--input <filename>', 'Input path')
   .option('--from <property_type>', 'Whether to transfer from vertex or face property (default=face)', 'vertex')
   .option('--property <name>', 'Name of property to transfer (default=segment_id)', 'segment_id')
