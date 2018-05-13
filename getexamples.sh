@@ -15,6 +15,7 @@ fi
 
 NYUV2_DIR='server/static/data/nyuv2'
 ln -s ../../../$EXAMPLES_DIR/data/nyuv2/scans $NYUV2_DIR
+ln -s ../../../$EXAMPLES_DIR/data/nyuv2/nyuv2.csv $NYUV2_DIR/nyuv2.example.csv
 
 exit_code=$?
 cd $OLD_PATH
