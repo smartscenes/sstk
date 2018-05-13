@@ -1208,6 +1208,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
     };
 
     SceneState.prototype.transformCameraState = function (camState, matrix, scale) {
+      //TODO(MS): Account for direction vs position vector transformation
       // Takes camera state using matrix
       var fields = ['up', 'position', 'target', 'direction'];
       var transformedCamState = {};

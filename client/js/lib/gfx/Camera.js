@@ -31,7 +31,7 @@ Camera.prototype.initFromGapsString = function (str, aspect) {
   //this.up.set(-ux, uy, -uz);
   //var towards = new THREE.Vector3(-tx, ty, -tz);
 
-  this.position.set(vx, vy, vz).multiplyScalar(Constants.metersToVirtualUnit);
+  this.position.set(vx, vy, vz);
   this.up.set(ux, uy, uz);
   var towards = new THREE.Vector3(tx, ty, tz);
   //var right = new THREE.Vector3();
