@@ -2,7 +2,7 @@
 
 # TODO(MS): Parse config file to specify versions of datasets to use
 
-METADATA_VER='v0.5.1'
+METADATA_VER='v0.5.2'
 METADATA_DIR='metadata'
 METADATA_REPO='https://github.com/smartscenes/sstk-metadata.git'
 
