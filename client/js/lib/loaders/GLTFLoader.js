@@ -1722,6 +1722,7 @@ THREE.GLTFLoader = ( function () {
 		var parser = this;
 		var json = this.json;
 		var extensions = this.extensions;
+		var ignoreOcclusionTexture = parser.options? parser.options.ignoreOcclusionTexture : false; // AXC: option to ignoreOcclusionTexture
 
 		return _each( json.materials, function ( material ) {
 
@@ -1825,7 +1826,7 @@ THREE.GLTFLoader = ( function () {
 
 			}
 
-			if ( material.occlusionTexture !== undefined ) {
+			if ( material.occlusionTexture !== undefined && !ignoreOcclusionTexture ) { // AXC: option to ignoreOcclusionTexture
 
 				pending.push( parser.assignTexture( materialParams, 'aoMap', material.occlusionTexture.index ) );
 
@@ -1864,6 +1865,13 @@ THREE.GLTFLoader = ( function () {
 				}
 
 			}
+
+			var overrideMaterialType = parser.options? parser.options.overrideMaterialType : null; // AXC: Override materialType
+			if (overrideMaterialType) { // AXC: Override materialType
+				materialType = overrideMaterialType;
+				//console.log(material, materialParams);
+			}
+
 
 			return Promise.all( pending ).then( function () {
 
@@ -2016,6 +2024,7 @@ THREE.GLTFLoader = ( function () {
 
 				var defaultMaterial = scope.options? scope.options.defaultMaterial : null; // AXC: Default material
 				var defaultMaterialType = scope.options? scope.options.defaultMaterialType : null; // AXC: Default material
+        var overrideMaterial = scope.options? scope.options.overrideMaterial : null; // AXC: Override material
 
 				return scope.loadGeometries( primitives ).then( function ( geometries ) {
 
@@ -2027,6 +2036,10 @@ THREE.GLTFLoader = ( function () {
 						var material = primitive.material === undefined
 							? defaultMaterial || createDefaultMaterial(defaultMaterialType)  // AXC: Default material
 							: dependencies.materials[ primitive.material ];
+
+						if (overrideMaterial) {
+							material = overrideMaterial; // AXC: override material
+						}
 
 						if ( material.aoMap
 								&& geometry.attributes.uv2 === undefined

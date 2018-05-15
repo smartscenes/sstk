@@ -846,40 +846,6 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       }
     };
 
-    AssetManager.prototype.__loadObjMtlModel = function (modelInfo, callback, onerror) {
-      var objFile = modelInfo.file;
-      var mtlFile = modelInfo.mtl;
-      // TODO: Move this material options to be less format specific
-      var side = this.__getMaterialSide(modelInfo);
-      var options = _.defaults(Object.create(null), { side: side }, modelInfo.options || {});
-      if (options) {
-        options.materialBase = options.materialBase || options.texturePath || modelInfo.materialBase || modelInfo.texturePath;
-        var materialType = options.defaultMaterialType || modelInfo.defaultMaterialType || Materials.DefaultMaterialType;
-        if (_.isString(materialType)) {
-          materialType = Materials.getMaterialType(materialType);
-        }
-        options.defaultMaterialType = materialType;
-      }
-      var onLoad = function (object) {
-        callback(object);
-      };
-
-      if (options.preserveMeshes == undefined || options.preserveMeshes) {
-        // Use old OBJMTLLoader so we have same number of meshes as something...
-        //console.log('Using old OBJMTLLoader (slow)');
-        var loader = new THREE.OBJMTLLoader();
-        return loader.load(objFile, mtlFile, options, onLoad, undefined, onerror);
-      } else {
-        // Use new OBJLoader
-        //console.log('Using new OBJLoader');
-        var loader = new THREE.OBJLoader();
-        loader.setOptions(options);
-        loader.setMtlOptions(options);
-        options.mtl = modelInfo.mtl;
-        return loader.load(objFile, onLoad, undefined, onerror);
-      }
-    };
-
     AssetManager.prototype.__getMaterialSide = function(modelInfo) {
       var options = modelInfo.options || {};
       var sidedness = options.materialSidedness || modelInfo.materialSidedness;
@@ -898,23 +864,78 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       return THREE.DoubleSide;
     };
 
-    AssetManager.prototype.__getDefaultMaterial = function(modelInfo, defaultMaterialType) {
-      var materialType = this.__getDefaultMaterialType(modelInfo, defaultMaterialType);
-      var options = modelInfo.options || {};
-      var side = this.__getMaterialSide(modelInfo);
-      var material = (options.defaultMaterial) ? options.defaultMaterial : new materialType(
-        { name: 'defaultMaterial', side: side });;
-      return material;
+    AssetManager.prototype.__getMaterial = function(modelInfo, materialKey, materialTypeKey, defaultMaterialType) {
+      var materialType = this.__getMaterialType(modelInfo, materialTypeKey, defaultMaterialType);
+      if (materialType) {
+        var options = modelInfo.options || {};
+        var side = this.__getMaterialSide(modelInfo);
+        var material = (options[materialKey]) ? options[materialKey] : new materialType(
+          { name: materialKey, side: side });;
+        return material;
+      }
     };
 
-    AssetManager.prototype.__getDefaultMaterialType = function(modelInfo, defaultMaterialType) {
-      var materialType = modelInfo.options? modelInfo.options.defaultMaterialType : null;
-      materialType = materialType || modelInfo.defaultMaterialType || defaultMaterialType;
+    AssetManager.prototype.__getDefaultMaterial = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterial(modelInfo, 'defaultMaterial', 'defaultMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__getOverrideMaterial = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterial(modelInfo, 'overrideMaterial', 'overrrideMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__getMaterialType = function(modelInfo, materialTypeKey, defaultMaterialType) {
+      var materialType = modelInfo.options? modelInfo.options[materialTypeKey] : null;
+      materialType = materialType || modelInfo[materialTypeKey] || defaultMaterialType;
       if (_.isString(materialType)) {
         materialType = Materials.getMaterialType(materialType);
       }
       return materialType;
-    }
+    };
+
+    AssetManager.prototype.__getDefaultMaterialType = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterialType(modelInfo, 'defaultMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__getOverrideMaterialType = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterialType(modelInfo, 'overrideMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__updateMaterialOptions = function(modelInfo, options, defaultMaterialType) {
+      var side = this.__getMaterialSide(modelInfo);
+      options.materialBase = options.materialBase || options.texturePath || modelInfo.materialBase || modelInfo.texturePath;
+      options.defaultMaterialType = this.__getDefaultMaterialType(modelInfo, defaultMaterialType);
+      options.defaultMaterial = this.__getDefaultMaterial(modelInfo, defaultMaterialType);
+      options.overrideMaterialType = this.__getOverrideMaterialType(modelInfo, null);
+      options.overrideMaterial = this.__getOverrideMaterial(modelInfo, null);
+    };
+
+    AssetManager.prototype.__loadObjMtlModel = function (modelInfo, callback, onerror) {
+      var objFile = modelInfo.file;
+      var mtlFile = modelInfo.mtl;
+      // TODO: Move this material options to be less format specific
+      var side = this.__getMaterialSide(modelInfo);
+      var options = _.defaults(Object.create(null), { side: side }, modelInfo.options || {});
+      this.__updateMaterialOptions(modelInfo, options, Materials.DefaultMaterialType);
+
+      var onLoad = function (object) {
+        callback(object);
+      };
+
+      if (options.preserveMeshes == undefined || options.preserveMeshes) {
+        // Use old OBJMTLLoader so we have same number of meshes as something...
+        // console.log('Using old OBJMTLLoader (slow)');
+        var loader = new THREE.OBJMTLLoader();
+        return loader.load(objFile, mtlFile, options, onLoad, undefined, onerror);
+      } else {
+        // Use new OBJLoader
+        // console.log('Using new OBJLoader');
+        var loader = new THREE.OBJLoader();
+        loader.setOptions(options);
+        loader.setMtlOptions(options);
+        options.mtl = modelInfo.mtl;
+        return loader.load(objFile, onLoad, undefined, onerror);
+      }
+    };
 
     AssetManager.prototype.__loadPlyModel = function (modelInfo, callback, onerror) {
       // Tested to work for ASCII and BINARY ply files
@@ -1085,7 +1106,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
       var file = modelInfo.file;
       modelInfo.formatOptions = {};
-      loader.options.defaultMaterial = this.__getDefaultMaterial(modelInfo, Materials.DefaultMaterialType);
+      this.__updateMaterialOptions(modelInfo, loader.options, Materials.DefaultMaterialType);
       if (!modelInfo.source) {
         loader.options.convertUpAxis = true;
         modelInfo.formatOptions['applyUp'] = true;
@@ -1122,10 +1143,13 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.__loadGLTFModel = function (modelInfo, callback, onerror) {
       var loader = new THREE.GLTFLoader();
-      var options = modelInfo.options || {};
-      var computeNormals = (options.computeNormals != undefined) ? options.computeNormals : modelInfo.computeNormals;
-      var defaultMaterialType = this.__getDefaultMaterialType(modelInfo);
-      loader.setOptions({ computeNormals: computeNormals, defaultMaterialType: defaultMaterialType })
+      if (!_.isString(modelInfo.file)) {
+        loader.setPath('');
+      }
+      var options = _.defaults({}, modelInfo.options || {});
+      options.computeNormals = (options.computeNormals != undefined) ? options.computeNormals : modelInfo.computeNormals;
+      this.__updateMaterialOptions(modelInfo, options, Materials.DefaultMaterialType);
+      loader.setOptions(options)
       return loader.load(modelInfo.file, function (object) {
         //console.log(object);
         callback(object.scene);
