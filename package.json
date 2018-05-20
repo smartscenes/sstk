@@ -8,8 +8,7 @@
     "shelljs": "^0.7.0"
   },
   "scripts": {
-    "preinstall": "node getdata.js",
-    "postinstall": "npm run bootstrap",
+    "postinstall": "node getdata.js && npm run bootstrap",
     "bootstrap": "lerna bootstrap --hoist",
     "clean": "lerna clean",
     "ls": "lerna ls",
