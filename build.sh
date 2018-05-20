@@ -10,7 +10,6 @@ then
   source $ENV
 fi
 
-npm install -g shelljs
 npm install
 exit_code=$?
 
