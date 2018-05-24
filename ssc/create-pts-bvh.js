@@ -130,6 +130,8 @@ var files = fs.readdirSync(cmd.input);
 var object_filename_pattern = /object_(\d+).pts/;
 var object_files = _.filter(files, function(f) {
   return f.match(object_filename_pattern);
+}).map(function(f) {
+  return path.join(cmd.input, f);
 });
 
 read_object_files(object_files, null, function(err, objects) {
