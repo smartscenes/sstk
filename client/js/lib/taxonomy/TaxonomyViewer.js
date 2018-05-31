@@ -34,6 +34,7 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
       this.viewerIframe = params.viewerIframe;
       this.kmzSourceButton = params.kmzSourceButton;
       this.viewerSourceButton = params.viewerSourceButton;
+      this.viewerOpenButton = params.viewerOpenButton;
       // Thumbnail switching buttons
       this.thumbnailDecrButton = params.thumbnailDecrButton;
       this.thumbnailIncrButton = params.thumbnailIncrButton;
@@ -367,39 +368,33 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
       });
     };
 
+    function hookupButtonToUrl(button, url) {
+      if (button) {
+        button.unbind('click');
+        if (url) {
+          button.click(function () {
+            window.open(url);
+          });
+          button.show();
+        } else {
+          buttonhide();
+        }
+      }
+    };
+
     TaxonomyViewer.prototype.showModel = function (source, id) {
       var fullId = AssetManager.toFullId(source, id);
 
       this.viewerIframe.attr('src', 'view-model?modelId=' + fullId);
       //this.viewerIframe.attr("src", "simple-model-viewer2.html?modelId=" + fullId);
-      if (this.kmzSourceButton) {
-        this.kmzSourceButton.unbind('click');
-      }
-      this.viewerSourceButton.unbind('click');
 
       var kmzResult = this.assetManager.getLoadModelInfo(source, id);
       var kmzUrl = kmzResult && kmzResult.file;
       var sourceUrl = this.assetManager.getOriginalSourceUrl(source,id);
 
-      if (this.kmzSourceButton) {
-        if (kmzUrl) {
-          this.kmzSourceButton.click(function () {
-            window.open(kmzUrl);
-          });
-          this.kmzSourceButton.show();
-        } else {
-          this.kmzSourceButton.hide();
-        }
-      }
-
-      if (sourceUrl) {
-        this.viewerSourceButton.click(function () {
-          window.open(sourceUrl);
-        });
-        this.viewerSourceButton.show();
-      } else {
-        this.viewerSourceButton.hide();
-      }
+      hookupButtonToUrl(this.kmzSourceButton, kmzUrl);
+      hookupButtonToUrl(this.viewerSourceButton, sourceUrl);
+      hookupButtonToUrl(this.viewerOpenButton, Constants.baseUrl + '/model-viewer?modelId=' + fullId);
       this.viewerModal.modal('show');
       //window.open("simple-model-viewer2.html?modelId=" + fullId, 'Model Viewer')
     };

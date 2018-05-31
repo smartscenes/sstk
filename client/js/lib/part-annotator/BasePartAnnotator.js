@@ -35,6 +35,7 @@ function BasePartAnnotatorFactory(baseClass) {
    * @param [params.linkWordNet] Whether we should allow user to link to WordNet synsets
    * @param [params.obbsVisible=false] {boolean} To show obbs of labeled segment groups or not.
    * @param [params.allowPass=false] {boolean} Whether passing of this item is allowed
+   * @param [params.allowHierarchy=false] {boolean} Whether grouping of labels into hierarchy is allowed
    * @param [params.expandObbAmount=0] {number} Number of virtual unit to expand obb by with labeling obb
    * @constructor BasePartAnnotator
    */
@@ -101,6 +102,17 @@ function BasePartAnnotatorFactory(baseClass) {
         }
       ], 'name')
     };
+    var annotationModes = ['label'];
+    if (params.allowHierarchy) {
+      annotationModes.push('group');
+    }
+    if (annotationModes.length > 1) {
+      defaults['uihookups']['toggleAnnotationMode'] = {
+        name: 'toggleAnnotationMode',
+        click: this.toggleAnnotationMode.bind(this),
+        shortcut: 'ctrl-shift-a'
+      };
+    }
     params = _.defaultsDeep(Object.create(null), params, defaults);
     baseClass.call(this, params);
 
@@ -119,6 +131,10 @@ function BasePartAnnotatorFactory(baseClass) {
 
     this.annotations = [];
     this.annotationStats = {};
+
+    this.annotationModes = annotationModes;
+    this.__annotationModeIndex = 0;
+    this.allowHierarchy = params.allowHierarchy;
 
     if (this.allowPass) {
       $('#passBtn').removeClass('hidden');
@@ -180,6 +196,37 @@ function BasePartAnnotatorFactory(baseClass) {
 
   BasePartAnnotator.prototype = Object.create(baseClass.prototype);
   BasePartAnnotator.prototype.constructor = BasePartAnnotator;
+
+  Object.defineProperty(BasePartAnnotator.prototype, 'annotationMode', {
+    get: function () {return this.annotationModes[this.__annotationModeIndex]; }
+  });
+
+  Object.defineProperty(BasePartAnnotator.prototype, 'annotationModeIndex', {
+    get: function () {return this.__annotationModeIndex; },
+    set: function (v) {
+      this.__enterAnnotationMode(v);
+    }
+  });
+
+  BasePartAnnotator.prototype.toggleAnnotationMode = function() {
+    this.annotationModeIndex = (this.annotationModeIndex + 1) % this.annotationModes.length;
+    //console.log('set annotationModeIndex ' + this.annotationModeIndex);
+  };
+
+  BasePartAnnotator.prototype.__enterAnnotationMode = function(index) {
+    this.__annotationModeIndex = index;
+    var mode = this.annotationMode;
+    this.__showUIs(mode);
+    if (mode === 'label') {
+      // Show labels panel
+    } else if (mode === 'group') {
+      // Show hierarchy panel
+    } else if (mode === 'decompose') {
+      // Show decomposition panel
+    } else {
+      this.showAlert('Unsupported annotation mode ' + mode, 'alert-warning');
+    }
+  };
 
   BasePartAnnotator.prototype.setupDatGui = function () {
     if (this.useDatGui) {
@@ -534,6 +581,35 @@ function BasePartAnnotatorFactory(baseClass) {
       this.labelsPanel.selectLabel(merged);
       this.__trackUndo(true);
       this.onEditOpDone('merge', { labelInfo: merged });
+    }
+  };
+
+  BasePartAnnotator.prototype.addRelation = function (callback) {
+    // merges selected labels
+    var selected = this.labelsPanel.getAllSelected();
+    if (selected && selected.length > 1) {
+    }
+  };
+
+  BasePartAnnotator.prototype.addGroup = function (callback) {
+    // merges selected labels
+    var selected = this.labelsPanel.getAllSelected();
+    if (selected && selected.length > 0) {
+      var form = new Form("Please enter a label for the group", [{
+        title: 'Group',
+        name: 'group',
+        inputType: 'text'
+      }]);
+      var scope = this;
+      var dialog = form.form(
+        function (results) {
+          if (results) {
+            var label = results['group'];
+            scope.labelsPanel.groupLabels(selected, label);
+          }
+          if (callback) { callback(null, results) };
+        }
+      );
     }
   };
 

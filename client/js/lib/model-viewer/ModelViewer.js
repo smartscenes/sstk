@@ -36,7 +36,9 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       };
       var allParams = _.defaultsDeep(Object.create(null), this.urlParams, params, defaults);
 
-      this.modelSources = params.sources || Constants.assetSources.model;
+      // Make sure assetgroups are registered....
+      var assetGroups = AssetGroups.getAssetGroups();
+      this.modelSources = params.sources || _.concat(Constants.assetSources.model, Constants.assetSources.scan);
       this.allowPrevNext = params.allowPrevNext;
       this.__restrictModels = params.restrictModels;
       this.showSearchOptions = (params.showSearchOptions != undefined)? params.showSearchOptions : true;

@@ -26,8 +26,18 @@ HighlightControls.prototype.constructor = HighlightControls;
 HighlightControls.prototype.onMouseMove = function (event) {
   // Highlight model on mouseover
   var pickables = (this.scene.pickables) ? this.scene.pickables : this.scene.children;
-  this.mouse = this.picker.getCoordinates(this.container, event);
-  var intersected = this.picker.getFirstIntersected(this.mouse.x, this.mouse.y, this.camera, pickables);
+  var intersected = this.picker.pick({
+    targetType: 'object',
+    container: this.container,
+    position: { clientX: event.clientX, clientY: event.clientY },
+    camera: this.camera,
+    objects: pickables,
+    scene: this.scene
+  });
+  //return intersects;
+
+  //this.mouse = this.picker.getCoordinates(this.container, event);
+  //var intersected = this.picker.getFirstIntersected(this.mouse.x, this.mouse.y, this.camera, pickables);
 
   if (intersected) {
     if (this.intersected !== intersected.object) {

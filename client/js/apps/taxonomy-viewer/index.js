@@ -76,6 +76,7 @@ define(['Constants','taxonomy/WordnetTaxonomyDetailsHandler', 'taxonomy/Taxonomy
       viewerIframe: $('#viewerIframe'),
       kmzSourceButton: $('#kmzSourceButton'),
       viewerSourceButton: $('#viewerSourceButton'),
+      viewerOpenButton: $('#viewerOpenButton'),
       thumbnailIncrButton: $('#synsetDetailsLeftButton, #treemapLeftButton'),
       thumbnailDecrButton: $('#synsetDetailsRightButton, #treemapRightButton'),
       dataTabs: tabDiv,

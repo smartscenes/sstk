@@ -1,6 +1,6 @@
 'use strict';
 
-define(['three-shaders'], function () {
+define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
 
   /**
    * Main rendering class (wrapper around THREE.Renderer)
@@ -154,13 +154,12 @@ define(['three-shaders'], function () {
         // Let's try to read it from the domElement
         var pixels = opts.pixelBuffer;
         this.renderer.context.readPixels(offsetX, offsetY, width, height, this.renderer.context.RGBA, this.renderer.context.UNSIGNED_BYTE, pixels);
-        return pixels;
       } else {
         var renderTarget = this.useAmbientOcclusion ? this.composer.writeBuffer : this.__rtTexture;
         var pixels = opts.pixelBuffer;
         this.renderer.readRenderTargetPixels(renderTarget, offsetX, offsetY, width, height, pixels);
-        return pixels;
       }
+      return pixels;
     }
   };
 
@@ -244,6 +243,9 @@ define(['three-shaders'], function () {
       if (this.__needFlipY) {
         this.__flipY(pixels);
       }
+      if (opts.postprocess) {
+        pixels = this.postprocessPixels(pixels, opts.postprocess, camera);
+      }
       return pixels;
     }
   };
@@ -308,6 +310,13 @@ define(['three-shaders'], function () {
 
   Renderer.prototype.getMaxAnisotropy = function() {
     return this.renderer.getMaxAnisotropy();
+  };
+
+  Renderer.prototype.postprocessPixels = function(pixels, operation, camera) {
+    if (operation === 'unpackRGBAdepth') {
+      pixels = ImageUtil.unpackRGBAdepth(pixels, camera);
+    }
+    return pixels;
   };
 
   // Exports

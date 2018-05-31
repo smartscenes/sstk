@@ -34,13 +34,13 @@ function OffscreenRendererFactory (baseRendererClass) {
   OffscreenRenderer.prototype.constructor = OffscreenRenderer;
 
   // Renders scene from given camera into pngFile and returns raw RGBA pixels
-  OffscreenRenderer.prototype.renderToPng = function (scene, camera, basename) {
+  OffscreenRenderer.prototype.renderToPng = function (scene, camera, basename, opts) {
     var pngfile = _.endsWith(basename, '.png') ? basename : basename + '.png';
     if (this.skip_existing && this.__fs.existsSync(pngfile)) {
       console.log('Skipping render for existing file: ' + pngfile);
       return;
     }
-    var pixels = this.render(scene, camera);
+    var pixels = this.render(scene, camera, opts);
     this.writePNG(pngfile, this.width, this.height, pixels);
     if (this.compress) {
       this.__fs.execSync('pngquant -f --ext .png ' + pngfile, { encoding: 'utf8' });
@@ -49,8 +49,8 @@ function OffscreenRendererFactory (baseRendererClass) {
   };
 
   // Renders scene from given camera into raw RGBA pixels
-  OffscreenRenderer.prototype.render = function (scene, camera) {
-    var pixels = this.super.render.call(this, scene, camera);
+  OffscreenRenderer.prototype.render = function (scene, camera, opts) {
+    var pixels = this.super.render.call(this, scene, camera, opts);
     if (this.__debugFilename) {
       this.writePNG(this.__debugFilename + '-' + this.__debugCount + '.png', this.width, this.height, pixels);
       this.__debugCount++;
@@ -59,12 +59,12 @@ function OffscreenRendererFactory (baseRendererClass) {
   };
 
   // Renders scene from given camera into raw RGBA pixels
-  OffscreenRenderer.prototype.renderToRawPixels = function (scene, camera) {
-    return this.render(scene, camera);
+  OffscreenRenderer.prototype.renderToRawPixels = function (scene, camera, opts) {
+    return this.render(scene, camera, opts);
   };
 
-  OffscreenRenderer.prototype.renderToBuffer = function (scene, camera) {
-    var pixels = this.render(scene, camera);
+  OffscreenRenderer.prototype.renderToBuffer = function (scene, camera, opts) {
+    var pixels = this.render(scene, camera, opts);
     var png = new PNG({ width: this.width, height: this.height });
     png.data = Buffer.from(pixels);
     var buff = PNG.sync.write(png);
@@ -105,7 +105,7 @@ function OffscreenRendererFactory (baseRendererClass) {
       });
       var pngfile = basename + '-' + _.padStart(key.toString(), 4, '0') + '.png';
       cameraControls.camera.updateProjectionMatrix();
-      scope.renderToPng(scene, cameraControls.camera, pngfile);
+      scope.renderToPng(scene, cameraControls.camera, pngfile, opts);
       setTimeout(function () { callback(); });
     }, function () {
       if (!opts.skipVideo) {
@@ -128,7 +128,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     async.forEachSeries(views, function (view, callback) {
       cameraControls.viewTarget(view);
       var pngfile = basename + '-' + view.name + '.png';
-      scope.renderToPng(scene, cameraControls.camera, pngfile);
+      scope.renderToPng(scene, cameraControls.camera, pngfile, opts);
       setTimeout(function () { callback(); });
     }, function () {
       onDone();
@@ -170,23 +170,30 @@ function OffscreenRendererFactory (baseRendererClass) {
   };
 
   OffscreenRenderer.prototype.writePNG = function (pngFile, width, height, pixels) {
-    //png.data = Buffer.from(pixels);
-    var png;
+    var opts = { width: width, height: height, bpp: 4 };
+    if (pixels instanceof Uint16Array) {  // 16-bit depth
+      opts.inputColorType = 0;
+      opts.inputHasAlpha = false;
+      opts.colorType = 0;
+      opts.bitDepth = 16;
+      opts.bpp = 2;
+    }
+    var buf = Buffer.alloc(opts.bpp * opts.width * opts.height);
     if (this.flipxy) {
-      png = new PNG({ width: height, height: width });
+      opts.width = height;  opts.height = width;
       if (this.flipxy === 'lower_left') {
-        this.__flipXY_ll(pixels, width, height, png.data);
+        this.__flipXY_ll(pixels, width, height, buf);
       } else {
-        this.__flipXY_ul(pixels, width, height, png.data);
+        this.__flipXY_ul(pixels, width, height, buf);
       }
     } else {
-      png = new PNG({ width: width, height: height });
-      for (var i = 0; i < png.data.length; i++) {
-        png.data[i] = pixels[i];
+      var pixbuf = new Uint8Array(pixels.buffer);
+      for (var i = 0; i < pixbuf.length; i++) {
+        buf[i] = pixbuf[i];
       }
     }
-    var buff = PNG.sync.write(png);
-    this.__fs.writeFileSync(pngFile, buff);
+    var outbuf = PNG.sync.write({ width: opts.width, height: opts.height, data: buf}, opts);
+    this.__fs.writeFileSync(pngFile, outbuf);
     console.log('Saved ' + pngFile);
   };
 

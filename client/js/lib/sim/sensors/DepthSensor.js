@@ -1,6 +1,7 @@
 var Constants = require('Constants');
 var CameraSensor = require('sim/sensors/CameraSensor');
 var SceneUtil = require('scene/SceneUtil');
+var ImageUtil = require('util/ImageUtil');
 
 /**
  * Depth sensor (used for depth rendering and encoding)
@@ -22,21 +23,12 @@ DepthSensor.prototype.constructor = CameraSensor;
 
 DepthSensor.prototype.__getFrame = function(scene) {
   var depthSensor = this;
-  function perspectiveDepthToViewZ(near, far, d) {
-    return ( near * far ) / ( ( far - near ) * d - far );
-  }
   // TODO: pass encoding as parameter
   var config = depthSensor.config || {};
   var encoding = config.encoding || 'depth'; //'rgba|binned';
   var datatype = config.datatype || 'uint16';
   var useBasicPacking = encoding === 'binned';  // rgba packing preserves more bits
-  var typeToArray = {
-    'float32': Float32Array,
-    'uint16': Uint16Array,
-    'uint32': Uint32Array
-  };
   var metersToUnit = config.metersToUnit || 1000;
-  var scaleFactor = metersToUnit*Constants.virtualUnitToMeters;
   var elementSize = 4;
 
   // TODO: Ensuring rendering is done at resolution of the depthSensor
@@ -53,7 +45,6 @@ DepthSensor.prototype.__getFrame = function(scene) {
 
   //console.log('far=' + camera.far + ', near='+camera.near);
   //console.log('pixels', pixels);
-  var unpack_factors = [1.0/(256*256*256*256), 1.0/(256*256*256), 1.0/(256*256), 1.0/256];
   switch (encoding) {
     case 'binned':
       var d = new Uint8Array(npixels);
@@ -69,39 +60,7 @@ DepthSensor.prototype.__getFrame = function(scene) {
       break;
     case 'depth':
     default:
-      var arrayType = typeToArray[datatype];
-      var d = new arrayType(npixels);
-      var sum = 0;
-      var sum_opaque = 0;
-      var nopaque = 0;
-      for (var i = 0; i < npixels; i++) {
-        var b = i << 2;  // 4 * i
-        var transparent = 0;
-        var pd = 0;
-        if (useBasicPacking) {
-          pd = pixels[b]/255;
-          transparent = (pixels[b+3] === 0);
-        } else {
-          for (var j = 0; j < 4; j++) {
-            pd += pixels[b + j] * unpack_factors[j];
-          }
-        }
-
-        var v = 0;
-        if (pd != 0) {  // Convert from packed depth buffer value pd to real depth v
-          v = - perspectiveDepthToViewZ(camera.near, camera.far, pd);
-          v = scaleFactor * v;
-        }
-
-        d[i] = v;
-        sum += d[i];
-        if (!transparent) {
-          nopaque++;
-          sum_opaque++;
-        }
-      }
-      //console.log('min=' + _.min(d), 'max=' + _.max(d), 'ave=' + (sum/npixels), 'opaque_ave=' + (sum_opaque/nopaque), 'opaque=' + (nopaque/npixels));
-      pixels = d;
+      pixels = ImageUtil.unpackRGBAdepth(pixels, camera, datatype, metersToUnit, useBasicPacking);
       elementSize = 1;
       break;
   }

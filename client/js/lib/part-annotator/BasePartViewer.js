@@ -8,6 +8,7 @@ var Viewer3D = require('Viewer3D');
 var Picker = require('controls/Picker');
 var AssetManager = require('assets/AssetManager');
 var LabelsPanel = require('ui/LabelsPanel');
+var LabelHierarchyPanel = require('ui/LabelHierarchyPanel');
 var Object3DUtil = require('geo/Object3DUtil');
 var Renderer = require('gfx/Renderer');
 var SearchController = require('search/SearchController');
@@ -28,6 +29,7 @@ Materials.DefaultMaterialType = THREE.MeshPhongMaterial;
  * @param [params.delayedLoading] {boolean} Whether to delay loading and setting up of annotation target (scene/model) until later.
  *   Otherwise, scene/model is loaded during init.  Use if additional setup of scene/model is required.
  * @param [params.labelsPanel] {Object} Configuration for {@link LabelsPanel}
+ * @param [params.hierarchyPanel] {Object} Configuration for {@link LabelHierarchyPanel}
  * @param [params.linkWordNet] Whether we should display links to WordNet synsets
  * @constructor
  * @extends Viewer3D
@@ -121,6 +123,7 @@ function BasePartViewer(params) {
   this.enableLookAt = params.enableLookAt;
   this.delayedLoading = params.delayedLoading;
   this.labelsPanelConfig = params.labelsPanel;
+  this.hierarchyPanelConfig = params.hierarchyPanel;
   if (this.mode === 'verify') {
     this.labelsPanelConfig.allowEditStatus = true;
     this.labelsPanelConfig.validStatuses = ['', 'cleaned', 'rejected'];
@@ -263,7 +266,29 @@ BasePartViewer.prototype.createPanel = function () {
   }
   this.labeler.updateLabels(this.labelsPanel.labelInfos);
   this.labelInfos = this.labelsPanel.labelInfos;  // TODO: Do we need this?
+
+  this.__uis = {
+    'label': { panels: [this.labelsPanel] }
+  }
+  if (this.hierarchyPanelConfig) {
+    if (!this.hierarchyPanel) {
+      var options = _.defaults(Object.create(null), this.hierarchyPanelConfig);
+      this.hierarchyPanel = new LabelHierarchyPanel(options);
+    }
+    this.__uis['group'] = { panels: [this.hierarchyPanel] }
+  }
+  var allPanels = _.flatMap(_.values(this.__uis), function(x) { return x.panels || []; });
+  this.__uis['all'] = { panels: allPanels };
 };
+
+BasePartViewer.prototype.__showUIs = function(mode) {
+  var all = this.__uis['all'];
+  _.each(all.panels, function(x) { x.hide(); });
+  var ui = this.__uis[mode];
+  if (ui.panels) {
+    _.each(ui.panels, function(x) { x.show(); });
+  }
+}
 
 BasePartViewer.prototype.showAlert = function(message, style) {
   UIUtil.showAlert(null, message, style);
