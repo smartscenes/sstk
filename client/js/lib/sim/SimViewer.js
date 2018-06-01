@@ -54,7 +54,7 @@ function SimViewer(params) {
     goal: 'random',
     // goal: { type: 'position', position: [2.68, 0.05, -10.39] },
     // goal: { type: 'object', categories: ['door', 'arch'], select: 'random' },
-    // goal: { type: 'room', minRooms: 1, roomTypes: ['bathroom'], select: 'closest' },
+    // goal: { type: 'room', minRooms: 2, roomTypes: ['Bedroom'], select: 'closest' },
     frameSkip: 1,
     observations: { objectId: true, objectType: false, forces: true, normal: true, depth: true, map: true },
     uihookups: _.keyBy([

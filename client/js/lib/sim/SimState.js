@@ -333,6 +333,7 @@ SimState.prototype.__getGoalForModelInstance = function (mi) {
     position: objectCentroid,
     bbox: bbox,
     objectId: mi.object3D.userData.id,
+    objectType: mi.model.getCategories(),
     room: roomIds,
     roomType: roomTypes,
     modelInstance: mi,
@@ -429,7 +430,7 @@ SimState.prototype.computeGoals = function () {
         } else if (goalsSpec.roomTypes && goalsSpec.roomTypes.length > 0) {  // select rooms give roomTypes
           rooms = this.sceneState.getRoomsOrHouseRegions(this.level,
             (goalsSpec.roomTypes === 'any') ? null : function(room) {
-              var roomType = room.userData.roomType || room.userData.regionType;
+              const roomType = room.userData.roomType || room.userData.regionType;
               if (_.isArray(roomType)) {  // match on any in roomType
                 return _.some(roomType, function (rt) {
                   return goalsSpec.roomTypes.includes(rt);
