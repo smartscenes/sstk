@@ -57,8 +57,6 @@ SimState.prototype.reset = function (sceneState) {
   this.level = (this.opts.scene.level != undefined)? sceneState.getLevelByIndex(this.opts.scene.level): null;
 
   // set goal and start
-  this.__serializableGoals = null;
-  this.goals = this.computeGoals();
   if (this.opts.start === 'random') {
     // Select point in random level and room as starting point
     this.start = this.sampleStart();
@@ -72,6 +70,8 @@ SimState.prototype.reset = function (sceneState) {
     }
   }
   this.agent.moveTo(this.start);
+  this.__serializableGoals = null;
+  this.goals = this.computeGoals();
   this.prevTicks = 0;
   this.ticks = 0;
 
@@ -315,126 +315,149 @@ SimState.prototype.getSerializableGoals = function() {
   return this.__serializableGoals;
 };
 
+// Convert a model instance to a goal
+SimState.prototype.__getGoalForModelInstance = function (mi) {
+  const bbox = mi.getBBox();
+  const objectCentroid = bbox.centroid();
+  const closestPoint = bbox.closestPoint(this.agent.position);
+  let roomIds = mi.object3D.userData.roomIds ? mi.object3D.userData.roomIds : null;
+  if (!roomIds) {
+    // did not get rooms from modelInstances, get from position query
+    const room = this.sceneState.getIntersectedRoomAt(objectCentroid);
+    roomIds.push(room.object.userData.id);
+  }
+  const rooms = roomIds.map(this.sceneState.getRoomById.bind(this.sceneState));
+  const roomTypes = rooms.map(r => this.sceneState.getRoomInfo.bind(this.sceneState)(r).roomType);
+
+  return {
+    position: objectCentroid,
+    bbox: bbox,
+    objectId: mi.object3D.userData.id,
+    objectType: mi.model.getCategories(),
+    room: roomIds,
+    roomType: roomTypes,
+    modelInstance: mi,
+    initialOffsetFromAgent: this.agent.worldToLocalPositionNoScaling(closestPoint),
+    audioFile: mi.model.getAudioFile()
+  };
+};
+
+// Convert a room object to a goal
+SimState.prototype.__getGoalInRoom = function (room) {
+  const bbox = Object3DUtil.getBoundingBox(room);
+  const sample = this.__sampleFloor(room, this.opts.sampleFloor);
+  const position = sample ? sample.worldPoint : bbox.centroid();
+  const closestPoint = bbox.closestPoint(this.agent.position);
+  const offsetFromAgent = this.agent.worldToLocalPositionNoScaling(closestPoint);
+  const roomInfo = this.sceneState.getRoomInfo(room);
+
+  return {
+    position: position,
+    bbox: bbox,
+    room: [roomInfo.id],
+    roomType: [roomInfo.roomType],
+    initialOffsetFromAgent: offsetFromAgent
+  };
+};
+
+// Convert a position in the scene to a goal
+SimState.prototype.__getGoalForPosition = function (position) {
+  const room = this.sceneState.getIntersectedRoomAt(position);
+  const roomInfo = this.sceneState.getRoomInfo(room.object);
+  return {
+    position: position,
+    room: [roomInfo.id],
+    roomType: [roomInfo.roomType],
+    initialOffsetFromAgent: this.agent.worldToLocalPositionNoScaling(position)
+  };
+};
+
 /**
  * Computes actual goals from goal specification
  * @returns {Array<{position: THREE.Vector3, room: ?string, angle: ?number, bbox: ?geo.BBox, objectId: ?string, modelInstance: ?model.ModelInstance, initialOffsetFromAgent: ?THREE.Vector3, audioFile: ?string}>}
  */
 SimState.prototype.computeGoals = function () {
-  var scope = this;
-  var goalsSpec = this.opts.goal;
-  var goals = [];
+  let goalsSpec = this.opts.goal;
+  let goals = [];
 
-  // random floor point
-  if (goalsSpec === 'random') {
-    goals.push(this.sample());
-    // TODO room
-    // TODO roomType
-    return goals;
+  // basic random position goal -> sample concrete position goal
+  if (goalsSpec === 'random'  || (goalsSpec && goalsSpec.type === 'position' && goalsSpec.position === 'random')) {
+    let sample = this.sample();
+    goalsSpec = { type: 'position', position: sample.position, radius: goalsSpec.radius }
   }
 
-  // single position goal
-  if (goalsSpec.position) {
-    if (goalsSpec.position === 'random') {
-      var sample = this.sample();
-      sample.radius = goalsSpec.radius;
-      goals.push(sample);
-    } else {  // assume position and radius specified
-      goals.push(this.goal);
+  // check type and required fields, dispatch to type-specific handlers for specification field
+  if (goalsSpec && goalsSpec.type) {
+    switch (goalsSpec.type) {
+      case 'position':
+        if (goalsSpec.position) {
+          let pos = Object3DUtil.toVector3(goalsSpec.position);
+          if (!this.sceneState.getBBox().contains(pos)) {
+            console.error('Goal position outside bounds of scene: ' + JSON.stringify(pos));
+          }
+          goals.push(this.__getGoalForPosition(pos));
+        } else {
+          // error
+        }
+        break;
+      case 'object':
+        let filterFun;
+        if (goalsSpec.objectIds && goalsSpec.objectIds.length > 0) {
+          // select objects by object ids
+          if (_.isString(goalsSpec.objectIds)) {
+            goalsSpec.objectIds = goalsSpec.objectIds.split(',');
+          }
+          filterFun = mi => goalsSpec.objectIds.includes(mi.object3D.userData.id);
+        } else if (goalsSpec.modelIds && goalsSpec.modelIds.length > 0) {
+          // select objects by model ids
+          filterFun = mi => goalsSpec.modelIds.includes(mi.model.getFullID()) && mi.object3D.visible;
+        } else if (goalsSpec.categories && goalsSpec.categories.length > 0) {
+          // select objects by categories
+          filterFun = mi => mi.model.hasCategoryIn(goalsSpec.categories) && mi.object3D.visible;
+        } else {
+          // error
+        }
+        // map modelInstances to goals
+        const modelInstances = this.sceneState.findModelInstances(filterFun);
+        goals = _.map(modelInstances, this.__getGoalForModelInstance.bind(this));
+        break;
+      case 'room':
+        let rooms;
+        if (goalsSpec.roomIds && goalsSpec.roomIds.length > 0) {  // select rooms given roomIds
+          rooms = this.sceneState.getRoomsOrHouseRegions(this.level, function(room) {
+            return goalsSpec.roomIds.includes(room.userData.id);
+          });
+        } else if (goalsSpec.roomTypes && goalsSpec.roomTypes.length > 0) {  // select rooms give roomTypes
+          rooms = this.sceneState.getRoomsOrHouseRegions(this.level,
+            (goalsSpec.roomTypes === 'any') ? null : function(room) {
+              const roomType = room.userData.roomType || room.userData.regionType;
+              if (_.isArray(roomType)) {  // match on any in roomType
+                return _.some(roomType, function (rt) {
+                  return goalsSpec.roomTypes.includes(rt);
+                });
+              } else {  // assume roomType is string
+                return goalsSpec.roomTypes.includes(roomType);
+              }
+            });
+        } else {
+          // error
+        }
+        goals = _.map(rooms, this.__getGoalInRoom.bind(this));  // map rooms to goals
+        break;
+      default:
+        console.error('Goal specification of unknown type: ' + JSON.stringify(goalsSpec));
+        return null;
     }
-    // TODO room
-    // TODO roomType
-    return goals;
   }
 
-  // helper for converting modelInstance to goal entry
-  var modelInstanceToGoalFunc = function (mi) {
-    var bbox = mi.getBBox();
-    var centroid = bbox.centroid();
-    var closestPoint = bbox.closestPoint(scope.agent.position);
-    var offsetFromAgent = scope.agent.worldToLocalPositionNoScaling(closestPoint);
-    var audioFile = mi.model.getAudioFile();
-    if (audioFile && scope.opts.audio.datapath) {
-      audioFile = scope.opts.audio.datapath + '/' + audioFile;
-    }
-    // Converts a model instance to a goal
-    return {
-      position: centroid,
-      bbox: bbox,
-      objectId: mi.object3D.userData.id,
-      // TODO room
-      // TODO roomType
-      modelInstance: mi,
-      initialOffsetFromAgent: offsetFromAgent,
-      audioFile: audioFile
-    };
-  };
-
-  var roomToGoalFunc = function(room) {
-    var bbox = Object3DUtil.getBoundingBox(room);
-    var sample = scope.__sampleFloor(room, scope.opts.sampleFloor);
-    var position = sample? sample.worldPoint : bbox.centroid();
-    var closestPoint = bbox.closestPoint(scope.agent.position);
-    var offsetFromAgent = scope.agent.worldToLocalPositionNoScaling(closestPoint);
-    var roomInfo = scope.sceneState.getRoomInfo(room);
-
-    // Convert a room object to a goal
-    return {
-      position: position,
-      bbox: bbox,
-      room: roomInfo.id,
-      roomType: roomInfo.roomType,
-      //roomObject: room,
-      initialOffsetFromAgent: offsetFromAgent
-    };
-  };
-
-  if (goalsSpec.objectIds && goalsSpec.objectIds.length > 0) {  // goals specified by object ids
-    if (_.isString(goalsSpec.objectIds)) {
-      goalsSpec.objectIds = goalsSpec.objectIds.split(',');
-    }
-    var matchObjectId = function (mi) {
-      return goalsSpec.objectIds.indexOf(mi.object3D.userData.id) >= 0;
-    };
-    var mInstsOfObjectId = this.sceneState.findModelInstances(matchObjectId);
-    goals = _.map(mInstsOfObjectId, modelInstanceToGoalFunc);
-  } else if (goalsSpec.modelIds && goalsSpec.modelIds.length > 0) {  // goals specified by model ids
-    var matchId = function (mi) {
-      return goalsSpec.modelIds.indexOf(mi.model.getFullID()) >= 0 && mi.object3D.visible;
-    };
-    var mInstsOfId = this.sceneState.findModelInstances(matchId);
-    goals = _.map(mInstsOfId, modelInstanceToGoalFunc);
-  } else if (goalsSpec.categories && goalsSpec.categories.length > 0) {  // goals specified by categories
-    var matchCat = function (mi) {
-      return mi.model.hasCategoryIn(goalsSpec.categories) && mi.object3D.visible;
-    };
-    var mInstsOfCat = this.sceneState.findModelInstances(matchCat);
-    goals = _.map(mInstsOfCat, modelInstanceToGoalFunc);
-  } else if (goalsSpec.roomIds && goalsSpec.roomIds.length > 0) {
-    var rooms = this.sceneState.getRoomsOrHouseRegions(this.level, function(room) {
-      return goalsSpec.roomIds.indexOf(room.userData.id) >= 0;
-    });
-    goals = _.map(rooms, roomToGoalFunc);
-  } else if (goalsSpec.roomTypes && goalsSpec.roomTypes.length > 0) {
-    var rooms = this.sceneState.getRoomsOrHouseRegions(this.level,
-      (goalsSpec.roomTypes === 'any') ? null : function(room) {
-      var roomType = room.userData.roomType;
-      if (_.isArray(roomType)) {  // match on any in roomType
-        return _.some(roomType, function (rt) {
-          return goalsSpec.roomTypes.indexOf(rt) >= 0;
-        });
-      } else {  // assume roomType is string
-        return goalsSpec.roomTypes.indexOf(roomType) >= 0;
-      }
-    });
-    goals = _.map(rooms, roomToGoalFunc);
-  }
-
-  // From a specific view we can take goal picture
+  // Goal selection strategy
   if (goalsSpec.select === 'random') {
+    // random choice at uniform
     if (goals && goals.length > 1) {
       goals = [this.opts.rng.choice(goals)];
     }
   } else if (goalsSpec.select === 'closest') {
+    // pick goal closest to starting position of agent
     goals = _.sortBy(goals, function (g) {
       return g.initialOffsetFromAgent.length();
     });
@@ -456,6 +479,7 @@ SimState.prototype.computeGoals = function () {
     console.error('Could not select a goal given spec ' + JSON.stringify(goalsSpec));
   }
 
+  // return filled in goals
   return goals;
 };
 

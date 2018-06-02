@@ -118,7 +118,7 @@ function () {
   Constants.assetTypeTexture = 'texture';
 
   Constants.assetSources = {
-    'scan': ['vf'],
+    'scan': [/*'scans'*/],
     'model': ['models3d'],
     'scene': ['scenes'],
     'texture': ['textures']

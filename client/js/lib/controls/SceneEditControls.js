@@ -255,21 +255,22 @@ SceneEditControls.prototype.pick = function (event) {
 
 SceneEditControls.prototype.getIntersected = function (event, object3Ds) {
   object3Ds = object3Ds || this.scene.children;
-  var mouse = this.picker.getCoordinates(this.container, event);
-  var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, object3Ds, this.dragdrop.ignore);
-  if (intersects.length > 0) {
-    return intersects[0];
-  }
-  return null;
-  // var intersects = this.picker.pick({
-  //   targetType: 'object',
-  //   container: container,
-  //   position: { clientX: event.clientX, clientY: event.clientY },
-  //   camera: this.cameraControls.camera,
-  //   objects: object3Ds,
-  //   ignore: this.dragdrop.ignore
-  // });
-  // return intersects;
+  // var mouse = this.picker.getCoordinates(this.container, event);
+  // var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, object3Ds, this.dragdrop.ignore);
+  // if (intersects.length > 0) {
+  //   return intersects[0];
+  // }
+  // return null;
+  var intersects = this.picker.pick({
+    targetType: 'object',
+    container: this.container,
+    position: { clientX: event.clientX, clientY: event.clientY },
+    camera: this.cameraControls.camera,
+    objects: object3Ds,
+    ignore: this.dragdrop.ignore,
+    scene: this.scene
+  });
+  return intersects;
 };
 
 SceneEditControls.prototype.onMouseDown = function (event) {

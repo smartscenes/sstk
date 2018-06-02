@@ -33,6 +33,17 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
       return new THREE.Vector2(x,y);
     };
 
+    Picker.prototype.pick = function(options) {
+      var raycastMouse = this.getCoordinates(options.container, options.position);
+      if (options.targetType === 'mesh') {
+        return this.getFirstIntersectedMesh(raycastMouse.x, raycastMouse.y, options.camera, options.objects, options.ignore);
+      } else if (options.targetType === 'object') {
+        return this.getFirstIntersected(raycastMouse.x, raycastMouse.y, options.camera, options.objects, options.ignore);
+      } else {
+        console.error('Unsupport targetType', options.targetType);
+      }
+    };
+
     // Returns the first intersected object
     Picker.prototype.getFirstIntersected = function (x, y, camera, objects, ignore) {
       var args = this.__processArguments(arguments, ['x', 'y', 'camera', 'objects', 'ignore']);

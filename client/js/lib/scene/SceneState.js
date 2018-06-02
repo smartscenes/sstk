@@ -1557,6 +1557,15 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return this.__roomIndex;
     };
 
+    SceneState.prototype.getRoomById = function(roomId) {
+      var roomIndex = this.getRoomIndex().indexOf(roomId);
+      if (roomIndex >= 0) {
+        return this.getRoomByIndex1(roomIndex);
+      } else {
+        return null;
+      }
+    };
+
     SceneState.prototype.getRoomByIndex1 = function(roomIndex) {
       if (_.isFinite(roomIndex) && roomIndex > 0) {
         // input roomIndex is one based

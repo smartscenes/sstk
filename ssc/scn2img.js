@@ -170,7 +170,8 @@ assetManager.loadAsset(info, function (err, asset) {
       } else {
         filename = basename + '-' + i + suffix
       }
-      renderer.renderToPng(scene, cam, filename);
+      var opts = cmd.color_by === 'depth' ? { postprocess: 'unpackRGBAdepth' } : null;
+      renderer.renderToPng(scene, cam, filename, opts);
     }
 
     // // add camera frustums to scene

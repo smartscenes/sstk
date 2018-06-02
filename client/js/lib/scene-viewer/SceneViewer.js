@@ -134,6 +134,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
      * @param [params.defaultModelFormat=utf8v2] {string} Default loading format for models
      * @param [params.modelFormat=params.defaultModelFormat] {string} Loading format for models (url parameter)
      * @param [params.showSceneVoxels=false] {boolean} Whether scene voxels are shown
+     * @param [params.isScanSupport=false] {boolean} Whether a scan is allowed to be a support object
      *
      * @param [params.emptyRoom=false] {boolean} Load just the empty room (only walls, ceilings, floors, windows, doors)
      * @param [params.archOnly=false] {boolean} Load the architectural elements (includes columns, partitions, stairs, etc)
@@ -650,8 +651,21 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       // Setup local loading buttons
       this.setupLocalLoading(this.loadFromLocal.bind(this), false, this.localLoadingFiletypes);
 
+      // RENDERER
+      this.renderer = new Renderer({
+        container: this.container,
+        camera: this.camera,
+        useAmbientOcclusion: this.useAmbientOcclusion,
+        useShadows: this.useShadows,
+        useLights: this.useLights
+      });
+      this.assetManager.maxAnisotropy = this.renderer.getMaxAnisotropy();
+
       //PICKER
       this.picker = new Picker({
+        camera: this.camera,
+        width: this.renderer.width,
+        height: this.renderer.height,
         highlightMaterial: this.highlightMaterial,
         colorObject: function (object3D, highlighted, highlightMaterial) {
           // Recolor objects to indicate highlight or no highlight
@@ -663,16 +677,6 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
           }
         }
       });
-
-      // RENDERER
-      this.renderer = new Renderer({
-        container: this.container,
-        camera: this.camera,
-        useAmbientOcclusion: this.useAmbientOcclusion,
-        useShadows: this.useShadows,
-        useLights: this.useLights
-      });
-      this.assetManager.maxAnisotropy = this.renderer.getMaxAnisotropy();
 
       // Setup edit controls and event listeners
       this.setupEditControls();
@@ -2364,6 +2368,10 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
 
     SceneViewer.prototype.onWindowResize = function (options) {
       Viewer3D.prototype.onWindowResize.call(this, options);
+
+      if (this.picker && this.picker.onResize) {
+        this.picker.onResize(this.container);
+      }
 
       this.sceneSearchController.onResize(options);
       this.modelSearchController.onResize(options);

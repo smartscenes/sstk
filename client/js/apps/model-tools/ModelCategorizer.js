@@ -1,8 +1,10 @@
 'use strict';
 
 define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'search/SearchModule',
+    'search/SolrQuerySuggester', 'model/ModelSchema',
     'ui/AnnotationsPanel', 'io/FileUtil', 'ui/UIUtil', 'util', 'dragscrollable', 'jquery-lazy'],
-  function (Constants, AssetManager, SearchController, SearchModule, AnnotationsPanel, FileUtil, UIUtil, _) {
+  function (Constants, AssetManager, SearchController, SearchModule, SolrQuerySuggester, ModelSchema,
+            AnnotationsPanel, FileUtil, UIUtil, _) {
     // Interface for categorizing models
     function ModelCategorizer(params) {
       // Keep our own copy of categories
@@ -75,10 +77,17 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
         entriesPerRow: 6,
         nRows: 40,
         searchPanel: this.searchPanel,
+        showLoadFile: true,
+        allowSave: true,
         loadImagesLazy: true,
         encodeQuery: false,
         boostFields: []
       });
+      this.searchController.searchPanel.setAutocomplete(
+        new SolrQuerySuggester({
+          schema: new ModelSchema()
+        })
+      );
 
       // Hook up select all checkbox
       this.selectAll = $('#selectAll');

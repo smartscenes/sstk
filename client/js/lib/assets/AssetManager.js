@@ -331,6 +331,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       } else {
         if (source === 'models3d') {
           return Constants.assetTypeModel;
+        } else if (source === 'scans') {
+          return Constants.assetTypeScan;
         } else if (source === 'scenes') {
           return Constants.assetTypeScene;
         } else if (source === 'rooms') {

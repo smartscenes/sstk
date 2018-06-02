@@ -1157,6 +1157,14 @@ LabelsPanel.prototype.showRemapLabelsPanel = function() {
   })
 };
 
+LabelsPanel.prototype.hide = function() {
+  this.container.hide();
+};
+
+LabelsPanel.prototype.show = function() {
+  this.container.show();
+};
+
 module.exports = LabelsPanel;
 
 /**

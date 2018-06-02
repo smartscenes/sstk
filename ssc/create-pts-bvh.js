@@ -40,7 +40,7 @@ function read_object_files(files, opts, callback) {
         console.error('Error parsing object file ' + file, err);
       } else {
         var position = new THREE.Vector3();
-        var id = path.basename(file).split('.')[0].split('_')[1];
+        var id = file.split('.')[0].split('_')[1];
         var points = _.map(records.data, function(row) { return _.map(row, function(x) { return parseFloat(x); })});
         //console.log(points);
         var bbox = new BBox();
