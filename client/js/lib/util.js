@@ -719,6 +719,19 @@ _.addUnique = function(array, element) {
   }
 };
 
+_.mapKeysDeep = function(object, iteratee) {
+  iteratee = iteratee || _.identity;
+  if (_.isPlainObject(object)) {
+    var remapped = _.mapKeys(object, iteratee);
+    remapped = _.mapValues(remapped, function (v) {
+      return _.mapKeysDeep(v, iteratee);
+    });
+    return remapped;
+  } else {
+    return object;
+  }
+};
+
 // Put back aliases that were removed in lodash 4
 // (https://github.com/lodash/lodash/wiki/Changelog#notable-changes)
 // These are useful for modules using older version of underscore/lodash

@@ -253,7 +253,10 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
               labelType: this.urlParams['labelType'],
               defaultPartType: this.urlParams['defaultPartType'],
               defaultLabelType: this.urlParams['defaultLabelType'],
-              allowVoxels: this.urlParams['allowVoxels']
+              allowVoxels: this.urlParams['allowVoxels'],
+              filterEmptyGeometries: false,
+              showMultiMaterial: true,
+              collapseNestedPaths: false,
             },
             this.params.partsPanel || {},
             {

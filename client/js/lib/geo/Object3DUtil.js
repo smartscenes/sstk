@@ -391,6 +391,16 @@ Object3DUtil.applyMaterials = function (object3D, getMaterialCallback, nonrecurs
   return {total: totalMeshes, skipped: skippedMeshes};
 };
 
+Object3DUtil.replaceChild = function (oldChild, newChild) {
+  if (oldChild.parent) {
+    var parent = oldChild.parent;
+    var iChild = parent.children.indexOf(oldChild);
+    parent.children[iChild] = newChild;
+    newChild.parent = parent;
+    oldChild.parent = null;
+  }
+};
+
 Object3DUtil.detachFromParent = function (object3D, scene) {
   // Detach from parent while keeping same world transform
   if (object3D.parent) {
@@ -2242,6 +2252,15 @@ Object3DUtil.setState = function (object, field, value, filter) {
   }
 };
 
+/**
+ * Traverses the scene graph with given root and orders nodes, geometries, materials for serialization
+ * Each node, geometry, material will have their `userData.nodeIndex`, `userData.geometryIndex`, or `userData.materialIndex` field set appropriately.
+ * @param object3D {THREE.Object3D} Root object to with nodes to index
+ * @param [options] Additional options
+ * @param [options.splitByMaterial=false] Whether to split nodes with Material into separate multiple meshes.
+ *   The old mesh in the scene graph is replaced with the split up meshes.
+ * @returns {nodes: Array[THREE.Object3D], geometries: Array[THREE.Geometry], materials: Array[THREE.Material], leafNodes: Array[THREE.Mesh]}
+ */
 Object3DUtil.getIndexedNodes = function (object3D, options) {
   options = options || {};
   var result = options.result || {
@@ -2250,12 +2269,15 @@ Object3DUtil.getIndexedNodes = function (object3D, options) {
     materials: []
   }
   object3D.traverse(function (node) {
-    node.index = result.nodes.length;
+    node.userData.nodeIndex = result.nodes.length;
     result.nodes.push(node);
     if (node instanceof THREE.Mesh) {
       var geometry = node.geometry;
-      if (geometry.index == undefined || result.geometries[geometry.index] !== geometry) {
-        geometry.index = result.geometries.length;
+      if (!geometry.userData) {
+        geometry.userData = {};
+      }
+      if (geometry.userData.geometryIndex == undefined || result.geometries[geometry.userData.geometryIndex] !== geometry) {
+        geometry.userData.geometryIndex = result.geometries.length;
         result.geometries.push(geometry);
       }
       var materials;
@@ -2268,13 +2290,70 @@ Object3DUtil.getIndexedNodes = function (object3D, options) {
       }
       for (var i = 0; i < materials.length; i++) {
         var m = materials[i];
-        if (m.index == undefined || result.materials[m.index] !== m) {
-          m.index = result.materials.length;
+        if (!m.userData) {
+          m.userData = {};
+        }
+        if (m.userData.materialIndex == undefined || result.materials[m.userData.materialIndex] !== m) {
+          m.userData.materialIndex = result.materials.length;
           result.materials.push(m);
         }
       }
     }
   });
+  // Split multi material
+  var meshNodes = _.filter(result.nodes, function(x) { return x instanceof THREE.Mesh; });
+  if (options.splitByMaterial) {
+    var splitGeometries = _.clone(result.geometries);
+    var leafNodes = [];
+    for (var i = 0; i < meshNodes.length; i++) {
+      var mesh = meshNodes[i];
+      var nodeIndex = mesh.userData.nodeIndex;
+      var splitMeshes = GeometryUtil.splitByMaterial(mesh, { validOnly: true });
+      if (splitMeshes.length > 1) {
+        console.log('spliting mesh ' + nodeIndex + ' for ' + object3D.name);
+        // Update geometry index
+        for (var j = 0; j < splitMeshes.length; j++) {
+          var geometry = splitMeshes[j].geometry;
+          if (!geometry.userData) {
+            geometry.userData = {};
+          }
+        }
+
+        var origGeomIndex = mesh.geometry.userData.geometryIndex;
+        splitMeshes[0].geometry.userData.geometryIndex = origGeomIndex;
+        splitGeometries[origGeomIndex] = splitMeshes[0].geometry;
+        for (var j = 1; j < splitMeshes.length; j++) {
+          splitMeshes[j].geometry.userData.geometryIndex = splitGeometries.length;
+          splitGeometries.push(splitMeshes[j].geometry);
+        }
+
+        // Merge node into results
+        var newNode = new THREE.Object3D();
+        newNode.name = mesh.name;
+        _.assign(newNode.userData, mesh.userData);
+
+        Object3DUtil.setMatrix(newNode, mesh.matrix);
+        Object3DUtil.replaceChild(mesh, newNode);
+        result.nodes[nodeIndex] = newNode;
+        for (var j = 0; j < splitMeshes.length; j++) {
+          var childNode = splitMeshes[j];
+          childNode.userData.nodeIndex = result.nodes.length;
+          result.nodes.push(childNode);
+          leafNodes.push(childNode);
+          // Add child to parent
+          newNode.add(childNode);
+        }
+      } else {
+        leafNodes.push(node);
+      }
+    }
+    result.geometries = splitGeometries;
+    result.leafNodes = leafNodes;
+    //console.log('got result', result.nodes.length, result.geometries.length);
+  } else {
+    result.leafNodes = meshNodes;
+  }
+  result.root = result.nodes[0];
   return result;
 };
 
@@ -2726,6 +2805,13 @@ Object3DUtil.getMaterials = function (object3D) {
     meshes: allMeshesWithTexture, materials: allMaterialsWithTexture
   };
   return materials;
+};
+
+
+Object3DUtil.populateSceneGraphPath = function (node, parentRoot) {
+  node.traverse(function(n) {
+    n.userData.sceneGraphPath = Object3DUtil.getSceneGraphPath(n, parentRoot);
+  })
 };
 
 Object3DUtil.getSceneGraphPath = function (node, parentRoot) {

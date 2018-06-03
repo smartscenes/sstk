@@ -322,9 +322,12 @@ SimState.prototype.__getGoalForModelInstance = function (mi) {
   const closestPoint = bbox.closestPoint(this.agent.position);
   let roomIds = mi.object3D.userData.roomIds ? mi.object3D.userData.roomIds : null;
   if (!roomIds) {
+    roomIds = [];
     // did not get rooms from modelInstances, get from position query
     const room = this.sceneState.getIntersectedRoomAt(objectCentroid);
-    roomIds.push(room.object.userData.id);
+    if (room) {
+      roomIds.push(room.object.userData.id);
+    }
   }
   const rooms = roomIds.map(this.sceneState.getRoomById.bind(this.sceneState));
   const roomTypes = rooms.map(r => this.sceneState.getRoomInfo.bind(this.sceneState)(r).roomType);

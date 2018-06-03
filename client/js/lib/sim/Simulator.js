@@ -64,7 +64,7 @@ function Simulator(opts) {
       assetCacheSize: 100,
       useSky: true
     });
-  opts = _.mapKeys(opts, function(v,k) { return _.camelCase(k); });
+  opts = _.mapKeysDeep(opts, function(v,k) { return _.camelCase(k); });
   console.log('Creating Simulator with options', _.omit(opts, __optsToIgnore));
   this.__init(opts);
 }

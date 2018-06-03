@@ -22,20 +22,21 @@ JSONExporter.prototype.export = function(obj, opts) {
   var callback = opts.callback;
 
   // Linearize nodes and put meshes into an array
-  var indexed = Object3DUtil.getIndexedNodes(obj);
+  var indexed = Object3DUtil.getIndexedNodes(obj, { splitByMaterial: opts.splitByMaterial });
   var nodes = _.map(indexed.nodes, function(node) {
     var meshIds = undefined;
     var childids = undefined;
     if (node instanceof THREE.Mesh) {
-      meshIds = [node.geometry.index];
+      meshIds = [node.geometry.userData.geometryIndex];
       childIds = undefined;
     } else {
       meshIds = undefined;
-      childIds = _.map(node.children, function(x) { return x.index; });
+      childIds = _.map(node.children, function(x) { return x.userData.nodeIndex; });
     }
     return {
-      id: node.index,
-      name: node.name || (node.userData && node.userData.id) || ("node" + node.index),
+      id: node.userData.nodeIndex,
+      name: node.name || (node.userData && node.userData.id) || ("node" + node.userData.nodeIndex),
+      path: node.userData.sceneGraphPath,
       transformation: node.matrix.toArray(),
       meshes: meshIds,
       children: childIds
@@ -53,8 +54,7 @@ JSONExporter.prototype.export = function(obj, opts) {
   function finishFile() {
     fileutil.fsExportFile(filename, filename);
     console.log('finished exporting mesh data to ' + filename);
-    var leafNodes = _.filter(indexed.nodes, function(x) { return x instanceof THREE.Mesh; });
-    json.leafIds = _.map(leafNodes, function(x) { return x.index; });
+    json.leafIds = _.map(indexed.leafNodes, function(x) { return x.userData.nodeIndex; });
     if (callback) { callback(null, { indexed: indexed, json: json }); }
   }
   var blob = JSON.stringify(json, null, 2);

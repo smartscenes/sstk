@@ -19,6 +19,7 @@ cmd
   .option('--world_up <vector3>', STK.util.cmd.parseVector)
   .option('--world_front <vector3>', STK.util.cmd.parseVector)
   .option('--use_ids [flag]', STK.util.cmd.parseBoolean, false)
+  .option('--split_by_material [flag]', STK.util.cmd.parseBoolean, false)
   .option('--input_format <format>', 'File format to use')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .optionGroups(['config_file', 'color_by'])
@@ -74,7 +75,7 @@ function exportParts(exporter, exportOpts, object3D, callback) {
   var objectId = exportOpts.name;
   console.log('Process ' + objectId + ' parts got ' + meshes.length);
   async.forEachSeries(meshes, function(mesh, meshCb) {
-    var index = mesh.index;
+    var index = mesh.userData.nodeIndex;
     var filename = index;
     exporter.export(mesh, _.defaults({name: filename, callback: meshCb}, exportOpts));
   }, function(objectErr, objectResults) {
@@ -153,6 +154,7 @@ function processFiles() {
           var wrapped = modelInstance.getObject3D('Model');
           var object3D = wrapped.children[0];
           object3D.name = object3D.name.replace('-orig', '');
+          STK.geo.Object3DUtil.populateSceneGraphPath(object3D, object3D);
           if (cmd.filter_empty) {
             console.log('Remove empty geometry from ' + name);
             STK.geo.Object3DUtil.removeEmptyGeometries(object3D);
@@ -165,6 +167,7 @@ function processFiles() {
           var ajsonExportOpts = {
             dir: basename,
             name: outname,
+            splitByMaterial: cmd.split_by_material,
             json: {
               rootTransform: wrapped.matrix.toArray()
             }
@@ -181,7 +184,7 @@ function processFiles() {
                 console.error('Error processing ' + name, err2);
                 callback(err2, res2);
               } else {
-                exportParts(objExporter, objExportOpts, object3D, function (err3, res3) {
+                exportParts(objExporter, objExportOpts, res2.indexed.root, function (err3, res3) {
                   if (err3) {
                     console.error('Error processing ' + name, err3);
                   }

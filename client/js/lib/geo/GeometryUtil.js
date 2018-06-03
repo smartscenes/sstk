@@ -519,6 +519,7 @@ function createCroppedIndexBuffer(triIndices, origVertIndices, map) {
 }
 
 GeometryUtil.extractMesh = function (mesh, triIndices) {
+  //console.log('extractMesh ' + mesh.name + ' with ' + triIndices.length + ' triangles')
   //console.time('extractMesh');
   // Remesh with specific triangles
   var origGeom = mesh.__bufferGeometry || GeometryUtil.toBufferGeometry(mesh.geometry);
@@ -729,6 +730,80 @@ GeometryUtil.extractParts = function(geometry, segmentation, parts) {
     }
   }
   return extracted;
+};
+
+GeometryUtil.getMaterials = function(material) {
+  var materials;
+  if (material instanceof THREE.MultiMaterial) {
+    materials = material.materials;
+  } else if (_.isArray(material)) {
+    materials = material;
+  } else {
+    materials = [material];
+  }
+  return materials;
+}
+
+GeometryUtil.splitByMaterial = function(mesh, opts) {
+  opts = opts || {};
+  var geometry = mesh.geometry;
+  var materials = GeometryUtil.getMaterials(mesh.material);
+
+  function createSplitMesh(mesh, geometry, material, i) {
+    var newMesh = new THREE.Mesh(geometry, material);
+    if (mesh.userData.sceneGraphPath) {
+      newMesh.userData.sceneGraphPath = mesh.userData.sceneGraphPath + '/material[' + i + ']';
+    }
+    newMesh.name = mesh.name + '/material_' + i;
+    newMesh.userData.splitInfo = { type: 'byMaterial', meshId: mesh.userData.id, materialIndex: i };
+    return newMesh;
+  }
+
+  //console.log('splitByMaterial ' + mesh.name);
+  //console.time('splitByMaterial');
+  if (materials.length > 1) {
+    var splitNodes = [];
+    if (geometry.faces) {
+      for (var i = 0; i < materials.length; i++) {
+        //console.log('processing material ' + (i+1) + '/' + materials.length);
+        var triIndices = [];
+        for (var iface = 0; iface < geometry.faces.length; iface++) {
+          if (geometry.faces[iface].materialIndex === i) {
+            triIndices.push(iface);
+          }
+        }
+        //console.log('Got ' + triIndices.length + ' for material ' + (i+1));
+        if (triIndices.length > 0) {
+          var extractedMesh = GeometryUtil.extractMesh(mesh, triIndices);
+          //console.log('extracted vertices ' + extractedMesh.geometry.index.array.length + ' for material ' + (i+1));
+          var newMesh = createSplitMesh(mesh, extractedMesh.geometry, materials[i], i);
+          splitNodes.push(newMesh);
+        } else if (!opts.validOnly) {
+          splitNodes.push(null);
+        }
+      }
+    } else {
+      for (var i = 0; i < geometry.groups.length; i++) {
+        //console.log('processing material ' + (i+1) + '/' + geometry.groups.length);
+        var group = geometry.groups[i];
+        if (group && group.count) {
+          //console.log('Got ' + group.count + ' for material ' + (i+1));
+          var triIndices = _.range(group.start, group.start + group.count);
+          var extractedMesh = GeometryUtil.extractMesh(mesh, triIndices);
+          //console.log('extracted vertices ' + extractedMesh.geometry.index.array.length + ' for material ' + (i+1));
+          var newMesh = createSplitMesh(mesh, extractedMesh.geometry, materials[i], i);
+          splitNodes.push(newMesh);
+        } else if (!opts.validOnly) {
+          splitNodes.push(null);
+        }
+      }
+    }
+    //console.timeEnd('splitByMaterial');
+    return splitNodes;
+  } else {
+    //console.timeEnd('splitByMaterial');
+    return [mesh];
+  }
 };
 
 GeometryUtil.mergeMeshes = function (input) {
