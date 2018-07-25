@@ -1368,8 +1368,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       if (preloads) {
         _.each(preloads, function(preload) {
           var preloadInfo = assetinfo[preload];
-          scope.__updateMaterialOptions(preloadInfo, preloadInfo);
           if (preloadInfo && preloadInfo.path) {
+            scope.__updateMaterialOptions(preloadInfo, preloadInfo);
             var path = _.replaceVars(preloadInfo.path, assetinfo);
             var assetLoader;
             if (preloadInfo.assetType) {
