@@ -6,7 +6,7 @@ var shell = require('shelljs');
 
 // TODO(MS): Parse config file to specify versions of datasets to use
 var METADATA = {
-  'VER': 'v0.5.2',
+  'VER': 'v0.5.3',
   'DIR': 'metadata',
   'REPO': 'https://github.com/smartscenes/sstk-metadata.git',
   'DATA_DIRS': ['labels', 'matterport', 'nyuv2', 'shapenet', 'suncg']
