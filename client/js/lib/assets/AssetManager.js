@@ -953,7 +953,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       options.mtl = mtlFile;
       if (options.preserveMeshes == undefined || options.preserveMeshes) {
         // Use old OBJMTLLoader so we have same number of meshes as something...
-        console.log('Using old OBJMTLLoader (slow)');
+        // console.log('Using old OBJMTLLoader (slow)');
         var loader = modelInfo.isZipped? new THREE.ZippedObjMtlLoader(options) : new THREE.OBJMTLLoader();
         if (modelInfo.isZipped) {
           return loader.load(objFile, onLoad, undefined, onerror);
@@ -962,7 +962,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         }
       } else {
         // Use new OBJLoader
-        console.log('Using new OBJLoader');
+        // console.log('Using new OBJLoader');
         var loader = modelInfo.isZipped? new THREE.ZippedObjLoader(options) : new THREE.OBJLoader();
         if (!modelInfo.isZipped) {
           loader.setOptions(options);
