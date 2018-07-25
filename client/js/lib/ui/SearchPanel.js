@@ -456,10 +456,9 @@ SearchPanel.prototype.updatePreviewImages = function (previewImageIndex) {
   var searchResults = this.resultsElem.find('.searchResult');
   this.previewImageIndex = previewImageIndex;
   searchResults.each(function (index, elem) {
-    var resId = $(this).attr('id');
-    var idfields = resId.split('_');
-    var source = idfields[1];
-    var id = idfields.slice(2).join('_');
+    var result = $(this).data('result');
+    var source = result.source;
+    var id = result.id;
     var img = $(this).find('img.resultImg');
     var metadata = img.data('metadata');
     var imagePreviewUrl = scope.getImagePreviewUrlCallback(source, id, previewImageIndex, metadata);

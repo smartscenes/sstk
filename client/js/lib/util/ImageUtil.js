@@ -76,7 +76,7 @@ function makePowerOfTwo(image, callback) {
           if (err) {
             callback(err, image);
           } else {
-            callback(err, {data: data, width: info.width, height: info.height, channels: image.channels});
+            callback(err, {src: image.src, path: image.path, data: data, width: info.width, height: info.height, channels: image.channels});
           }
         });
     } catch (e) {

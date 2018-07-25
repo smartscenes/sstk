@@ -26,12 +26,19 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 	 * @param options - Options on how to interpret the material (see THREE.MTLLoader.MaterialCreator )
 	 * @private
 	 */
-	load: function ( url, mtlurl, options, onLoad, onProgress, onError ) {
+  load: function ( url, mtlurl, options, onLoad, onProgress, onError ) {
+  	this.loadWithMtl(url, mtlurl, options, onLoad, onProgress, onError);
+  },
+
+	loadWithMtl: function ( url, mtlurl, options, onLoad, onProgress, onError ) {
 
 		var scope = this;
 
-		var mtlLoader = new THREE.MTLLoader( this.manager );
-		mtlLoader.setBaseUrl( url.substr( 0, url.lastIndexOf( "/" ) + 1 ) );
+		var mtlLoader = options.mtlLoader || new THREE.MTLLoader( this.manager );
+		// AXC: Handle url that is not a string
+		if (typeof url === 'string') {
+			mtlLoader.setBaseUrl( url.substr( 0, url.lastIndexOf( "/" ) + 1 ) );
+		}
 		mtlLoader.setCrossOrigin( this.crossOrigin );
     // AXC: Set material options
     mtlLoader.setMaterialOptions( options );
@@ -49,7 +56,7 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 		}
 
 		function loadObj(materialsCreator) {
-			var loader = new THREE.FileLoader( scope.manager );
+			var loader = scope.getFileLoader();
 			//loader.setCrossOrigin( scope.crossOrigin );
 			loader.load( url, function ( text ) {
 				var object = scope.parse(text, undefined, options);
@@ -74,7 +81,7 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 						materialsCreator = mc;
 					}, onProgress, onError);
 				}
-				var loader = new THREE.FileLoader(scope.manager);
+				var loader = scope.getFileLoader();
 				//loader.setCrossOrigin(scope.crossOrigin);
 				loader.load(url, function (text) {
 					object = scope.parse(text, mtllibCallback, options);
@@ -99,6 +106,11 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 				loadObjWithMTLCallback();
 			}
 
+	},
+
+	// AXC: Custom file loader
+	getFileLoader: function() {
+		return new THREE.FileLoader(this.manager);
 	},
 
 	setCrossOrigin: function ( value ) {

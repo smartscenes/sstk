@@ -3,6 +3,7 @@ var sensors = {
   DepthSensor: require('sim/sensors/DepthSensor'),
   NormalSensor: require('sim/sensors/NormalSensor'),
   SemanticSensor: require('sim/sensors/SemanticSensor'),
+  SemanticTextureSensor: require('sim/sensors/SemanticTextureSensor'),
   SensorGroup: require('sim/sensors/SensorGroup'),
   Sensor: require('sim/sensors/Sensor')
 };
@@ -50,6 +51,8 @@ sensors.getSensor = function(sensorConfig, opts) {
     return new sensors.NormalSensor(sensorConfig, opts);
   } else if (sensorConfig.type === 'semantic') {
     return new sensors.SemanticSensor(sensorConfig, opts);
+  } else if (sensorConfig.type === 'semantic_texture') {
+    return new sensors.SemanticTextureSensor(sensorConfig, opts);
   } else if (sensorConfig.type === 'group') {
     return new sensors.SensorGroup(sensorConfig, opts);
   } else {

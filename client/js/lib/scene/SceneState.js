@@ -1500,6 +1500,18 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return object3Ds.concat(this.extraObjects);
     };
 
+    SceneState.prototype.getModelObject3Ds = function() {
+      var modelInstances = Object3DUtil.findModelInstances(this.scene);
+      var object3Ds = _.map(modelInstances, function (mInst) {
+        return mInst.object3D;
+      });
+      return object3Ds;
+    };
+
+    SceneState.prototype.getWalls = function() {
+      return _.filter(this.extraObjects, function(x) { return x.userData.type === 'Wall'; });
+    };
+
     SceneState.prototype.computeObjectIndex = function() {
       var objectIndex = new Index();
       objectIndex.add('unknown');

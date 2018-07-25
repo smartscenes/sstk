@@ -302,6 +302,35 @@ Graph.prototype.makeProxy = function () {
   return proxy;
 };
 
+Graph.prototype.getUserDataArray = function(key) {
+  var array = [];
+  _.each(this._userData, function(v,id) {
+    if (_.has(v,key)) {
+      array[id] = v[key];
+    }
+  });
+  return array;
+};
+
+Graph.prototype.getCellIdsWithUserData = function(key, valuefilter) {
+  var ids = [];
+  var filter;
+  if (valuefilter == undefined) {
+    filter = function(v, k, context) { return _.has(context, key); };
+  } else if (_.isFunction(valuefilter)) {
+    filter = valuefilter;
+  } else {
+    filter = function(v, k, context) { return v === valuefilter; };
+  }
+  console.log('userdata', this._userData);
+  _.each(this._userData, function (v, id) {
+    if (filter(v[key], key, v)) {
+      ids.push(id);
+    }
+  });
+  return ids;
+}
+
 /**
  * A grid of squares, to be used as a graph.
  * The class creates the structure of the grid; the client can
@@ -448,9 +477,11 @@ SquareGrid.prototype.fromJson = function (json, opts) {
   this.__populateEdges();
 };
 // Encode this grid as a set of pixels
-SquareGrid.prototype.toPixels = function(key) {
+SquareGrid.prototype.toPixels = function(key, keyType) {
   if (key) {
-    if (this._tileAttributes[key]) {
+    if (keyType === 'userData') {
+      return {data: this.getUserDataArray(key), width: this.width, height: this.height }
+    } else if (this._tileAttributes[key]) {
       return {data: this._tileAttributes[key], width: this.width, height: this.height}
     }
   } else {

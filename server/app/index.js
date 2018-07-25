@@ -13,6 +13,7 @@ var bodyParser = require('body-parser');
 var methodOverride = require('method-override');
 var proxyRules = require('./routes/proxy-rules');
 var runReverseProxy = require('../lib/reverse-proxy');
+var assets = require('./assets');
 var _ = require('lodash');
 
 var app = express();
@@ -75,6 +76,9 @@ annServer.registerRoutes(app, '/annotations');
 
 // Query scenes and annotations
 app.get('/query', function(req,res) { return annDb.queryHandler(req, res); });
+
+// Add assets
+assets.registerRoutes(app);
 
 // SSC rendering
 var SSCServer = require('./sscServer');

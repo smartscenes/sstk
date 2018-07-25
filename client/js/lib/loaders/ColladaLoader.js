@@ -3777,8 +3777,8 @@ THREE.ColladaLoader = function () {
 										var texture;
 
 										// AXC - custom texture loading for KMZLoader
-										if (options.loadTextureCallbackFunc) {
-											texture = options.loadTextureCallbackFunc(baseUrl, image.init_from);
+										if (options.loadTextureCallback) {
+											texture = options.loadTextureCallback(baseUrl, image.init_from);
 										} else {
 											var loader = THREE.Loader.Handlers.get(url);
 											if (loader !== null) {

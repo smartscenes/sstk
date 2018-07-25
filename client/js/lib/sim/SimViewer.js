@@ -531,7 +531,8 @@ SimViewer.prototype.visualizeSensorData = function(container, actionResult, debu
     var sensors = actionResult.observation.sensors;
     var scope = this;
     _.each(sensors, function(sensor, sensor_name) {
-      if (sensor.data && (sensor.type === 'normal' || sensor.type === 'semantic' || sensor.type === 'depth' || sensor.type === 'color')) {
+      if (sensor.data && (sensor.type === 'normal' || sensor.type === 'semantic_texture' || sensor.type === 'semantic'
+          || sensor.type === 'depth' || sensor.type === 'color')) {
         var sid = (name? id + '_' + name : id) + '_' + sensor_name;
         var sensor_data = sensor.data_viz || sensor.data;
         var pixelBuffer = sensor_data instanceof ArrayBuffer? new Uint8ClampedArray(sensor_data) : sensor_data;

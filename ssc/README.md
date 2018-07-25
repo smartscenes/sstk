@@ -86,6 +86,8 @@ Annotation tools:
 
 1. './export-part-meshes' - Export part meshes as OBJ/MTL
 
+1. './export-mesh' - Export mesh
+
 1. './create-pts-bvh' - Create BVH given a directory of object point clouds
 
 Known Issues:

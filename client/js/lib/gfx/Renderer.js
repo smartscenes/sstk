@@ -224,6 +224,9 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
         //console.log('render with tile', tile.x, tile.y, tile.width, tile.height);
         camera.setViewOffset(this.width, this.height, tile.x, tile.y, this.__tileWidth, this.__tileHeight);
         var tilePixels = this.__render(scene, camera, _.defaults({pixelBuffer: tileBuffer, width: this.__tileWidth, height: this.__tileHeight}, opts));
+        if (opts.postprocess) {
+          tilePixels = this.postprocessPixels(tilePixels, opts.postprocess, camera);
+        }
         if (this.isOffscreen) {
           // copy from tilePixels into our pixels
           copyPixels(

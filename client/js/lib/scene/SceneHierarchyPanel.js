@@ -820,41 +820,103 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
     },
     'contextmenu':{
       "items": function(node) {
+        var selected = scope.tree.jstree('get_selected', true);
+        var targets = scope.__getObjects(selected);
         var basicItems = {
-          lookAtItem : {
-            "label" : "Look at",
-            "action" : function(item) {
+          lookAtItem: {
+            "label": "Look at",
+            "action": function (item) {
               // Handle look at item for multiple selected
-              var selected = scope.tree.jstree('get_selected', true);
-              var targets = scope.__getObjects(selected);
               //var targets = scope.__getObjects(node);  // Only look at single item
               if (targets && targets.length) {
                 scope.app.lookAt(targets);
               }
             },
-            "_class" : "class"
+            "_class": "class"
           },
-          showItem : {
-            "label" : "(S)how - hide other nodes",
+          toggleVisible: {
+            "label": function (item) {
+              var label = "Toggle visible";
+              if (targets && targets.length) {
+                var isAllVisible = _.every(targets, function (x) {
+                  return x.visible;
+                });
+                var isAllHidden = _.every(targets, function (x) {
+                  return !x.visible;
+                });
+                if (isAllVisible) {
+                  label += " (hide)"
+                }
+                else if (isAllHidden) {
+                  label += " (show)"
+                }
+              }
+              return label;
+            },
+            "action": function (item) {
+              if (targets && targets.length) {
+                _.each(targets, function (target) {
+                  target.visible = !target.visible;
+                });
+              }
+            },
+            "_class": "class"
+          },
+          showItem: {
+            "label": "(S)how - hide other nodes",
             "shortcut": 83,
             "shortcut_label": 's',
-            "action" : function(item) {
+            "action": function (item) {
               // Handle show item for multiple selected
-              var selected = scope.tree.jstree('get_selected', true);
               scope.__showItems(selected);
             },
-            "_class" : "class"
+            "_class": "class"
           },
-          showAll : {
-            "label" : "Show (a)ll",
+          showAll: {
+            "label": "Show (a)ll",
             "shortcut": 65,
             "shortcut_label": 'a',
-            "action" : function(item) {
+            "action": function (item) {
               scope.app.showAll();
             },
+            "_class": "class"
+          }
+        };
+
+        function addSetVisibleOption(items, name, label, flag, recursive) {
+          basicItems[name] = {
+            "label" : label,
+            "action" : function(item) {
+              _.each(targets, function(x) {
+                Object3DUtil.setVisible(x, flag, recursive);
+              });
+            },
             "_class" : "class"
-          },
-          openModelViewer : {
+          };
+
+        }
+
+        if (targets && targets.length) {
+
+          var isAllVisible = _.every(targets, function(x) { return x.visible; });
+          var isAllHidden = _.every(targets, function(x) { return !x.visible; });
+
+          if (isAllVisible) {
+            //addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
+            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+          } else if (isAllHidden) {
+            //addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+          } else {
+            //addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
+            //addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+          }
+        }
+
+        if (scope.modelViewerUrl) {
+          basicItems['openModelViewer'] = {
             "label" : "Show (m)odel",
             "shortcut": 77,
             "shortcut_label": 'm',
@@ -862,10 +924,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
               scope.__openModelViewer(node);
             },
             "_class" : "class"
-          }
-        };
-        if (!scope.modelViewerUrl) {
-          delete basicItems['openModelViewer'];
+          };
         }
         var items = basicItems;
 

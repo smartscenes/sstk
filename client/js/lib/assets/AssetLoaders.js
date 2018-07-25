@@ -14,8 +14,10 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('mesh', 'obj', require('loaders/OBJLoader'));
   assetManager.registerAssetLoader('mesh', 'objmtl', require('loaders/OBJMTLLoader'));
   assetManager.registerAssetLoader('mesh', 'utf8', require('loaders/UTF8Loader'));
-  assetManager.registerAssetLoader('mesh', 'kmz', require('loaders/KMZLoader'));
+  //assetManager.registerAssetLoader('mesh', 'kmz', require('loaders/KMZLoader'));
   assetManager.registerAssetLoader('mesh', 'dae', require('loaders/ColladaLoader'));
+
+  assetManager.registerAssetLoader('materials', 'mtl', require('loaders/MTLLoaderWrapper'));
 
   // The following loaders already use error first callback style
   assetManager.registerAssetLoader('alignmentMatrix', 'aln', require('loaders/ALNLoader'));

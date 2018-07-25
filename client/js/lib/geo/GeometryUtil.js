@@ -742,7 +742,7 @@ GeometryUtil.getMaterials = function(material) {
     materials = [material];
   }
   return materials;
-}
+};
 
 GeometryUtil.splitByMaterial = function(mesh, opts) {
   opts = opts || {};

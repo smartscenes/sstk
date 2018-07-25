@@ -10,6 +10,7 @@ var _ = require('util');
  * @param params.container {jQuery} container object
  * @param params.attributes {string[]} List of editable attributes
  * @param params.attributeLinks {Map<string,LinkInfo>} Map of attribute name to linkage properties
+ * @param params.attributeInfos {Map<string,Object>} Map of attribute name to custom attribute info
  * @param params.attributesReadOnly {string[]} List of readonly attributes
  * @param params.hideEmptyFields {boolean} Whether to hide empty fields or not
  * @param params.searchController {search.SearchController} Search controller for looking up field information
@@ -25,7 +26,9 @@ function AnnotationsPanel(params) {
   // List of settable attributes
   this.attributes = params.attributes || [];
   // Map of attribute name to linking information
-  this.attributeLinks = params.attributeLinks || [];
+  this.attributeLinks = params.attributeLinks || {};
+  // Map of attribute name to custom attribute info
+  this.attributeInfos = params.attributeInfos || {};
   // List of readonly attributes
   this.attributesReadOnly = params.attributesReadOnly || [];
   // Whether to hide empty fields
@@ -389,9 +392,11 @@ AnnotationsPanel.prototype.__createAnnotationField = function(field) {
   var inputType = 'text';
   if (field.type === 'boolean') {
     inputType = 'checkbox';
+  } else if (field.type === 'int' || field.type === 'double' || field.type === 'float') {
+    inputType = 'number';
   }
   if (field.isReadOnly) {
-    var fieldLabel = $('<label></label>').text(fieldName);
+    var fieldLabel = $('<label></label>').text(fieldName).addClass('readonly');
     fieldUi.append(fieldLabel);
     fieldUi.append('&nbsp;');
     if (multiValued) {
@@ -407,6 +412,16 @@ AnnotationsPanel.prototype.__createAnnotationField = function(field) {
   } else {
     var fieldInput = $('<input/>').attr('id', 'anno_' + fieldName).attr('type', inputType);
     var fieldLabel = $('<label></label>').attr('for', 'anno_' + fieldName).text(fieldName);
+    var attrsToSet = ['placeholder'];
+    if (inputType === 'number') {
+      attrsToSet = attrsToSet.concat(['min', 'max', 'step']);
+    }
+    for (var i = 0; i < attrsToSet.length; i++) {
+      var attr = attrsToSet[i];
+      if (field[attr] != undefined) {
+        fieldInput.attr(attr, field[attr]);
+      }
+    }
     var addButton;
     fieldUi.append(fieldLabel);
     fieldUi.append('&nbsp;');
@@ -491,6 +506,12 @@ AnnotationsPanel.prototype.lookupAttributeFields = function () {
       for (var i = 0; i < data.fields.length; i++) {
         var field = data.fields[i];
         map[field.name] = field;
+        if (this.attributeInfos) {
+          var info = this.attributeInfos[field.name];
+          if (info) {
+            _.merge(field, info);
+          }
+        }
       }
       this.attributesMap = map;
       this.displayAttributes = _.filter(this.__displayableAttributes, function(name) { return map.hasOwnProperty(name); });
@@ -671,7 +692,7 @@ function WordNetLabelLinker(linkField, linkerInfo) {
   this.fieldMappings = linkerInfo.fieldMappings;
   this.linkedFields = _.keys(this.fieldMappings);
   this.__cached = {};
-};
+}
 
 WordNetLabelLinker.prototype.clear = function() {
   this.__cached = {};
@@ -686,7 +707,7 @@ WordNetLabelLinker.prototype.getHoverData = function(key) {
 
 WordNetLabelLinker.prototype.getLinked = function(key) {
   return this.__cached[key];
-}
+};
 
 WordNetLabelLinker.prototype.populateLink = function(fieldname, values, callback) {
   var scope = this;
@@ -725,7 +746,7 @@ WordNetLabelLinker.prototype.__convertSynset = function(synset) {
   };
   this.__cached[linkDetail.linkValue] = linkDetail;
   return linkDetail;
-}
+};
 
 WordNetLabelLinker.prototype.__convertSynsetTaxnomyNode = function(node) {
   var linkField = this.fieldMappings[this.linkField];
@@ -733,7 +754,7 @@ WordNetLabelLinker.prototype.__convertSynsetTaxnomyNode = function(node) {
   node.synset.wnhypersynsets = node.ancestors? _.uniq(_.flatMap(node.ancestors, function(x) { return x[linkField]; })) : undefined;
   var linkDetail = this.__convertSynset(node.synset);
   return linkDetail;
-}
+};
 
 WordNetLabelLinker.prototype.linkLabel = function(label, callback) {
   var scope = this;

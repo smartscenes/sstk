@@ -3,6 +3,7 @@ var SceneOperations = require('scene/SceneOperations');
 var SimUtil = require('sim/SimUtil');
 var ImageUtil = require('util/ImageUtil');
 var Picker = require('controls/Picker');
+var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 var async = require('async');
 
@@ -84,6 +85,8 @@ SimOperations.prototype.__modify = function(simState, modification, cb) {
         cb('Cannot place without goals');
       }
       return;
+    } else if (modification.positionAt) {  // assume convertible to THREE.Vector3
+      modification.positionAt = Object3DUtil.toVector3(modification.positionAt);
     }
 
     var prepareModelInstance = function(modelInstance) {

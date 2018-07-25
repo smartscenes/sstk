@@ -51,6 +51,10 @@ THREE.OBJLoader.prototype = {
 		}
 	},
 
+	// AXC: Custom file loader
+	getFileLoader: function() {
+		return new THREE.FileLoader(this.manager);
+	},
 	/**
 	 * Load a Wavefront OBJ file with materials (MTL file)
 	 *
@@ -62,14 +66,17 @@ THREE.OBJLoader.prototype = {
 	_loadWithMtl: function ( url, options, onLoad, onProgress, onError ) {
 		var scope = this;
 
+		// AXC: Custom file loader
 		var mtlurl = options.mtl;
-		var mtlLoader = new THREE.MTLLoader( this.manager );
-		mtlLoader.setBaseUrl( url.substr( 0, url.lastIndexOf( "/" ) + 1 ) );
+		var mtlLoader = options.mtlLoader || new THREE.MTLLoader( this.manager );
+		if (typeof url === 'string') {
+			mtlLoader.setBaseUrl( url.substr( 0, url.lastIndexOf( "/" ) + 1 ) );
+		}
 		mtlLoader.setCrossOrigin( this.crossOrigin );
 		// AXC: Set material options
 		mtlLoader.setMaterialOptions( options );
 
-		var loader = new THREE.FileLoader(scope.manager);
+		var loader = this.getFileLoader();
 		//loader.setCrossOrigin(scope.crossOrigin);
 		loader.load(url, function (text) {
 			// Look for mtllib
@@ -97,12 +104,11 @@ THREE.OBJLoader.prototype = {
 		}, onProgress, onError);
 	},
 
-
 	_loadSimple: function ( url, onLoad, onProgress, onError ) {
 
 		var scope = this;
 
-		var loader = new THREE.FileLoader( scope.manager );
+		var loader = this.getFileLoader();
 		loader.setPath( this.path );
 		loader.load( url, function ( text ) {
 
@@ -845,8 +851,8 @@ THREE.OBJLoader.prototype = {
 					} else if ( isPoints && material && ! ( material instanceof THREE.PointsMaterial ) ) {
 
 						var materialPoints = new THREE.PointsMaterial( { size: 10, sizeAttenuation: false } );
-						materialLine.copy( material );
-						materialLine.lights = false; // TODO: UNHACK
+						materialPoints.copy( material );
+						materialPoints.lights = false; // TODO: UNHACK
 						material = materialPoints;
 
 					}

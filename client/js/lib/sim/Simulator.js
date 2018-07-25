@@ -848,6 +848,9 @@ Simulator.prototype.__loadScene = function (opts, callback) {
     // TODO: enforce recompute false = no recomputation, only use precomputed
     //               recompute undefined = use precomputed, recompute as needed
   }
+  if (this.opts.scene && this.opts.scene.fullId.startsWith("mp3d")) {
+    preloads.push('objectInstanceMaterials');
+  }
   //console.log('got preloads', preloads);
   var defaults = { includeCeiling: true, preload: preloads,
     modelMetadata: { userData: { isSupportObject: true } },

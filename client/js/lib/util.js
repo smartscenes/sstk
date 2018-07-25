@@ -491,8 +491,8 @@ _.interpolate = function(obj, vars, options) {
     var root = stack? stack.get(obj) : {};
     var parentVars = stack? stack.get(parent) : {};
     if (_.isString(value) && (!options.isPossibleTemplate || options.isPossibleTemplate(value))) {
-      var v = _.merge(vars, root)
-      v = _.defaults(Object.create(null), parentVars, v)
+      var v = _.merge(vars, root);
+      v = _.defaults(Object.create(null), parentVars, v);
       var t = _.template(value, options);
       //console.log('resolving template ', value, v);
       var r = t(v);

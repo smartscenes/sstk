@@ -92,6 +92,11 @@ var Viewer3D = function (params) {
   // 2D view
   this._show2D = false;
 
+  // What types of meshes to show
+  this.__showMeshes = true;
+  this.__showLines = true;
+  this.__showPoints = true;
+
   // Has this viewer been "launched" (i.e. initialized?)
   this.isLaunched = false;
 
@@ -140,6 +145,30 @@ Object.defineProperty(Viewer3D.prototype, 'showStats', {
     } else {
       this.__perfStats.dom.style.visibility = 'hidden';
     }
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'showLines', {
+  get: function () {return this.__showLines; },
+  set: function (v) {
+    this.__showLines = v;
+    Object3DUtil.setVisibleForType(this.getRenderScene(), 'line', v);
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'showPoints', {
+  get: function () {return this.__showPoints; },
+  set: function (v) {
+    this.__showPoints = v;
+    Object3DUtil.setVisibleForType(this.getRenderScene(), 'point', v);
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'showMeshes', {
+  get: function () {return this.__showMeshes; },
+  set: function (v) {
+    this.__showMeshes = v;
+    Object3DUtil.setVisibleForType(this.getRenderScene(), 'mesh', v);
   }
 });
 
@@ -403,6 +432,9 @@ Viewer3D.prototype.setupDatGui = function () {
     if (showAll || options['showGrid']) { viewGui.add(this, 'gridPlaneHeight', -10*Constants.metersToVirtualUnit, 10*Constants.metersToVirtualUnit).listen(); }
     if (showAll || options['show2D'])   { viewGui.add(this, 'show2D').listen(); }
     if (showAll || options['showStats']) { viewGui.add(this, 'showStats').listen(); }
+    if (showAll || options['showLines']) { viewGui.add(this, 'showLines').listen(); }
+    if (showAll || options['showPoints']) { viewGui.add(this, 'showPoints').listen(); }
+    if (showAll || options['showMeshes']) { viewGui.add(this, 'showMeshes').listen(); }
 
     if (this.clippingBox && (showAll || options['showClipping'])) {
       var clippingGui = viewGui.addFolder('clipping');

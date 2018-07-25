@@ -82,9 +82,13 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
     PartsPanel.prototype.__initDefaultLabelRemaps = function() {
       var labelMappingCategory = 'category';
       var labelMappingsRaw = require("raw!labels/label-mappings.tsv");
+      var labelMappings = IOUtil.parseDelimited(labelMappingsRaw, {keyBy: labelMappingCategory}).data;
+      this.initLabelRemaps(labelMappings, labelMappingCategory);
+    };
+
+    PartsPanel.prototype.initLabelRemaps = function(labelMappings, labelMappingCategory) {
       var mpr40ColorsRaw = require("raw!labels/mpr40.tsv");
       var nyu40ColorsRaw = require("raw!labels/nyu40colors.csv");
-      var labelMappings = IOUtil.parseDelimited(labelMappingsRaw,  { keyBy: labelMappingCategory }).data
       var mpr40Colors = IOUtil.parseDelimited(mpr40ColorsRaw).data;
       var nyu40Colors = IOUtil.parseDelimited(nyu40ColorsRaw).data;
 
@@ -100,7 +104,9 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       var scope = this;
       //console.log(labelRemap);
       _.each(labelRemap.labelSets, function(labels, name) {
-        scope.defaultLabelTypes.push(name);
+        if (scope.defaultLabelTypes.indexOf(name) < 0) {
+          scope.defaultLabelTypes.push(name);
+        }
         scope.setLabelColorIndex(name, labels);
       });
     };
@@ -151,13 +157,28 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
         this.partTypeSelect.val(this.partType);
       }
       //this.container.append(this.partTypeSelect);
-
+      var hierarchyMaterials = ['clear', 'original'];
+      var meshHierarchMaterialSelect = $('#hierarchyMaterial');
+      for (var i = 0; i < hierarchyMaterials.length; i++) {
+        var s = hierarchyMaterials[i];
+        meshHierarchMaterialSelect.append('<option value="' + s + '">' + s + '</option>');
+      }
+      meshHierarchMaterialSelect.change(function () {
+        meshHierarchMaterialSelect.find('option:selected').each(function () {
+          if ($(this).val() === 'clear') {
+            scope.meshHierarchy.useSpecialMaterial = true;
+          } else if ($(this).val() === 'original') {
+            scope.meshHierarchy.useSpecialMaterial = false;
+          }
+        });
+      });
       this.meshHierarchy = new MeshHierarchyPanel({
         treePanel: $('#treePanel'),
         app: this.app,
         filterEmptyGeometries: this.filterEmptyGeometries,
         showMultiMaterial: this.showMultiMaterial,
-        collapseNestedPaths: this.collapseNestedPaths
+        collapseNestedPaths: this.collapseNestedPaths,
+        useSpecialMaterial: true
       });
 
       this.showButton = $('#showButton');

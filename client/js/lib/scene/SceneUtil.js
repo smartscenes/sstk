@@ -287,6 +287,33 @@ SceneUtil.__colorSceneByMaterial = function (sceneState, opts) {
   return categoryIndex;
 };
 
+SceneUtil.__remapSceneModelMaterials = function (sceneState, opts) {
+  opts = opts || {};
+  var remapMaterialsKey = opts.remapMaterialsKey;
+  var getMeshMaterialForModel = function (modelInfo, mesh) {
+    var originalMaterials = null;
+    var materialsMap = modelInfo[remapMaterialsKey].data.materials;
+    if (mesh.material instanceof THREE.MultiMaterial) {
+      originalMaterials = mesh.material.materials;
+    } else if (Array.isArray(mesh.material)) {
+      originalMaterials = mesh.material;
+    }
+    if (originalMaterials) {
+      var newMaterials = originalMaterials.map(function(m) {
+        return materialsMap[m.name];
+      });
+      return new THREE.MultiMaterial(newMaterials);
+    } else {
+      return materialsMap[mesh.material.name];
+    }
+  };
+  for (var i = 0; i < sceneState.modelInstances.length; i++) {
+    var modelInstance = sceneState.modelInstances[i];
+    var getMeshMaterial = function (m) { return getMeshMaterialForModel(modelInstance.model.info, m); };
+    colorObj(modelInstance.object3D, getMeshMaterial, opts);
+  }
+};
+
 SceneUtil.__colorSceneByIndex = function (sceneState, opts) {
   opts = opts || {};
   var getMaterialFn = opts.getMaterialFn || getMaterial;
@@ -888,6 +915,16 @@ SceneUtil.renderWithMaterial = function(sceneState, opts) {
   var pixels = opts.renderer.render(scene, opts.camera);
   scene.overrideMaterial = oldOverrideMaterial;
   return pixels;
+};
+
+SceneUtil.renderWithRemappedMaterials = function(sceneState, opts) {
+  SceneUtil.__remapSceneModelMaterials(sceneState, _.defaults({ isTemporary: true }, opts));
+  var pixels = opts.renderer.render(sceneState.fullScene, opts.camera);
+  SceneUtil.revertMaterials(sceneState);
+  return {
+    pixels: pixels,
+    nPixels: pixels.length / 4
+  };
 };
 
 SceneUtil.renderColored = function(sceneState, opts) {

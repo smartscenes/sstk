@@ -333,6 +333,7 @@ SimState.prototype.__getGoalForModelInstance = function (mi) {
   const roomTypes = rooms.map(r => this.sceneState.getRoomInfo.bind(this.sceneState)(r).roomType);
 
   return {
+    type: 'object',
     position: objectCentroid,
     bbox: bbox,
     objectId: mi.object3D.userData.id,
@@ -355,6 +356,7 @@ SimState.prototype.__getGoalInRoom = function (room) {
   const roomInfo = this.sceneState.getRoomInfo(room);
 
   return {
+    type: 'room',
     position: position,
     bbox: bbox,
     room: [roomInfo.id],
@@ -368,6 +370,7 @@ SimState.prototype.__getGoalForPosition = function (position) {
   const room = this.sceneState.getIntersectedRoomAt(position);
   const roomInfo = this.sceneState.getRoomInfo(room.object);
   return {
+    type: 'position',
     position: position,
     room: [roomInfo.id],
     roomType: [roomInfo.roomType],
@@ -533,6 +536,7 @@ SimState.prototype.getPositionMetadata = (function() {
     if (floorHeight == undefined && opts.estimateFloorHeight) {
       //console.log('estimateFloorHeight', opts.estimateFloorHeight);
       // No floor height - try to estimate from of room floors around this one
+      // TODO: pass this.opts.rng
       var estimatedFloorHeight = SceneUtil.estimateFloorHeight(opts.level, pFeet,
         opts.estimateFloorHeight.numSamples,
         opts.estimateFloorHeight.maxDist,
@@ -717,6 +721,7 @@ SimState.prototype.getSummary = function() {
   var goals = this.getSerializableGoals();
   var summary = {
     sceneId: this.sceneState.getFullID(),
+    scene: { bbox: this.sceneState.getBBox() },
     start: this.start,
     goal: goals[0]
   };

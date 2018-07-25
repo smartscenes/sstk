@@ -26,6 +26,7 @@ function MeshLabeler(params) {
     filterEmptyGeometries: this.filterEmptyGeometries,
     showMultiMaterial: this.showMultiMaterial,
     collapseNestedPaths: this.collapseNestedPaths,
+    useSpecialMaterial: true,
     getMeshId: params.getMeshId
   });
 }

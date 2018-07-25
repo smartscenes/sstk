@@ -48,7 +48,7 @@ html(lang='en')
       var scanQuerier = new STK.ScanQuerier({
         entriesPerRow: 8,
         assetTypes: ['scan'],
-        sources: ['scannet'],
+        sources: [!{JSON.stringify(assetName || 'scannet')}],
         screenshots: ['original', 'category', 'instance', 'mpr40', 'nyu40'],
         viewerUrl: '#{baseUrl}/scans/simple-viewer',
         filterPanel: '#filters',
@@ -57,7 +57,7 @@ html(lang='en')
         searchPanel: '#searchPanel',
         searchButton: '#searchButton',
         searchTextElem: '#searchText',
-        assetFiles: [STK.Constants.assetsDir + '/data/scannet/scannet.json'],
+        assetFiles: [!{JSON.stringify(assetGroup.metadata)}],
         helpPanel: {
           selector: '#helpPanel',
           close: function() { $('#helpModal').modal('hide'); }

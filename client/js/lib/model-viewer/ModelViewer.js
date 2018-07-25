@@ -308,9 +308,12 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       var annotationsPanel = $('#annotationsPanel');
       if (annotationsPanel && annotationsPanel.length > 0) {
         var modelAttributes = ['id', 'wnsynset', 'category', 'color', 'material', 'shape', 'depicts',
-          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection'];
-        var readOnlyAttributes = ['id', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
+          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection', 'modelQuality'];
+        var readOnlyAttributes = ['id', 'isAligned', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
           'staticFrictionForce' /*, "aligned.dims" */];
+        var attributeInfos = {
+          "modelQuality": { min: 0, max: 7, step: 1 }
+        };
         var attributeLinks = { "wnsynset": {
             solrUrl: Constants.shapenetSearchUrl,
             taxonomy: "shapenet",
@@ -334,6 +337,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
           attributes: modelAttributes,
           attributesReadOnly: readOnlyAttributes,  // readonly attributes
           attributeLinks: attributeLinks,
+          attributeInfos: attributeInfos,
           searchController: this.modelSearchController,
           onSubmittedCallback: this.refreshModelInfo.bind(this)
         });

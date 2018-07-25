@@ -424,12 +424,20 @@ OBJMTLExporter.prototype.__getMaterialString = function(mat, matId, params) {
   }
   // mtl += 'Ke 0.0000 0.0000 0.0000\n';
   if (mat.map && mat.map.image) {
-    var file = this.__getTexturePath(mat.map.image.src, params);
-    mtl += 'map_Kd ' + file + '\n';
+    if (mat.map.image.path || mat.map.image.src) {
+      var file = this.__getTexturePath(mat.map.image.path || mat.map.image.src, params);
+      mtl += 'map_Kd ' + file + '\n';
+    } else {
+      console.warn('Cannot get path to image for material map for ' + matId);
+    }
   }
   if (mat.bumpMap && mat.bumpMap.image) {
-    var file = this.__getTexturePath(mat.bumpMap.image.src, params);
-    mtl += 'map_bump ' + file + '\n';
+    if (mat.bumpMap.image.path || mat.bumpMap.image.src) {
+      var file = this.__getTexturePath(mat.bumpMap.image.path || mat.bumpMap.image.src, params);
+      mtl += 'map_bump ' + file + '\n';
+    } else {
+      console.warn('Cannot get path to image for material bumpMap for ' + matId);
+    }
   }
   return mtl;
 };
@@ -469,6 +477,11 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
     };
     if (child instanceof THREE.Mesh) {
       scope.__exportMesh(child, result, params, cb);
+      return;
+    } else if (child instanceof THREE.Line) {
+      // TODO: Handle line
+      console.warning("Skipping line " + child.id);
+      // scope.__exportLine(child, result, params, cb);
       return;
     } else {
       if (params.getGroupName) {

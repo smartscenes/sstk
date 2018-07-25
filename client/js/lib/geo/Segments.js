@@ -42,6 +42,7 @@ function Segments(params, segmentType) {
   params = params || {};
   this.segmentType = segmentType || 'surfaces';
   this.showNodeCallback = params.showNodeCallback;
+  this.segmentLevels = ['components', 'pieces', 'surfaces'];
 
   // Should we compute remapped segments?
   this.sortSegmentsByArea = params.sortSegmentsByArea;
@@ -475,7 +476,7 @@ Segments.prototype.__indexedSegmentationToHierarchicalSegmentsUseExisting = func
   var meshes = Object3DUtil.getMeshes(this.origObject3D).list;
   var meshIndex = segmentationsByName['meshes'].index;
 
-  var segLevels = ['components', 'pieces', 'surfaces'];
+  var segLevels = this.segmentLevels;
   var combinedIndex = [];
   for (var i = 0; i < nTris; i++) {
     var index = segLevels.map( function(name) { return segmentationsByName[name].index[i]; }).join('_');

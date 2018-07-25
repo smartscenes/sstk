@@ -22,6 +22,7 @@ cmd
   .option('--split_by_material [flag]', STK.util.cmd.parseBoolean, false)
   .option('--input_format <format>', 'File format to use')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
+  .option('--segmentation <filename>', 'Segmentation file')
   .optionGroups(['config_file', 'color_by'])
   .option('--skip_existing', 'Skip rendering existing images [false]')
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
@@ -148,52 +149,86 @@ function processFiles() {
         info = _.defaults(info, cmd.assetInfo);
       }
 
-      assetManager.loadModel(info,
-        function (err, modelInstance) {
-          modelInstance.object3D.updateMatrixWorld();
-          var wrapped = modelInstance.getObject3D('Model');
-          var object3D = wrapped.children[0];
+      function processSegmentedModel(err, modelInstance, segments) {
+        var wrapped = modelInstance.getObject3D('Model');
+        var object3D;
+        if (segments) {
+          object3D = segments.segmentedObject3DHierarchical;
+        } else {
+          object3D = wrapped.children[0];
           object3D.name = object3D.name.replace('-orig', '');
-          STK.geo.Object3DUtil.populateSceneGraphPath(object3D, object3D);
-          if (cmd.filter_empty) {
-            console.log('Remove empty geometry from ' + name);
-            STK.geo.Object3DUtil.removeEmptyGeometries(object3D);
-          }
-          if (cmd.collapse_nested) {
-            console.log('Collapse nested for ' + name);
-            object3D = STK.geo.Object3DUtil.collapseNestedPaths(object3D);
-          }
+        }
+        STK.geo.Object3DUtil.populateSceneGraphPath(object3D, object3D);
+        if (cmd.filter_empty) {
+          console.log('Remove empty geometry from ' + name);
+          STK.geo.Object3DUtil.removeEmptyGeometries(object3D);
+        }
+        if (cmd.collapse_nested) {
+          console.log('Collapse nested for ' + name);
+          object3D = STK.geo.Object3DUtil.collapseNestedPaths(object3D);
+        }
 
-          var ajsonExportOpts = {
-            dir: basename,
-            name: outname,
-            splitByMaterial: cmd.split_by_material,
-            json: {
-              rootTransform: wrapped.matrix.toArray()
-            }
-          };
-          var objExportOpts = {
-            dir: basename + '/leaf_part_obj',
-            name: outname,
-            skipMtl: true,
+        var ajsonExportOpts = {
+          dir: basename,
+          name: outname,
+          splitByMaterial: cmd.split_by_material,
+          json: {
+            rootTransform: wrapped.matrix.toArray()
+          }
+        };
+        var objExportOpts = {
+          dir: basename + '/leaf_part_obj',
+          name: outname,
+          skipMtl: true,
 //            rewriteTexturePathFn: rewriteTexturePath
-          };
-          STK.util.waitImagesLoaded(function () {
-            exportHierarchy(ajsonExporter, ajsonExportOpts, object3D, function (err2, res2) {
-              if (err2) {
-                console.error('Error processing ' + name, err2);
-                callback(err2, res2);
-              } else {
-                exportParts(objExporter, objExportOpts, res2.indexed.root, function (err3, res3) {
-                  if (err3) {
-                    console.error('Error processing ' + name, err3);
-                  }
-                  callback(err3, res3);
-                });
-              }
-            });
+        };
+        STK.util.waitImagesLoaded(function () {
+          exportHierarchy(ajsonExporter, ajsonExportOpts, object3D, function (err2, res2) {
+            if (err2) {
+              console.error('Error processing ' + name, err2);
+              callback(err2, res2);
+            } else {
+              exportParts(objExporter, objExportOpts, res2.indexed.root, function (err3, res3) {
+                if (err3) {
+                  console.error('Error processing ' + name, err3);
+                }
+                callback(err3, res3);
+              });
+            }
           });
         });
+      }
+
+      function processModel(err, modelInstance) {
+        modelInstance.object3D.updateMatrixWorld();
+        if (cmd.segmentation || cmd.segmentsType) {
+          var segmentsType = cmd.segmentsType || 'custom_segmentation';
+          var segments = new STK.geo.Segments({
+            skipSegmentedObject3D: false,
+            showNodeCallback: function (segmentedObject3D) {
+            }
+          }, segmentsType);
+          segments.segmentLevels = ['components', 'pieces'];
+          var segmentsInfo = modelInstance.model.info[segmentsType];
+          if (cmd.segmentation) {
+            segmentsInfo = {
+              "name": "parts",
+              "format": "indexedSegmentation",
+              "files": {
+                "segmentation": cmd.segmentation
+              }
+            }
+            modelInstance.model.info[segmentsType] = segmentsInfo;
+          }
+          segments.init(modelInstance);
+          segments.loadSegments(function (err, res) {
+            processSegmentedModel(err, modelInstance, segments);
+          });
+        } else {
+          processSegmentedModel(err, modelInstance);
+        }
+      }
+      assetManager.loadModel(info, processModel);
     }
   }, function (err, results) {
     if (err) {
