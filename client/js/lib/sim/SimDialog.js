@@ -151,6 +151,15 @@ SimDialog.prototype.process = function(lastActionResult, text, callback) {
       } else {
         callback("I don't have any " + nouns);
       }
+    } else if (action === 'color' || action === 'color_all') {
+      var objs = (action === 'color')? operations.findObjectsInViewByCategory(simState, observations.objectId, categories) :
+        operations.findObjectsInSceneByCategory(simState, categories);
+      if (objs.length > 0) {
+        operations.colorObjects(objs, target);
+        callback("I colored " + objs.length + " " + nouns + " " + target);
+      } else {
+        callback("I didn't find  any " + nouns);
+      }
     } else {
       var objs = operations.findObjectsInViewByCategory(simState, observations.objectId, categories);
       if (objs.length > 0) {

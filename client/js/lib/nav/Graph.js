@@ -179,7 +179,7 @@ Graph.prototype.checkCellsTraversable = function(cellIds, filter) {
     var tileWeight = scope.tileWeight(cellId);
     //console.log('got tileWeight', cellId, tileWeight);
     return _.isFinite(tileWeight);
-  }
+  };
   for (var i = 0; i < cellIds.length; i++) {
     var okay = filter(cellIds[i]);
     if (!okay) {
@@ -322,7 +322,7 @@ Graph.prototype.getCellIdsWithUserData = function(key, valuefilter) {
   } else {
     filter = function(v, k, context) { return v === valuefilter; };
   }
-  console.log('userdata', this._userData);
+  // console.log('userdata', this._userData);
   _.each(this._userData, function (v, id) {
     if (filter(v[key], key, v)) {
       ids.push(id);

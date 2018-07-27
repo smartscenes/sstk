@@ -1,4 +1,5 @@
 var Constants = require('Constants');
+var Object3DUtil = require('geo/Object3DUtil');
 var SceneOperations = require('scene/SceneOperations');
 var SimUtil = require('sim/SimUtil');
 var ImageUtil = require('util/ImageUtil');
@@ -129,9 +130,39 @@ SimOperations.prototype.__modify = function(simState, modification, cb) {
     } else {
       cb('Please specify modelIds, objectIds, categories, or filter for remove');
     }
+  } else if (modification.name === 'color') {
+    var color = modification.color;
+    if (color == undefined) {
+      cb('Please specify color to use');
+      return;
+    }
+    if (modification.modelIds) {
+      this.colorObjects(this.findObjectsInSceneByModelId(simState, modification.modelIds), color, cb);
+    } else if (modification.objectIds) {
+      this.colorObjects(this.findObjectsInSceneByObjectId(simState, modification.objectIds), color, cb);
+    } else if (modification.categories) {
+      this.colorObjects(this.findObjectsInSceneByCategory(simState, modification.categories), color, cb);
+    } else if (modification.filter) {
+      this.colorObjects(this.findObjectsInScene(simState, filter), color, cb);
+    } else {
+      cb('Please specify modelIds, objectIds, categories, or filter for color');
+    }
   } else {
     cb('Unsupported operation ' + modification.name);
   }
+};
+
+/**
+ * Color specified objects
+ * @param objects {Array[THREE.Object3D|{node: THREE.Object3D}]}
+ * @param color {THREE.Color}}
+ * @param cb
+ */
+SimOperations.prototype.colorObjects = function(objects, color, cb) {
+  var object3Ds = _.map(objects, function(x) { return (x instanceof THREE.Object3D)? x : x.node; });
+  var material = Object3DUtil.getStandardMaterial(color);
+  this.__sceneOperations.setObjectMaterial({ objects: object3Ds, material: material });
+  if (cb) { cb(); }
 };
 
 /**
@@ -235,7 +266,7 @@ SimOperations.prototype.getQueryForCategories = function(categories) {
   var assetManager = this.simulator.assetManager;
   var query = assetManager.searchController.getQuery('category', categories.concat(_.map(categories, function(x) { return _.upperFirst(x); })));
   return query;
-}
+};
 
 /**
  * Add object to scene with specified category
@@ -298,10 +329,69 @@ SimOperations.prototype.findObjectsInView = function(simState, sensedObjects, fi
  * @param simState {SimState}
  * @param sensedObjects {sim.sensors.SemanticSensor.Frame}
  * @param categories {string[]}
- * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance, count: number}>}
+ * @param includeOtherObjects {boolean} Whether non model instances (wall/ceilings/floors) are included
+ * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance}>}
  */
 SimOperations.prototype.findObjectsInViewByCategory = function(simState, sensedObjects, categories, includeOtherObjects) {
   return SimUtil.findObjectsByCategory(simState, sensedObjects, categories, includeOtherObjects);
+};
+
+SimOperations.prototype.findObjectsInViewById = function(simState, sensedObjects, ids) {
+  return SimUtil.findObjects(simState, sensedObjects, function(x) {
+    return ids.indexOf(x.node.userData.id) >= 0;
+  });
+};
+
+/**
+ * Find object in scene matching filter
+ * @param simState {SimState}
+ * @param filter {Function}
+ */
+SimOperations.prototype.findObjectsInScene = function(simState, filter) {
+  var nodes = simState.sceneState.findNodes(filter);
+  var objectInfos = nodes.map(function(node) {
+    return {
+      id: node.userData.id,
+      node: node,
+      modelInstance: Object3DUtil.getModelInstance(node)
+    }
+  });
+  objectInfos = _.sortBy(objectInfos, 'id');
+  return objectInfos;
+};
+
+/**
+ * Find object in scene matching category
+ * @param simState {SimState}
+ * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance}>}
+ */
+SimOperations.prototype.findObjectsInSceneByCategory = function(simState, categories, includeOtherObjects) {
+  return this.findObjectsInScene(simState, function(node) {
+    return Object3DUtil.filterByCategory(node, categories, includeOtherObjects);
+  });
+};
+
+/**
+ * Find object in scene matching object id
+ * @param simState {SimState}
+ * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance}>}
+ */
+SimOperations.prototype.findObjectsInSceneByObjectId = function(simState, ids) {
+  return this.findObjectsInScene(simState, function(node) {
+    return ids.indexOf(node.userData.id) >= 0;
+  });
+};
+
+/**
+ * Find object in scene matching model id
+ * @param simState {SimState}
+ * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance}>}
+ */
+SimOperations.prototype.findObjectsInSceneByModelId = function(simState, ids) {
+  return this.findObjectsInScene(simState, function(node) {
+    var modelInstance = Object3DUtil.getModelInstance(node);
+    return modelInstance && ids.indexOf(modelInstance.model.info.fullId) >= 0;
+  });
 };
 
 /**

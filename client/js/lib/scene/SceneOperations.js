@@ -96,8 +96,8 @@ SceneOperations.prototype.createObject = function(opts) {
 /**
  * Rotate object
  * @param opts
- * @param [opts.modelInstance] {THREE.Object3D}
- * @param [opts.object3D] {ModelInstance}
+ * @param [opts.object3D] {THREE.Object3D}
+ * @param [opts.modelInstance] {ModelInstance}
  * @param opts.axis {THREE.Vector3} Axis to rotate around
  * @parma opts.delta {number} Number of radians to rotate
  * @param [opts.bbfaceIndex] Bounding box face to rotate around
@@ -121,6 +121,7 @@ SceneOperations.prototype.rotateObject = function(opts) {
  * @param [opts.anchorPosition] {THREE.Vector3} What anchor point to use for positioning object (interpreted wrt anchorFrame)
  */
 SceneOperations.prototype.placeObject = function(opts) {
+  //console.log('placeObject', opts);
   var sceneState = opts.sceneState;
   var modelInstance = opts.modelInstance || Object3DUtil.getModelInstance(opts.object3D);
   var keepWorldTransform = false;
@@ -128,7 +129,9 @@ SceneOperations.prototype.placeObject = function(opts) {
   if (opts.positionAt) {
     keepWorldTransform = true;
     if (opts.anchorFrame === 'objectOrigin') {
+      //console.log('before add place', Object3DUtil.getBoundingBox(modelInstance.object3D).toString());
       Object3DUtil.placeObject3DByOrigin(modelInstance.object3D, opts.positionAt);
+      //console.log('after place', Object3DUtil.getBoundingBox(modelInstance.object3D).toString());
     } else if (opts.anchorFrame === 'objectBBox') {
       // TODO: we should differentiate between objectBBox and objectWorldBBox
       Object3DUtil.placeObject3D(modelInstance.object3D, opts.positionAt, opts.anchorPosition);
@@ -141,7 +144,9 @@ SceneOperations.prototype.placeObject = function(opts) {
     // TODO: Flesh out rotation
     this.rotateObject({modelInstance: modelInstance, axis: opts.axis || Constants.worldUp, delta: opts.rotation});
   }
+  //console.log('before add modelInstance', Object3DUtil.getBoundingBox(modelInstance.object3D).toString());
   sceneState.addObject(modelInstance, keepWorldTransform);
+  //console.log('after add modelInstance', Object3DUtil.getBoundingBox(modelInstance.object3D).toString());
 };
 
 /**
@@ -178,6 +183,35 @@ SceneOperations.prototype.removeObjects = function(opts) {
     return sceneState.removeObjects(indices);
   }
 };
+
+/**
+ * Set object material
+ * @param opts
+ * @param [opts.objects] {THREE.Object3D|Array[THREE.Object3D]}
+ * @param {opts.sceneState} {SceneState}
+ * @param {opts.filter} {Function(THREE.Object3D)}
+ * @param opts.material {THREE.Material}
+ */
+SceneOperations.prototype.setObjectMaterial = function(opts) {
+  if (opts.objects) {
+    var objects = opts.objects;
+    if (!Array.isArray(objects)) {
+      objects = [objects];
+    }
+    _.each(objects, function (obj) {
+      console.log('applymaterial', obj, opts.material);
+      Object3DUtil.applyMaterial(obj, opts.material, true, false);
+    });
+  } else if (opts.sceneState) {
+    var objects = opts.sceneState.findNodes(opts.filter || function(x) { return x; });
+    _.each(objects, function (obj) {
+      Object3DUtil.applyMaterial(obj, opts.material, true, false);
+    });
+  } else {
+    throw "Please specify either sceneState and filter or objects";
+  }
+};
+
 
 /**
  * Performs some action on an object

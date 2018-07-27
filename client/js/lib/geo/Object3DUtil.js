@@ -3575,6 +3575,20 @@ Object3DUtil.grayOutVertices = function(object3D, center, maxRadius, grayColor) 
   });
 };
 
+Object3DUtil.filterByCategory = function(node, categories, includeNonModelInstances) {
+  var modelInstance = Object3DUtil.getModelInstance(node);
+  if (modelInstance) {
+    return modelInstance.model.hasCategoryIn(categories, true);
+  } else {
+    if (includeNonModelInstances && node.userData.type) {
+      var t = node.userData.type.toLowerCase();
+      return _.any(categories, function(cat) { return t === cat.toLowerCase(); });
+    } else {
+      return false;
+    }
+  }
+};
+
 Object3DUtil.BlackMatParams = {
   type: 'phong',
   opacity: 1,

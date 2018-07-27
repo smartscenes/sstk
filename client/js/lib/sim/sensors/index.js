@@ -9,7 +9,7 @@ var sensors = {
 };
 
 /**
- *
+ * Get renderer to use for camera sensors
  * @param sensorConfig
  * @param sensorConfig.type {string}
  * @param sensorConfig.width {int}
@@ -32,11 +32,18 @@ function getRenderer(sensorConfig, opts) {
 }
 
 
-// TODO: Create new render for sensor based on sensor configuration instead of just reusing old prespecified
+/**
+ * Create the specified sensor
+ * @param sensorConfig
+ * @param opts
+ * @returns {*}
+ */
 sensors.getSensor = function(sensorConfig, opts) {
+  // TODO: Create new renderer for sensor based on sensor configuration instead of just reusing old prespecified
   opts = _.defaults(Object.create(null), opts, {
     getRenderer: getRenderer, getSensor: sensors.getSensor
   });
+  // console.log('got sensorConfig', sensorConfig);
   if (sensorConfig.type === 'color') {
     // TODO: Clean override of encoding up
     // If opts.colorEncoding specified, has it override sensorConfig.encoding
@@ -61,6 +68,23 @@ sensors.getSensor = function(sensorConfig, opts) {
     return null;
     //return new sensors.Sensor(sensorConfig);
   }
+};
+
+sensors.getSensors = function(sensorConfig, opts) {
+  var sensorConfigs;
+  if (_.isArray(sensorConfig.position)) {
+    var sz = sensorConfig.position.length;
+    sensorConfigs = _.map(sensorConfig.position, function(p,i) {
+      var index = (sz > 1 && i)? i : undefined;
+      return _.defaults({ position: p, orientation: sensorConfig.orientation[i], index: index }, sensorConfig);
+    });
+  } else {
+    sensorConfigs = [sensorConfig];
+  }
+  var res = _.map(sensorConfigs, function(sc) {
+    return sensors.getSensor(sc, opts);
+  });
+  return res;
 };
 
 module.exports = sensors;

@@ -23,17 +23,7 @@ SimUtil.findObjectsByCategory = function(state, objects, categories, includeOthe
   var objectIds = _.keys(objects.counts);
   var objectInfos = state.getObjectInfos(objectIds);
   var filtered = objectInfos.filter(function(x) {
-    var modelInstance = Object3DUtil.getModelInstance(x.node);
-    if (modelInstance) {
-      return modelInstance.model.hasCategoryIn(categories, true);
-    } else {
-      if (includeOtherObjects && x.node.userData.type) {
-        var t = x.node.userData.type.toLowerCase();
-        return _.any(categories, function(cat) { return t === cat.toLowerCase(); });
-      } else {
-        return false;
-      }
-    }
+    return Object3DUtil.filterByCategory(x.node, categories, includeOtherObjects);
   });
   _.each(filtered, function(x) {
     x.modelInstance = Object3DUtil.getModelInstance(x.node);
