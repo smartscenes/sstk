@@ -28,7 +28,7 @@ Sampler.prototype.sample = function(opts) {
     // Batch sampling
     if (opts.withReplacement) {
       if (opts.scorer) { //weighted
-        return this.__sampleWeightedWithReplacement({});
+        return this.__sampleWeightedWithReplacement(opts.elements, opts.nsamples, opts.scorer);
       } else {
         return this.__sampleWithReplacement(opts.elements, opts.nsamples);
       }
@@ -51,7 +51,7 @@ Sampler.prototype.sample = function(opts) {
     // Sample single
     if (opts.scorer) { //weighted
       if (isArray) {
-        return this.__sampleOneWeighted(opts.elements);
+        return this.__sampleOneWeighted(opts.elements, opts.scorer);
       } else {
         return this.__sampleOneWeightedStream(opts.elements, opts.scorer);
       }

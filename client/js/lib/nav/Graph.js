@@ -173,6 +173,52 @@ Graph.prototype.edgeWeight = function (id1, id2) {
     return this._weights[id2];
   }
 };
+Graph.prototype.checkCellsTraversable = function(cellIds, filter) {
+  var scope = this;
+  filter = filter || function(cellId) {
+    var tileWeight = scope.tileWeight(cellId);
+    //console.log('got tileWeight', cellId, tileWeight);
+    return _.isFinite(tileWeight);
+  };
+  for (var i = 0; i < cellIds.length; i++) {
+    var okay = filter(cellIds[i]);
+    if (!okay) {
+      return false;
+    }
+  }
+  return true;
+};
+Graph.prototype.getLinePathById = function(id1, id2) {
+  var startCell = this.idToCell(id1);
+  var endCell = this.idToCell(id2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+Graph.prototype.getLinePathByPosition = function(p1, p2) {
+  var startCell = this.positionToCell(p1);
+  var endCell = this.positionToCell(p2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+Graph.prototype.getLinePathInfoById = function(id1, id2) {
+  var info = {};
+  var startCell = this.idToCell(id1);
+  var endCell = this.idToCell(id2);
+  info.cellIds = this.getLinePath(startCell, endCell);
+  if (info.cellIds) {
+    info.isTraversable = this.checkCellsTraversable(info.cellIds);
+    if (info.isTraversable) {
+      // Weight distance by distance in cell
+      //var pos1 =  this.idToPosition(id1);
+      //var pos2 =  this.idToPosition(id2);
+      var dir = [startCell.i - endCell.i, startCell.j - endCell.j];
+      info.weight = Math.sqrt(dir[0]*dir[0] + dir[1]*dir[1])*this._weights[endCell.id];
+    } else {
+      info.weight = Infinity;
+    }
+  }
+  return info;
+};
 Graph.prototype.distance = function (id1, id2) {
   // Assume edge weight is same as distance (not true!!!)
   return this.edgeWeight(id1, id2);
@@ -255,6 +301,35 @@ Graph.prototype.makeProxy = function () {
   }
   return proxy;
 };
+
+Graph.prototype.getUserDataArray = function(key) {
+  var array = [];
+  _.each(this._userData, function(v,id) {
+    if (_.has(v,key)) {
+      array[id] = v[key];
+    }
+  });
+  return array;
+};
+
+Graph.prototype.getCellIdsWithUserData = function(key, valuefilter) {
+  var ids = [];
+  var filter;
+  if (valuefilter == undefined) {
+    filter = function(v, k, context) { return _.has(context, key); };
+  } else if (_.isFunction(valuefilter)) {
+    filter = valuefilter;
+  } else {
+    filter = function(v, k, context) { return v === valuefilter; };
+  }
+  // console.log('userdata', this._userData);
+  _.each(this._userData, function (v, id) {
+    if (filter(v[key], key, v)) {
+      ids.push(id);
+    }
+  });
+  return ids;
+}
 
 /**
  * A grid of squares, to be used as a graph.
@@ -383,7 +458,7 @@ SquareGrid.prototype.edgesFrom = function (id1) {
 SquareGrid.prototype.isValidCell = function (x, y) { return 0 <= x && x < this.width && 0 <= y && y < this.height; };
 SquareGrid.prototype.isTraversable = function (x, y) { return this.isValidCell(x,y) && this.tileWeight(this.toId(x,y)) !== Infinity; };
 SquareGrid.prototype.toId = function (x, y) { return x + y * this.width; };
-SquareGrid.prototype.fromId = function (id) { return [id % this.width, Math.floor(id / this.width)]; };
+SquareGrid.prototype.fromId = function (id) { return [id % this.width, Math.floor(id / this.width), [0, 0]]; };
 // Represent this grid as a serializable json object
 SquareGrid.prototype.toJson = function () {
   var json = Graph.prototype.toJson.call(this);
@@ -402,9 +477,11 @@ SquareGrid.prototype.fromJson = function (json, opts) {
   this.__populateEdges();
 };
 // Encode this grid as a set of pixels
-SquareGrid.prototype.toPixels = function(key) {
+SquareGrid.prototype.toPixels = function(key, keyType) {
   if (key) {
-    if (this._tileAttributes[key]) {
+    if (keyType === 'userData') {
+      return {data: this.getUserDataArray(key), width: this.width, height: this.height }
+    } else if (this._tileAttributes[key]) {
       return {data: this._tileAttributes[key], width: this.width, height: this.height}
     }
   } else {
@@ -448,20 +525,110 @@ SquareGrid.prototype.distance = function (id1, id2) {
   return Math.sqrt(dir[0]*dir[0] + dir[1]*dir[1]);
 };
 
-SquareGrid.prototype.edgeWeight = function (id1, id2) {
-  if (this.useEdgeWeights && !this._precomputeEdges) {
-    var xy1 = this.fromId(id1);
-    var xy2 = this.fromId(id2);
-    if (this.__hasEdgeXY(xy1, xy2)) {
-      var dx = xy2[0] - xy1[0];
-      var dy = xy2[1] - xy1[1];
-      return this.__computeEdgeWeight([dx,dy], this._weights[id2]);
-    } else {
-      return Infinity;
+SquareGrid.prototype.__line_tile_weight = function (xy0, xy1) {
+  var x1 = xy0[0], y1 = xy0[1];
+  var x2 = xy1[0], y2 = xy1[1];
+
+  var xstep = 1, ystep = 1;
+  var error, errorprev;
+  var y = y1, x = x1;
+  var ddy, ddx;
+  var dx = x2 - x1;
+  var dy = y2 - y1;
+
+  if (Math.abs(dy) <= 1 && Math.abs(dx) <= 1) {
+    return 0.0;
+  }
+
+  if (dy < 0) {
+    dy = -dy;
+    ystep = -1;
+  }
+
+  if (dx < 0) {
+    dx = -dx;
+    xstep = -1;
+  }
+
+  ddy = 2 * dy;
+  ddx = 2 * dx;
+
+  var max_tile_weight = 0.0;
+  if (ddx >= ddy) {
+    errorprev = error = dx;
+    for (var i = 0; i < dx; i++) {
+      x += xstep;
+      error += ddy;
+      if (error > ddx) {
+        y += ystep;
+        error -= ddx;
+
+        if (error + errorprev < ddx) {
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x, y - ystep)]);
+        } else if (error + errorprev > ddx) {
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x - xstep, y)]);
+        } else {
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x, y - ystep)]);
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x - xstep, y)]);
+        }
+      }
+
+      max_tile_weight =
+        Math.max(max_tile_weight, this._weights[this.toId(x, y)]);
+
+      errorprev = error;
     }
   } else {
-    return Graph.prototype.edgeWeight.call(this, id1, id2);
+    errorprev = error = dy;
+    for (var i = 0; i < dy; i++) {
+      y += ystep;
+      error += ddx;
+      if (error > ddy) {
+        x += xstep;
+        error -= ddy;
+
+        if (error + errorprev < ddy) {
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x - xstep, y)]);
+        } else if (error + errorprev > ddy) {
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x, y - ystep)]);
+        } else {
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x - xstep, y)]);
+          max_tile_weight =
+            Math.max(max_tile_weight,
+              this._weights[this.toId(x, y - ystep)]);
+        }
+      }
+
+      max_tile_weight =
+        Math.max(max_tile_weight, this._weights[this.toId(x, y)]);
+
+      errorprev = error;
+    }
   }
+
+  return max_tile_weight;
+};
+
+SquareGrid.prototype.edgeWeight = function (id1, id2) {
+  var xy1 = this.fromId(id1);
+  var xy2 = this.fromId(id2);
+  var dx = xy2[0] - xy1[0];
+  var dy = xy2[1] - xy1[1];
+  return this.__computeEdgeWeight([dx,dy], Math.max(this._weights[id2], this.__line_tile_weight(xy1, xy2)));
 };
 SquareGrid.prototype.__hasEdgeXY = function (xy1, xy2) {
   var dx = xy2[0] - xy1[0];
@@ -503,7 +670,14 @@ SquareGrid.prototype.allEdges = function () {
 
 
 SquareGrid.DIRS4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-SquareGrid.DIRS8 = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -1]];
+//SquareGrid.DIRS8 = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -1]];
+SquareGrid.DIRS8 = [
+  [1, 0], [1, 1], [ 0, 1 ], [ -1, 1 ], [ -1, 0 ], [ -1, -1 ], [ 0, -1 ], [ 1, -1 ]
+];
 SquareGrid.DIRS = SquareGrid.DIRS4;
 
-module.exports = { Graph: Graph, SquareGrid: SquareGrid, CellAttribute: CellAttribute };
+module.exports = {
+  Graph: Graph,
+  SquareGrid: SquareGrid,
+  CellAttribute: CellAttribute
+};

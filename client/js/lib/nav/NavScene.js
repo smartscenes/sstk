@@ -3,10 +3,12 @@ var BBox = require('geo/BBox');
 var Constants = require('Constants');
 var Colors = require('util/Colors');
 var MeshHelpers = require('geo/MeshHelpers');
+var RaycasterUtil = require('geo/RaycasterUtil');
 var Object3DUtil = require('geo/Object3DUtil');
 var Graph = require('nav/Graph');
 var PathFinder = require('nav/PathFinder');
 var PubSub = require('PubSub');
+var RNG = require('math/RNG');
 var Timings = require('util/Timings');
 var _ = require('util');
 
@@ -22,8 +24,9 @@ Graph.createFromJson = function(json, opts) {
   }
 };
 
-Graph.ClearanceTileWeight = 10;
-Graph.MaxTileWeight = 20;
+// TODO parameterize and put back default values
+Graph.ClearanceTileWeight = 1.0;
+Graph.MaxTileWeight = 20000;
 
 /**
  * 2D grid for a scene
@@ -96,7 +99,7 @@ SceneGrid2D.prototype.positionToCell = function(position) {
 };
 SceneGrid2D.prototype.idToCell = function(id) {
   var ij = this.fromId(id);
-  return { i: ij[0], j: ij[1], id: id };
+  return { i: ij[0], j: ij[1], dir: ij[2], id: id };
 };
 SceneGrid2D.prototype.idToPosition = function(id) {
   var ij = this.fromId(id);
@@ -199,7 +202,9 @@ SceneGrid2D.prototype.refine = function(opts, levels) {
   }
   // Clearance and radius in number of tiles
   if (opts.updateWeights) {
-    var r = opts.radius/this.cellSize;
+    console.log('Updating Weights');
+    // TODO check if epsilon makes sense here
+    var r = (opts.radius + 0.05) / this.cellSize;
     var r2 = r*r;
     var cr = (opts.radius + opts.clearance)/this.cellSize;
     var cr2 = cr*cr;
@@ -378,9 +383,9 @@ MultiLevelGrid.prototype.toEncodedPixels = function(key, encodeFn) {
   });
   return levels;
 };
-MultiLevelGrid.prototype.toPixels = function(key) {
+MultiLevelGrid.prototype.toPixels = function(key, keyType) {
   var levels = _.map(this.levelGrids, function(levelGrid) {
-    var pixels = levelGrid.toPixels(key);
+    var pixels = levelGrid.toPixels(key, keyType);
     return pixels;
   });
   return levels;
@@ -574,12 +579,43 @@ MultiLevelGrid.prototype.getLinePath = function(cell1, cell2) {
     return levelGrid.getLinePath(cell1, cell2);
   }
 };
-
+// TODO: reduce duplication with Graph
+MultiLevelGrid.prototype.getLinePathByPosition = function(p1, p2) {
+  var startCell = this.positionToCell(p1);
+  var endCell = this.positionToCell(p2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+MultiLevelGrid.prototype.getLinePathById = function(id1, id2) {
+  var startCell = this.idToCell(id1);
+  var endCell = this.idToCell(id2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+MultiLevelGrid.prototype.getLinePathByPosition = function(p1, p2) {
+  var startCell = this.positionToCell(p1);
+  var endCell = this.positionToCell(p2);
+  var cellIds = this.getLinePath(startCell, endCell);
+  return cellIds;
+};
+MultiLevelGrid.prototype.getCellIdsWithUserData = function(key, valuefilter) {
+  var cellIds = [];
+  for (var i = 0; i < this.levelGrids.length; i++) {
+    var levelGrid = this.levelGrids[i];
+    var ids = levelGrid.getCellIdsWithUserData(key, valuefilter);
+    for (var j = 0; j < ids.length; j++) {
+      var id = ids[j];
+      cellIds.push(levelGrid.nodeIdOffset + id);
+    }
+  }
+  return cellIds;
+};
 /**
  * Navigation structure for a scene - includes support for visualization, graph for path planning, and precomputed paths
  * @param opts Configuration
  * @param opts.sceneState {scene.SceneState} Scene state to build/load navigation mesh for
  * @param opts.cellSize {number} Size of a navigation cell (in virtual units).
+ * @param opts.cellObjectResolution {number} Resolution (in meters) to use for cell object detection (used to determine number of ray samples per cell).
  * @param opts.getCellData {function(THREE.Vector3): {cost: number, roomIndex: int, floorHeight: number}} Function returning the cell data at the given positions
  * @param [opts.cellAttributes] {Object<string, {type: string, compute: function(celldata): number}>} Array of dense attributes to keep in cells
  * @param [opts.isValid] {function} Function returning if the position is valid (used only for visualization now)
@@ -609,6 +645,7 @@ function NavScene(opts) {
   this.tileOverlap = opts.tileOverlap || 0; // How much should tiles overlap (for visualization purposes)
   this.tileOpacity = opts.tileOpacity || 0.5; // Tile opacity (for visualization purposes)
   this.cellSize = opts.cellSize;
+  this.cellObjectResolution = opts.cellObjectResolution || 0.03;
   this.autoUpdate = (opts.autoUpdate !== undefined)? opts.autoUpdate : true;
   this.autoCreateGrid = (opts.autoCreateGrid !== undefined)? opts.autoCreateGrid : true;
   this.useEdgeWeights = (opts.useEdgeWeights !== undefined)? opts.useEdgeWeights : true;
@@ -707,6 +744,7 @@ NavScene.prototype.clear = function() {
   this.map = [];
   this.start = null;
   this.goals = [];
+  this.goalCellIds = [];
   this.__tiles = {};
   this.__shortestPath = null;
   this.__lastSearchState = null;
@@ -742,16 +780,18 @@ NavScene.prototype.reset = function(agent, start, goals, mapState) {
 NavScene.prototype.update = function(agent) {
   var position = agent.position;
   this.__currentOrientation = agent.getOrientation();
-  if (!this.__currentPosition.equals(position)) {
-    this.__shortestPath = this.computeShortestPath(
-      { position: position, maxTileWeight: Graph.MaxTileWeight, prevPosition: this.__currentPosition },
-      this.goals,
-      { reuseMap: true }
-    );
-    this.__currentPosition.copy(position);
-  }
+  this.__shortestPath = this.computeShortestPath({
+    position: position,
+    dir: [ -this.__currentOrientation.x, -this.__currentOrientation.z ],
+    maxTileWeight: Graph.MaxTileWeight,
+    prevPosition: this.__currentPosition
+  }, this.goals, {reuseMap : true});
+  this.__currentPosition.copy(position);
+
   if (this.__shortestPath && this.__shortestPath.next) {
-    this.__shortestPath.direction = this.__getDirection(this.grid, agent, this.__shortestPath.next.id);
+    var directions = this.__getDirection(this.grid, agent, this.__shortestPath.start.id, this.__shortestPath.next.id);
+    this.__shortestPath.direction = directions.local;
+    this.__shortestPath.worldDirection = directions.world;
   }
 };
 
@@ -762,6 +802,64 @@ NavScene.prototype.__parseGrid = function(json) {
     reverseEdgeOrder: this.reverseEdgeOrder
   };
   return Graph.createFromJson(json, opts);
+};
+
+function CellObjectDetector(opts) {
+  this.resolution = opts.resolution;
+  this.cellSize = opts.cellSize;
+  this.rng = opts.rng || RNG.global;
+  this.objects = opts.objects;
+  this.raycaster = new THREE.Raycaster(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+  this.raycaster.intersectBackFaces = true;
+  this.nIntersectionRays = _.clamp(0.5 * (this.cellSize / this.resolution) ^ 2,
+    opts.minIntersectionRays || 1, opts.maxIntersectionRays || Infinity);
+}
+
+CellObjectDetector.prototype.identifyObjects = function(cellBox) {
+  // TODO: replace with projection from voxels
+  // check if objects are intersected
+  // shoot ray from level min y to level max y
+  var rng = this.rng;
+  var raycaster = this.raycaster;
+  raycaster.far = cellBox.max.y - cellBox.min.y;
+  var cellSize = this.cellSize;
+
+  var idsByType = { doors: new Set(), objects: new Set(), walls: new Set() };
+  var hasIntersected = false;
+  for (var ns = 0; ns < this.nIntersectionRays; ns++) {
+    if (ns) {
+      raycaster.ray.origin.set(cellBox.min.x + (rng.random()) * cellSize, cellBox.min.y, cellBox.min.z + (rng.random()) * cellSize);
+    } else {
+      raycaster.ray.origin.set(cellBox.min.x + (0.5) * cellSize, cellBox.min.y, cellBox.min.z + (0.5) * cellSize);
+    }
+    var intersected = RaycasterUtil.getIntersectedForRay(this.raycaster, this.objects);
+    if (intersected.length > 0) {
+      hasIntersected = true;
+      for (var i = 0; i < intersected.length; i++) {
+        var object = intersected[i].object;
+        var id = object.userData.id;
+        if (object.userData.type === 'Wall') {
+          idsByType.walls.add(id);
+        } else {
+          idsByType.objects.add(id);
+          var mi = Object3DUtil.getModelInstance(object);
+          if (mi && mi.model.isDoor()) {
+            idsByType.doors.add(id);
+          }
+        }
+      }
+    }
+  }
+  if (hasIntersected) {
+    var ud = {};
+    _.each(idsByType, function(set, type) {
+      var values = Array.from(set);
+      if (values.length) {
+        ud[type] = values;
+      }
+    });
+    return ud;
+  }
 };
 
 NavScene.prototype.__createGrid2D = function(opts) {
@@ -776,9 +874,9 @@ NavScene.prototype.__createGrid2D = function(opts) {
     allowDiagonalMoves: this.allowDiagonalMoves,
     reverseEdgeOrder: this.reverseEdgeOrder
   });
-  var doors = this.sceneState.findModelInstances(function(mi) {
-    return mi.model.isDoor();
-  });
+  // var doors = this.sceneState.findModelInstances(function(mi) {
+  //   return mi.model.isDoor();
+  // });
   var position = new THREE.Vector3();
   var tileBBox = new BBox();
   var cellSize = this.cellSize;
@@ -794,6 +892,16 @@ NavScene.prototype.__createGrid2D = function(opts) {
     });
   }
   var floorHeight = grid.floorHeight;
+  var minY = Math.min(opts.bbox.min.y, floorHeight);
+  var maxY = Math.max(opts.bbox.max.y, floorHeight);
+  var objects = this.sceneState.getModelObject3Ds();
+  var walls = this.sceneState.getWalls();
+  var cellObjectDetector = new CellObjectDetector({
+    resolution: this.cellObjectResolution*Constants.virtualUnitToMeters,
+    cellSize: this.cellSize,
+    objects: _.concat(walls, objects),
+    walls: walls
+  });
   for (var i = 0; i < grid.width; i++) {
     for (var j = 0; j < grid.height; j++) {
       var id = grid.toId(i,j);
@@ -807,17 +915,27 @@ NavScene.prototype.__createGrid2D = function(opts) {
           grid.setCellAttribute(id, key, value); // set cell attribute
         });
       }
-      // check if this tile intersect a door
-      tileBBox.min.set(min1 + i*cellSize, floorHeight, min2 + j*cellSize);
-      tileBBox.max.set(min1 + (i+1)*cellSize, floorHeight + dy, min2 + (j+1)*cellSize);
-      var intersected = _.filter(doors, function(mi) {
-        var bbox = Object3DUtil.getBoundingBox(mi.object3D);
-        return bbox.intersects(tileBBox);
-      });
-      intersected = _.map(intersected, function(x) { return x.object3D.userData.id; });
-      if (intersected.length > 0) {
-        grid.setUserData(id, {doors: intersected});
+
+      tileBBox.min.set(min1 + i*cellSize, minY, min2 + j*cellSize);
+      tileBBox.max.set(min1 + (i+1)*cellSize, maxY, min2 + (j+1)*cellSize);
+      var ud = cellObjectDetector.identifyObjects(tileBBox);
+      if (ud) {
+        grid.setUserData(id, ud);
       }
+
+
+      // // old code for checking if doors are intersected
+      // tileBBox.min.set(min1 + i*cellSize, floorHeight, min2 + j*cellSize);
+      // tileBBox.max.set(min1 + (i+1)*cellSize, floorHeight + dy, min2 + (j+1)*cellSize);
+      //
+      // var intersected = _.filter(doors, function(mi) {
+      //   var bbox = Object3DUtil.getBoundingBox(mi.object3D);
+      //   return bbox.intersects(tileBBox);
+      // });
+      // intersected = _.map(intersected, function(x) { return x.object3D.userData.id; });
+      // if (intersected.length > 0) {
+      //   grid.setUserData(id, {doors: intersected});
+      // }
     }
   }
   this.__timings.stop('createGrid2D');
@@ -833,7 +951,8 @@ NavScene.prototype.__createGrid = function() {
     sceneId: this.sceneState.getFullID(),
     cellAttributes: _.map(this.cellAttributes, function (cellAttr, key) {
       return { name: cellAttr.name, type: cellAttr.type.name, dataType: cellAttr.dataType }
-    })
+    }),
+    cellObjectResolution: this.cellObjectResolution
   }, this.metadata || {});
   if (levels && levels.length > 1) {
     console.log('creating MultiLevelGrid with ' + levels.length);
@@ -863,9 +982,7 @@ NavScene.prototype.__createGrid = function() {
 };
 
 NavScene.prototype.getCellId = function(p, saveCell) {
-  //if (p.id != undefined) { return p.id; }
-  var cell = this.grid.positionToCell(p.position);
-  //console.log('getCellId', p, cell);
+  var cell = this.grid.positionToCell(p.position, p.dir);
   if (saveCell) {
     p.cell = cell;
   }
@@ -873,11 +990,15 @@ NavScene.prototype.getCellId = function(p, saveCell) {
 };
 
 
+/**
+ * Return list of cellIds in line path
+ * @param start {THREE.Vector3} Start position (world coordinates)
+ * @param end {THREE.Vector3} End position (world coordinates)
+ * @returns {int[]}
+ * @private
+ */
 NavScene.prototype.__getLinePathCellIds = function(start, end) {
-  var startCell = this.grid.positionToCell(start);
-  var endCell = this.grid.positionToCell(end);
-  var cellIds = this.grid.getLinePath(startCell, endCell);
-  return cellIds;
+  return this.grid.getLinePathByPosition(start, end);
 };
 
 /**
@@ -892,15 +1013,7 @@ NavScene.prototype.checkLinePathUnoccupied = function(start, end, radius, filter
   //console.log('checkLinePath', startCell, endCell, cellIds);
   var cellIds = this.__getLinePathCellIds(start, end);
   if (!cellIds) { return false; }
-  for (var i = 0; i < cellIds.length; i++) {
-    var cellId = cellIds[i];
-    var tileWeight = this.grid.tileWeight(cellId);
-    //console.log('got tileWeight', cellId, tileWeight);
-    // TODO: use filter function instead of hardcoded weight comparison
-    var okay = _.isFinite(tileWeight);
-    if (!okay) { return false; }
-  }
-  return true;
+  return this.grid.checkCellsTraversable(cellIds);
 };
 
 /**
@@ -922,6 +1035,35 @@ NavScene.prototype.checkPositionUnoccupied = function(pos, radius, filter) {
   }
 };
 
+// TODO decide if need to use radius check instead of above + clearance
+NavScene.prototype.checkPositionUnoccupiedWithRadius = function(pos, radius, filter) {
+  // TODO: take radius into account by checking all cells in radius
+  var cell = this.grid.positionToCell(pos);
+  if (cell) {
+    var cellId = cell.id;
+    radius /= this.grid.cellSize;
+    var r2 = radius * radius;
+    for (var dy = -radius; dy <= radius; dy++) {
+      for (var dx = -radius; dx <= radius; dx++) {
+        if (dy*dy + dx + dx > r2)
+          continue;
+
+        var ij = this.grid.fromId(cellId);
+        ij[0] += dx;
+        ij[1] += dy;
+
+        var testId = this.grid.toId(ij[0], ij[1]);
+        if (this.grid.getCellAttribute(testId, 'occupancy')) {
+          return false;
+        }
+      }
+    }
+    return !this.grid.getCellAttribute(cellId, 'occupancy');
+  } else {
+    return false;
+  }
+};
+
 NavScene.prototype.getCellAttribute = function(pos, key) {
   var cellId = this.getCellId({position: pos});
   var value = this.grid.getCellAttribute(cellId, key);
@@ -934,15 +1076,26 @@ NavScene.prototype.getRoom = function(pos) {
 };
 
 NavScene.prototype.__getDirection = (function() {
+  var currPos = new THREE.Vector3();
   var nextPos = new THREE.Vector3();
-  var localPos = new THREE.Vector3();
-  return function(graph, agent, cellId) {
+  var worldDir = new THREE.Vector3();
+  var localDir = new THREE.Vector3();
+  return function(graph, agent, currCellId, nextCellId) {
     if (agent) {
-      var pos2 = graph.idToPosition(cellId);
-      nextPos.set(pos2[0], pos2[1] + agent.originHeight * Constants.metersToVirtualUnit, pos2[2]);
-      agent.worldToLocalPositionNoScaling(nextPos, localPos);
-      localPos.normalize();
-      return localPos.toArray();
+      // nextPos.set(pos2[0], pos2[1] + agent.originHeight * Constants.metersToVirtualUnit, pos2[2]);
+      // agent.worldToLocalPositionNoScaling(nextPos, localPos);
+      var pos1 = graph.idToPosition(currCellId);
+      var pos2 = graph.idToPosition(nextCellId);
+      currPos.set(pos1[0], pos1[1], pos1[2]);
+      nextPos.set(pos2[0], pos2[1], pos2[2]);
+      worldDir.copy(nextPos).sub(currPos);
+      worldDir.normalize();
+      agent.worldToLocalDirection(worldDir, localDir);
+      localDir.normalize();
+      //console.log('[DEBUG __getDirection]', 'agentPos', agent.position, 'agentOri', agent.orientation,
+      //  'currCell', currCellId, 'currPos', currPos, 'nextCell', nextCellId, 'nextPos', nextPos,
+      //  'localDir', localDir, 'worldDir', worldDir);
+      return { local: localDir.toArray(), world: worldDir.toArray() };
     }
   };
 })();
@@ -984,9 +1137,11 @@ NavScene.prototype.__getPathRoomIndices = function(path) {
 };
 
 NavScene.prototype.__getPath = function(cellId) {
+  var scope = this;
   var map = this.map;
   var path = this.pathFinder.getPath(map, cellId);
-  var result = { path: path };
+  var realPath = _.map(path, function(id) { return scope.grid.idToPosition(id); });
+  var result = { path: path, realPath: realPath };
   var firstCell = map[cellId];
   if (firstCell) {
     result.start = firstCell;
@@ -1002,7 +1157,7 @@ NavScene.prototype.__getPath = function(cellId) {
       result.next = parentCell;
     }
   }
-  result.isValid = !!firstCell;
+  result.isValid = !!firstCell && _.isFinite(result.cost);
   return result;
 };
 
@@ -1015,6 +1170,7 @@ NavScene.prototype.__getPath = function(cellId) {
  */
 NavScene.prototype.computeShortestPath = function(position, goals, opts) {
   opts = opts || {};
+  //console.log('compute shortest path to goals', goals);
   // Figure out grid cell for start and grid cell for end
   // Convert from starts/goal to grid cells
   var scope = this;
@@ -1035,24 +1191,39 @@ NavScene.prototype.computeShortestPath = function(position, goals, opts) {
     for (var i = 0; i < cellIds.length; i++) {
       var cellId = cellIds[i];
       if (this.grid.tileWeight(cellId) > position.maxTileWeight) {
-        this.grid.setTileWeight(currCell, position.maxTileWeight);
+        this.grid.setTileWeight(cellId, position.maxTileWeight);
         mapState.__lastSearchState = null; // Force recompute (slower but more correct)
         mapState.map = [];
       }
     }
   }
   if (!mapState.map[currCell]) {
-    var goalCells = _.map(goals, function (x) {
-      return scope.getCellId(x, opts.saveCell);
-    });
+    var goalCellIds = scope.getGoalCells(goals, opts);
+    this.goalCellIds = goalCellIds;
     //console.time('NavScene.getShortestPath');
-    //console.log('currCell and goals', currCell, goalCells);
+    //console.log('currCell and goals', currCell, goalCellIds);
     var heuristic = this.allowDiagonalMoves? PathFinder.heuristics.octile_grid2d : PathFinder.heuristics.manhattan_grid2d;
-    mapState.__lastSearchState = this.pathFinder.search(goalCells, currCell, this.grid, mapState.map, mapState.__lastSearchState, heuristic);
+    mapState.__lastSearchState = this.pathFinder.theta_star_search(goalCellIds, currCell, this.grid, mapState.map, mapState.__lastSearchState, heuristic);
     //console.timeEnd('NavScene.getShortestPath');
   }
   var path = this.__getPath(currCell);
   return path;
+};
+
+NavScene.prototype.getGoalCells = function(goals, opts) {
+  var scope = this;
+  var cellIds = _.flatMap(goals, function (goal) {
+    if (goal.type === 'object') {
+      var objectCellIds = scope.grid.getCellIdsWithUserData('objects', function(v, k, c) { return v && v.indexOf(goal.objectId) >= 0; });
+      if (objectCellIds.length) {
+        scope.getCellId(goal, opts.saveCell);
+        return objectCellIds;
+      }
+    }
+    return [scope.getCellId(goal, opts.saveCell)];
+  });
+  cellIds = _.uniq(cellIds);
+  return cellIds;
 };
 
 NavScene.prototype.getShortestPath = function() {
@@ -1092,7 +1263,14 @@ NavScene.prototype.__checkPath = function(path, opts) {
 };
 
 NavScene.prototype.hasValidPath = function(opts) {
-  return this.__checkPath(this.__shortestPath, opts);
+  if (this.__shortestPath) {
+    // NOTE a bit confusing to have both valid and isValid members with different semantics, consider renaming valid
+    // to isValidGivenConstraints
+    this.__shortestPath.valid = this.__checkPath(this.__shortestPath, opts);
+    return this.__shortestPath.valid;
+  } else {
+    return false;
+  }
 };
 
 NavScene.defaultTileColors = {
@@ -1102,6 +1280,7 @@ NavScene.defaultTileColors = {
   'start': new THREE.Color('purple'),
   'goal': new THREE.Color('green'),
   'shortestPath': new THREE.Color('blue'),
+  'shortestPathDirection': new THREE.Color('goldenrod'),
   'trace': new THREE.Color('red'),
   'position': new THREE.Color('darkred')
 };
@@ -1273,7 +1452,7 @@ NavScene.prototype.visualizePathCost = function(opts) {
     maxWeight: Math.ceil(Math.sqrt(this.grid.numNodes))
   });
   var startId = this.start.cell? this.start.cell.id : -1;
-  var goalIds = this.goals.map(function(g) { return g? g.cell.id : -1; });
+  var goalIds = this.goalCellIds; //this.goals.map(function(g) { return g? g.cell.id : -1; });
   var pathIds = this.__shortestPath? this.__shortestPath.path : [];
   var map = this.map;
   this.__visualizeTiles({
@@ -1383,17 +1562,29 @@ NavScene.prototype.__getEncodedMap = function(opts) {
   }
   if (opts.overlays.indexOf('goal') >= 0) {
     // Add goals
-    var goalIds = this.goals.map(function(g) { return g? g.cell.id : -1; });
+    var goalIds = this.goalCellIds; //this.goals.map(function(g) { return g? g.cell.id : -1; });
     this.__setPixelColors(pixels, goalIds, opts.colors['goal']);
   }
   if (opts.overlays.indexOf('position') >= 0) {
     // Add current position
     if (this.__currentPosition) {
-      //var currCell = this.grid.positionToCell(this.__currentPosition);
-      //this.__setPixelColors(pixels, [currCell.id], opts.colors['position']);
+      var currCell = this.grid.positionToCell(this.__currentPosition);
+      this.__setPixelColors(pixels, [currCell.id], opts.colors['position']);
       this.__tmpPosition.copy(this.__currentPosition).addScaledVector(this.__currentOrientation, 5*this.cellSize);
       var cellIds =  this.__getLinePathCellIds(this.__currentPosition, this.__tmpPosition);
       this.__setPixelColors(pixels, cellIds, opts.colors['position']);
+
+      //var d = this.__shortestPath.direction;
+      var d = this.__shortestPath.worldDirection;
+      if (d && opts.overlays.indexOf('shortestPath') >= 0) {
+        var v = new THREE.Vector3(d[0], d[1], d[2]);
+        //var ang = this.__currentOrientation.angleTo(new THREE.Vector3(1, 0, 0));
+        //v.applyAxisAngle(new THREE.Vector3(0, 1, 0), -ang);
+        this.__tmpPosition.copy(this.__currentPosition).addScaledVector(v, 5 * this.cellSize);
+        var cellIds = this.__getLinePathCellIds(this.__currentPosition, this.__tmpPosition);
+        this.__setPixelColors(pixels, cellIds, opts.colors['shortestPathDirection']);
+        //console.log('[DEBUG NavScene shortestPath] direction:', v);
+      }
     }
   }
   return pixels;
@@ -1413,6 +1604,10 @@ NavScene.prototype.getEncodeDataFn = function(attrname) {
     return function (d) {
       return _.isFinite(d) ? [0, 0, d, 255] : [0, 0, 0, 0];
     };
+  } else if (attrname === 'doors' || attrname === 'objects' || attrname === 'walls') {
+      return function (d) {
+        return d ? [0, 0, 0, 255] : [255, 255, 255, 0];
+      };
   } else if (attrname === 'tileTraversibility') {
     var stats = this.grid.getCellAttributeStatistics('tileWeight');
     var cf = Colors.getColorFunction({
@@ -1471,11 +1666,16 @@ NavScene.prototype.__pathScorer = function(opts) {
   var mapState = opts.mapState || { map: [] };
   var position = new THREE.Vector3();
   return function(i) {
-    var p = scope.grid.idToPosition(i);
-    position.set(p[0], p[1], p[2]);
-    var path = scope.computeShortestPath({ position: position }, opts.goals, { mapState: mapState, reuseMap: true, saveCell: true });
-    var okay = scope.__checkPath(path, opts);
-    return okay? 1 : 0;
+    var ij = scope.grid.fromId(i);
+    if (scope.grid.isTraversable(ij[0], ij[1])) {
+      var p = scope.grid.idToPosition(i);
+      position.set(p[0], p[1], p[2]);
+      var path = scope.computeShortestPath({ position: position }, opts.goals, { mapState: mapState, reuseMap: true, saveCell: true });
+      var okay = scope.__checkPath(path, opts);
+      return okay? 1 : 0;
+    } else {
+      return 0;
+    }
   }
 };
 
@@ -1511,7 +1711,7 @@ NavScene.prototype.sample = function(opts) {
   //console.log(sampled);
   var grid = this.grid;
   if (_.isArray(sampled)) {
-    sampled = _.filter(_.map(sampled, function(s) { return convertSample(grid, s); }, function(s) { return s; }));
+    sampled = _.filter(_.map(sampled, function(s) { return convertSample(grid, s); }), function(s) { return s; });
   } else if (sampled) {
     sampled = convertSample(grid, sampled);
   }

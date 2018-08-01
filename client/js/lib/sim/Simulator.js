@@ -64,7 +64,7 @@ function Simulator(opts) {
       assetCacheSize: 100,
       useSky: true
     });
-  opts = _.mapKeys(opts, function(v,k) { return _.camelCase(k); });
+  opts = _.mapKeysDeep(opts, function(v,k) { return _.camelCase(k); });
   console.log('Creating Simulator with options', _.omit(opts, __optsToIgnore));
   this.__init(opts);
 }
@@ -220,7 +220,8 @@ Simulator.prototype.__preloadData = function(opts) {
     this.__aggregatedSceneStatistics = new SceneStatistics();
     this.__aggregatedSceneStatistics.importCsvs({
       fs: this.opts.fs,
-      basename: assetGroup.rootPath + '/stats/suncg',
+      basename: assetGroup.rootPath + '/stats/v4/suncg',
+      stats: opts.stats || ['materials', 'relations'],
       callback: function(err, data) {
         if (err) {
           console.warn('Error loading scene statistics', err);
@@ -351,6 +352,38 @@ Simulator.prototype._logAction = function(actionname, actionArgs) {
     }
     this._actionTrace.push(rec);
   }
+};
+
+/**
+ * Apply temporary modifications to the simulation environment
+ * @param modifications {sim.ModificationCmd[]}
+ * @param convertForSerialization {boolean} Whether to convert return data for serialization
+ * @param callback {callback} Error first callback
+ */
+Simulator.prototype.modify = function(modifications, convertForSerialization, callback) {
+  function convert(m) {
+    if (_.isArray(m)) {
+      return _.map(m, convert);
+    } else if (m instanceof THREE.Object3D) {
+      return m.userData.objectId;
+    } else if (m instanceof ModelInstance) {
+      return m.object3D.userData.objectId;
+    } else if (_.isPlainObject(m) || _.isNumber(m) || _.isString(m) || _.isBoolean(m)) {
+      return m;
+    }
+  }
+
+  // TODO: track the modifications
+  if (!_.isArray(modifications)) {
+    modifications = [modifications];
+  }
+  this.__simOperations.modify(this.state, modifications, function(err, data) {
+    var convertedData = data;
+    if (convertForSerialization && data) {
+      convertedData = _.map(data, convert);
+    }
+    callback(err, convertedData);
+  });
 };
 
 /**
@@ -572,9 +605,13 @@ Simulator.prototype.getObservations = function (callback) {
 
   if (this.state.navscene) {
     var path = this.state.navscene.getShortestPath();
+    // TODO do we need to return both realPath and path?
     data.observation.measurements.shortest_path_to_goal = {
       distance: path.distance,
-      direction: path.direction
+      direction: path.direction,
+      path: path.realPath,
+      valid: path.isValid,
+      full_path: path
     };
   }
 
@@ -666,7 +703,14 @@ Simulator.prototype.prepareTopDownMapProjection = function() {
   return this.topDownMapProjection;
 };
 
-Simulator.prototype.__setSceneState = function(sceneState, callback) {
+/**
+ * Set the simulator to this the specified scene state.  If there
+ * @param sceneState {scene.SceneState} Scene state for the simulator
+ * @param modifications {sim.ModificationCmd[]} Array of modifications to apply to the scene state
+ * @param callback {function(err,res)} Error first callback returning modifications to the scene if scene loaded successfully
+ * @private
+ */
+Simulator.prototype.__setSceneState = function(sceneState, modifications, callback) {
   this.state.reset(sceneState);
 
   if (this._actionTrace) {
@@ -679,10 +723,10 @@ Simulator.prototype.__setSceneState = function(sceneState, callback) {
     }
   }
 
-  if (this.state.sceneState && this.__modifications) {
+  if (this.state.sceneState && modifications) {
     // TODO: handle clearing state of scene to initial state before all times of modifications (not just this one)
     this.__simOperations.removeObjects(this.state, function(x) { return x.object3D.userData.inserted; });
-    this.__simOperations.modify(this.state, this.__modifications, callback);
+    this.modify(modifications, true, callback);
   } else {
     callback(null);
   }
@@ -702,7 +746,7 @@ Simulator.prototype.reset = function (callback) {
     [
       function(cb) {
         if (scope.state.sceneState) {
-          scope.__setSceneState(scope.state.sceneState, cb);
+          scope.__setSceneState(scope.state.sceneState, scope.__modifications, cb);
         } else {
           setTimeout( function() { cb(); }, 0);
         }
@@ -847,8 +891,12 @@ Simulator.prototype.__loadScene = function (opts, callback) {
     // TODO: enforce recompute false = no recomputation, only use precomputed
     //               recompute undefined = use precomputed, recompute as needed
   }
+  if (this.opts.scene && this.opts.scene.fullId.startsWith("mp3d")) {
+    preloads.push('objectInstanceMaterials');
+  }
   //console.log('got preloads', preloads);
   var defaults = { includeCeiling: true, preload: preloads,
+    modelMetadata: { userData: { isSupportObject: true } },
     textureSet: 'all', texturedObjects: Constants.defaultTexturedObjects };
   var sceneOpts = _.defaultsDeep({}, opts.scene, defaults);
   console.time('Timing loadScene');
@@ -903,7 +951,7 @@ Simulator.prototype.__loadScene = function (opts, callback) {
       });
     }
 
-    scope.__setSceneState(sceneState, function(err, ss) {
+    scope.__setSceneState(sceneState, scope.__modifications, function(err, ss) {
       if (scope.audioSim) {
         // Local configure
         console.time('Timing startAudio');
@@ -914,9 +962,11 @@ Simulator.prototype.__loadScene = function (opts, callback) {
         scope.audioSim.start(function () {
           //TODO(MS): improve error handling
           console.timeEnd('Timing startAudio');
+          scope.Publish('SceneLoaded', sceneState);
           callback(err, sceneState);
         });
       } else {
+        scope.Publish('SceneLoaded', sceneState);
         callback(err, sceneState);
       }
     });
@@ -969,6 +1019,33 @@ Simulator.prototype.getActionTrace = function () {
 Simulator.prototype.isReady = function() {
   // Ready if we have a scene ready to go!
   return this.scene;
+};
+
+//TODO camelcase function name for consistency, add jsdoc
+Simulator.prototype.to_floor = function(pt_world) {
+  var tmp_vec = new THREE.Vector3();
+  tmp_vec.x = pt_world[0];
+  tmp_vec.y = pt_world[1];
+  tmp_vec.z = pt_world[2];
+  pt_world = tmp_vec;
+  var grid_id = this.state.navscene.getCellId({
+    position: pt_world
+  });
+  return this.state.navscene.grid.idToPosition(grid_id);
+};
+
+//TODO camelcase function name for consistency, add jsdoc
+Simulator.prototype.can_stand = function(pt_world) {
+  var tmp_vec = new THREE.Vector3();
+  tmp_vec.x = pt_world[0];
+  tmp_vec.y = pt_world[1];
+  tmp_vec.z = pt_world[2];
+  pt_world = tmp_vec;
+  var grid_id = this.state.navscene.getCellId({
+    position: pt_world
+  });
+  var xy = this.state.navscene.grid.fromId(grid_id);
+  return this.state.navscene.grid.isTraversable(xy[0], xy[1]);
 };
 
 module.exports = Simulator;
