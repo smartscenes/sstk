@@ -21,6 +21,11 @@ var getJSON = function (url, callback) {
   //xobj.send(null);
 };
 
+/**
+ * Utility function for fetching a json file
+ * @param url {string}
+ * @param callback {callback} Optional error first callback
+ */
 self.getJSON = function (url, callback) {
   var __done = function (data) {
     if (callback) {

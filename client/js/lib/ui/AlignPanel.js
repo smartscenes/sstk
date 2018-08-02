@@ -7,6 +7,8 @@ function AlignPanel(params) {
   this.rotateXDeg = 90;
   this.rotateZDeg = 90;
   this.submitAlignmentUrl = Constants.baseUrl + '/submitAlignment';
+  this.transformControls = null;
+  this._useTransformControls = false;
 
   if (params) {
     this.container = params.container;
@@ -16,23 +18,52 @@ function AlignPanel(params) {
 
     // Application callback fetching next target to align
     this.nextTargetCallback = params.nextTargetCallback;
+
+    // Application callback to add transform controls to the scene
+    this.addControlCallback = params.addControlCallback;
+
+    // Application that the align panel is part of
+    this.app = params.app;
   }
   this.init();
 }
 
+Object.defineProperty(AlignPanel.prototype, 'useTransformControls', {
+  get: function () {return this._useTransformControls; },
+  set: function (v) {
+    this._useTransformControls = v;
+    if (v) {
+      this.__ensureTransformControls();
+      var target = this.target;
+      if (target) {
+        if (!target.modelBaseObject3D) {
+          target.ensureNormalizedModelCoordinateFrame();
+          target.setAttachmentPoint({position: new THREE.Vector3(0.5, 0.5, 0.5), coordFrame: 'childBB'});
+        }
+      }
+      this.transformControls.attach(target.object3D);
+    } else {
+      if (this.transformControls) {
+        this.transformControls.detach();
+      }
+    }
+  }
+});
+
 AlignPanel.prototype.setTarget = function (target) {
   this.target = target;
+  this.useTransformControls = this.useTransformControls; // Make sure transform controls are updated with the target
   this.updateUpFrontAxes(target);
 };
 
 AlignPanel.prototype.init = function () {
-  this.createSlider($('#sliderRotateX'), $('#rotateX'), this.rotateXDeg,
+  this.__createSlider($('#sliderRotateX'), $('#rotateX'), this.rotateXDeg,
     function (value) {
       this.rotateXDeg = value;
       this.rotateX = Math.PI * this.rotateXDeg / 180.0;
     }.bind(this)
   );
-  this.createSlider($('#sliderRotateZ'), $('#rotateZ'), this.rotateZDeg,
+  this.__createSlider($('#sliderRotateZ'), $('#rotateZ'), this.rotateZDeg,
     function (value) {
       this.rotateZDeg = value;
       this.rotateZ = Math.PI * this.rotateZDeg / 180.0;
@@ -56,10 +87,10 @@ AlignPanel.prototype.init = function () {
   this.alignUpText = $('#alignUp');
   this.alignFrontText = $('#alignFront');
 
-  $(document).keydown(this.arrowKeyHandler.bind(this));
+  $(document).keydown(this.__keyHandler.bind(this));
 };
 
-AlignPanel.prototype.createSlider = function (sliderElem, textElem, initialValue, callback) {
+AlignPanel.prototype.__createSlider = function (sliderElem, textElem, initialValue, callback) {
   sliderElem.slider({
     orientation: 'horizontal',
     range: 'min',
@@ -82,8 +113,48 @@ AlignPanel.prototype.createSlider = function (sliderElem, textElem, initialValue
   callback(initialValue);
 };
 
-AlignPanel.prototype.arrowKeyHandler = function (event) {
+AlignPanel.prototype.__ensureTransformControls = function() {
+  if (!this.transformControls) {
+    var scope = this;
+    this.transformControls = new THREE.TransformControls(this.app.cameraControls.camera, this.app.renderer.domElement);
+    this.transformControls.setMode('rotate');
+    this.transformControls.addEventListener('change', function() {
+      if (scope.target) {
+        scope.updateUpFrontAxes(scope.target);
+      };
+      scope.app.render();
+    });
+    scope.addControlCallback(this.transformControls);
+  }
+};
+
+AlignPanel.prototype.redisplay = function() {
+  if (this.transformControls) {
+    this.transformControls.update();
+  }
+};
+
+AlignPanel.prototype.__keyHandler = function (event) {
   if (event.target.type && (event.target.type === 'text')) { return; }
+
+  // Handle keys for transform controls
+  switch (event.which) {
+    case 74: // 'J'
+      if (event.shiftKey) {
+        this.useTransformControls = !this.useTransformControls;
+        return false;
+      }
+      break;
+
+    case 17: // Ctrl
+      if (this.transformControls) {
+        this.transformControls.setRotationSnap(THREE.Math.degToRad(15));
+        return false;
+      }
+      break;
+  }
+
+  // Handle arrow keys for rotation
   var target = this.target;
   if (!target) { return; }
 
@@ -91,16 +162,16 @@ AlignPanel.prototype.arrowKeyHandler = function (event) {
 
   switch (event.which) {
     case 37: // left
-      target.rotate(new THREE.Vector3(0, -this.rotateZ * mult, 0));
+      target.rotateAboutAxis(new THREE.Vector3(0, 1, 0), -this.rotateZ * mult);
       break;
     case 38: // up
-      target.rotate(new THREE.Vector3(+this.rotateX * mult, 0, 0));
+      target.rotateAboutAxis(new THREE.Vector3(1, 0, 0), +this.rotateX * mult);
       break;
     case 39: // right
-      target.rotate(new THREE.Vector3(0, +this.rotateZ * mult, 0));
+      target.rotateAboutAxis(new THREE.Vector3(0, 1, 0), +this.rotateZ * mult);
       break;
     case 40: // down
-      target.rotate(new THREE.Vector3(-this.rotateX * mult, 0, 0));
+      target.rotateAboutAxis(new THREE.Vector3(1, 0, 0), -this.rotateX * mult);
       break;
     default:
       break;
@@ -111,7 +182,7 @@ AlignPanel.prototype.arrowKeyHandler = function (event) {
 };
 
 AlignPanel.prototype.updateUpFrontAxes = function (target) {
-  var upFront = target.getUpFrontAxes(Constants.worldUp, Constants.worldFront);
+  var upFront = target.getUpFrontAxes(Constants.worldUp, Constants.worldFront, 0.0000001);
   this.targetUp = Object3DUtil.vectorToString(upFront.up);
   this.targetFront = Object3DUtil.vectorToString(upFront.front);
   this.alignUpText.text(this.targetUp);

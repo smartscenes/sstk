@@ -56,7 +56,9 @@ html(lang="en")
     script(src='#{baseUrl}/STK.bundle.js')
     link(rel='stylesheet', href='#{baseUrl}/css/datgui-light.css')
     script.
-      STK.Constants.defaultPalette = STK.Colors.palettes['d3_category19p'];
+      var defaultPaletteName = 'd3_category19p';
+      var paletteName = STK.util.getUrlParam('palette') || defaultPaletteName;
+      STK.Constants.defaultPalette = STK.Colors.palettes[paletteName] || STK.Colors.palettes[defaultPaletteName];
       var canvas = document.getElementById('canvas');
       var modelViewer = new STK.ModelViewer({
         container: canvas,
@@ -65,19 +67,41 @@ html(lang="en")
         useNewImages: true,
         partsPanel: {
           partTypes: ['none', 'surfaces', 'voxels-solid', 'voxels-surface', 'voxels-labeled'],
-          defaultPartType: 'surfaces',
-          defaultLabelType: 'Category'
+          labelTypes: ['Raw', 'Category', 'Object'],
+          defaultPartType: 'none',
+          defaultLabelType: 'Object'
         }
       });
-      modelViewer.Subscribe('Launch', modelViewer, function () {
-        // Auto search for models
-        modelViewer.partsPanel.setLabelColorIndex('Category', STK.Constants.assetsDir + 'data/scannet/scannet-category-color-index.txt',
-          function (index) {
+      function setLabelColors(labelMappings, cb) {
+        var labelMappingsFile = STK.Constants.assetsDir + 'data/labels/label-mappings.tsv';
+        var remapCategoryField = 'category';
+        var categoryField = 'category';
+        var indexField = 'index';
+        if (labelMappings) {
+          labelMappingsFile = labelMappings.path || labelMappingsFile;
+          remapCategoryField = labelMappings.remapCategoryField || remapCategoryField;
+          categoryField = labelMappings.categoryField || categoryField;
+          indexField = labelMappings.indexField || indexField;
+        }
+        STK.FileUtil.loadDelimited(labelMappingsFile, null, function(err, parsed) {
+          if (parsed) {
+            var index = _.keyBy(parsed.data, categoryField);
+            index = _.mapValues(index, function (v) {
+              return v[indexField];
+            });
+            modelViewer.partsPanel.initLabelRemaps(_.keyBy(parsed.data, remapCategoryField), remapCategoryField);
+            modelViewer.partsPanel.setLabelColorIndex('Category', index);
             modelViewer.partsPanel.setLabelColorIndex('voxels-labeled', index);
             modelViewer.partsPanel.labeledVoxels.setLabelColorIndex(index);
             modelViewer.partsPanel.setLabelColorIndex('Label', index);
           }
-        );
+          if (cb) {
+            cb();
+          }
+        });
+      }
+      modelViewer.Subscribe('Launch', modelViewer, function () {
+        modelViewer.showLoadingIcon(true);
       });
       var modelId = STK.util.getUrlParam('modelId');
       modelViewer.launch();
@@ -85,15 +109,31 @@ html(lang="en")
         assetFiles: STK.Constants.scanAssetsFile,
         filterByAssetId: modelId,
         callback: function(err, res) {
-          if (!err) {
-            if (modelId != undefined) {
-              var modelIdParts = modelId.split('.');
-              modelViewer.setSourceAndSearch(modelViewer.modelSearchController, modelIdParts[0], 'fullId:' + modelId);
+          //console.log(res);
+          var labelMappings;
+          if (res) {
+            for (var i = 0; i < res.length; i++) {
+              if (res[i].labelMappings) {
+                labelMappings = res[i].labelMappings;
+                break;
+              }
             }
           }
+          setLabelColors(labelMappings, function() {
+            if (!err) {
+
+              if (modelId != undefined) {
+                var modelIdParts = modelId.split('.');
+                modelViewer.setSourceAndSearch(modelViewer.modelSearchController, modelIdParts[0], 'fullId:' + modelId);
+              } else {
+                modelViewer.showLoadingIcon(false);
+              }
+            }
+          });
         }
       });
 
+      $('#partsPanel').collapse('show')
       $('#images').on('shown.bs.collapse', function () {
         modelViewer.modelImagesPanel.onResize();
       });

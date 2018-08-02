@@ -26,9 +26,34 @@ function createGlyphIcon(name) {
 
 self.createGlyphIcon = createGlyphIcon;
 
+function createNumberSpinner(opts) {
+  var input = $('<input/>').attr('id', opts.id).attr('name', opts.name || opts.id);
+  var label = $('<label></label>').attr('for', opts.id).append(opts.label);
+  var span = $('<span></span>');
+  span.append(label).append(input);
+  var spinnerOpts = _.pick(opts, ['min', 'max', 'step']);
+  if (opts.change) {
+    spinnerOpts.change = function(event, ui) {
+      var v = input.spinner('value');
+      opts.change(v);
+    };
+  }
+  input.spinner(spinnerOpts);
+  if (opts.value != undefined) {
+    input.spinner('value', opts.value);
+  }
+  return { div: span, label: label, input: input };
+}
+
+self.createNumberSpinner = createNumberSpinner;
+
 function setupLocalLoading(loadLocalFile, loadLocalFilename, loadFromLocalFn, allowMultiple, fileTypes) {
   // console.log('setup local loading');
   // Load from local button
+  loadLocalFile.click(function() {
+    // Force on change if same file is selected
+    this.value = null;
+  });
   loadLocalFile.change(function () {
     var input = $(this);
     var numFiles = input.get(0).files ? input.get(0).files.length : 0;
@@ -221,6 +246,12 @@ function bindVideoPreview(element) {
 }
 
 self.bindVideoPreview = bindVideoPreview;
+
+function copy(selector) {
+  var copyText = document.querySelector(selector);
+  copyText.select();
+  document.execCommand("copy");
+}
 
 module.exports = self;
 

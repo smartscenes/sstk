@@ -7,6 +7,7 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
       this.highlightMaterial = params.highlightMaterial ||
         Object3DUtil.getSimpleFalseColorMaterial('selected', new THREE.Color(0xef9f56));
       this.__customColorObjectFn = params.colorObject;
+      this.__renderer = params.renderer;
       this.highlighted = null;
     }
 
@@ -32,6 +33,17 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
       return new THREE.Vector2(x,y);
     };
 
+    Picker.prototype.pick = function(options) {
+      var raycastMouse = this.getCoordinates(options.container, options.position);
+      if (options.targetType === 'mesh') {
+        return this.getFirstIntersectedMesh(raycastMouse.x, raycastMouse.y, options.camera, options.objects, options.ignore);
+      } else if (options.targetType === 'object') {
+        return this.getFirstIntersected(raycastMouse.x, raycastMouse.y, options.camera, options.objects, options.ignore);
+      } else {
+        console.error('Unsupport targetType', options.targetType);
+      }
+    };
+
     // Returns the first intersected object
     Picker.prototype.getFirstIntersected = function (x, y, camera, objects, ignore) {
       var args = this.__processArguments(arguments, ['x', 'y', 'camera', 'objects', 'ignore']);
@@ -55,6 +67,7 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
 
     Picker.prototype.getIntersectedForRay = function (raycaster, objects, ignore, n) {
       var intersected = raycaster.intersectObjects(objects, true);
+      intersected = RaycasterUtil.filterClipped(intersected, this.__renderer);
       RaycasterUtil.sortIntersectionsByNormal(raycaster.ray, intersected);
       return this.selectIntersectedObjects(intersected, objects, ignore, n);
     };
@@ -79,7 +92,8 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
       var meshes = [];
       for (var i = 0; i < intersected.length; i++) {
         var m = intersected[i].object;
-        var ignoreObject = (ignore && ignore.indexOf(m) >= 0);
+        //var ignoreObject = (ignore && ignore.indexOf(m) >= 0);
+        var ignoreObject = (ignore && Object3DUtil.isDescendantOf(m, ignore));
         if (!ignoreObject) {
           meshes.push(intersected[i].object);
         }
@@ -102,6 +116,7 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
       //
       // Also, need to do recursive intersect since intersect is done at the mesh level
       var intersects = args.raycaster.intersectObjects(args.objects, true);
+      intersects = RaycasterUtil.filterClipped(intersects, this.__renderer);
       RaycasterUtil.sortIntersectionsByNormal(args.raycaster.ray, intersects);
       return intersects;
     };

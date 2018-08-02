@@ -56,7 +56,7 @@ body {
 #namesPanel {
   top: 20px;
   right: 20px;
-  height: 95%;
+  max-height: 95%;
   overflow: auto;
 }
 

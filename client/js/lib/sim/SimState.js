@@ -61,8 +61,6 @@ SimState.prototype.reset = function (sceneState) {
   this.level = (this.opts.scene.level != undefined)? sceneState.getLevelByIndex(this.opts.scene.level): null;
 
   // set goal and start
-  this.__serializableGoals = null;
-  this.goals = this.computeGoals();
   if (this.opts.start === 'random') {
     // Select point in random level and room as starting point
     this.start = this.sampleStart();
@@ -76,6 +74,8 @@ SimState.prototype.reset = function (sceneState) {
     }
   }
   this.agent.moveTo(this.start);
+  this.__serializableGoals = null;
+  this.goals = this.computeGoals();
   this.prevTicks = 0;
   this.ticks = 0;
 
@@ -394,6 +394,8 @@ SimState.prototype.computeGoals = function () {
     let sample = this.sample();
     goalsSpec = { type: 'position', position: sample.position, radius: goalsSpec.radius }
   }
+  const rooms = roomIds.map(this.sceneState.getRoomById.bind(this.sceneState));
+  const roomTypes = rooms.map(r => this.sceneState.getRoomInfo.bind(this.sceneState)(r).roomType);
 
   // check type and required fields, dispatch to type-specific handlers for specification field
   if (goalsSpec && goalsSpec.type) {

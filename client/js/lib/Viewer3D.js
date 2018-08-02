@@ -75,15 +75,27 @@ var Viewer3D = function (params) {
   this._controlTypeIndex = 0;
   this.controlType = this.controlTypes[this._controlTypeIndex];
 
+  // Wireframe
+  this.__isWireframe = false;
+
   // Draw axes
   this._drawAxes = (params.drawAxes !== undefined) ? params.drawAxes : false;
+  this.axesSize = 10*Constants.metersToVirtualUnit;
   this.axes = null;
 
   // Grid
   this._showGrid = false;
+  this._gridNeedUpdate = false; // Does the grid need to be recreated?
+  this._gridPlaneHeight = 0;  // Grid plane height
+  this.__gridPlane = null;
 
   // 2D view
   this._show2D = false;
+
+  // What types of meshes to show
+  this.__showMeshes = true;
+  this.__showLines = true;
+  this.__showPoints = true;
 
   // Has this viewer been "launched" (i.e. initialized?)
   this.isLaunched = false;
@@ -94,7 +106,10 @@ var Viewer3D = function (params) {
 
   // async tasks that we are waiting on
   this._waiting = {};
+
+  // dynamic assets and controls
   this._dynamicAssets = [];
+  this._controls = [];
 
   this.__perfStats = new Stats();
   this.__perfStats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
@@ -133,6 +148,30 @@ Object.defineProperty(Viewer3D.prototype, 'showStats', {
   }
 });
 
+Object.defineProperty(Viewer3D.prototype, 'showLines', {
+  get: function () {return this.__showLines; },
+  set: function (v) {
+    this.__showLines = v;
+    Object3DUtil.setVisibleForType(this.getRenderScene(), 'line', v);
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'showPoints', {
+  get: function () {return this.__showPoints; },
+  set: function (v) {
+    this.__showPoints = v;
+    Object3DUtil.setVisibleForType(this.getRenderScene(), 'point', v);
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'showMeshes', {
+  get: function () {return this.__showMeshes; },
+  set: function (v) {
+    this.__showMeshes = v;
+    Object3DUtil.setVisibleForType(this.getRenderScene(), 'mesh', v);
+  }
+});
+
 Object.defineProperty(Viewer3D.prototype, 'viewIndex', {
   get: function () {return this._viewIndex; },
   set: function (v) {
@@ -165,7 +204,7 @@ Object.defineProperty(Viewer3D.prototype, 'showAxes', {
     var scene = this.getRenderScene();
     if (v) {
       if (!this.axes) {
-        this.axes = Object3DUtil.makeAxes(1*Constants.metersToVirtualUnit);
+        this.axes = Object3DUtil.makeAxes(this.axesSize);
       }
       if (this.axes.parent !== scene) {
         scene.add(this.axes);
@@ -200,14 +239,15 @@ Object.defineProperty(Viewer3D.prototype, 'gridPlane', {
 
 Object.defineProperty(Viewer3D.prototype, 'gridPlaneHeight', {
   get: function () {
-    this.__ensureGridPlane();
-    return this.__gridPlane.position.y;
+    return this._gridPlaneHeight;
   },
   set: function (g) {
-    this.__ensureGridPlane();
-    this.__gridPlane.position.y = g;
-    this.__gridPlane.updateMatrix();
-    Object3DUtil.clearCache(this.__gridPlane);
+    this._gridPlaneHeight = g;
+    if (this.__gridPlane) {
+      this.__gridPlane.position.y = g;
+      this.__gridPlane.updateMatrix();
+      Object3DUtil.clearCache(this.__gridPlane);
+    }
   }
 });
 
@@ -254,7 +294,15 @@ Object.defineProperty(Viewer3D.prototype, 'show2D', {
   }
 });
 
+Viewer3D.prototype.__computeGridPlanePosition = function() {
+  var bbox = this.getSceneBoundingBox();
+  var p = bbox.getWorldPosition(new THREE.Vector3(0.5, -0.001, 0.5));
+  return p;
+};
+
 Viewer3D.prototype.__ensureGridPlane = function (forceRecompute) {
+  //console.log('computing grid plane');
+  forceRecompute = forceRecompute || this._gridNeedUpdate;
   if (!this.__gridPlane) {
     // TODO: ensure that the grid is large enough
     var width = 30 * Constants.metersToVirtualUnit;
@@ -294,8 +342,8 @@ Viewer3D.prototype.__ensureGridPlane = function (forceRecompute) {
         Object3DUtil.alignToUpFrontAxes(this.__gridPlane, new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0),
          Constants.worldUp, Constants.worldFront);
       }
-      var p = bbox.getWorldPosition(new THREE.Vector3(0.5, -0.01, 0.5));
-      this.__gridPlane.position.set(p.x, p.y, p.z);
+      var p = bbox.getWorldPosition(new THREE.Vector3(0.5, -0.001, 0.5));
+      this.__gridPlane.position.set(p.x, this._gridPlaneHeight, p.z);
       this.__gridPlane.updateMatrix();
       Object3DUtil.clearCache(this.__gridPlane);
     }
@@ -303,6 +351,7 @@ Viewer3D.prototype.__ensureGridPlane = function (forceRecompute) {
     created = true;
   }
   Object3DUtil.setVisible(this.__gridPlane, this._showGrid);
+  this._gridNeedUpdate = false;
   return created;
 };
 
@@ -325,7 +374,7 @@ Viewer3D.prototype.__ensurePickingPlane = function() {
         var height = Math.max(bbdims.z*1.01, u.height);
         this.__pickingPlane = Object3DUtil.makePickingPlane(width,height);
       }
-      var p = bbox.getWorldPosition(new THREE.Vector3(0.5, -0.01, 0.5));
+      var p = bbox.getWorldPosition(new THREE.Vector3(0.5, -0.001, 0.5));
       this.__pickingPlane.position.set(p.x, p.y, p.z);
       this.__pickingPlane.updateMatrix();
       Object3DUtil.clearCache(this.__pickingPlane);
@@ -378,10 +427,14 @@ Viewer3D.prototype.setupDatGui = function () {
     }
     var viewGui = gui.addFolder('view');
     if (showAll || options['showAxes']) { viewGui.add(this, 'showAxes').listen(); }
+    if (showAll || options['axesSize']) { viewGui.add(this, 'axesSize', 1, 10000).listen(); }
     if (showAll || options['showGrid']) { viewGui.add(this, 'showGrid').listen(); }
     if (showAll || options['showGrid']) { viewGui.add(this, 'gridPlaneHeight', -10*Constants.metersToVirtualUnit, 10*Constants.metersToVirtualUnit).listen(); }
     if (showAll || options['show2D'])   { viewGui.add(this, 'show2D').listen(); }
     if (showAll || options['showStats']) { viewGui.add(this, 'showStats').listen(); }
+    if (showAll || options['showLines']) { viewGui.add(this, 'showLines').listen(); }
+    if (showAll || options['showPoints']) { viewGui.add(this, 'showPoints').listen(); }
+    if (showAll || options['showMeshes']) { viewGui.add(this, 'showMeshes').listen(); }
 
     if (this.clippingBox && (showAll || options['showClipping'])) {
       var clippingGui = viewGui.addFolder('clipping');
@@ -599,7 +652,9 @@ Viewer3D.prototype.onWindowResize = function (options) {
 Viewer3D.prototype.onSceneChanged = function () {
   // Set various parameters for new scene
   this.useOrthographicCamera = this._useOrthographicCamera;
-  this.__ensureGridPlane(true);
+  var p = this.__computeGridPlanePosition();
+  this.gridPlaneHeight = p.y;
+  this._gridNeedUpdate = true;
   this.showGrid = this._showGrid;
   if (!this.__keepCurrentView) {
     this.viewIndex = this._viewIndex;
@@ -630,8 +685,19 @@ Viewer3D.prototype.clearAssets = function () {
   this._dynamicAssets = [];  // Clears dynamic assets
 };
 
+Viewer3D.prototype.clearControls = function () {
+  this._controls = [];  // Clears controls
+};
+
+Viewer3D.prototype.addControl = function (control) {
+  if (this._controls.indexOf(control) < 0) {
+    this._controls.push(control);
+  }
+};
+
 Viewer3D.prototype.updateAndRender = function () {
   this._dynamicAssets.forEach(function(x) { x.update(); });
+  this._controls.forEach(function(x) { x.update(); });
   this.render();
 };
 
@@ -696,6 +762,20 @@ Viewer3D.prototype.registerBasicEventListeners = function () {
   var scope = this;
   window.addEventListener('resize', function(event) { scope.onWindowResize(event); }, false);
   window.addEventListener("beforeunload", function(event) { scope.confirmPageUnload(event); } , false);
+};
+
+Viewer3D.prototype.registerContextMenu = function(callback) {
+  window.addEventListener('mousedown', function(event) {
+    if ((event.ctrlKey || event.metaKey) && event.button === THREE.MOUSE.RIGHT) {
+      event.stopPropagation();
+    }
+  }, true);
+  $(document).on('contextmenu', function(event) {
+    if ((event.ctrlKey || event.metaKey) && event.button === THREE.MOUSE.RIGHT) {
+      event.preventDefault();
+      callback(event);
+    }
+  });
 };
 
 Viewer3D.prototype.confirmPageUnload = function(event) {
@@ -876,6 +956,23 @@ Viewer3D.prototype.setupBasicRenderer = function() {
     container: this.container,
     autoRotateCheckbox: $('#autoRotate'),
     renderCallback: this.render.bind(this) });
+};
+
+// toggle wireframe mode to see triangle
+Viewer3D.prototype.toggleWireframe = function () {
+  this.setWireframeMode(!this.__isWireframe);
+};
+
+Viewer3D.prototype.setWireframeMode = function (flag) {
+  this.__isWireframe = flag;
+  var scene = this.getRenderScene();
+  if (!scene) { return; } // Not ready yet
+  //console.log('set wireframe', this.__isWireframe);
+  if (this.__isWireframe) {
+    Object3DUtil.setWireframe(scene, true);
+  } else {
+    Object3DUtil.setWireframe(scene, false);
+  }
 };
 
 Viewer3D.prototype.createDefaultLight = function() {

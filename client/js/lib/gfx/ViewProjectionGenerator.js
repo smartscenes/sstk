@@ -153,7 +153,7 @@ ViewProjection.prototype.project = (function() {
   var tmpVector = new THREE.Vector3();
   return function(v) {
     tmpVector.copy(v);
-    tmpVector.applyProjection(this.projectMatrix);
+    tmpVector.applyMatrix4(this.projectMatrix);
     return tmpVector;
   };
 });
@@ -162,7 +162,7 @@ ViewProjection.prototype.unproject = (function() {
   var tmpVector = new THREE.Vector3();
   return function(v) {
     tmpVector.copy(v);
-    tmpVector.applyProjection(this.unprojectMatrix);
+    tmpVector.applyMatrix4(this.unprojectMatrix);
     return tmpVector;
   };
 });

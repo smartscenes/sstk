@@ -7,7 +7,7 @@ var _ = require('util');
 
 // Defines fields we care about for scenes
 var fields = [
-  { name: 'id', type: 'categorical', excludeFromFacet: true },
+  { name: 'id', type: 'categorical', excludeFromFacet: false },
   { name: 'datasets', type: 'categorical' },
   { name: 'source', type: 'categorical' },
   { name: 'category', type: 'categorical' },
@@ -58,7 +58,7 @@ var fields = [
       { query: '!modelCats:window', description: 'Scenes without any window' },
       { query: 'modelCats:*lamp OR modelCats:chandelier', description: 'Scenes with any lamp (wall_lamp, floor_lamp, etc.)' }]
   },
-  { name: 'modelIds', type: 'categorical', excludeFromFacet: true,
+  { name: 'modelIds', type: 'categorical', excludeFromFacet: false,
     examples: [{ query: 'modelIds:122', description: 'Scenes with model 122 (a particular door)' },
       { query: 'modelIds:(122 OR 247)', description: 'Scenes with either model 122 or 247 (two different doors)' }]
   },

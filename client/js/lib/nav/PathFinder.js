@@ -344,7 +344,8 @@ PathFinder.prototype.__search = function(options, graph, map) {
       break;
     }
     s.neighbors.forEach(function (next) {
-      var new_cost_so_far = (map[s.current].cost_so_far + graph.edgeWeight(s.current, next));
+      //var new_cost_so_far = (map[s.current].cost_so_far + graph.edgeWeight(s.current, next));
+      var new_cost_so_far = options.total_cost_fn(graph, map, s.current, next);
       if (!map[next]) {
         map[next] = { id: next, in_heap: false };
       }

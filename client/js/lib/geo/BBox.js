@@ -74,6 +74,15 @@ BBox.prototype.includeBBox = function (bbox) {
   this.clearCache();
 };
 
+BBox.prototype.includeLine = function (line, transform) {
+  var scope = this;
+  GeometryUtil.forMeshVertices(line, function (v) {
+      scope.__includePoint(v, transform);
+    }
+  );
+  this.clearCache();
+};
+
 BBox.prototype.includeMesh = function (mesh, transform) {
   var nFaces = GeometryUtil.getGeometryFaceCount(mesh.geometry);
   if (nFaces > 0) {
@@ -118,6 +127,8 @@ BBox.prototype.includeObject3D = function (root, transform, filter) {
   var bbox = new BBox();
   if (root instanceof THREE.Mesh) {
     bbox.includeMesh(root, transform);
+  } else if (root instanceof THREE.Line) {
+    bbox.includeLine(root, transform);
   } else if (root instanceof THREE.Points) {
     bbox.includePoints(root, transform);
   }
@@ -554,7 +565,8 @@ BBox.prototype.toString = function() {
   function vtoString(v) {
     return '[' + v.x + ',' + v.y + ',' + v.z + ']';
   }
-  return '{ min: ' + vtoString(this.min) + ', max: ' + vtoString(this.max) + ', dims: ' + vtoString(this.dimensions()) + '}';
+  return '{ min: ' + vtoString(this.min) + ', max: ' + vtoString(this.max) +
+    ', dims: ' + vtoString(this.dimensions()) + ', centroid: ' + vtoString(this.centroid()) + '}';
 };
 
 BBox.prototype.toJSON = function () {

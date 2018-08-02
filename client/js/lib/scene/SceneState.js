@@ -277,7 +277,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         if (!m) { continue; }
         var candidateAttachments = this.identifyCandidateAttachments(m, allCandidateSupportObjects,
           { aggregatedSceneStatistics: opts.aggregatedSceneStatistics, includeCandidates: true,
-            maxCandidatesToCheck: 1, keepSameLevel: true, disallowSameModelHorizontalAttachment: true });
+            keepSameLevel: true, disallowSameModelHorizontalAttachment: true });
         if (candidateAttachments) {
           attachments[i] = candidateAttachments.best;
           candidates[i] = candidateAttachments.candidates;
@@ -852,10 +852,10 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           // Set depthWrite to false so the other objects always appear on top
           //Object3DUtil.setDepthWrite(modelInstance.object3D, false);
           // Make the object not pickable, selectable, and not a support object
-          modelInstance.object3D.userData.isPickable = false;
-          modelInstance.object3D.userData.isSelectable = false;
+          modelInstance.object3D.userData.isPickable = modelInstance.object3D.userData.isPickable ||false;
+          modelInstance.object3D.userData.isSelectable = modelInstance.object3D.userData.isSelectable || false;
           modelInstance.object3D.userData.isEditable = modelInstance.object3D.userData.isSelectable;
-          modelInstance.object3D.userData.isSupportObject = false;
+          modelInstance.object3D.userData.isSupportObject = modelInstance.object3D.userData.isSupportObject || false;
           // Set the current scene type to be the category of the vf model
           this.rootModelInstance = modelInstance;
           this.sceneType = modelInstance.model.getCategory();
@@ -1208,6 +1208,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
     };
 
     SceneState.prototype.transformCameraState = function (camState, matrix, scale) {
+      //TODO(MS): Account for direction vs position vector transformation
       // Takes camera state using matrix
       var fields = ['up', 'position', 'target', 'direction'];
       var transformedCamState = {};
@@ -1499,6 +1500,18 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return object3Ds.concat(this.extraObjects);
     };
 
+    SceneState.prototype.getModelObject3Ds = function() {
+      var modelInstances = Object3DUtil.findModelInstances(this.scene);
+      var object3Ds = _.map(modelInstances, function (mInst) {
+        return mInst.object3D;
+      });
+      return object3Ds;
+    };
+
+    SceneState.prototype.getWalls = function() {
+      return _.filter(this.extraObjects, function(x) { return x.userData.type === 'Wall'; });
+    };
+
     SceneState.prototype.computeObjectIndex = function() {
       var objectIndex = new Index();
       objectIndex.add('unknown');
@@ -1554,6 +1567,15 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         this.__roomIndex = this.computeRoomIndex();
       }
       return this.__roomIndex;
+    };
+
+    SceneState.prototype.getRoomById = function(roomId) {
+      var roomIndex = this.getRoomIndex().indexOf(roomId);
+      if (roomIndex >= 0) {
+        return this.getRoomByIndex1(roomIndex);
+      } else {
+        return null;
+      }
     };
 
     SceneState.prototype.getRoomByIndex1 = function(roomIndex) {

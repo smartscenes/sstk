@@ -227,6 +227,24 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
     }.bind(this), totalMillis);
   };
 
+  /**
+   * View target
+   * @param options
+   * @param [options.target] {THREE.Vector3} Target point to look at (if not specified, then must specify `targetBBox` - then the `targetBBox` centroid is used as target)
+   * @param [options.position] {THREE.Vector3} Camera position to look from (if not specified, then must specify `targetBBox` - then the `target` and `targetBBox` along with other parameters are used to determine the position)
+   * @param [options.targetBBox] {geo.BBox} Target bounding box to look at (used if either `target` or `position` not specified)
+   * @param [options.up] {THREE.Vector3} Camera up (existing camera up is used if not specified)
+   * @param [options.lookatUp] {THREE.Vector3} Up to use for lookat computation (`up` is used if not specified)
+   * @param [options.distanceScale=this.defaultDistanceScale] {number}
+   * @param [options.viewIndex] {int}
+   * @param [options.theta] {number}
+   * @param [options.phi] {number}
+   * @param [options.fitRatio] {number}
+   * @param [options.defaultPosition] {number}
+   * @param [options.fov] {number} Vertical field of view (in radians)
+   * @param [options.near] {number} Near in virtual units
+   * @param [options.far] {number} Far in virtual units
+   */
   CameraControls.prototype.viewTarget = function (options) {
     var target = Object3DUtil.toVector3(options.target);        // Target to look at
     var position = Object3DUtil.toVector3(options.position);    // Camera position

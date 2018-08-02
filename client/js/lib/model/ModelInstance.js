@@ -587,10 +587,15 @@ define(['geo/BBox', 'geo/Object3DUtil','Constants'], function (BBox, Object3DUti
     return physicalDims;
   };
 
-  ModelInstance.prototype.getUpFrontAxes = function (targetUp, targetFront) {
+  ModelInstance.prototype.getUpFrontAxes = function (targetUp, targetFront, snapTo) {
     var r = new THREE.Quaternion();
-    r.multiplyQuaternions(this.object3D.quaternion, this.model.object3D.quaternion);
-    return Object3DUtil.getObjUpFrontAxes(r, targetUp, targetFront, 0.0000000000001);
+    if (this.modelBaseObject3D) {
+      r.multiplyQuaternions(this.object3D.quaternion, this.modelBaseObject3D.quaternion);
+      r.multiplyQuaternions(r, this.modelObject3D.quaternion);
+    } else {
+      r.multiplyQuaternions(this.object3D.quaternion, this.modelObject3D.quaternion);
+    }
+    return Object3DUtil.getObjUpFrontAxes(r, targetUp, targetFront, snapTo);
   };
 
   ModelInstance.prototype.getUILogInfo = function (detailed) {

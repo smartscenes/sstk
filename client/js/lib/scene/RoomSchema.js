@@ -7,7 +7,7 @@ var _ = require('util');
 
 // Defines fields we care about for rooms
 var fields = [
-  { name: 'id', type: 'categorical', excludeFromFacet: true },
+  { name: 'id', type: 'categorical', excludeFromFacet: false },
   { name: 'datasets', type: 'categorical' },
   { name: 'source', type: 'categorical' },
 //  { name: 'category', type: 'categorical' },
@@ -56,7 +56,7 @@ var fields = [
       { query: 'modelCats:garage_door', description: 'Rooms with garage_door' },
       { query: '!modelCats:door', description: 'Rooms without any doors' }]
   },
-  { name: 'modelIds', type: 'categorical', excludeFromFacet: true },
+  { name: 'modelIds', type: 'categorical', excludeFromFacet: false },
   { name: 'roomTypes', type: 'categorical',
     description: 'Best guess at whether to room is a Bedroom, Bathroom, etc by the SUNCG team (each room can have multiple room types)',
     examples: [{ query: 'roomTypes:Bedroom', description: 'Rooms that are bedrooms' },

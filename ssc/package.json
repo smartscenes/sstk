@@ -25,7 +25,7 @@
     "lodash": "^4.17.4",
     "minimist": "^1.2.0",
     "papaparse": "^4.3.6",
-    "pngjs": "^3.3.0",
+    "pngjs": "^3.3.3",
     "seedrandom": "^2.4.3",
     "shelljs": "^0.7.0",
     "sharp": "^0.18.4",

@@ -20,6 +20,7 @@ var _ = require('util');
  * @param [params.useCleanAnnotations=false] {boolean} whether to use cleaned annotations (instead of raw)
  * @constructor
  * @extends ModelPartViewer
+ * @memberOf scannet
  */
 function SegmentAnnotationViewer(params) {
   var params = _.defaultsDeep(Object.create(null), params, {
@@ -224,10 +225,6 @@ SegmentAnnotationViewer.prototype.onSelectLabel = function (labelInfo) {
 
 SegmentAnnotationViewer.prototype.clearDebug = function () {
   Object3DUtil.removeAllChildren(this.debugOBBsNode);
-};
-
-SegmentAnnotationViewer.prototype.hasAnnotations = function () {
-  return this.annotations && this.annotations.length > 0;
 };
 
 //Given the annotationId, queries the sql database for the

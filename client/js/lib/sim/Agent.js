@@ -206,6 +206,15 @@ Agent.prototype.localToWorldDirection = function(direction, out) {
   return out;
 };
 
+Agent.prototype.worldToLocalDirection = function(direction, out) {
+  out = out || new THREE.Vector3();
+  // Assumes agent is already in world coordinate!
+  // Use getWorldQuaternion (if our agent no longer in world space)
+  out.copy(direction);
+  out.applyQuaternion(this.__object3D.quaternion.clone().inverse());
+  return out;
+};
+
 Agent.prototype.worldToLocalPositionNoScaling = function(position, out) {
   // Assumes agent is already in world coordinate!
   // Use getWorldQuaternion and getWorldPosition (if our agent no longer in world space)

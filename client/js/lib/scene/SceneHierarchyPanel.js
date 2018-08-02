@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var AssetLoader = require('assets/AssetLoader');
 var ConfigControls  = require('ui/ConfigControls');
 var Object3DUtil = require('geo/Object3DUtil');
@@ -378,24 +379,24 @@ SceneHierarchyPanel.prototype.__createSummaryInfo = function(object3D) {
   var nGround = _.sumBy(object3D.children, function(node) { return node.name === 'Ground'? 1:0; });
   var nBoxes = _.sumBy(object3D.children, function(node) { return node.name === 'Box'? 1:0; });
   var nWindows = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isWindow())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isWindow())? 1:0;
   });
   var nDoors = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isDoor())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isDoor())? 1:0;
   });
   var nPeople = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isPerson())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isPerson())? 1:0;
   });
   var nPlants = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isPlant())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isPlant())? 1:0;
   });
   var nStairs = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isStairs())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isStairs())? 1:0;
   });
   var nStruct = _.sumBy(object3D.children, function(node) {
-    return (node.userData.modelId && Object3DUtil.getModelInstance(node).model.isStructure())? 1:0;
+    return (node.userData.type === 'ModelInstance' && Object3DUtil.getModelInstance(node).model.isStructure())? 1:0;
   });
-  var nObjects = _.sumBy(object3D.children, function(node) { return node.userData.modelId? 1:0; });
+  var nObjects = _.sumBy(object3D.children, function(node) { return node.userData.type === 'ModelInstance'? 1:0; });
   nObjects = nObjects - nWindows - nDoors - nStruct - nStairs;
   var stats = { nRooms: nRooms, nStructure: nStruct, nStairs: nStairs,
     nWindows: nWindows, nDoors: nDoors, nPeople: nPeople, nPlants: nPlants,
@@ -621,7 +622,7 @@ SceneHierarchyPanel.prototype.__showBoundingBoxForNode = function(node, flag) {
     var mesh = new MeshHelpers.BoxMinMax(bbox.min, bbox.max, Object3DUtil.TransparentMat);
     var boxwf = new THREE.BoxHelper(mesh);
     var material = this.app.picker.highlightMaterial;
-    var boxwffat = new MeshHelpers.FatLines(boxwf, 5, material);
+    var boxwffat = new MeshHelpers.FatLines(boxwf, 0.05*Constants.metersToVirtualUnit, material);
 
     bboxMesh = boxwffat;
     this.__bbNodes.add(bboxMesh);
@@ -819,41 +820,103 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
     },
     'contextmenu':{
       "items": function(node) {
+        var selected = scope.tree.jstree('get_selected', true);
+        var targets = scope.__getObjects(selected);
         var basicItems = {
-          lookAtItem : {
-            "label" : "Look at",
-            "action" : function(item) {
+          lookAtItem: {
+            "label": "Look at",
+            "action": function (item) {
               // Handle look at item for multiple selected
-              var selected = scope.tree.jstree('get_selected', true);
-              var targets = scope.__getObjects(selected);
               //var targets = scope.__getObjects(node);  // Only look at single item
               if (targets && targets.length) {
                 scope.app.lookAt(targets);
               }
             },
-            "_class" : "class"
+            "_class": "class"
           },
-          showItem : {
-            "label" : "(S)how - hide other nodes",
+          toggleVisible: {
+            "label": function (item) {
+              var label = "Toggle visible";
+              if (targets && targets.length) {
+                var isAllVisible = _.every(targets, function (x) {
+                  return x.visible;
+                });
+                var isAllHidden = _.every(targets, function (x) {
+                  return !x.visible;
+                });
+                if (isAllVisible) {
+                  label += " (hide)"
+                }
+                else if (isAllHidden) {
+                  label += " (show)"
+                }
+              }
+              return label;
+            },
+            "action": function (item) {
+              if (targets && targets.length) {
+                _.each(targets, function (target) {
+                  target.visible = !target.visible;
+                });
+              }
+            },
+            "_class": "class"
+          },
+          showItem: {
+            "label": "(S)how - hide other nodes",
             "shortcut": 83,
             "shortcut_label": 's',
-            "action" : function(item) {
+            "action": function (item) {
               // Handle show item for multiple selected
-              var selected = scope.tree.jstree('get_selected', true);
               scope.__showItems(selected);
             },
-            "_class" : "class"
+            "_class": "class"
           },
-          showAll : {
-            "label" : "Show (a)ll",
+          showAll: {
+            "label": "Show (a)ll",
             "shortcut": 65,
             "shortcut_label": 'a',
-            "action" : function(item) {
+            "action": function (item) {
               scope.app.showAll();
             },
+            "_class": "class"
+          }
+        };
+
+        function addSetVisibleOption(items, name, label, flag, recursive) {
+          basicItems[name] = {
+            "label" : label,
+            "action" : function(item) {
+              _.each(targets, function(x) {
+                Object3DUtil.setVisible(x, flag, recursive);
+              });
+            },
             "_class" : "class"
-          },
-          openModelViewer : {
+          };
+
+        }
+
+        if (targets && targets.length) {
+
+          var isAllVisible = _.every(targets, function(x) { return x.visible; });
+          var isAllHidden = _.every(targets, function(x) { return !x.visible; });
+
+          if (isAllVisible) {
+            //addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
+            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+          } else if (isAllHidden) {
+            //addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+          } else {
+            //addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
+            //addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+          }
+        }
+
+        if (scope.modelViewerUrl) {
+          basicItems['openModelViewer'] = {
             "label" : "Show (m)odel",
             "shortcut": 77,
             "shortcut_label": 'm',
@@ -861,10 +924,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
               scope.__openModelViewer(node);
             },
             "_class" : "class"
-          }
-        };
-        if (!scope.modelViewerUrl) {
-          delete basicItems['openModelViewer'];
+          };
         }
         var items = basicItems;
 
@@ -880,7 +940,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
               "separator_after": false,
               "label": "Identify attachment",
               "action": function (obj) {
-                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { maxCandidatesToCheck: 1 });
+                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { checkOpposite: true });
                 console.log(attachment);
               }
             };

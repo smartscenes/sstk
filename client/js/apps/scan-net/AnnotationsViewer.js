@@ -139,73 +139,78 @@ AnnotationsViewer.prototype.createAnnotationsTable = function(params) {
   $(loadingMessageSelector).css('visibility', 'visible');
   var resultTable = $(resultTableSelector);
   var lazyImgLoadCallback = $.fn.dataTable.getLazyImgLoadCallback();
+  var buttons = ['csv', 'colvis', 'orderNeutral', 'selectAll', 'selectNone'];
 // Setup our editor
-  var notes = getValues(annotations, 'notes', ['dup', 'replaced', 'bad', 'old'])
-    .filter(function (x) {
-      return x && x.length <= 20;
-    });
-  var editor = new $.fn.dataTable.Editor( {
-    ajax: {
-      url: this.editUrl,
-      data: function(d) { return JSON.stringify(d); },
-      contentType: "application/json; charset=utf-8"
-    },
-    table: resultTableSelector,
-    idSrc:  'id',
-    fields:
-      [ {
-          label: "Status",
-          name: "status",
-          type: "selectize",
-          options: [{label: 'rejected', value: 'rejected'},
-            {label: 'flagged', value: 'flagged'},
-            {label: 'ignore', value: 'ignore'},
-            {label: 'none', value: ''}]
-        },
-        {
-          label: "Verified",
-          name: "verified",
-          type: "checkbox",
-          separator: "|",
-          options:   [
-            { label: '', value: 1 }
-          ]
-        },
-        {
-          label: "Condition",
-          name: "condition"
-        },
-        {
-          label: "Notes",
-          name: "notes",
-          type: "autoComplete",
-          opts: {
-            'minLength': 0,
-            'source': notes
+  if ($.fn.dataTable.Editor) {
+    var notes = getValues(annotations, 'notes', ['dup', 'replaced', 'bad', 'old'])
+      .filter(function (x) {
+        return x && x.length <= 20;
+      });
+    var editor = new $.fn.dataTable.Editor( {
+      ajax: {
+        url: this.editUrl,
+        data: function(d) { return JSON.stringify(d); },
+        contentType: "application/json; charset=utf-8"
+      },
+      table: resultTableSelector,
+      idSrc:  'id',
+      fields:
+        [ {
+            label: "Status",
+            name: "status",
+            type: "selectize",
+            options: [{label: 'rejected', value: 'rejected'},
+              {label: 'flagged', value: 'flagged'},
+              {label: 'ignore', value: 'ignore'},
+              {label: 'none', value: ''}]
+          },
+          {
+            label: "Verified",
+            name: "verified",
+            type: "checkbox",
+            separator: "|",
+            options:   [
+              { label: '', value: 1 }
+            ]
+          },
+          {
+            label: "Condition",
+            name: "condition"
+          },
+          {
+            label: "Notes",
+            name: "notes",
+            type: "autoComplete",
+            opts: {
+              'minLength': 0,
+              'source': notes
+            }
           }
-        }
-      ]
-  });
-
-// Activate an inline edit on click of a table cell
-  resultTable.on( 'click', 'tbody td.bubble', function (e) {
-    editor.bubble( this );
-  } );
-  resultTable.on( 'click', 'tbody td.inline', function (e) {
-    editor.inline( this );
-  } );
-  resultTable.on( 'click', 'tbody td.inline-selectize', function (e) {
-    editor.inline( this, {
-      onReturn: 'none',
-      buttons: { label: '&gt;', fn: function () { this.submit(); } }
+        ]
     });
-  });
-  resultTable.on( 'change', 'input.editor-verified', function () {
-    editor
-      .edit( $(this).closest('tr'), false )
-      .set( 'verified', $(this).prop( 'checked' ) ? 1 : 0 )
-      .submit();
-  } );
+
+  // Activate an inline edit on click of a table cell
+    resultTable.on( 'click', 'tbody td.bubble', function (e) {
+      editor.bubble( this );
+    } );
+    resultTable.on( 'click', 'tbody td.inline', function (e) {
+      editor.inline( this );
+    } );
+    resultTable.on( 'click', 'tbody td.inline-selectize', function (e) {
+      editor.inline( this, {
+        onReturn: 'none',
+        buttons: { label: '&gt;', fn: function () { this.submit(); } }
+      });
+    });
+    resultTable.on( 'change', 'input.editor-verified', function () {
+      editor
+        .edit( $(this).closest('tr'), false )
+        .set( 'verified', $(this).prop( 'checked' ) ? 1 : 0 )
+        .submit();
+    } );
+
+    buttons.push({ extend: "edit",   editor: editor });
+  }
 
   function getViewUrl(ann) {
     //var url = scope.viewUrl + '?annotationId=' + ann.id + '&modelId=' + ann.itemId;
@@ -423,10 +428,7 @@ AnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     "data": annotations,
     "ajax": ajaxOptions,
     "dom": 'BlfripFtip',
-    "buttons": [
-      'csv', 'colvis', 'orderNeutral', 'selectAll', 'selectNone',
-      { extend: "edit",   editor: editor }
-    ],
+    "buttons": buttons,
     "select": true,
     "columns": columns,
     "rowCallback": function( row, aData, iDisplayIndex ) {

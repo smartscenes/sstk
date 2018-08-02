@@ -27,12 +27,14 @@ function SearchController(params) {
       'scenes', 'datasets',
       'nrooms', 'nlevels', 'nmodels', 'nobjects', 'ndoors', 'nwindows', 'nwalls', 'npeople', 'nmisc', // scenes
       'levelRating', 'overallRating', // scene ratings
-      'floorArea', // Rooms
+      'floorArea', 'floorAreaFilled', // Rooms
+      'sceneType',
       'a3d.category', 'imageSize', 'fileSize', 'popularity', 'modelQuality',
-      'pcaDim', 'dims', 'aligned.dims', 'score']
+      'pcaDim', 'dims', 'aligned.dims', 'score'],
+    tooltipIncludeLimits: {'description': { length: 256 }}
   };
   params = _.defaults(Object.create(null), params, defaults);
-  BasicSearchController.call(this, params);
+  BasicSearchController.call(this, _.defaults({ deferInit: true}, params));
 
   var scope = this;
   this.searchPanel = new SearchPanel(_.defaults({
@@ -64,6 +66,10 @@ function SearchController(params) {
     //this.searchOptionsElem.append("<br/>");
     this.searchPanel.addToSearchOptions(this.searchPanel.searchSimilarByOptions);
     this.searchPanel.addToSearchOptions(this.searchPanel.searchSimilarButton);
+  }
+
+  if (!params.deferInit) {
+    this.init();
   }
 }
 

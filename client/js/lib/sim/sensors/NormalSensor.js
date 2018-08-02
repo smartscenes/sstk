@@ -36,3 +36,14 @@ NormalSensor.prototype.__getFrame = function(scene) {
 };
 
 module.exports = NormalSensor;
+
+/**
+ * Normals from a camera sensor
+ * @typedef sim.sensors.NormalSensor.Frame
+ * @type {object}
+ * @extends {sim.sensors.CameraSensor.Frame}
+ * @property type {string} Sensor type (`normal`)
+ * @property data {Array|TypedArray} pixels from the camera sensor for normals
+ * @property encoding {string} Encoding indicating how the data should be interpreted (`xyza`)
+ * @property shape {Array} Array indicating the width, height, and number of channels of the data
+ */

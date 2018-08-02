@@ -7,6 +7,8 @@ Then, install all necessary dependencies by running `npm install`.  After that, 
 
 Use `--help` to get help for specific scripts.
 
+See [`config`](config/README.md) for example configuration files and how to use `--config_file` option.
+
 Rendering scripts:
 
 1. `./render  --id <id> --dir=<baseDir> [--source p5d|p5dScene] [--width w] [--height h]` - Renders model or scene using default cameras
@@ -55,18 +57,38 @@ Annotation tools:
 
 1. `./export-annotated-ply` - Takes semantically annotated segments and outputs a PLY with semantic data on vertices
 
-2. `./recolor-ply` - Recolors ply with face annotations using prettier colors
-   `./transfer-property.ply` - Transfers face annotation in ply directly onto vertex colors
+1. `./recolor-ply` - Recolors ply with face annotations using prettier colors
 
-3. `./export-annotated-parts` - Export part annotations
+1. `./transfer-property-ply` - Transfers face annotation in ply directly onto vertex colors
 
-4. `./clean-segment-annotations` - Cleans aggregated segment annotations
+    1. Transfer vertex label to vertex color
 
-5. `./compare-segment-annotations` - Compares two sets of segment annotations
+       ./transfer-property-ply.js --input scene0166_00_vh_clean_2.labels.ply --property label --incr_by 1 --from vertex --use_pretty_colors
 
-6. `./project-annotations` - Project segment annotations from one mesh to another mesh
+    2. Transfer face segment_id to vertex color
 
-7. `./export-scan-model-alignments` - Export scan to model alignment provided by turkers
+       ./transfer-property-ply.js --input scene0166_00_vh_clean_2.segment_id.ply --property segment_id --incr_by 1 --from face --use_pretty_colors
+
+1. `./clean-segment-annotations` - Cleans aggregated segment annotations
+
+1. `./compare-segment-annotations` - Compares two sets of segment annotations
+
+1. `./project-annotations` - Project segment annotations from one mesh to another mesh
+    
+    1. Project annotations from one mesh to annother (the two meshes should represent the same environment)
+
+       ./project-annotations.js --source <id> --target <id> --output_dir <dir>  --sourceSegmentType segment-annotations-latest --targetSegmentType surfaces --max_dist 0.01       
+
+
+1. `./export-scan-model-alignments` - Export scan to model alignment provided by turkers
+
+1. `./export-annotated-parts` - Export part annotations
+
+1. './export-part-meshes' - Export part meshes as OBJ/MTL
+
+1. './export-mesh' - Export mesh
+
+1. './create-pts-bvh' - Create BVH given a directory of object point clouds
 
 Known Issues:
 

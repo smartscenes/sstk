@@ -48,6 +48,16 @@ function () {
     Constants.metersToVirtualUnit = 1/virtualUnitToMeters;
   };
 
+  Constants.setWorldUpFront = function(worldUp, worldFront) {
+    if (worldUp) {
+      Constants.worldUp.copy(worldUp);
+    }
+    if (worldFront) {
+      Constants.worldFront.copy(worldFront);
+    }
+    Constants.worldDown.copy(Constants.worldUp).negate();
+  };
+
   Constants.defaultPalette = null;
 
   // Mouse buttons (event.which)
@@ -93,10 +103,12 @@ function () {
 
   // TODO: Populate with stuff!
   Constants.assetTypes = {
-    'model': { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultModelUp, defaultFront: Constants.defaultModelFront, defaultUnit: Constants.defaultModelUnit } },
+    'model': { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultModelUp, defaultFront: Constants.defaultModelFront, defaultUnit: Constants.defaultModelUnit },
+               arrayFields: ['datasets', 'category', 'variantIds', 'componentIds', 'setIds', 'wnsynset','wnsynsetkey'] },
     'scan':  { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultModelUp, defaultFront: Constants.defaultModelFront, defaultUnit: Constants.defaultModelUnit } },
     'room':  { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit } },
-    'scene': { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit } },
+    'scene': { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit },
+               arrayFields: ['datasets', 'modelIds', 'modelCats', 'modelNames', 'modelTags', 'roomIds', 'roomTypes', 'origRoomTypes'] },
     'texture': { defaults: { defaultDataType: "image" } }
   };
   Constants.assetTypeModel = 'model';
@@ -106,7 +118,7 @@ function () {
   Constants.assetTypeTexture = 'texture';
 
   Constants.assetSources = {
-    'scan': ['vf', 'scan-checked', 'scan-staging', 'nyuv2'],
+    'scan': [/*'scans'*/],
     'model': ['models3d'],
     'scene': ['scenes'],
     'texture': ['textures']

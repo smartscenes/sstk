@@ -51,11 +51,18 @@ Object3DUtil.PlaneToFaceRotationParams = Object.freeze([
 
 // Set the node material, keeping multimaterial
 function setNodeMaterial(node, material, materialIndex) {
-  if (!node.userData.origMaterial) {
-    node.userData.origMaterial = node.material;
-  }
+  //if (!node.userData.origMaterial) {
+  //  node.userData.origMaterial = node.material;
+  //}
   if (node.material instanceof THREE.MultiMaterial) {
     node.material = node.material.clone();
+
+    var materials = null;
+    if (material instanceof THREE.MultiMaterial) {
+      materials = material.materials;
+    } else if (Array.isArray(material)) {
+      materials = material;
+    }
     if (materialIndex !== undefined) {
       var i = materialIndex;
       if (i < 0 || i >= node.material.materials.length) {
@@ -63,10 +70,10 @@ function setNodeMaterial(node, material, materialIndex) {
         console.log(node);
         return false;
       }
-      node.material.materials[i] = material;
+      node.material.materials[i] = materials? materials[i] : material;
     } else {
       for (var i = 0; i < node.material.materials.length; i++) {
-        node.material.materials[i] = material;
+        node.material.materials[i] = materials? materials[i] : material;
       }
     }
   } else {
@@ -151,7 +158,7 @@ Object3DUtil.revertMaterials = function (object3D, nonrecursive, fullRevert) {
 
 Object3DUtil.setTransparency = function (object3D, transparency) {
   object3D.traverse(function (node) {
-    if (node instanceof THREE.Mesh) {
+    if (node instanceof THREE.Mesh || node instanceof THREE.Line) {
       if (node.material) {
         Object3DUtil.setMaterialOpacity(node.material, 1.0 - transparency);
       }
@@ -199,6 +206,12 @@ Object3DUtil.setMaterialOpacity = function (material, opacity) {
   Materials.setMaterialOpacity(material, opacity);
 };
 
+Object3DUtil.setWireframe = function (object3D, flag) {
+  Object3DUtil.processMaterial(object3D, function (material) {
+    material.wireframe = flag;
+  });
+};
+
 Object3DUtil.setDepthWrite = function (object3D, flag) {
   Object3DUtil.processMaterial(object3D, function (material) {
     material.depthWrite = flag;
@@ -208,7 +221,7 @@ Object3DUtil.setDepthWrite = function (object3D, flag) {
 Object3DUtil.processMaterial = function (object3D, callback) {
   if (object3D instanceof THREE.Object3D) {
     object3D.traverse(function (node) {
-      if (node instanceof THREE.Mesh) {
+      if (node instanceof THREE.Mesh || node instanceof THREE.Line) {
         if (node.material) {
           Object3DUtil.processMaterial(node.material, callback);
         }
@@ -319,12 +332,15 @@ Object3DUtil.highlightMeshes = function (object3D, meshIndices, material, useInd
     true);
 };
 
-Object3DUtil.applyPartMaterial = function (part, material, nonrecursive, keepMultiMaterial) {
+Object3DUtil.applyPartMaterial = function (part, materialOrFn, nonrecursive, keepMultiMaterial, filter) {
+  if (filter && !filter(part)) {
+    return; // Don't apply material to this part
+  }
   if (part instanceof THREE.Object3D) {
-    Object3DUtil.applyMaterial(part, material, nonrecursive, keepMultiMaterial);
+    Object3DUtil.applyMaterial(part, materialOrFn, nonrecursive, keepMultiMaterial, filter);
   } else if (part instanceof Array) {
     for (var i = 0; i < part.length; i++) {
-      Object3DUtil.applyPartMaterial(part[i], material, nonrecursive, keepMultiMaterial);
+      Object3DUtil.applyPartMaterial(part[i], materialOrFn, nonrecursive, keepMultiMaterial, filter);
     }
   } else {
     var node = part['node'];
@@ -333,10 +349,11 @@ Object3DUtil.applyPartMaterial = function (part, material, nonrecursive, keepMul
     if (node) {
       if (materialIndex !== undefined) {
         if (node instanceof THREE.Mesh) {
+          var material = (_.isFunction(materialOrFn))? materialOrFn(node) : materialOrFn;
           materialApplied = setNodeMaterial(node, material, materialIndex);
         }
       } else {
-        Object3DUtil.applyPartMaterial(node, material, nonrecursive, keepMultiMaterial);
+        Object3DUtil.applyPartMaterial(node, materialOrFn, nonrecursive, keepMultiMaterial, filter);
         materialApplied = true;
       }
     }
@@ -347,12 +364,28 @@ Object3DUtil.applyPartMaterial = function (part, material, nonrecursive, keepMul
   }
 };
 
-Object3DUtil.applyMaterial = function (object3D, material, nonrecursive, keepMultiMaterial) {
+Object3DUtil.applyMaterial = function (object3D, materialOrFn, nonrecursive, keepMultiMaterial, filter) {
   return Object3DUtil.applyMaterials(object3D,
     function (mesh) {
-      return material;
+      if (filter && !filter(mesh)) {
+        return;
+      }
+      if (_.isFunction(materialOrFn)) {
+        return materialOrFn(mesh);
+      } else {
+        return materialOrFn;
+      }
     },
     nonrecursive, keepMultiMaterial);
+};
+
+Object3DUtil.saveMaterials = function(object3D, nonrecursive) {
+  Object3DUtil.traverseMeshes(object3D,
+    nonrecursive,
+    function (node) {
+      node.cachedData = node.cachedData || {};
+      node.cachedData.origMaterial = node.material;
+    });
 };
 
 Object3DUtil.applyMaterials = function (object3D, getMaterialCallback, nonrecursive, keepMultiMaterial) {
@@ -377,6 +410,16 @@ Object3DUtil.applyMaterials = function (object3D, getMaterialCallback, nonrecurs
     console.log('Material not applied to all meshes: skipped ' + skippedMeshes + '/' + totalMeshes);
   }
   return {total: totalMeshes, skipped: skippedMeshes};
+};
+
+Object3DUtil.replaceChild = function (oldChild, newChild) {
+  if (oldChild.parent) {
+    var parent = oldChild.parent;
+    var iChild = parent.children.indexOf(oldChild);
+    parent.children[iChild] = newChild;
+    newChild.parent = parent;
+    oldChild.parent = null;
+  }
 };
 
 Object3DUtil.detachFromParent = function (object3D, scene) {
@@ -579,6 +622,127 @@ Object3DUtil.convertBbDimsToSize = function (bbDims, sizeBy) {
   }
   return size;
 };
+
+Object3DUtil.computeNodeStatistics = function(root, splitOnMaterial) {
+  // Compute number of faces at each node
+  Object3DUtil.traverse(root, function (node) {
+    return true;
+  }, function (node) {
+    var nfaces = 0;
+    var nleafs = 0;
+    var nvertices = 0;
+    if (node instanceof THREE.Mesh) {
+      nfaces = GeometryUtil.getGeometryFaceCount(node.geometry);
+      nvertices = GeometryUtil.getGeometryVertexCount(node.geometry);
+      nleafs = 1;
+      if (splitOnMaterial) {
+        var nmats = (node.material instanceof THREE.MultiMaterial) ? node.material.materials.length :
+          (Array.isArray(node.material) ? node.material.length : 1);
+        nleafs = nmats;
+      }
+    } else if (node instanceof THREE.Line) {
+      nvertices = GeometryUtil.getGeometryVertexCount(node.geometry);
+      nleafs = 1;
+    } else if (node instanceof THREE.Points) {
+      nvertices = GeometryUtil.getGeometryVertexCount(node.geometry);
+      nleafs = 1;
+    } else if (node.children && node.children.length > 0) {
+      for (var i = 0; i < node.children.length; i++) {
+        nfaces += node.children[i].userData.nfaces || 0;
+        nleafs += node.children[i].userData.nleafs || 0;
+        nvertices += node.children[i].userData.nvertices || 0;
+      }
+    }
+    node.userData.nfaces = nfaces;
+    node.userData.nleafs = nleafs;
+    node.userData.nvertices = nvertices;
+  });
+};
+
+Object3DUtil.removeLines = function(root) {
+  return Object3DUtil.removeNodes(root, function(node) { return node instanceof THREE.Line; });
+};
+
+Object3DUtil.removePoints = function(root) {
+  return Object3DUtil.removeNodes(root, function(node) { return node instanceof THREE.Points; });
+};
+
+Object3DUtil.removeEmptyGeometries = function(root, options) {
+  options = _.defaults(Object.create(null), options || {}, {
+    splitOnMaterial: false,
+    minFaces: 1,
+    minVertices: 0
+  });
+
+  Object3DUtil.computeNodeStatistics(root, options.splitOnMaterial);
+  Object3DUtil.traverse(root, function(node) {
+    return node.userData.nfaces > 0;
+  }, function(node) {
+    // Remove any children that doesn't have enough faces or vertices
+    var removeList = [];
+    for (var i = 0; i < node.children.length; i++) {
+      var c = node.children[i].userData;
+      if (c.nfaces < options.minFaces || c.nvertices < options.minVertices) {
+        removeList.push(node.children[i]);
+      }
+    }
+    for (var i = 0; i < removeList.length; i++) {
+      console.log('Removing node ' + removeList[i].id);
+      node.remove(removeList[i]);
+    }
+  });
+  Object3DUtil.clearCache(root);
+};
+
+Object3DUtil.collapseNestedPaths = function(root, options) {
+  // Collapse nodes that have just one child
+  var queue = [root];
+  var newRoot = root;
+  while (queue.length > 0) {
+    var node = queue.pop();
+    if (node instanceof THREE.Group && node.children.length === 1) {
+      var collapseNodes = [node];
+      var n = node;
+      while (n.children.length === 1) {
+        n = n.children[0];
+        collapseNodes.push(n);
+      }
+      var finalNode = collapseNodes[collapseNodes.length-1];
+      // Fold transforms into this node
+      var finalTransform = finalNode.matrix;
+      for (var i = collapseNodes.length-2; i >= 0; i--) {
+        var n = collapseNodes[i];
+        finalTransform.premultiply(n.matrix);
+      }
+      Object3DUtil.setMatrix(finalNode, finalTransform);
+      // Figure out name
+      var labels = _.map(collapseNodes, function(n) { return n.name || (n.userData && n.userData.id) || ("node" + n.index); });
+      finalNode.name = labels.join('/');
+      // Replace current node with this node
+      if (node.parent) {
+        //var parent = node.parent;
+        //parent.remove(node);
+        //parent.add(finalNode);
+
+        var index = node.parent.children.indexOf(node);
+        node.parent.children[index] = finalNode;
+        finalNode.parent = node.parent;
+        node.parent = null;
+        if (node === root) {
+          newRoot = finalNode;
+        }
+      }
+      node = finalNode;
+      console.log('Consolidated ' + finalNode.name);
+    }
+    for (var i = 0; i < node.children.length; i++) {
+      queue.push(node.children[i]);
+    }
+  }
+  newRoot.updateMatrixWorld();
+  return newRoot;
+};
+
 
 Object3DUtil.getObjectStats = function(object3D, includeChildModelInstance) {
   var nverts = 0;
@@ -897,7 +1061,7 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
 };
 
 Object3DUtil.setMatrix = function (obj, matrix) {
-  obj.matrix = matrix;
+  obj.matrix.copy(matrix);
   obj.matrix.decompose(obj.position, obj.quaternion, obj.scale);
   obj.matrixWorldNeedsUpdate = true;  // make sure matrixWorldNeedsUpdate is set
   Object3DUtil.clearCache(obj);
@@ -1041,9 +1205,13 @@ Object3DUtil.placeObject3D = function (obj, targetWorldPosition, bbBoxPointToPos
 
 Object3DUtil.placeObject3DByOrigin = function (obj, targetWorldPosition) {
   var shift;
-  var currentWorldPosition = obj.localToWorld(new THREE.Vector3());
   if (obj.parent) {
     obj.parent.updateMatrixWorld();
+  } else {
+    obj.updateMatrixWorld();
+  }
+  var currentWorldPosition = obj.localToWorld(new THREE.Vector3());
+  if (obj.parent) {
     var current = obj.parent.worldToLocal(currentWorldPosition.clone());
     var target = obj.parent.worldToLocal(targetWorldPosition.clone());
     shift = target.clone();
@@ -1097,16 +1265,30 @@ Object3DUtil.rescaleObject3D = function (obj, scale) {
   Object3DUtil.clearCache(obj);
 };
 
-Object3DUtil.rescaleObject3DToFit = function (obj, dim) {
+Object3DUtil.rescaleObject3DToFit = function (obj, dim, tolRange) {
   var bbSize = Object3DUtil.getBoundingBoxDims(obj);
   var scale;
   if ((typeof dim) === 'number') {
     scale = dim / bbSize.length();
+  } else if (dim.rescaleBy) {
+    if (!dim.rescaleTo) {
+      throw "Missing rescaleTo";
+    }
+    if (dim.rescaleBy === 'max') {
+      scale = dim.rescaleTo / Math.max(bbSize.x, bbSize.y, bbSize.z);
+    } else if (dim.rescaleBy === 'diagonal') {
+      scale = dim.rescaleTo / bbSize.length();
+    } else {
+      throw "Unsupported rescaleBy " + dim.rescaleBy;
+    }
   } else {
     var scaleV = new THREE.Vector3();
     scaleV.copy(dim);
     scaleV.divide(bbSize);
     scale = Math.min(scaleV.x, scaleV.y, scaleV.z);
+  }
+  if (tolRange && tolRange[0] <= scale && tolRange[1] >= scale) {
+    return;
   }
   obj.scale.multiplyScalar(scale);
   //obj.scale.x = obj.scale.y = obj.scale.z = scale;
@@ -1864,7 +2046,7 @@ Object3DUtil.deepClone = function(object3D) {
   // Deep clone that makes a copy of the geometry as well
   var clone = object3D.clone();
   clone.traverse(function (node) {
-    if (node instanceof THREE.Mesh) {
+    if (node instanceof THREE.Mesh || node instanceof THREE.Line || node instanceof THREE.Points) {
       var newGeom = GeometryUtil.clone(node.geometry);
       node.geometry = newGeom;
     }
@@ -1954,7 +2136,7 @@ Object3DUtil.clearCache = function (object3D) {
 
 Object3DUtil.dispose = function(parentObject) {
   parentObject.traverse(function (node) {
-    if (node instanceof THREE.Mesh) {
+    if (node instanceof THREE.Mesh || node instanceof THREE.Line || node instanceof THREE.Points) {
       if (node.geometry) {
         node.geometry.dispose();
       }
@@ -2017,6 +2199,19 @@ Object3DUtil.traverseAncestors = function(object3D, callback) {
   }
 };
 
+Object3DUtil.findFirstAncestor = function(object3D, filter, n) {
+  var parent = object3D.parent;
+  n = (n || 0) + 1;
+  if ( parent != null ) {
+    var matched = filter(parent);
+    if (matched) {
+      return { ancestor: parent, pathLength: n };
+    } else {
+      return Object3DUtil.findFirstAncestor(parent, filter, n);
+    }
+  }
+};
+
 // Find nodes that returns true for the given filter
 Object3DUtil.findNodes = function(object3D, filter) {
   var nodes = [];
@@ -2036,6 +2231,10 @@ Object3DUtil.removeNodes = function(node, filter) {
   for (var i = 0; i < matches.length; i++) {
     var match = matches[i];
     match.parent.remove(match);
+  }
+  if (matches.length) {
+    //console.log("Removed " + matches.length + ' nodes');
+    Object3DUtil.clearCache(node);
   }
   return matches;
 };
@@ -2064,6 +2263,19 @@ Object3DUtil.getMinDistanceToObjectBBoxes = function(object3Ds, points, opt) {
 Object3DUtil.removeAllChildren = function (object3D) {
   while (object3D.children.length > 0) {
     object3D.remove(object3D.children[0]);
+  }
+};
+
+Object3DUtil.setVisibleForType = function(object, type, visible) {
+  if (object) {
+    object.traverse(function(x) {
+      if ((x instanceof THREE.Line && type === 'line') ||
+          (x instanceof THREE.Points && type === 'point') ||
+          (x instanceof THREE.Mesh && type === 'mesh')
+         ) {
+        x.visible = visible;
+      }
+    });
   }
 };
 
@@ -2096,6 +2308,113 @@ Object3DUtil.setState = function (object, field, value, filter) {
       }
     });
   }
+};
+
+/**
+ * Traverses the scene graph with given root and orders nodes, geometries, materials for serialization
+ * Each node, geometry, material will have their `userData.nodeIndex`, `userData.geometryIndex`, or `userData.materialIndex` field set appropriately.
+ * @param object3D {THREE.Object3D} Root object to with nodes to index
+ * @param [options] Additional options
+ * @param [options.splitByMaterial=false] Whether to split nodes with Material into separate multiple meshes.
+ *   The old mesh in the scene graph is replaced with the split up meshes.
+ * @returns {nodes: Array[THREE.Object3D], geometries: Array[THREE.Geometry], materials: Array[THREE.Material], leafNodes: Array[THREE.Mesh]}
+ */
+Object3DUtil.getIndexedNodes = function (object3D, options) {
+  options = options || {};
+  var result = options.result || {
+    nodes: [],
+    geometries: [],
+    materials: []
+  }
+  object3D.traverse(function (node) {
+    node.userData.nodeIndex = result.nodes.length;
+    result.nodes.push(node);
+    if (node instanceof THREE.Mesh) {
+      var geometry = node.geometry;
+      if (!geometry.userData) {
+        geometry.userData = {};
+      }
+      if (geometry.userData.geometryIndex == undefined || result.geometries[geometry.userData.geometryIndex] !== geometry) {
+        geometry.userData.geometryIndex = result.geometries.length;
+        result.geometries.push(geometry);
+      }
+      var materials;
+      if (node.material instanceof THREE.MultiMaterial) {
+        materials = node.material.materials;
+      } else if (_.isArray(node.material)) {
+        materials = node.material;
+      } else {
+        materials = [node.material];
+      }
+      for (var i = 0; i < materials.length; i++) {
+        var m = materials[i];
+        if (!m.userData) {
+          m.userData = {};
+        }
+        if (m.userData.materialIndex == undefined || result.materials[m.userData.materialIndex] !== m) {
+          m.userData.materialIndex = result.materials.length;
+          result.materials.push(m);
+        }
+      }
+    }
+  });
+  // Split multi material
+  var meshNodes = _.filter(result.nodes, function(x) { return x instanceof THREE.Mesh; });
+  if (options.splitByMaterial) {
+    var splitGeometries = _.clone(result.geometries);
+    var leafNodes = [];
+    for (var i = 0; i < meshNodes.length; i++) {
+      var mesh = meshNodes[i];
+      var nodeIndex = mesh.userData.nodeIndex;
+      var splitMeshes = GeometryUtil.splitByMaterial(mesh, { validOnly: true });
+      if (splitMeshes.length > 1) {
+        console.log('spliting mesh ' + nodeIndex + ' for ' + object3D.name);
+        // Update geometry index
+        for (var j = 0; j < splitMeshes.length; j++) {
+          var geometry = splitMeshes[j].geometry;
+          if (!geometry.userData) {
+            geometry.userData = {};
+          }
+        }
+
+        var origGeomIndex = mesh.geometry.userData.geometryIndex;
+        splitMeshes[0].geometry.userData.geometryIndex = origGeomIndex;
+        splitGeometries[origGeomIndex] = splitMeshes[0].geometry;
+        for (var j = 1; j < splitMeshes.length; j++) {
+          splitMeshes[j].geometry.userData.geometryIndex = splitGeometries.length;
+          splitGeometries.push(splitMeshes[j].geometry);
+        }
+
+        // Merge node into results
+        var newNode = new THREE.Object3D();
+        newNode.name = mesh.name;
+        _.assign(newNode.userData, mesh.userData);
+
+        Object3DUtil.setMatrix(newNode, mesh.matrix);
+        Object3DUtil.replaceChild(mesh, newNode);
+        result.nodes[nodeIndex] = newNode;
+        for (var j = 0; j < splitMeshes.length; j++) {
+          var childNode = splitMeshes[j];
+          childNode.userData.nodeIndex = result.nodes.length;
+          result.nodes.push(childNode);
+          leafNodes.push(childNode);
+          // Add child to parent
+          newNode.add(childNode);
+        }
+        newNode.updateMatrixWorld();
+      } else {
+        splitGeometries.push(mesh.geometry);
+        leafNodes.push(mesh);
+      }
+    }
+    result.geometries = splitGeometries;
+    result.leafNodes = leafNodes;
+    //console.log('got result', result.nodes.length, result.geometries.length);
+  } else {
+    result.leafNodes = meshNodes;
+  }
+  result.root = result.nodes[0];
+  return result;
 };
 
 Object3DUtil.getMeshList = function (object, recursive, meshes) {
@@ -2546,6 +2865,13 @@ Object3DUtil.getMaterials = function (object3D) {
     meshes: allMeshesWithTexture, materials: allMaterialsWithTexture
   };
   return materials;
+};
+
+
+Object3DUtil.populateSceneGraphPath = function (node, parentRoot) {
+  node.traverse(function(n) {
+    n.userData.sceneGraphPath = Object3DUtil.getSceneGraphPath(n, parentRoot);
+  })
 };
 
 Object3DUtil.getSceneGraphPath = function (node, parentRoot) {
@@ -3201,10 +3527,66 @@ Object3DUtil.colorVerticesUsingFaceAttribute = function(object3D, attribute, col
   });
 };
 
+Object3DUtil.transferVertexAttributeToVertexColor = function(object3D, attribute, convertAttrFn) {
+  var color = new THREE.Color();
+  Object3DUtil.colorVerticesUsingVertexAttribute(object3D, attribute, function(x) {
+    var v = convertAttrFn? convertAttrFn(x) : x;
+    color.setHex(v);
+    return color;
+  });
+};
+
+Object3DUtil.colorVerticesUsingVertexAttribute = function(object3D, attribute, colorIndexOrFn) {
+  var colorFn = null;
+  if (colorIndexOrFn) {
+    if (_.isFunction(colorIndexOrFn)) {
+      colorFn = colorIndexOrFn;
+    } else {
+      colorFn = function(x) { return colorIndexOrFn[x]; };
+    }
+  }
+  Object3DUtil.traverseMeshes(object3D, false, function(mesh) {
+    var geometry = mesh.geometry;
+    if (geometry.customVertexAttributes) {
+      var vertexAttributes = geometry.customVertexAttributes[attribute];
+      var vertexColorBuffer = geometry.attributes['color'].array;
+      console.log('got vertexAttributes ' + attribute + ': ' + vertexAttributes.length /*, _.min(vertexAttributes), _.max(vertexAttributes)*/);
+      var nvertices = vertexColorBuffer.length/3;
+      for (var iVert = 0; iVert < nvertices; iVert++) {
+        var v = vertexAttributes[iVert];
+        //console.log('got vertex attribute ' + v + ', vertex ' + iVert);
+        var c = colorFn? colorFn(v) : v;
+        if (c == undefined) {
+          c = v || 0;
+        }
+        c = _.isInteger(c)? Object3DUtil.createColor(c) : Object3DUtil.getColor(c);
+        var ci = iVert*3;
+        vertexColorBuffer[ci] = c.r;
+        vertexColorBuffer[ci+1] = c.g;
+        vertexColorBuffer[ci+2] = c.b;
+      }
+    }
+  });
+};
+
 Object3DUtil.grayOutVertices = function(object3D, center, maxRadius, grayColor) {
   Object3DUtil.traverseMeshes(object3D, false, function (mesh) {
     GeometryUtil.grayOutVertices(mesh, center, maxRadius, grayColor);
   });
+};
+
+Object3DUtil.filterByCategory = function(node, categories, includeNonModelInstances) {
+  var modelInstance = Object3DUtil.getModelInstance(node);
+  if (modelInstance) {
+    return modelInstance.model.hasCategoryIn(categories, true);
+  } else {
+    if (includeNonModelInstances && node.userData.type) {
+      var t = node.userData.type.toLowerCase();
+      return _.any(categories, function(cat) { return t === cat.toLowerCase(); });
+    } else {
+      return false;
+    }
+  }
 };
 
 Object3DUtil.BlackMatParams = {

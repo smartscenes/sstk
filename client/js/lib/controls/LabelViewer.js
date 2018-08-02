@@ -46,7 +46,7 @@ LabelViewer.prototype.registerEventListeners = function (domElement) {
 };
 
 LabelViewer.prototype.setLabelInfo = function(labelInfo) {
-  if (labelInfo.cssColor) {
+  if (labelInfo && labelInfo.cssColor) {
     var str = CanvasUtil.getColoredArrowCursor(labelInfo.cssColor, 32);
     $('canvas').css('cursor', str);
   } else {

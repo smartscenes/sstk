@@ -144,17 +144,18 @@ Materials.updateMaterialParams = function(materialType, p) {
   }
 };
 
-Materials.getStandardMaterial = function (color, alpha) {
+Materials.getStandardMaterial = function (color, alpha, materialType) {
   if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
     return color;
   }
+  materialType = materialType || Materials.DefaultMaterialType;
   var c = color;
   var a = new THREE.Color();
   //a.setRGB(0.02, 0.02, 0.05);
   a.setRGB(c.r / 4, c.g / 4, c.b / 4);
   var s = new THREE.Color();
   s.setRGB(0.18, 0.18, 0.18);
-  var mat = new Materials.DefaultMaterialType(Materials.updateMaterialParams(Materials.DefaultMaterialType, {
+  var mat = new materialType(Materials.updateMaterialParams(materialType, {
     color: c,
     //ambient: a,
     specular: s,
@@ -175,7 +176,7 @@ Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
     c = Colors.toColor(c);
   }
 
-  var mat = Materials.getStandardMaterial(c);
+  var mat = Materials.getStandardMaterial(c, undefined, THREE.MeshPhongMaterial);
   mat.name = 'color' + id;
   return mat;
 };

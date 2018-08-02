@@ -8,6 +8,7 @@ var STK = require('./stk-ssc');
 var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Export part annotations')
   .option('--id <id>', 'Model id [default: 101]', STK.util.cmd.parseList, ['101'])
   .option('--source <source>', 'Model source [default: p5d]', 'p5d')
 //  .option('--ann_type <type>', 'Annotation type', /^(raw|clean|aggr)$/)

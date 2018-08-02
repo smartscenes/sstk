@@ -133,7 +133,7 @@ LabeledGridEditor.prototype._previewAction = function (event, intersect) {
   if (isVoxel) {
     var vg = this.voxels.voxelGrid;
     var pos = this._calcVoxelPosition(intersect.point);
-    var gridCoords = pos.clone().applyProjection(this.worldToGrid).floor();
+    var gridCoords = pos.clone().applyMatrix4(this.worldToGrid).floor();
     selectedLabelId = vg.getVoxel(gridCoords.x, gridCoords.y, gridCoords.z);
     selectedLabel = (selectedLabelId > 0) ? vg.labels[selectedLabelId - 1] : null;
   }
@@ -185,7 +185,7 @@ LabeledGridEditor.prototype._processAction = function (event, intersect) {
     if (isVoxel) {
       var vg = this.voxels.voxelGrid;
       var pos = this._calcVoxelPosition(intersect.point);
-      var gridCoords = pos.clone().applyProjection(this.worldToGrid).floor();
+      var gridCoords = pos.clone().applyMatrix4(this.worldToGrid).floor();
       vg.setVoxel(gridCoords.x, gridCoords.y, gridCoords.z, 0);
       if (isVoxelNode) {
         console.log(intersect.descendant);
@@ -202,7 +202,7 @@ LabeledGridEditor.prototype._processAction = function (event, intersect) {
     } else {
       // Take from intersected to voxel grid
       var pos = this._calcVoxelPosition(intersect.point, intersect.face.normal);
-      var gridCoords = pos.clone().applyProjection(this.worldToGrid).floor();
+      var gridCoords = pos.clone().applyMatrix4(this.worldToGrid).floor();
       console.log(this.labelInfo);
       this.voxels.voxelGrid.setVoxel(gridCoords.x, gridCoords.y, gridCoords.z, this.labelInfo.id);
 

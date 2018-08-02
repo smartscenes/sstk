@@ -22,6 +22,7 @@ require('jquery-lazy');
  * @param [params.annotationConditions] {string[]} Array of annotation conditions to filter by (when querying)
  * @param [params.nTargetAnnotations=3] {int} Number of target annotations that we want to have (once this number is reached, the button becomes green, before that, the button is yellow-gold)
  * @constructor
+ * @memberOf part-annotator
  */
 function GroupedAnnotationsViewer(params) {
   this.nTargetAnnotations = params.nTargetAnnotations || 3;

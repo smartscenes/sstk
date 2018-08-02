@@ -6,14 +6,42 @@ var SearchController = require('search/SearchController');
 var _ = require('util');
 require('jquery-lazy');
 
-// Simplified asset querier (without visual search or schema)
+/**
+ * Simplified asset querier (without visual search or schema)
+ * The asset querier provides an ui for a user to query for assets.
+ * Preview images of assets are displayed in a search panel allowing for pagination.
+ * @constructor SimpleAssetQuerier
+ * @memberOf query
+ * @param options Configuration parameters for AssetQuerier
+ * @param [options.entriesPerRow=6] {int} Number of entries to show per row
+ * @param [options.nRows=50] {int} Number of rows to show
+ * @param [options.viewerUrl] {string} Base url for viewer (asset is shown using the pattern `${viewerUrl}?fullId=${fullId}`)
+ * @param [options.viewerIframe] {jQueryObject} If specified, asset is shown in the specified iframe vs a new tab.
+ * @param [options.viewerModal] {jQueryObject} If specified, asset is shown in the specified iframe/modal vs a new tab.  Requires `viewerIframe` be specified as well.
+ * @param [options.viewerWindowName='Asset Viewer'] {string} Name of browser tab to use for asset viewer (used if `viewerIframe` is not specified)
+ * @param [options.searchPanel] {jQueryObject|string} jQuery object or selector for where search results will be displayed
+ * @param [options.searchButton] {jQueryObject|string} jQuery object or selector for button to trigger search
+ * @param [options.searchTextElem] {jQueryObject|string} jQuery object or selector for search textbox
+ * @param [options.assetFiles] {string|string[]} List of asset metadata files to register
+ * @param [options.assetTypes] {string[]} List of asset types to support
+ * @param [options.selectedAssetType] {string} Selected asset type (defaults to first element of `assetTypes` if `assetTypes` is specified)
+ * @param [options.sources] {string[]} Asset data sources to support
+ * @param [options.previewImageIndex] {int|string} Which image to use for the preview image (shown in search results)
+ * @param [options.onClickAsset] {function(source, id, result)} Callback for when an asset is clicked (defaults to showing the asset in a new tab or modal)
+ * @param [options.customizeResult] {function(source, id, result, element)} Callback to customize display of asset in element
+ * @param [options.showLoadFile] {boolean} Whether option to load file of ids is shown
+ * @param [options.allowSave] {boolean} Whether option to save list of ids of shown
+ * @param [options.initialQuery] {string} Initial query of assets to search for
+ * @param [options.idsFile] {string|File} File of ids (one per line) to display
+ */
 function AssetQuerier(options) {
   var defaults = {
     viewerWindowName: 'Asset Viewer',
     entriesPerRow: 6,
     nRows: 50
   };
-  options = _.defaults({}, options, defaults);
+  this.urlParams = _.getUrlParams();
+  options = _.defaults({}, this.urlParams, options, defaults);
   this.init(options);
 }
 
@@ -87,9 +115,8 @@ AssetQuerier.prototype.__initSearch = function (options, assetGroups) {
     }
   }
 
-  this.urlParams = _.getUrlParams();
-  var idsFile = this.urlParams['idsFile'];
-  var initialQuery = options.initialQuery || this.urlParams['initialQuery'];
+  var idsFile = options.idsFile;
+  var initialQuery = options.initialQuery;
   if (idsFile) {
     this.searchController.loadIdsFromFile(idsFile);
   } else if (initialQuery) {
@@ -113,7 +140,9 @@ AssetQuerier.prototype.getViewResultUrl = function(fullId, result) {
 AssetQuerier.prototype.openViewer = function (url, windowName) {
   if (this.viewerIframe && this.viewerModal) {
     this.viewerIframe.attr('src', url);
-    this.viewerModal.modal('show');
+    if (this.viewerModal) {
+      this.viewerModal.modal('show');
+    }
   } else {
     window.open(url, windowName);
   }

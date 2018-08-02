@@ -57,6 +57,7 @@ var _ = require('util');
  *   onCloseUrl: "#{nextUrl}",
  * });
  * annotator.start();
+ * @memberOf scannet
  */
 function SegmentAnnotator(params) {
   var scope = this;
@@ -291,7 +292,7 @@ SegmentAnnotator.prototype.getState = function(options) {
   options = options || {};
   var labelInfos = this.labelsPanel? this.labelsPanel.getOrderedLabels() : [];
   var annotations = _.map(labelInfos, function(labelInfo) {
-    var info = _.pick(labelInfo, ['color', 'id', 'index', 'label', 'name', 'fixed', 'frozen', 'obb', 'segIndices', 'initialPoint']);
+    var info = _.pick(labelInfo, ['color', 'id', 'index', 'label', 'name', 'fixed', 'frozen', 'obb', 'data', 'segIndices', 'initialPoint']);
     if (labelInfo.element && labelInfo.element.hasClass('active')) {
       info.active = true;
     }
@@ -569,8 +570,8 @@ SegmentAnnotator.prototype.debugAnnotations = function () {
   this.getChanged();
 };
 
-SegmentAnnotator.prototype.hasAnnotations = function () {
-  return this.annotations && this.annotations.length > 0;
+SegmentAnnotator.prototype.__hasAnnotations = function (annotations) {
+  return annotations && annotations.length > 0;
 };
 
 SegmentAnnotator.prototype.onModelLoad = function (modelInstance) {

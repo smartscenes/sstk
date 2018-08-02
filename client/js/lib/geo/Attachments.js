@@ -15,13 +15,32 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
   // includeAllCandidates - Returns array of all candidates within threshold
   opts = opts || {};
   //console.log('identifyAttachments opts', opts);
-  var maxCandidates = opts.maxCandidates || Infinity;
-  var maxCandidatesToCheck = opts.maxCandidatesToCheck || maxCandidates;
-  var contactDistThreshold = opts.contactDistThreshold || (0.10 * Constants.metersToVirtualUnit);
+  var maxCandidates = opts.maxCandidates || Infinity;  // max candidate to track
+  var maxCandidatesToCheckPerAttachment = opts.maxCandidatesToCheck || maxCandidates;  // Max candidates to check per attachment
+  var deltaContactDistThresholdPerAttachment = (opts.deltaContactDistThreshold != undefined)? opts.deltaContactDistThreshold : (0.02 * Constants.metersToVirtualUnit); // maximum distance from closest attachment to furthest
+  var contactDistThreshold = (opts.contactDistThreshold != undefined)? opts.contactDistThreshold : (0.10 * Constants.metersToVirtualUnit);  // maximum distance from attachment point to support
   var modelInstance = modelInstWithCandidates.modelInstance;
   var candidatesAttachments = modelInstWithCandidates.attachments;
   var childModelId = modelInstance? modelInstance.model.info.fullId : null;
   var childObjectId = modelInstance? modelInstance.object3D.userData.id : null;
+
+  function getRoomIds(object3D) {
+    var roomIds = _.get(object3D, ['userData', 'roomIds']);
+    if (roomIds) { return roomIds; };
+    var roomId = _.get(object3D, ['userData', 'roomId']);
+    if (roomId != undefined) {
+      return [roomId];
+    } else {
+      return [];
+    }
+  }
+
+  function hasCommonRoomId(roomIds1, roomIds2) {
+    var intersection = _.intersection(roomIds1, roomIds2);
+    return intersection.length > 0;
+  }
+
+  var childRoomIds = modelInstance? getRoomIds(modelInstance.object3D) : [];
 
   function isBetter(cand, best, debug) {
     var intersected = cand.parentAttachment;
@@ -83,6 +102,19 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
             }
           }
         }
+        // Prefer correct room
+        if (intersected.normal.dot(best.parentSurfaceNormal) > 0.9) {
+          // Check candidate and best rooms
+          var candRoomIds = getRoomIds(cand.parent);
+          var bestRoomIds = getRoomIds(best.parent);
+          //if (debug) console.log('check room ids', childRoomIds, candRoomIds, bestRoomIds);
+          var candInSameRoom = hasCommonRoomId(childRoomIds, candRoomIds);
+          var bestInSameRoom = hasCommonRoomId(childRoomIds, bestRoomIds);
+          if (candInSameRoom !== bestInSameRoom) {
+            return candInSameRoom; // Favor candidate
+          }
+        }
+
         // Favor big flat surfaces
         var candBBFaceDims = _.get(cand, ['childAttachment', 'world', 'faceDims']);
         var bestBBFaceDims = _.get(best, ['childAttachment', 'world', 'faceDims']);
@@ -140,13 +172,14 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
     raycaster.ray.direction.copy(candidate.world.out);
     var intersected = picker.getIntersectedForRay(raycaster, parents);
     // Select the closest parent (favoring attachment with parent surface normal up)
-    //console.log('intersected', intersected, raycaster.ray.origin, raycaster.ray.direction, parents.map(function(p) { return Object3DUtil.getBoundingBox(p); }));
+    // console.log('intersected', intersected, raycaster.ray.origin, raycaster.ray.direction, parents.map(function(p) { return Object3DUtil.getBoundingBox(p); }));
     if (intersected.length > 0) {
       _.forEach(intersected, function(i) { i.distance = Math.max(i.distance - offset, 0); }); // subtract offset from distance
       var closest = intersected[0];
       if (closest.distance > contactDistThreshold) continue; // Skip
+      var distThreshold = Math.min(contactDistThreshold, closest.distance + deltaContactDistThresholdPerAttachment);
       var intersectedWithinThreshold = intersected.filter( function(x) {
-        return x.distance <= contactDistThreshold;
+        return x.distance <= distThreshold;
       });
 
       //console.log('closest', childObjectId, closest);
@@ -214,6 +247,7 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
       var nCandidates = Math.min(objectIds.length, maxCandidates);
       for (var k = 0; k < nCandidates; k++) {
         var objectId = objectIds[k];
+        //console.log('Check ' + objectId);
         var intersectsForObject = groupedByObjectId[objectId];
         for (var j = 0; j < intersectsForObject.length; j++) {
           var c = intersectsForObject[j];
@@ -232,7 +266,7 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
             parentAttachment: c,
             childAttachment: candidate // Candidate attachment point
           };
-          if (k < maxCandidatesToCheck && isBetter(candidateToCheck, best, false)) {
+          if (k < maxCandidatesToCheckPerAttachment && isBetter(candidateToCheck, best, false)) {
             best = candidateToCheck;
             //console.log('updating best', childObjectId, best);
           }

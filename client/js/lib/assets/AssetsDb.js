@@ -3,6 +3,7 @@
 
 'use strict';
 
+var Constants = require('Constants');
 var AssetLoader = require('assets/AssetLoader');
 var DataUtils = require('data/DataUtils');
 var IOUtil = require('io/IOUtil');
@@ -177,12 +178,10 @@ AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
         }
     }
   });
-  // TODO: Rework hack
-  var arrayFields = {
-    model: ['datasets', 'category', 'variantIds', 'componentIds', 'setIds', 'wnsynset','wnsynsetkey'],
-    scene: ['datasets', 'modelIds', 'modelCats', 'modelNames', 'modelTags', 'roomIds', 'roomTypes', 'origRoomTypes']
+  var splitFields = assetGroup.arrayFields;
+  if (!splitFields) {
+    splitFields = _.get(Constants.assetTypes, [assetGroup.type, 'arrayFields']);
   };
-  var splitFields = arrayFields[assetGroup.type];
   var assetInfos = parsed.data;
   for (var i = 0; i < assetInfos.length; i++) {
     if (this.convertDataFn) {

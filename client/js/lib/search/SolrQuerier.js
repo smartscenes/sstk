@@ -38,6 +38,13 @@ SolrQuerier.prototype.getRandomSortOrder = function (rng) {
   return 'random_' + seed + ' desc';
 };
 
+/**
+ * Returns a solr query string for querying records with field matching any one of the specified values
+ * @param field {string} Field name
+ * @param values {string|string[]} List of values to match
+ * @param [escape] {string|function(string)} Whether and how to escape values
+ * @returns {string} Solr query string
+ */
 SolrQuerier.prototype.getQuery = function (field, values, escape) {
   if (escape && typeof escape !== 'function') {
     if (escape === 'quote') {
@@ -59,6 +66,12 @@ SolrQuerier.prototype.getQuery = function (field, values, escape) {
   }
 };
 
+/**
+ * Returns a compound query string
+ * @param conj {string} Conjuction (`AND|OR`)
+ * @param terms {string[]} Terms to join
+ * @returns {string}
+ */
 SolrQuerier.prototype.getCompoundQuery = function (conj, terms) {
   var scope = this;
   var rest = Array.prototype.slice.call(arguments, 1);
@@ -93,7 +106,7 @@ SolrQuerier.prototype.getQueryUrl = function (params) {
 SolrQuerier.prototype.query = function (params, callback) {
   var solrUrl = params.url || this.searchUrl;
   var queryData = this.__toQueryData(params);
-  return this.__query(solrUrl, queryData, __getCallback(params, callback));
+  return this.__query(solrUrl, queryData, _.getCallback(params, callback));
 };
 
 SolrQuerier.prototype.__toQueryData = function(params) {
@@ -166,7 +179,7 @@ SolrQuerier.prototype.facetFieldSearch = function (params, callback) {
     'facet.field': facetField,
     'facet.mincount': facetMinCount
   };
-  return this.__query(solrUrl, queryData, __getCallback(params, callback));
+  return this.__query(solrUrl, queryData, _.getCallback(params, callback));
 };
 
 /**
@@ -193,7 +206,7 @@ SolrQuerier.prototype.getStats = function (params, callback) {
     'stats': true,
     'stats.field': field
   };
-  return this.__query(solrUrl, queryData, __getCallback(params, callback));
+  return this.__query(solrUrl, queryData, _.getCallback(params, callback));
 };
 
 /**
@@ -204,49 +217,18 @@ SolrQuerier.prototype.getStats = function (params, callback) {
 SolrQuerier.prototype.lookupFields = function (params, callback) {
   var solrUrl = params.url || this.schemaUrl;
   var method = 'GET';
-  var cb =  __getCallback(params, callback);
+  var cb =  _.getCallback(params, callback);
   return _.ajax
   ({
     type: method,
     url: solrUrl,
     contentType: 'application/json;charset=utf-8',
     dataType: 'json',
-    success: toAjaxSucceededCallback(cb),
-    error: toAjaxFailedCallback(cb),
+    callback: callback,
     timeout: this.timeout
   });
 };
 
-
-// Creates suitable function that ensures that callback / params.success / params.error are called
-function __getCallback(params, cb) {
-  return function(err, res) {
-    if (err) {
-      // Error
-      if (params && params.error) { params.error(err); }
-    } else {
-      // Success
-      if (params && params.success) { params.success(res); }
-    }
-    if (cb) { cb(err, res); }
-  };
-}
-
-function toAjaxSucceededCallback(cb) {
-  return function(data, textStatus, jqXHR) {
-    if (data.error) {
-      cb(data, null);
-    } else {
-      cb(null, data);
-    }
-  };
-}
-
-function toAjaxFailedCallback(cb) {
-  return function(jqXHR, textStatus, errorThrown) {
-    cb(textStatus + ' ' + errorThrown, null);
-  };
-}
 
 SolrQuerier.prototype.__query = function (solrUrl, queryData, callback) {
   var timeout = this.searchTimeout;
@@ -258,8 +240,7 @@ SolrQuerier.prototype.__query = function (solrUrl, queryData, callback) {
     dataType: 'jsonp',      // At some point, we might want to switch to a PHP script that queries Solr locally, and then we could use regular JSON again.
     jsonp: 'json.wrf',      // Solr requires the JSONP callback to have this name.
     traditional: true,      // If facet.field is array, it will become facet.field=a1&facet.field=a2 instead of facet.field[]=a1&facet.field[]=a2
-    success: toAjaxSucceededCallback(callback),
-    error: toAjaxFailedCallback(callback),
+    callback: callback,
     timeout: timeout       // in milliseconds. With JSONP, this is the only way to get the error handler to fire.
   });
 };

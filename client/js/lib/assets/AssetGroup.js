@@ -252,9 +252,10 @@ define(['Constants', 'util', 'base'],
         dataName = this.defaultFormat;
       }
       var loadInfo = this.__getBasicLoadInfo(id, dataName, metadata);
+      //console.log('supportFormats', this.supportedFormats);
       if (loadInfo.isSupported === false) {
         var mainSupportedFormat = this.supportedFormats[0];
-        if (mainSupportedFormat !== dataName) {
+        if (this.supportedFormats.indexOf(dataName) < 0) {
           console.warn(dataName + ' not supported for ' + id + ', using ' + mainSupportedFormat + ' instead');
           dataName = mainSupportedFormat;
           loadInfo = this.__getBasicLoadInfo(id, dataName, metadata);

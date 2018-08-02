@@ -31,6 +31,7 @@ function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
     var partsPanel = $('#partsPanel');
     if (partsPanel && partsPanel.length > 0) {
       this.partsPanel = new PartsPanel({
+        app: this,
         container: partsPanel,
         filterEmptyGeometries: true,
         showMultiMaterial: true,

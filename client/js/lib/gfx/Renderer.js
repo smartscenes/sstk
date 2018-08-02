@@ -1,6 +1,6 @@
 'use strict';
 
-define(['three-shaders'], function () {
+define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
 
   /**
    * Main rendering class (wrapper around THREE.Renderer)
@@ -23,6 +23,10 @@ define(['three-shaders'], function () {
     this.depthMaterial = null;
     this.depthTarget = null;
     this.composer = null;
+
+    this.__needFlipY = false;  // Do we need to flip about Y for rendering?
+    this.__maxViewportDims = null;  // Maximum viewport dimensions before we need to have tiles?
+    this.__tiles = null;
 
     this.init(opt);
   }
@@ -120,8 +124,7 @@ define(['three-shaders'], function () {
     return this.__pixelBuffer;
   };
 
-  Renderer.prototype.render = function (scene, camera, opts) {
-    opts = opts || {};
+  Renderer.prototype.__render = function (scene, camera, opts) {
     if (this.useAmbientOcclusion) {
       // Render to composer
       // Bad RenderPass API design requires setting scene and camera
@@ -140,26 +143,158 @@ define(['three-shaders'], function () {
         this.renderer.render(scene, camera, this.__rtTexture, true);
       }
     }
+
     if (this.isOffscreen) {
+      var height = opts.height;
+      var width = opts.width;
+      var offsetX = opts.offsetX || 0;
+      var offsetY = opts.offsetY || 0;
       if (this.domElement) {
         // We also want to return the pixels
         // Let's try to read it from the domElement
-        var pixels = opts.pixelBuffer || this.__getPixelBuffer();
-        this.renderer.context.readPixels(0, 0, this.width, this.height, this.renderer.context.RGBA, this.renderer.context.UNSIGNED_BYTE, pixels);
-        return pixels;
+        var pixels = opts.pixelBuffer;
+        this.renderer.context.readPixels(offsetX, offsetY, width, height, this.renderer.context.RGBA, this.renderer.context.UNSIGNED_BYTE, pixels);
       } else {
         var renderTarget = this.useAmbientOcclusion ? this.composer.writeBuffer : this.__rtTexture;
-        var pixels = opts.pixelBuffer || this.__getPixelBuffer();
-        this.renderer.readRenderTargetPixels(renderTarget, 0, 0,
-          this.width, this.height, pixels);
-        return pixels;
+        var pixels = opts.pixelBuffer;
+        this.renderer.readRenderTargetPixels(renderTarget, offsetX, offsetY, width, height, pixels);
+      }
+      return pixels;
+    }
+  };
+
+  // handle y flip due to WebGL render target
+  Renderer.prototype.__flipY = function (p) {
+    var t;
+    var numElementsPerRow = 4 * this.width;
+    for (var row = 0; row < this.height / 2; row++) {
+      var yOut = this.height - row - 1;
+      var base = numElementsPerRow * row;
+      var baseOut = numElementsPerRow * yOut;
+      for (var col = 0; col < this.width; col++) {
+        var step = col << 2;  // 4*x
+        var idx = base + step;
+        var idxOut = baseOut + step;
+        t = p[idxOut    ]; p[idxOut    ] = p[idx    ]; p[idx    ] = t;  // R
+        t = p[idxOut + 1]; p[idxOut + 1] = p[idx + 1]; p[idx + 1] = t;  // G
+        t = p[idxOut + 2]; p[idxOut + 2] = p[idx + 2]; p[idx + 2] = t;  // B
+        t = p[idxOut + 3]; p[idxOut + 3] = p[idx + 3]; p[idx + 3] = t;  // A
       }
     }
   };
 
+  function copyPixels(source, target, flipY) {
+    // TODO: make more efficent
+    //console.log('copyPixels', _.omit(source, ['buffer']), _.omit(target, ['buffer']), flipY);
+    var sourceNumElementPerRow = 4 * source.fullWidth;
+    var targetNumElementPerRow = 4 * target.fullWidth;
+    var sourceColOffset = 4 * source.x;
+    var targetColOffset = 4 * target.x;
+    var bytesToCopyPerRow = 4 * source.width;
+    //console.log('bytesToCopyPerRow is ', bytesToCopyPerRow);
+    for (var row = 0; row < source.height; row++) {
+      var sourceRow = flipY? (source.fullHeight - source.height + source.y + row) : (source.y + row);
+      var base = sourceNumElementPerRow * sourceRow + sourceColOffset;
+      var targetRow = target.y + row;
+      if (flipY) {
+        targetRow = target.y + (source.height - row - 1);
+        //targetRow = target.fullHeight - targetRow;
+      }
+      var baseOut = targetNumElementPerRow * targetRow + targetColOffset;
+      //console.log('source start/end is ', base, base + bytesToCopyPerRow, source.buffer.length);
+      //console.log('target start/end is ', baseOut, baseOut + bytesToCopyPerRow, target.buffer.length);
+      var s = source.buffer.subarray(base, base + bytesToCopyPerRow);
+      target.buffer.set(s, baseOut);
+      //for (var j = 0; j < bytesToCopyPerRow; j++) {
+      //  target.buffer[baseOut+j] = source.buffer[base+j];
+      //}
+    }
+  }
+
+  Renderer.prototype.render = function (scene, camera, opts) {
+    opts = opts || {};
+    if (this.__tiles) {
+      //console.log('render with tiles');
+      var tileBuffer = this.__getTileBuffer();
+      //var oldAutoClear = this.renderer.autoClear;
+      //this.renderer.autoClear = false;
+      var pixels = opts.pixelBuffer || this.__getPixelBuffer();
+      for (var i = 0; i < this.__tiles.length; i++) {
+        var tile = this.__tiles[i];
+        //console.log('render with tile', tile.x, tile.y, tile.width, tile.height);
+        camera.setViewOffset(this.width, this.height, tile.x, tile.y, this.__tileWidth, this.__tileHeight);
+        var tilePixels = this.__render(scene, camera, _.defaults({pixelBuffer: tileBuffer, width: this.__tileWidth, height: this.__tileHeight}, opts));
+        if (opts.postprocess) {
+          tilePixels = this.postprocessPixels(tilePixels, opts.postprocess, camera);
+        }
+        if (this.isOffscreen) {
+          // copy from tilePixels into our pixels
+          copyPixels(
+            { buffer: tilePixels, x: 0, y: 0, width: tile.width, height: tile.height, fullWidth: this.__tileWidth, fullHeight: this.__tileHeight },
+            { buffer: pixels, x: tile.x, y: tile.y, width: tile.width, height: tile.height, fullWidth: this.width, fullHeight: this.height },
+            this.__needFlipY
+          );
+        }
+      }
+      camera.clearViewOffset(); // TODO: restore old view offset
+      //this.renderer.autoClear = oldAutoClear;
+      return this.isOffscreen? pixels : null;
+    } else {
+      //console.log('render no tiles');
+      var pixelBuffer = opts.pixelBuffer || this.__getPixelBuffer();
+      var pixels = this.__render(scene, camera, _.defaults({pixelBuffer: pixelBuffer, width: this.width, height: this.height}, opts));
+      if (this.__needFlipY) {
+        this.__flipY(pixels);
+      }
+      if (opts.postprocess) {
+        pixels = this.postprocessPixels(pixels, opts.postprocess, camera);
+      }
+      return pixels;
+    }
+  };
+
   Renderer.prototype.setSize = function (width, height) {
+    this.__setSize(width, height);
+    var maxTileWidth = this.__maxViewportDims? this.__maxViewportDims[0] : Infinity;
+    var maxTileHeight = this.__maxViewportDims? this.__maxViewportDims[1] : Infinity;
+    if (this.width < maxTileWidth && this.height < maxTileHeight) {
+      this.__setTileSize(width, height);
+      this.__tiles = null;
+    } else {
+      var tilew = maxTileWidth;
+      var tileh = maxTileHeight;
+      this.__setTileSize(tilew, tileh);
+      this.__tiles = [];
+      var nw = Math.ceil(width / tilew);
+      var nh = Math.ceil(height / tileh);
+      for (var i = 0; i < nw; i++) {
+        var sx = i*tilew;
+        var w = Math.min(width-sx, tilew);
+        for (var j = 0; j < nh; j++) {
+          var sy = j*tileh;
+          var h = Math.min(height-sy, tileh);
+          this.__tiles.push({ x: sx, y: sy, width: w, height: h });
+        }
+      }
+    }
+  };
+
+  Renderer.prototype.__getTileBuffer = function() {
+    var createNewBuffer = !this.__tileBuffer || (this.__tileWidth * this.__tileHeight * 4 !== this.__tileBuffer.length);
+    if (createNewBuffer) {
+      this.__tileBuffer = new Uint8Array(4 * this.__tileWidth * this.__tileHeight);
+    }
+    return this.__tileBuffer;
+  };
+
+  Renderer.prototype.__setSize = function (width, height) {
     this.width = width;
     this.height = height;
+  };
+
+  Renderer.prototype.__setTileSize = function(width, height) {
+    this.__tileWidth = width;
+    this.__tileHeight = height;
     if (this.renderer) {
       this.renderer.setSize(width, height);
     }
@@ -168,16 +303,23 @@ define(['three-shaders'], function () {
     }
     // Update ambient occlusion sizes
     if (this.useAmbientOcclusion && this.composer) {
-      this.composer.setSize(this.width, this.height);
-      this.depthTarget.setSize(this.width, this.height);
+      this.composer.setSize(width, height);
+      this.depthTarget.setSize(width, height);
       this.shaderPassFXAA.uniforms['resolution'].value = new THREE.Vector2(
-        this.width > 0? 1 / this.width : 0, this.height > 0? 1 / this.height : 0);
-      this.shaderPassSSAO.uniforms['size'].value.set(this.width, this.height);
+        width > 0? 1 / width : 0, height > 0? 1 / height : 0);
+      this.shaderPassSSAO.uniforms['size'].value.set(width, height);
     }
   };
 
   Renderer.prototype.getMaxAnisotropy = function() {
     return this.renderer.getMaxAnisotropy();
+  };
+
+  Renderer.prototype.postprocessPixels = function(pixels, operation, camera) {
+    if (operation === 'unpackRGBAdepth') {
+      pixels = ImageUtil.unpackRGBAdepth(pixels, camera);
+    }
+    return pixels;
   };
 
   // Exports

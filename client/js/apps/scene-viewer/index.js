@@ -4,6 +4,10 @@
 require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function (SceneViewer, Constants) {
   Physijs.scripts.worker = 'client/js/vendor/physijs/physijs_worker.js';
   Physijs.scripts.ammo = 'ammo.js';
+  Constants.sys = {
+    fs: require('io/FileUtil'),
+    Buffer: Buffer
+  };
 
   function onResize() {
     var tabs = $('#tabs');

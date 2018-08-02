@@ -9,10 +9,22 @@ var __raycaster = new THREE.Raycaster();
 var __backfaceRaycaster = new THREE.Raycaster();
 __backfaceRaycaster.intersectBackFaces = true;
 
-self.getIntersectedForRay = function (raycaster, objects, ignore, n) {
+self.getIntersectedForRay = function (raycaster, objects, ignore, n, renderer) {
   var intersected = raycaster.intersectObjects(objects, true);
+  intersected = self.filterClipped(intersected, renderer);
   self.sortIntersectionsByNormal(raycaster.ray, intersected);
   return self.selectIntersectedObjects(intersected, objects, ignore, n);
+};
+
+self.filterClipped = function(intersected, renderer) {
+  if (renderer && renderer.clippingPlanes.length > 0) {
+    intersected = intersected.filter(function(elem) {
+      return renderer.clippingPlanes.every(function(elem2) {
+        return elem2.distanceToPoint(elem.point) > 0;
+      });
+    });
+  }
+  return intersected;
 };
 
 self.getIntersected = function(objects, opts) {
@@ -21,7 +33,7 @@ self.getIntersected = function(objects, opts) {
   rc.ray.direction.copy(opts.direction);
   rc.near = opts.near || 0;
   rc.far = opts.far || Infinity;
-  return self.getIntersectedForRay(rc, objects);
+  return self.getIntersectedForRay(rc, objects, opts.ignore, opts.n, opts.renderer);
 };
 
 self.sortIntersectionsByNormal = function(ray, intersections) {

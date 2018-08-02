@@ -43,66 +43,72 @@ THREE.OBJLoader.prototype = {
 
 	constructor: THREE.OBJLoader,
 
-  load: function ( url, onLoad, onProgress, onError ) {
+	load: function ( url, onLoad, onProgress, onError ) {
 		if (this.mtlOptions) {
-      this._loadWithMtl(url, this.mtlOptions, onLoad, onProgress, onError);
+			this._loadWithMtl(url, this.mtlOptions, onLoad, onProgress, onError);
 		} else {
 			this._loadSimple(url, onLoad, onProgress, onError);
 		}
-  },
+	},
 
-  /**
-   * Load a Wavefront OBJ file with materials (MTL file)
-   *
-   * If the MTL file cannot be loaded, then a MeshLambertMaterial is used as a default
-   * @param url - Location of OBJ file to load
-   * @param mtlurl - MTL file to load (optional, if not specified, attempts to use MTL specified in OBJ file)
-   * @param options - Options on how to interpret the material (see THREE.MTLLoader.MaterialCreator )
-   */
-  _loadWithMtl: function ( url, options, onLoad, onProgress, onError ) {
-    var scope = this;
+	// AXC: Custom file loader
+	getFileLoader: function() {
+		return new THREE.FileLoader(this.manager);
+	},
+	/**
+	 * Load a Wavefront OBJ file with materials (MTL file)
+	 *
+	 * If the MTL file cannot be loaded, then a MeshLambertMaterial is used as a default
+	 * @param url - Location of OBJ file to load
+	 * @param mtlurl - MTL file to load (optional, if not specified, attempts to use MTL specified in OBJ file)
+	 * @param options - Options on how to interpret the material (see THREE.MTLLoader.MaterialCreator )
+	 */
+	_loadWithMtl: function ( url, options, onLoad, onProgress, onError ) {
+		var scope = this;
 
-    var mtlurl = options.mtl;
-    var mtlLoader = new THREE.MTLLoader( this.manager );
-    mtlLoader.setBaseUrl( url.substr( 0, url.lastIndexOf( "/" ) + 1 ) );
-    mtlLoader.setCrossOrigin( this.crossOrigin );
-    // AXC: Set material options
-    mtlLoader.setMaterialOptions( options );
+		// AXC: Custom file loader
+		var mtlurl = options.mtl;
+		var mtlLoader = options.mtlLoader || new THREE.MTLLoader( this.manager );
+		if (typeof url === 'string') {
+			mtlLoader.setBaseUrl( url.substr( 0, url.lastIndexOf( "/" ) + 1 ) );
+		}
+		mtlLoader.setCrossOrigin( this.crossOrigin );
+		// AXC: Set material options
+		mtlLoader.setMaterialOptions( options );
 
-    var loader = new THREE.FileLoader(scope.manager);
-    //loader.setCrossOrigin(scope.crossOrigin);
-    loader.load(url, function (text) {
-      // Look for mtllib
+		var loader = this.getFileLoader();
+		//loader.setCrossOrigin(scope.crossOrigin);
+		loader.load(url, function (text) {
+			// Look for mtllib
 			if (!mtlurl) {
-        var mtllibIndex = text.indexOf('mtllib');
-        if (mtllibIndex >= 0) {
-          var mltlibLineEndIndex = text.indexOf('\n', mtllibIndex);
-          mtlurl = mtlLoader.baseUrl + text.substring(mtllibIndex + 6, mltlibLineEndIndex).trim();
-          console.log('mtlurl is ' + mtlurl);
-        }
-      }
-      var object;
-      if (mtlurl) {
-				// Load mtl and then parse
-        mtlLoader.load(mtlurl, function (materialsCreator) {
-          materialsCreator.preload();
-          scope.setMaterials(materialsCreator);
-          object = scope.parse(text);
-          onLoad(object);
-        }, onProgress, onError);
-			} else {
-        object = scope.parse(text);
-        onLoad(object);
+				var mtllibIndex = text.indexOf('mtllib');
+				if (mtllibIndex >= 0) {
+					var mltlibLineEndIndex = text.indexOf('\n', mtllibIndex);
+					mtlurl = mtlLoader.baseUrl + text.substring(mtllibIndex + 6, mltlibLineEndIndex).trim();
+					console.log('mtlurl is ' + mtlurl);
+				}
 			}
-    }, onProgress, onError);
-  },
-
+			var object;
+			if (mtlurl) {
+				// Load mtl and then parse
+				mtlLoader.load(mtlurl, function (materialsCreator) {
+					materialsCreator.preload();
+					scope.setMaterials(materialsCreator);
+					object = scope.parse(text);
+					onLoad(object);
+				}, onProgress, onError);
+			} else {
+				object = scope.parse(text);
+				onLoad(object);
+			}
+		}, onProgress, onError);
+	},
 
 	_loadSimple: function ( url, onLoad, onProgress, onError ) {
 
 		var scope = this;
 
-		var loader = new THREE.FileLoader( scope.manager );
+		var loader = this.getFileLoader();
 		loader.setPath( this.path );
 		loader.load( url, function ( text ) {
 
@@ -126,11 +132,11 @@ THREE.OBJLoader.prototype = {
 
 	// AXC: loader options
 	setOptions: function(options) {
-  	this.options = options;
+		this.options = options;
 	},
 
 	setMtlOptions: function (mtlOptions) {
-  	this.mtlOptions = mtlOptions;
+		this.mtlOptions = mtlOptions;
 	},
 
 	_createParserState : function () {
@@ -142,6 +148,7 @@ THREE.OBJLoader.prototype = {
 
 			vertices : [],
 			normals  : [],
+			colors  : [],
 			uvs      : [],
 
 			materialLibraries : [],
@@ -173,6 +180,7 @@ THREE.OBJLoader.prototype = {
 					geometry : {
 						vertices : [],
 						normals  : [],
+						colors   : [],
 						uvs      : [],
 						origVertIndices : []
 					},
@@ -376,6 +384,17 @@ THREE.OBJLoader.prototype = {
 
 			},
 
+			addColor: function ( a, b, c ) {
+
+				var src = this.colors;
+				var dst = this.object.geometry.colors;
+
+				dst.push( src[ a + 0 ], src[ a + 1 ], src[ a + 2 ] );
+				dst.push( src[ b + 0 ], src[ b + 1 ], src[ b + 2 ] );
+				dst.push( src[ c + 0 ], src[ c + 1 ], src[ c + 2 ] );
+
+			},
+
 			addUV: function ( a, b, c ) {
 
 				var src = this.uvs;
@@ -469,6 +488,25 @@ THREE.OBJLoader.prototype = {
 
 				}
 
+				if ( this.colors.length > 0 ) {
+
+					this.addColor( ia, ib, ic );
+
+				}
+			},
+
+			addPointGeometry: function ( vertices ) {
+
+				this.object.geometry.type = 'Points';
+
+				var vLen = this.vertices.length;
+
+				for ( var vi = 0, l = vertices.length; vi < l; vi ++ ) {
+
+					this.addVertexPoint( this.parseVertexIndex( vertices[ vi ], vLen ) );
+
+				}
+
 			},
 
 			addLineGeometry: function ( vertices, uvs ) {
@@ -553,9 +591,26 @@ THREE.OBJLoader.prototype = {
 					// ["v 1.0 2.0 3.0", "1.0", "2.0", "3.0"]
 
 					state.vertices.push(
+						parseFloat(result[1]),
+						parseFloat(result[2]),
+						parseFloat(result[3])
+					);
+
+				} else if ( lineSecondChar === ' ' && ( result = this.regexp.vertex_color_pattern.exec( line ) ) !== null ) {
+
+					// 0                  1      2      3
+					// ["v 1.0 2.0 3.0", "1.0", "2.0", "3.0"]
+
+					state.vertices.push(
 						parseFloat( result[ 1 ] ),
 						parseFloat( result[ 2 ] ),
 						parseFloat( result[ 3 ] )
+					);
+
+					state.colors.push(
+						parseFloat( result[ 4 ] ),
+						parseFloat( result[ 5 ] ),
+						parseFloat( result[ 6 ] )
 					);
 
 				} else if ( lineSecondChar === 'n' && ( result = this.regexp.normal_pattern.exec( line ) ) !== null ) {
@@ -661,6 +716,12 @@ THREE.OBJLoader.prototype = {
 				}
 				state.addLineGeometry( lineVertices, lineUVs );
 
+			} else if ( lineFirstChar === 'p' ) {
+
+				var lineData = line.substr( 1 ).trim();
+				var pointData = lineData.split( " " );
+
+				state.addPointGeometry( pointData );
 			} else if ( ( result = this.regexp.object_pattern.exec( line ) ) !== null ) {
 
 				// o object_name
@@ -728,6 +789,8 @@ THREE.OBJLoader.prototype = {
 			var geometry = object.geometry;
 			var materials = object.materials;
 			var isLine = ( geometry.type === 'Line' );
+			var isPoints = ( geometry.type === 'Points' );
+			var hasVertexColors = false;
 
 			// Skip o/g line declarations that did not follow with any faces
 			if ( geometry.vertices.length === 0 ) continue;
@@ -743,6 +806,13 @@ THREE.OBJLoader.prototype = {
 			} else {
 
 				buffergeometry.computeVertexNormals();
+
+			}
+
+			if ( geometry.colors.length > 0 ) {
+
+				hasVertexColors = true;
+				buffergeometry.addAttribute( 'color', new THREE.Float32BufferAttribute( geometry.colors, 3 ) );
 
 			}
 
@@ -775,20 +845,41 @@ THREE.OBJLoader.prototype = {
 
 						var materialLine = new THREE.LineBasicMaterial();
 						materialLine.copy( material );
+						materialLine.lights = false; // TODO: UNHACK
 						material = materialLine;
 
-					}
+					} else if ( isPoints && material && ! ( material instanceof THREE.PointsMaterial ) ) {
 
+						var materialPoints = new THREE.PointsMaterial( { size: 10, sizeAttenuation: false } );
+						materialPoints.copy( material );
+						materialPoints.lights = false; // TODO: UNHACK
+						material = materialPoints;
+
+					}
 				}
 
 				if ( ! material ) {
 
-					material = ( ! isLine ? new THREE.MeshPhongMaterial() : new THREE.LineBasicMaterial() );
+					if ( isLine ) {
+
+						material = new THREE.LineBasicMaterial();
+
+					} else if ( isPoints ) {
+
+						material = new THREE.PointsMaterial( { size: 1, sizeAttenuation: false } );
+
+					} else {
+
+						material = new THREE.MeshPhongMaterial();
+
+					}
+
 					material.name = sourceMaterial.name;
 
 				}
 
 				material.shading = sourceMaterial.smooth ? THREE.SmoothShading : THREE.FlatShading;
+				material.vertexColors = hasVertexColors ? THREE.VertexColors : THREE.NoColors;
 
 				createdMaterials.push(material);
 

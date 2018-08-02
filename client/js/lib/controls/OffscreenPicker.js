@@ -63,6 +63,42 @@ OffscreenPicker.prototype.__updateScene = function(scene) {
   }
 };
 
+OffscreenPicker.prototype.pick = function (options) {
+  var raycastMouse = this.getCoordinates(options.container, options.position);
+  var offscreenMouse = this.getOffscreenCoordinates(options.container, options.position);
+  var raycaster =  this.getRaycaster(raycastMouse.x, raycastMouse.y, options.camera);
+
+  var scene = options.scene;
+  this.__updateScene(scene);
+  if (options.ignore) {
+    for (var i = 0; i < options.ignore.length; i++) {
+      options.ignore[i].userData.__visible = options.ignore[i].visible;
+      options.ignore[i].visible = false;
+    }
+  }
+  this.__gpuPicker.setCamera(options.camera);
+  var intersected = this.__gpuPicker.pick(offscreenMouse, raycaster);
+  if (options.ignore) {
+    for (var i = 0; i < options.ignore.length; i++) {
+      options.ignore[i].visible = options.ignore[i].userData.__visible;
+      delete options.ignore[i].userData.__visible;
+    }
+  }
+  if (intersected) {
+    if (options.targetType === 'mesh') {
+      var intersected2 = this.selectIntersectedMeshes([intersected], [scene], [], 1);
+      return intersected2[0];
+    } else if (options.targetType === 'object') {
+      // console.log('intersected', intersected, 'scene', scene);
+      var intersected2 = this.selectIntersectedObjects([intersected], [scene], [], 1, true);
+      // console.log('intersected2', intersected2);
+      return intersected2[0];
+    } else {
+      console.error('Unsupport targetType', options.targetType);
+    }
+  }
+};
+
 OffscreenPicker.prototype.getIntersectedFromScreenPosition = function (container, screenPosition, camera, scene) {
   var raycastMouse = this.getCoordinates(container, screenPosition);
   var offscreenMouse = this.getOffscreenCoordinates(container, screenPosition);

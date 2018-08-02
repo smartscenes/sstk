@@ -54,6 +54,7 @@ function LabelPainter(params) {
   // Internal state
   this.__isMouseDown = false;
   this.__isDragging = false;
+  this.__isMouseDownAny = false;  // some mouse button is down
   this.__firstSelectedPart = null;
   this.__firstSelectedLabel = null;
   this.__editStarted = false;
@@ -87,7 +88,7 @@ LabelPainter.prototype.registerEventListeners = function (domElement) {
 
   domElement.addEventListener('mousedown', this.handleMouseDown.bind(this));
   domElement.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
-  domElement.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
+  document.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
   domElement.addEventListener('mouseleave', this.handleMouseLeave.bind(this), false);
 };
 
@@ -140,6 +141,7 @@ LabelPainter.prototype.__handleMouseDown = function (e) {
       this.__firstSelectedLabel = labelInfo;
     }
   }
+  this.__isMouseDownAny = true;
 };
 
 LabelPainter.prototype.handleMouseUp = function (e) {
@@ -164,6 +166,7 @@ LabelPainter.prototype.handleMouseUp = function (e) {
     }
   }
 
+  this.__isMouseDownAny = false;
   this.__isMouseDown = false;
   this.__isDragging = false;
   this.__firstSelectedPart = null;
@@ -284,6 +287,9 @@ LabelPainter.prototype.__getPaintMode = function (part, event) {
           return MODE_NONE;
         }
       }
+    } else if (this.__isMouseDownAny) {
+      // Some key is down... not sure what
+      return MODE_NONE;
     }
 
     if (event.shiftKey) {

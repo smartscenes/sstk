@@ -155,7 +155,7 @@ PLYExporter.prototype.__getHeader = function(opts) {
 PLYExporter.prototype.exportMesh = function(mesh, opts) {
   opts = opts || {};
   var callback = opts.callback;
-  var filename = (opts.name || 'scene');
+  var filename = (opts.name != undefined)? opts.name : 'scene';
   if (!filename.endsWith('.ply')) {
     filename = filename + '.ply';
   }
@@ -320,7 +320,7 @@ PLYExporter.prototype.export = function (objects, opts) {
   opts = opts || {};
   var callback = opts.callback;
   // Exports object3D to file using OBJ format
-  var filename = (opts.name || 'scene');
+  var filename = (opts.name != undefined)? opts.name : 'scene';
   if (!filename.endsWith('.ply')) {
     filename = filename + '.ply';
   }

@@ -64,9 +64,9 @@ OBB.prototype.applyMatrix = function (matrix) {
   var temp = new THREE.Matrix4();
   temp.extractRotation(matrix);
   this.__dominantNormal = this.__extractDominantNormal();
-  this.__dominantNormal.applyProjection(temp);
+  this.__dominantNormal.applyMatrix4(temp);
 
-  this.position.applyProjection(matrix);
+  this.position.applyMatrix4(matrix);
   temp.multiplyMatrices(matrix, this.basis);
   this.basis.extractRotation(temp);
   var v1 = new THREE.Vector3();

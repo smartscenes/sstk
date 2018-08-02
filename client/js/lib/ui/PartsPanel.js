@@ -1,14 +1,16 @@
 'use strict';
 
 define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceVoxels',
-  'geo/Object3DUtil', 'ui/LabelsPanel', 'ui/MeshHierarchyPanel', 'ui/DatConfigControls', 'util', 'base'],
-  function (Constants, AssetLoader, Segments, Voxels, Object3DUtil, LabelsPanel, MeshHierarchyPanel, DatConfigControls, _) {
+  'geo/Object3DUtil', 'util/LabelRemap', 'ui/LabelsPanel', 'ui/MeshHierarchyPanel',
+  'ui/DatConfigControls', 'io/IOUtil', 'util', 'base'],
+  function (Constants, AssetLoader, Segments, Voxels, Object3DUtil, LabelRemap, LabelsPanel, MeshHierarchyPanel, DatConfigControls, IOUtil, _) {
 
     function PartsPanel(params) {
       params = params || {};
       // Initialize from params
       this.submitPartNameUrl = Constants.baseUrl + '/submitPartName';
       this.container = params.container;
+      this.app = params.app;
       this.getDebugNode = params.getDebugNode;
       this.showNodeCallback = params.showNodeCallback;
       this.filterEmptyGeometries = params.filterEmptyGeometries;
@@ -16,6 +18,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       this.collapseNestedPaths = params.collapseNestedPaths;
       this.allowVoxels = (params.allowVoxels != undefined)? params.allowVoxels : true;
       this.partTypes = params.partTypes;
+      this.labelTypes = params.labelTypes;
       this.defaultPartType = params.defaultPartType || 'none';
       this.defaultLabelType = params.defaultLabelType || 'Segment';
 
@@ -28,9 +31,9 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
 
       this.surfaces = this.segmentsByType['surfaces'];
       this.surfaces.Subscribe('segmentsUpdated', this, function() {
-        this.surfaces.colorSegments(this.labelType, this.__getLabelColorIndex('surfaces'));
+        this.__colorSegments(this.surfaces, 'surfaces', this.labelType);
         if (this.labelsPanel && this.partType === 'surfaces') {
-          this.labelsPanel.setLabels(this.surfaces.getLabels(), this.__getLabelColorIndex());
+          this.__updateLabelsPanel(this.surfaces.getLabels(), this.__getLabelColorIndex());
         }
         if (this.surfaces.segmentedObject3DHierarchical) {
           if (this.meshHierarchy.partsNode) {
@@ -76,10 +79,43 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       this.init();
     }
 
+    PartsPanel.prototype.__initDefaultLabelRemaps = function() {
+      var labelMappingCategory = 'category';
+      var labelMappingsRaw = require("raw!labels/label-mappings.tsv");
+      var labelMappings = IOUtil.parseDelimited(labelMappingsRaw, {keyBy: labelMappingCategory}).data;
+      this.initLabelRemaps(labelMappings, labelMappingCategory);
+    };
+
+    PartsPanel.prototype.initLabelRemaps = function(labelMappings, labelMappingCategory) {
+      var mpr40ColorsRaw = require("raw!labels/mpr40.tsv");
+      var nyu40ColorsRaw = require("raw!labels/nyu40colors.csv");
+      var mpr40Colors = IOUtil.parseDelimited(mpr40ColorsRaw).data;
+      var nyu40Colors = IOUtil.parseDelimited(nyu40ColorsRaw).data;
+
+      var labelRemap = new LabelRemap({
+        mappings: labelMappings,
+        labelSets: {
+          'mpr40': { data: mpr40Colors, id: 'mpcat40index', label: 'mpcat40', unlabeled: 'unlabeled', empty: 'void', other: 'misc' },
+          'nyu40': { data: nyu40Colors, id: 'nyu40id', label: 'nyu40class', unlabeled: 'void', other: 'otherprop' }
+        },
+        mappingKeyField: labelMappingCategory
+      });
+
+      var scope = this;
+      //console.log(labelRemap);
+      _.each(labelRemap.labelSets, function(labels, name) {
+        if (scope.defaultLabelTypes.indexOf(name) < 0) {
+          scope.defaultLabelTypes.push(name);
+        }
+        scope.setLabelColorIndex(name, labels);
+      });
+    };
+
     PartsPanel.prototype.init = function () {
       this.labelTypeSelect = $('#labelType');//$('<select></select>');
       // TODO: Add materials and meshes
-      this.defaultLabelTypes = ['Raw', 'Segment', 'Category', 'Label', 'Object'];
+      this.defaultLabelTypes = this.labelTypes || ['Raw', 'Segment', 'Category', 'Label', 'Object'];
+      this.__initDefaultLabelRemaps();
       for (var i = 0; i < this.defaultLabelTypes.length; i++) {
         var s = this.defaultLabelTypes[i];
         this.labelTypeSelect.append('<option value="' + s + '">' + s + '</option>');
@@ -91,7 +127,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
         });
       });
       this.labelTypeSelect.val(this.labelType);
-      this.surfaces.colorSegments(this.labelType, this.__getLabelColorIndex());
+      this.__colorSegments(this.surfaces, 'surfaces', this.labelType);
       //this.container.append(this.labelTypeSelect);
 
       // TODO: Add materials and meshes
@@ -121,12 +157,28 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
         this.partTypeSelect.val(this.partType);
       }
       //this.container.append(this.partTypeSelect);
-
+      var hierarchyMaterials = ['clear', 'original'];
+      var meshHierarchMaterialSelect = $('#hierarchyMaterial');
+      for (var i = 0; i < hierarchyMaterials.length; i++) {
+        var s = hierarchyMaterials[i];
+        meshHierarchMaterialSelect.append('<option value="' + s + '">' + s + '</option>');
+      }
+      meshHierarchMaterialSelect.change(function () {
+        meshHierarchMaterialSelect.find('option:selected').each(function () {
+          if ($(this).val() === 'clear') {
+            scope.meshHierarchy.useSpecialMaterial = true;
+          } else if ($(this).val() === 'original') {
+            scope.meshHierarchy.useSpecialMaterial = false;
+          }
+        });
+      });
       this.meshHierarchy = new MeshHierarchyPanel({
         treePanel: $('#treePanel'),
+        app: this.app,
         filterEmptyGeometries: this.filterEmptyGeometries,
         showMultiMaterial: this.showMultiMaterial,
-        collapseNestedPaths: this.collapseNestedPaths
+        collapseNestedPaths: this.collapseNestedPaths,
+        useSpecialMaterial: true
       });
 
       this.showButton = $('#showButton');
@@ -164,7 +216,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
         var flag = scope.showSegmentOBBsCheckbox.prop('checked');
         scope.surfaces.showOBBs = flag;
         if (scope.partType === 'surfaces') {
-          scope.surfaces.colorSegments(scope.labelType, scope.__getLabelColorIndex());
+          scope.__colorSegments(scope.surfaces, scope.partType, scope.labelType);
         }
       }
       this.showSegmentOBBsCheckbox = $('#showSegmentOBBs');
@@ -200,7 +252,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       });
     };
 
-    PartsPanel.prototype.setLabelColorIndex = function (labelType, index, callback) {
+    PartsPanel.prototype.setLabelColorIndex = function (labelType, index, callback, labelField, indexField) {
       if (!this.__labelColors) {
         this.__labelColors = {};
       }
@@ -209,19 +261,13 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
         // TODO: Refactor into separate utility class
         var loader = new AssetLoader();
         var labelColors = this.__labelColors;
-        loader.load(index, null, function(data) {
-          var lines = data.split('\n');
-          var labelToIndex = {};
-          for (var i = 0; i < lines.length; i++) {
-            lines[i] = lines[i].trim();
-            if (lines[i]) {
-              var fields = lines[i].split(',');
-              if (fields.length > 1) {
-                labelToIndex[fields[0]] = parseInt(fields[1]);
-              } else {
-                labelToIndex[fields[0]] = i;
-              }
-            }
+        loader.load(index, null, function (data) {
+          var labelToIndex;
+          if (labelField && indexField) {
+            labelToIndex = IOUtil.parseDelimited(data, { keyBy: labelField }).data;
+            labelToIndex = _.mapValues(labelToIndex, function(v) { return v[indexField]; });
+          } else {
+            labelToIndex = IOUtil.indexLines(data, { delimiter: ',' });
           }
           labelColors[labelType] = labelToIndex;
           _.merge(labelToIndex, defaultColors);
@@ -229,6 +275,11 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
             callback(labelToIndex);
           }
         });
+      } else if (index.labelToId) {
+        this.__labelColors[labelType] = index;
+        if (callback) {
+          callback(index);
+        }
       } else {
         this.__labelColors[labelType] = index;
         _.merge(index, defaultColors);
@@ -237,6 +288,32 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
         }
       }
     };
+
+    PartsPanel.prototype.__colorSegments = function(segments, partType, labelType) {
+      var labelColors =  this.__getLabelColorIndex(partType, labelType);
+      if (labelColors && labelColors.labelToId) {
+        segments.colorSegments(labelType, labelColors.labelToId, function(x) {
+            var label = x? x.split(':')[0] : x;
+            return labelColors.rawLabelToLabel(label);
+          }, labelColors.getMaterial, labelColors.unlabeledId, true);
+      } else {
+        segments.colorSegments(labelType, labelColors, null, null, null, true);
+      }
+    }
+
+    PartsPanel.prototype.__updateLabelsPanel = function(rawLabels, labelColors) {
+      var colorIndex = labelColors;
+      var labels = rawLabels;
+      if (labelColors && labelColors.idToColor) {
+        colorIndex = {};
+        for (var i = 0; i < labels.length; i++) {
+          var label = labels[i];
+          colorIndex[label] = labelColors.idToColor(labelColors.labelToId(label));
+        }
+      }
+      //console.log('setLabels', labels, colorIndex);
+      this.labelsPanel.setLabels(labels, colorIndex);
+    }
 
     PartsPanel.prototype.__getLabelColorIndex = function (partType, labelType) {
       partType = partType || this.partType;
@@ -258,9 +335,9 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       }
       this.labelType = labelType;
       if (this.partType === 'surfaces') {
-        this.surfaces.colorSegments(this.labelType, this.__getLabelColorIndex());
+        this.__colorSegments(this.surfaces, this.partType, this.labelType);
         if (this.labelsPanel) {
-          this.labelsPanel.setLabels(this.surfaces.getLabels(), this.__getLabelColorIndex());
+          this.__updateLabelsPanel(this.surfaces.getLabels(), this.__getLabelColorIndex());
         }
       }
     };
@@ -268,11 +345,11 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
     PartsPanel.prototype.__showLabelsPanel = function (flag) {
       if (this.labelsPanel) {
         if (this.partType === 'voxels-labeled') {
-          this.labelsPanel.setLabels(this.labeledVoxels.getLabels(), this.labeledVoxels.labelColorIndex);
+          this.__updateLabelsPanel(this.labeledVoxels.getLabels(), this.labeledVoxels.labelColorIndex);
         } else if (this.partType === 'surfaces') {
-          this.labelsPanel.setLabels(this.surfaces.getLabels(), this.__getLabelColorIndex());
+          this.__updateLabelsPanel(this.surfaces.getLabels(), this.__getLabelColorIndex());
         } else {
-          this.labelsPanel.setLabels([], this.__getLabelColorIndex());
+          this.__updateLabelsPanel([], this.__getLabelColorIndex());
         }
 
         if (flag) {
@@ -288,8 +365,12 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       if (this.__isSegmentationType(this.partType)) {
         var s = this.segmentsByType[this.partType];
         if (s && labelInfo) {
-          var slabelData = s.labelData[labelInfo.index];
-          s.highlightSegments(slabelData.segmentGroups, s.useColorSequence? slabelData.material : null);
+          if (labelInfo.isAll) {
+            this.__colorSegments(s, this.partType, this.labelType);
+          } else {
+            var slabelData = s.labelData[labelInfo.index];
+            s.highlightSegments(slabelData.segmentGroups, s.useColorSequence ? slabelData.material : null);
+          }
         }
       }
     };
@@ -332,7 +413,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       } else if (partType === 'surfaces') {
         this.surfaces.showSegments(flag);
         if (flag) {
-          this.surfaces.colorSegments(this.labelType, this.__getLabelColorIndex(partType));
+          this.__colorSegments(this.surfaces, partType, this.labelType);
         }
       } else if (this.segmentsByType[this.partType]) {
         var s = this.segmentsByType[this.partType];
@@ -350,7 +431,9 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
 
     PartsPanel.prototype.loadVoxels = function (voxelType, modelInstance, voxels, labelColorIndex) {
       voxels.init(modelInstance);
-      voxels.setLabelColorIndex(labelColorIndex);
+      if (labelColorIndex != undefined) {
+        voxels.setLabelColorIndex(labelColorIndex);
+      }
       voxels.loadVoxels(
         function (v) {
           Object3DUtil.setVisible(v.getVoxelNode(), this.partType === voxelType);
@@ -425,9 +508,12 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       }.bind(this));
 
       // TODO: Keep old part type and show that...
-      this.setPartType(this.defaultPartType);
       this.meshHierarchy.setTarget(modelInstance);
       this.getDebugNode().add(this.meshHierarchy.partsNode);
+      if (this.defaultPartType !== 'none') {
+        this.__showPartType('none', false);
+      }
+      this.setPartType(this.defaultPartType);
     };
 
     PartsPanel.prototype.nextPart = function (inc, partControl) {

@@ -3,6 +3,8 @@
  * @author Tim Knip / http://www.floorplanner.com/ / tim at floorplanner.com
  * @author Tony Parisi / http://www.tonyparisi.com/
  * @license MIT License <http://www.opensource.org/licenses/mit-license.php>
+ * @constructor
+ * @memberOf loaders
  */
 
 THREE.ColladaLoader = function () {
@@ -1042,7 +1044,7 @@ THREE.ColladaLoader = function () {
 
 	function createSceneGraph ( node, parent ) {
 
-		var obj = new THREE.Object3D();
+		var obj = new THREE.Group();  // AXC: Use Group
 		var skinned = false;
 		var skinController;
 		var morphController;
@@ -1186,11 +1188,23 @@ THREE.ColladaLoader = function () {
 
 					material = new THREE.MultiMaterial( used_materials_array );
 
+					var defaultMaterialIndex;
+					var warned_materials = {};
 					for ( j = 0; j < geom.faces.length; j ++ ) {
 
 						var face = geom.faces[ j ];
 						face.materialIndex = used_materials[ face.daeMaterial ]
-
+						// AXC: Log error and use default material
+						if (face.materialIndex === undefined && !warned_materials[face.daeMaterial]) {
+							console.warn('Unknown material when loading collada model', face.daeMaterial);
+							warned_materials[face.daeMaterial] = 1;
+							if (defaultMaterialIndex == undefined) {
+								defaultMaterialIndex = used_materials_array.length;
+								used_materials_array.push(options.defaultMaterial);
+							}
+							used_materials[ face.daeMaterial ] = defaultMaterialIndex;
+							face.materialIndex = defaultMaterialIndex;
+						}
 					}
 
 				}
@@ -1241,7 +1255,11 @@ THREE.ColladaLoader = function () {
 
 					if ( geom.isLineStrip === true ) {
 
-						mesh = new THREE.Line( geom );
+						mesh = new THREE.LineSegments( geom );
+						// AXC: Set line color and opacity
+						mesh.material.color.set(material.color);
+						mesh.material.transparent = material.transparent;
+						mesh.material.opacity = material.opacity;
 
 					} else {
 
@@ -2807,6 +2825,11 @@ THREE.ColladaLoader = function () {
 					this.vertices = ( new Vertices() ).parse( child );
 					break;
 
+				case 'lines': // AXC: Add lines
+
+					this.primitives.push( ( new LineStrips().parse( child ) ) );
+					break;
+
 				case 'linestrips':
 
 					this.primitives.push( ( new LineStrips().parse( child ) ) );
@@ -2885,7 +2908,18 @@ THREE.ColladaLoader = function () {
 		if ( primitive instanceof LineStrips ) {
 
 			// TODO: Handle indices. Maybe easier with BufferGeometry?
-
+			// AXC: handle indices
+			var pLists = primitive.p;
+			if (pLists) {
+				var vertices = geom.vertices;
+				geom.vertices = [];
+				for (var i = 0; i < pLists.length; i++) {
+					var pList = pLists[i];
+					for (var j = 0; j < pList.length; j++) {
+						geom.vertices.push(vertices[pList[j]]);
+					}
+				}
+			}
 			geom.isLineStrip = true;
 			return;
 
@@ -3743,8 +3777,8 @@ THREE.ColladaLoader = function () {
 										var texture;
 
 										// AXC - custom texture loading for KMZLoader
-										if (options.loadTextureCallbackFunc) {
-											texture = options.loadTextureCallbackFunc(baseUrl, image.init_from);
+										if (options.loadTextureCallback) {
+											texture = options.loadTextureCallback(baseUrl, image.init_from);
 										} else {
 											var loader = THREE.Loader.Handlers.get(url);
 											if (loader !== null) {

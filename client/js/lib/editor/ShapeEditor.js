@@ -943,11 +943,12 @@ ShapeEditor.prototype.getLabelInfo = function(label, add) {
 };
 
 ShapeEditor.prototype.setMode = function (params) {
+  var forceMode = (typeof params === 'object') ? params.force : false;
   var mode = (typeof params === 'object') ? params.mode : params;
   if (this.drawModes[mode] != undefined) {
     mode = this.drawModes[mode];
   }
-  if (this.mode !== mode) {
+  if (this.mode !== mode || forceMode) {
     if (this.selectedEditor) {
       this.selectedEditor.finish();
     }
@@ -1171,6 +1172,7 @@ ShapeEditor.prototype.setComponent = function(name, component) {
     this.drawModes[name] = this.componentEditors.length;
     this.componentEditors.push(component);
   }
+  this.setMode({ mode: this.mode, force: true });
 };
 
 ShapeEditor.DrawModes = DrawModes;

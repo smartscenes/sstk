@@ -20,6 +20,7 @@ Constants.defaultPalette = Colors.palettes.d3_category18;
  * @param params
  * @constructor
  * @extends ModelViewer
+ * @memberOf scannet
  */
 var HouseViewer = function (params) {
   var defaults = {

@@ -4,12 +4,15 @@
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "stk-ssc",
   "dependencies": {
-    "lerna": "^2.5.1"
+    "lerna": "^2.11.0",
+    "shelljs": "^0.7.0"
   },
   "scripts": {
-    "preinstall": "./getdata.sh",
-    "postinstall": "npm run bootstrap",
-    "bootstrap": "lerna bootstrap --hoist"
+    "postinstall": "node getdata.js && npm run bootstrap",
+    "bootstrap": "lerna bootstrap --hoist",
+    "clean": "lerna clean",
+    "ls": "lerna ls",
+    "test": "lerna run test"
   },
   "repository": {
     "type": "git",

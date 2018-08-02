@@ -333,8 +333,14 @@ function busywait(secs) {
 
 // Update ajax functions
 var najax = require('najax');
-STK.util.ajax = najax;
-STK.util.post = najax.post;
+STK.util.ajax = function(opts) {
+  opts = STK.util.__prepareAjaxOpts(opts);
+  return najax(opts);
+};
+STK.util.post = function(opts) {
+  opts = STK.util.__prepareAjaxOpts(opts);
+  return najax.post(opts);
+};
 STK.util.param = require('jquery-param');
 
 STK.Constants.sys = { fs: fs, Buffer: Buffer };

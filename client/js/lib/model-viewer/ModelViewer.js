@@ -36,7 +36,9 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       };
       var allParams = _.defaultsDeep(Object.create(null), this.urlParams, params, defaults);
 
-      this.modelSources = params.sources || Constants.assetSources.model;
+      // Make sure assetgroups are registered....
+      var assetGroups = AssetGroups.getAssetGroups();
+      this.modelSources = params.sources || _.concat(Constants.assetSources.model, Constants.assetSources.scan);
       this.allowPrevNext = params.allowPrevNext;
       this.__restrictModels = params.restrictModels;
       this.showSearchOptions = (params.showSearchOptions != undefined)? params.showSearchOptions : true;
@@ -58,6 +60,8 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       this.picker = null;
       this.lightProbe = null;
       this.idCounter = -1;
+      this.controlsNode = new THREE.Group();
+      this.controlsNode.name = 'controls';
       this.debugNode = new THREE.Group();
       this.debugNode.name = 'debugNode';
       this.bbSymmetryPlaneIndex = 0;
@@ -172,6 +176,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
         showSearchOptions: this.showSearchOptions,
         showSearchSortOption: this.showSearchSortOption,
         loadImagesLazy: true,
+        showLoadFile: true,
         tooltipIncludeFields: this.params.tooltipIncludeFields,
         tooltipIncludeExtraFields: this.params.tooltipIncludeExtraFields
       });
@@ -230,7 +235,12 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
         this.alignPanel = new AlignPanel({
           container: alignPanel,
           onAlignSubmittedCallback: this.alignSubmitted.bind(this),
-          nextTargetCallback: this.loadNextModel.bind(this)
+          nextTargetCallback: this.loadNextModel.bind(this),
+          addControlCallback: function(control) {
+            this.controlsNode.add(control);
+            this.addControl(control);
+          }.bind(this),
+          app: this
         });
       }
 
@@ -238,16 +248,22 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       if (partsPanel && partsPanel.length > 0) {
         var partsPanelParams = _.defaultsDeep(Object.create(null),
             {
+              app: this,
               partType: this.urlParams['partType'],
               labelType: this.urlParams['labelType'],
               defaultPartType: this.urlParams['defaultPartType'],
-              defaultLabelType: this.urlParams['defaultLabelType']
+              defaultLabelType: this.urlParams['defaultLabelType'],
+              allowVoxels: this.urlParams['allowVoxels'],
+              filterEmptyGeometries: false,
+              showMultiMaterial: true,
+              collapseNestedPaths: false,
             },
             this.params.partsPanel || {},
             {
               container: partsPanel,
               labelsPanel: {
                 container: $('#nameButtonsDiv'),
+                includeAllButton: true,
                 labels: []
               },
               getDebugNode: function () {
@@ -291,14 +307,37 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
 
       var annotationsPanel = $('#annotationsPanel');
       if (annotationsPanel && annotationsPanel.length > 0) {
-        var modelAttributes = ['category', 'color', 'material', 'shape', 'depicts',
-          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection'];
-        var readOnlyAttributes = ['isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
+        var modelAttributes = ['id', 'wnsynset', 'category', 'color', 'material', 'shape', 'depicts',
+          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection', 'modelQuality'];
+        var readOnlyAttributes = ['id', 'isAligned', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
           'staticFrictionForce' /*, "aligned.dims" */];
+        var attributeInfos = {
+          "modelQuality": { min: 0, max: 7, step: 1 }
+        };
+        var attributeLinks = { "wnsynset": {
+            solrUrl: Constants.shapenetSearchUrl,
+            taxonomy: "shapenet",
+            linkType: "wordnet",
+            displayField: "wnsynsetkey",  // Field to display
+            // Mapping from our field names to linked fields
+            // These are also fields that we should populate if the wnsynset changes
+            fieldMappings: {
+              wnsynsetkey: "wn30synsetkey",
+              wnlemmas: "words",
+              wnsynset: "synsetid",
+              shapenetCoreSynset: "shapenetcoresynsetid",
+              //wnsynset: "wn30synsetid"
+              // Special fields
+              wnhyperlemmas: "wnhyperlemmas", //"ancestors.words",
+              wnhypersynsets: "wnhypersynsets", //"ancestors.synsetid"
+            }
+          }};
         this.annotationsPanel = new AnnotationsPanel({
           container: annotationsPanel,
           attributes: modelAttributes,
-          attributesReadOnly: readOnlyAttributes,
+          attributesReadOnly: readOnlyAttributes,  // readonly attributes
+          attributeLinks: attributeLinks,
+          attributeInfos: attributeInfos,
           searchController: this.modelSearchController,
           onSubmittedCallback: this.refreshModelInfo.bind(this)
         });
@@ -322,6 +361,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       this.scene.name = 'scene';
       this.scene.add(this.camera);
       this.scene.add(this.debugNode);
+      this.scene.add(this.controlsNode);
 
       // Test models
       var defaultModel;
@@ -478,6 +518,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
           'Shift+H = Submit current alignment<br>' +
           'Shift+A = Toggle coordinate axes<br>' +
           'Shift+G = Toggle bounding box symmetry plane<br>' +
+          'Shift+W = Toggle wireframe<br>' +
           'Shift+V = Toggle show voxels<br>' +
           'Shift+B = Toggle show segments<br>' +
           'Shift+C = Assign simple color material to model<br>' +
@@ -852,6 +893,11 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
             this.getSymmetryPlane();
           }
           break;
+        case 'W':
+          if (event.shiftKey) {
+            this.toggleWireframe();
+          }
+          break;
         case 'V':
           if (event.shiftKey) {
             this.partsPanel.toggleVoxelization();
@@ -977,13 +1023,17 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       // var opt = viewOptimizer.lookAt(scene, objects);
       // this.cameraControls.viewTarget(opt);
       var bbox = Object3DUtil.getBoundingBox(objects);
-      this.cameraControls.viewTarget({
-        targetBBox: bbox,
-        viewIndex: 0,
-        distanceScale: 1.5
-      });
-      if (this.clippingBox && this.clipOnLookAt) {
-        this.clippingBox.init(bbox);
+      if (bbox.valid()) {
+        this.cameraControls.viewTarget({
+          targetBBox: bbox,
+          viewIndex: 0,
+          distanceScale: 1.5
+        });
+        if (this.clippingBox && this.clipOnLookAt) {
+          this.clippingBox.init(bbox);
+        }
+      } else {
+        console.warn('Invalid bounding box', objects);
       }
     };
 

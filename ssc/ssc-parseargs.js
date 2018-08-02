@@ -56,7 +56,7 @@ cmd.Command.prototype.optionGroups = function(opts) {
     this.option('--assetCacheSize <num>', 'Asset cache size', STK.util.cmd.parseInt, 100);
   }
   if (opts.config_file) {
-    this.option('--config_file <filename>', 'Config file with common options');
+    this.option('--config_file <filename>', 'Config file with common options', STK.util.cmd.collect, []);
   }
   return this;
 };
@@ -92,11 +92,15 @@ cmd.Command.prototype.__trackOptions = function() {
 
 cmd.Command.prototype.loadConfig = function() {
   if (this.config_file) {
-    var data = STK.fs.readSync(this.config_file);
-    var config = replaceRefs(JSON.parse(data), path.dirname(this.config_file));
-    console.log('got config', config);
-    console.log('got explicit options', this.__explicitOptions);
-    STK.util.merge(this, _.omit(config, _.keys(this.__explicitOptions)));
+    var filenames = _.isArray(this.config_file)? this.config_file : [this.config_file];
+    for (var i = 0; i < filenames.length; i++) {
+      var filename = filenames[i];
+      var data = STK.fs.readSync(filename);
+      var config = replaceRefs(JSON.parse(data), path.dirname(filename));
+      console.log('got config', config);
+      console.log('got explicit options', this.__explicitOptions);
+      STK.util.merge(this, _.omit(config, _.keys(this.__explicitOptions)));
+    }
   }
 };
 

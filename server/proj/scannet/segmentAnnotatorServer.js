@@ -35,16 +35,25 @@ function loadFile(filename) {
   }
 }
 
-function loadFileIfString(v, basepath) {
+function loadFileIfString(v, basepath, quiet) {
   if (typeof v === 'string') {
     var filename = basepath? path.resolve(basepath, v) : v;
-    return loadFile(filename);
+    if (quiet) {
+      try {
+        return loadFile(filename);
+      } catch (error) {
+        log.error('Error loading file: '+ basepath, error);
+      }
+    } else {
+      return loadFile(filename);
+    }
   } else {
     return v;
   }
 }
 
 function preprocessScansToAnnotate(scans, taskConfig) {
+  if (scans == undefined) return;
   if (!scans[0].id) {
     scans = scans.map(function (id) { return { id:  id }; });
   }
@@ -78,7 +87,7 @@ SegmentAnnotatorServer.prototype.__loadTaskConfig = function(filename) {
     config: taskConfig
   };
   var basepath = path.dirname(filename);
-  var scans =  loadFileIfString(taskConfig.scansToAnnotate, basepath);
+  var scans =  loadFileIfString(taskConfig.scansToAnnotate, basepath, true);
   task.scansToAnnotate = preprocessScansToAnnotate(scans, taskConfig);
   task.annotationChecks = loadFileIfString(taskConfig.annotationChecks, basepath);
   task.labels = loadFileIfString(taskConfig.labels, basepath);
@@ -181,13 +190,17 @@ SegmentAnnotatorServer.prototype.__populateUserState = function (req, callback) 
   req.session = req.session || {};
   req.session.userState = userState;
   if (!userState.todoModelIds) {  // need to populate items to annotate
-    this.__getItemsToAnnotate(userState, taskInfo.scansToAnnotate, {
-      thresh: taskInfo.config.doneThreshold,
-      callback: function (err, selectedItems) {
-        userState.todoModelIds = _.map(selectedItems, 'id');
-        callback(err, userState);
-      }
-    });
+    if (taskInfo.scansToAnnotate) {
+      this.__getItemsToAnnotate(userState, taskInfo.scansToAnnotate, {
+        thresh: taskInfo.config.doneThreshold,
+        callback: function (err, selectedItems) {
+          userState.todoModelIds = _.map(selectedItems, 'id');
+          callback(err, userState);
+        }
+      });
+    } else {
+      callback('No scans to annotate');
+    }
   } else {  // already have selected items to annotate
     callback(null, userState);
   }
@@ -224,7 +237,8 @@ SegmentAnnotatorServer.prototype.annotatorHandler = function (req, res) {
 
   var userState = getUserState(req);
   var sessionId = base.getSessionId(req);
-  var totalToAnnotate = Math.min(userState.totalModelsToAnnotate, userState.todoModelIds.length);
+  var numTodo = userState.todoModelIds? userState.todoModelIds.length : 0;
+  var totalToAnnotate = Math.min(userState.totalModelsToAnnotate, numTodo);
   log.info("SegmentAnnotatorServer processing user " + userState.userId
     + " modelsAnnotated=" + userState.modelsAnnotated + "/" + userState.totalModelsToAnnotate);
   if (req.query['pass']) {

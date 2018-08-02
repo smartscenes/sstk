@@ -6,6 +6,14 @@ STK.Constants.sys = {
   Buffer: Buffer
 };
 
+/* List namespaces */
+/** @namespace anim */
+/** @namespace data */
+/** @namespace editor */
+/** @namespace nlp */
+/** @namespace query */
+/** @namespace ui */
+
 // Include additional UI apps and utils
 STK.util.assign(STK, {
   DataViz: require('./viz/DataVizUI'),

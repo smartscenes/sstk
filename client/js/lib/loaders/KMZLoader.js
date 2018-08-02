@@ -1,19 +1,21 @@
 var ImageUtil = require('util/ImageUtil');
 var JSZip = require('jszip');
+var FileLoader = require('io/FileLoader');
 var _ = require('util');
 
 THREE.KMZLoader = function() {
   var options = {};
   var zip = null;
 
-  function load ( url, readyCallback, progressCallback, errorCallback ) {
-    var loader = new THREE.XHRLoader();
-    loader.setResponseType('arraybuffer');
-    loader.load(url,
+  function load (fileOrUrl, readyCallback, progressCallback, errorCallback ) {
+    var zipname = _.isString(fileOrUrl)? fileOrUrl : fileOrUrl.name;
+    var loader = new FileLoader();
+    loader.load(fileOrUrl,
+      'arraybuffer',
       function(data) {
         var zip = new JSZip(data);
         if (!zip.name) {
-          zip.name = url;
+          zip.name = zipname;
         }
         var colladaFile = null;
         for (var filename in zip.files) {
@@ -30,15 +32,15 @@ THREE.KMZLoader = function() {
           }
           loader.load(colladaFile, readyCallback);
         } else {
-          console.error("Cannot find .dae file in zip: " + url);
+          console.error("Cannot find .dae file in zip: " + zipname);
           if (errorCallback) {
-            errorCallback("Cannot find .dae file in zip: " + url);
+            errorCallback("Cannot find .dae file in zip: " + zipname);
           }
         }
       },
       progressCallback,
       function(err) {
-        console.log('Error loading ' + url, err);
+        console.log('Error loading ' + zipname, err);
         if (errorCallback) {
           errorCallback(err);
         }
@@ -58,6 +60,7 @@ THREE.ZippedColladaLoader = function (zip) {
 
   colladaLoader.options.loadTextureCallbackFunc = function loadTexture(basePath, relPath) {
     var path = _.getPath(basePath, relPath);
+    path = path.replace(/^.\//, '');
     var img = images[path];
     var texture = new THREE.Texture();
     if (!img) {

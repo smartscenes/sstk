@@ -16,6 +16,7 @@ define(['Constants', 'geo/Object3DUtil', 'loaders/VoxelLoader', 'util', 'voxel-m
     this.path = params.path;
     this.size = params.size;
     this.sizeBy = params.sizeBy;
+    this.labelColorIndex = params.labelColorIndex; // Label to color index
     this.init();
   }
 
@@ -47,7 +48,6 @@ define(['Constants', 'geo/Object3DUtil', 'loaders/VoxelLoader', 'util', 'voxel-m
     this.voxelNode = null;   // If in slice mode, then the voxelNode is shown with a transparent material
     this.voxelGrid = null;   // Grid of voxels
     this.voxelSliceNode = null;  // Current slice of the voxels
-    this.labelColorIndex = null; // Label to color index
   };
 
   Voxels.prototype.reset = function() {

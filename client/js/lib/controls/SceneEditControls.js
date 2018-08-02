@@ -11,6 +11,10 @@ var ModelInstance = require('model/ModelInstance');
 /**
  * Combined controls for scene editing (includes movement using drag drop, and scaling/rotation via Manipulator)
  * @param params
+ * @param params.enabled {boolean} If this scene edit controls is enabled
+ * @param params.allowRotation {boolean} Whether to allow rotation
+ * @param params.allowScaling {boolean} Whether to allow scaling
+ * @param params.useThreeTransformControls {boolean} Whether to use three.js transform controls
  * @constructor
  * @memberOf controls
  */
@@ -233,26 +237,40 @@ SceneEditControls.prototype.onMouseUp = function (event) {
 };
 
 SceneEditControls.prototype.select = function (event) {
-  var mouse = this.picker.getCoordinates(this.container, event);
   var fullScene = this.scene;
   var selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
-  var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, selectables, this.dragdrop.ignore);
-  if (intersects.length > 0) {
-    console.log('selected point', intersects[0].point);
-    return intersects[0].object;
+  var picked = this.getIntersected(event, selectables);
+  if (picked) {
+    console.log('selected point', picked.point);
   }
-  return null;
+  return picked? picked.object : null;
 };
 
 SceneEditControls.prototype.pick = function (event) {
-  var mouse = this.picker.getCoordinates(this.container, event);
   var fullScene = this.scene;
   var pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
-  var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, pickables, this.dragdrop.ignore);
-  if (intersects.length > 0) {
-    return intersects[0].object;
-  }
-  return null;
+  var picked = this.getIntersected(event, pickables);
+  return picked? picked.object : null;
+};
+
+SceneEditControls.prototype.getIntersected = function (event, object3Ds) {
+  object3Ds = object3Ds || this.scene.children;
+  // var mouse = this.picker.getCoordinates(this.container, event);
+  // var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, object3Ds, this.dragdrop.ignore);
+  // if (intersects.length > 0) {
+  //   return intersects[0];
+  // }
+  // return null;
+  var intersects = this.picker.pick({
+    targetType: 'object',
+    container: this.container,
+    position: { clientX: event.clientX, clientY: event.clientY },
+    camera: this.cameraControls.camera,
+    objects: object3Ds,
+    ignore: this.dragdrop.ignore,
+    scene: this.scene
+  });
+  return intersects;
 };
 
 SceneEditControls.prototype.onMouseDown = function (event) {
@@ -263,11 +281,10 @@ SceneEditControls.prototype.onMouseDown = function (event) {
   if (this.enabled) {
     event.preventDefault();
 
-    var mouse = this.picker.getCoordinates(this.container, event);
     var fullScene = this.scene;
 
     var pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
-    var intersected = this.picker.getFirstIntersected(mouse.x, mouse.y, this.cameraControls.camera, pickables, this.dragdrop.ignore);
+    var intersected = this.getIntersected(event, pickables);
 
     if (!this.dragdrop.insertMode) {
       var notHandled = this.manipulator.onMouseDown(event, intersected);
@@ -381,7 +398,9 @@ SceneEditControls.prototype.onKeyDown = function (event) {
         this.app.deleteObject(obj, event);
       }
       this.container.style.cursor = 'initial';
-      this.cameraControls.controls.enabled = true;
+      if (this.cameraControls.controls) {
+        this.cameraControls.controls.enabled = true;
+      }
       return true;
     // case 17: // ctrl
     //   this.dragdrop.yTranslateOn = true;

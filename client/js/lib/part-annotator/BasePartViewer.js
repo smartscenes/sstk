@@ -8,6 +8,7 @@ var Viewer3D = require('Viewer3D');
 var Picker = require('controls/Picker');
 var AssetManager = require('assets/AssetManager');
 var LabelsPanel = require('ui/LabelsPanel');
+var LabelHierarchyPanel = require('ui/LabelHierarchyPanel');
 var Object3DUtil = require('geo/Object3DUtil');
 var Renderer = require('gfx/Renderer');
 var SearchController = require('search/SearchController');
@@ -28,6 +29,7 @@ Materials.DefaultMaterialType = THREE.MeshPhongMaterial;
  * @param [params.delayedLoading] {boolean} Whether to delay loading and setting up of annotation target (scene/model) until later.
  *   Otherwise, scene/model is loaded during init.  Use if additional setup of scene/model is required.
  * @param [params.labelsPanel] {Object} Configuration for {@link LabelsPanel}
+ * @param [params.hierarchyPanel] {Object} Configuration for {@link LabelHierarchyPanel}
  * @param [params.linkWordNet] Whether we should display links to WordNet synsets
  * @constructor
  * @extends Viewer3D
@@ -107,8 +109,8 @@ function BasePartViewer(params) {
       }
     ], 'name')
   };
-  params = _.defaultsDeep(Object.create(null), params, defaults);
   this.urlParams = _.getUrlParams();
+  params = _.defaultsDeep(Object.create(null), _.pick(this.urlParams, ['useDatGui']), params, defaults);
   Viewer3D.call(this, params);
 
   this.mode = Constants.getGlobal('mode');
@@ -121,6 +123,7 @@ function BasePartViewer(params) {
   this.enableLookAt = params.enableLookAt;
   this.delayedLoading = params.delayedLoading;
   this.labelsPanelConfig = params.labelsPanel;
+  this.hierarchyPanelConfig = params.hierarchyPanel;
   if (this.mode === 'verify') {
     this.labelsPanelConfig.allowEditStatus = true;
     this.labelsPanelConfig.validStatuses = ['', 'cleaned', 'rejected'];
@@ -138,7 +141,6 @@ function BasePartViewer(params) {
   this.debugNode = new THREE.Group();
   this.debugNode.name = 'debugNode';
   this.useAmbientOcclusion = true;
-  this.__isWireframe = false;
 
   this.labelsPanel = null;
   this.excludeFromPicking = [];
@@ -184,11 +186,19 @@ BasePartViewer.prototype.init = function (container) {
     antialias: true
   });
 
-  this.picker = new Picker();
+  this.picker = new Picker({ renderer: this.renderer.renderer });
 
   this.registerEventListeners();
+  this.setupDatGui();
   if (!this.delayedLoading) {
     this.setupScene();
+  }
+};
+
+BasePartViewer.prototype.setupDatGui = function () {
+  if (this.useDatGui) {
+    Viewer3D.prototype.setupDatGui.call(this);
+    this.datgui.add(this.labelsPanel, 'labelMaterialOpacity', 0, 1).name('Label opacity').listen();
   }
 };
 
@@ -204,6 +214,12 @@ BasePartViewer.prototype.registerBasicEventListeners = function () {
       if (part) {
         scope.lookAtPart(part);
       }
+    });
+  }
+  if (this.labelsPanelConfig.contextMenu) {
+    var cm = $(this.labelsPanelConfig.contextMenu.selector);
+    this.registerContextMenu(function(event) {
+      cm.contextMenu({ x: event.clientX, y: event.clientY });
     });
   }
 };
@@ -250,7 +266,29 @@ BasePartViewer.prototype.createPanel = function () {
   }
   this.labeler.updateLabels(this.labelsPanel.labelInfos);
   this.labelInfos = this.labelsPanel.labelInfos;  // TODO: Do we need this?
+
+  this.__uis = {
+    'label': { panels: [this.labelsPanel] }
+  }
+  if (this.hierarchyPanelConfig) {
+    if (!this.hierarchyPanel) {
+      var options = _.defaults(Object.create(null), this.hierarchyPanelConfig);
+      this.hierarchyPanel = new LabelHierarchyPanel(options);
+    }
+    this.__uis['group'] = { panels: [this.hierarchyPanel] }
+  }
+  var allPanels = _.flatMap(_.values(this.__uis), function(x) { return x.panels || []; });
+  this.__uis['all'] = { panels: allPanels };
 };
+
+BasePartViewer.prototype.__showUIs = function(mode) {
+  var all = this.__uis['all'];
+  _.each(all.panels, function(x) { x.hide(); });
+  var ui = this.__uis[mode];
+  if (ui.panels) {
+    _.each(ui.panels, function(x) { x.show(); });
+  }
+}
 
 BasePartViewer.prototype.showAlert = function(message, style) {
   UIUtil.showAlert(null, message, style);
@@ -344,23 +382,6 @@ BasePartViewer.prototype.updateLabels = function(labelInfos) {
 
 BasePartViewer.prototype.createLabeler = function() {
   console.error(this.constructor.name + '.createLabeler - Please implement me!!!');
-};
-
-// toggle wireframe mode to see triangle
-BasePartViewer.prototype.toggleWireframe = function () {
-  this.__isWireframe = !this.__isWireframe;
-  var scene = this.getRenderScene();
-  if (!scene) { return; } // Not ready yet
-  //console.log('set wireframe', this.__isWireframe);
-  if (this.__isWireframe) {
-    this.__wireframeMaterial = this.__wireframeMaterial || new THREE.MeshBasicMaterial({color: new THREE.Color(0), wireframe: true, side: THREE.DoubleSide});
-    //console.log('wireframeMaterial', this.__wireframeMaterial);
-    //Object3DUtil.setMaterial(scene, this.__wireframeMaterial, Object3DUtil.MaterialsCompatible, true);
-    scene.overrideMaterial = this.__wireframeMaterial;
-  } else {
-    //Object3DUtil.revertMaterials(scene);
-    scene.overrideMaterial = null;
-  }
 };
 
 BasePartViewer.prototype.lookAtPart = function (part) {
@@ -485,6 +506,25 @@ BasePartViewer.prototype.registerCustomModelAssetGroup = function(assetIdsFile, 
 
 BasePartViewer.prototype.registerCustomModelAssetGroups = function(assetFiles, autoLoad) {
   this.registerCustomAssetGroups(this.searchController, assetFiles, autoLoad);
+};
+
+// toggle wireframe mode to see triangle
+BasePartViewer.prototype.setWireframeMode = function (flag) {
+  Viewer3D.prototype.setWireframeMode.call(this, flag);
+  if (this.labelsPanel) {
+    var labelInfos = this.labelsPanel.labelInfos;
+    for (var i = 0; i < labelInfos.length; i++) {
+      var labelInfo = labelInfos[i];
+      if (labelInfo) {
+        if (labelInfo.colorMat) {
+          labelInfo.colorMat.wireframe = flag;
+        }
+        if (labelInfo.hoverMat) {
+          labelInfo.hoverMat.wireframe = flag;
+        }
+      }
+    }
+  }
 };
 
 module.exports = BasePartViewer;

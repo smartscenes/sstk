@@ -291,6 +291,14 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
         }
       };
 
+      Model.prototype.getDatasets = function () {
+        if (this.info && this.info.datatsets) {
+          return this.info.datasets;
+        } else {
+          return [];
+        }
+      };
+
       Model.prototype.isScan = function() {
         return (this.info && Constants.assetSources.scan.indexOf(this.info.source) >= 0);
       };

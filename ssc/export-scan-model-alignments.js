@@ -9,6 +9,7 @@ var STK = require('./stk-ssc');
 var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Export scan to model alignment provided by turkers')
   .option('--id <id>', 'Model id [default: ScanNet-2016-07-24_10-48-40]', STK.util.cmd.parseList, ['ScanNet-2016-07-24_10-48-40'])
   .option('--ids_file <file>', 'File with model ids')
   .option('--parentId <parentId>', 'Parent model id', STK.util.cmd.parseList, [])
@@ -16,7 +17,7 @@ cmd
   .option('--ann_type <type>', 'Annotation type', 'scan-model-alignments')
   .option('-n, --ann_limit <num>', 'Limit on number of annotations to export', STK.util.cmd.parseInt, -1)
   .option('--labels <filename>', 'Labels file', __dirname + '/data/scannet-category-color-index.txt')
-  .option('--label_mapping <filename>', 'Label mappings file', __dirname + '/data/label-mappings.tsv')
+  .option('--label_mapping <filename>', 'Label mappings file', STK.Constants.assetsDir + '/data/labels/label-mappings.tsv')
   .option('--export_plys [flag]', 'Whether to export plys', STK.util.cmd.parseBoolean, false)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--include_annId [flag]', 'Whether to include ann id in output filename', STK.util.cmd.parseBoolean, false)

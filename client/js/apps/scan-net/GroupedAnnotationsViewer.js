@@ -25,8 +25,11 @@ require('jquery-lazy');
  * @param [params.alignParams] {Object} Additional parameters for  scan model alignment
  * @param [params.segmentType=surfaces] {string} Segmentation type to use (for statistics)
  * @param [params.nTargetAnnotations=3] {int} Number of target annotations that we want to have (once this number is reached, the button becomes green, before that, the button is yellow-gold)
+ * @param [params.parentType='scan'] {string} Name of group
+ * @param [params.childType='region'] {string} Name of scan in group
  * @param [params.sortBy] {string} Field to sort by
  * @constructor
+ * @memberOf scannet
  */
 function GroupedAnnotationsViewer(params) {
   this.groupBy = params.groupBy || 'parentId';

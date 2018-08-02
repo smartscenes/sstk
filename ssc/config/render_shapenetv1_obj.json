@@ -1,0 +1,10 @@
+{
+  "assetInfo": {
+    "defaultUp": [ 0, 1, 0 ],
+    "defaultFront": [ 1, 0, 0],
+    "defaultUnit": 1,
+    "materialSidedness": "Front",
+    "useVertexColors": true,
+    "computeNormals": true
+  }
+}

@@ -1,16 +1,20 @@
-/** Utility functions for Simulator **/
 var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
 
+/**
+ * Utility functions for Simulator
+ * @memberOf sim
+ */
 function SimUtil() {
 }
 
 /**
  * Find objects in observation matching category
  * @param {SimState} state - Simulator state
- * @param {Object} objects - Observations for objects (semantic mask)
+ * @param {sim.sensors.SemanticSensor.Frame} objects - Observations for objects (semantic mask)
  * @param {string|array} categories - categories to find
  * @param {boolean} [includeOtherObjects=boolean] whether to include objects that are not model instances
+ * @returns {Array<{id: string, node: THREE.Object3D, modelInstance: ModelInstance, count: number}>}
  */
 SimUtil.findObjectsByCategory = function(state, objects, categories, includeOtherObjects) {
   if (!Array.isArray(categories)) {
@@ -19,17 +23,7 @@ SimUtil.findObjectsByCategory = function(state, objects, categories, includeOthe
   var objectIds = _.keys(objects.counts);
   var objectInfos = state.getObjectInfos(objectIds);
   var filtered = objectInfos.filter(function(x) {
-    var modelInstance = Object3DUtil.getModelInstance(x.node);
-    if (modelInstance) {
-      return modelInstance.model.hasCategoryIn(categories, true);
-    } else {
-      if (includeOtherObjects && x.node.userData.type) {
-        var t = x.node.userData.type.toLowerCase();
-        return _.any(categories, function(cat) { return t === cat.toLowerCase(); });
-      } else {
-        return false;
-      }
-    }
+    return Object3DUtil.filterByCategory(x.node, categories, includeOtherObjects);
   });
   _.each(filtered, function(x) {
     x.modelInstance = Object3DUtil.getModelInstance(x.node);
@@ -42,7 +36,7 @@ SimUtil.findObjectsByCategory = function(state, objects, categories, includeOthe
 /**
  * Find objects in observation matching category
  * @param {SimState} state - Simulator state
- * @param {Object} objects - Observations for objects (semantic mask)
+ * @param {sim.sensors.SemanticSensor.Frame} objects - Observations for objects (semantic mask)
  * @param {Function} filter - Filter of objects
  */
 SimUtil.findObjects = function(state, objects, filter) {
@@ -60,7 +54,7 @@ SimUtil.findObjects = function(state, objects, filter) {
 /**
  * Return category to object count
  * @param {SimState} state - Simulator state
- * @param {Object} objects - Observations for objects (semantic mask)
+ * @param {sim.sensors.SemanticSensor.Frame} objects - Observations for objects (semantic mask)
  */
 SimUtil.getCategoryCounts = function(state, objects) {
   var objectIds = _.keys(objects.counts);

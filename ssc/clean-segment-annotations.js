@@ -8,6 +8,7 @@ var STK = require('./stk-ssc');
 var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Cleans aggregated segment annotations')
   .option('--id <id>', 'Model id [default: 2azQ1b91cZZ_room14,5q7pvUzZiYa_room5]', STK.util.cmd.parseList, ['2azQ1b91cZZ_room14','5q7pvUzZiYa_room5'])
   .option('--source <source>', 'Model source [default: mprm4]', 'mprm4')
 //  .option('--ann_type <type>', 'Annotation type', /^(raw|clean|aggr)$/)

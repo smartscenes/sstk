@@ -1,13 +1,14 @@
+var Materials = require('materials/Materials');
+
 /**
  * Modified version of THREE.MTLLoader from three.js
  * Loads a Wavefront .mtl file specifying materials
  *
  * @author angelxuanchang
  * @license MIT License <http://www.opensource.org/licenses/mit-license.php>
+ * @constructor
+ * @memberOf loaders
  */
-
-var Materials = require('materials/Materials');
-
 THREE.MTLLoader = function( manager ) {
 
 	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
@@ -52,6 +53,7 @@ Object.assign( THREE.MTLLoader.prototype, THREE.EventDispatcher.prototype, {
 	 * Parses loaded MTL file
 	 * @param text - Content of MTL file
 	 * @return {THREE.MTLLoader.MaterialCreator}
+	 * @private
 	 */
 	parse: function ( text ) {
 
@@ -142,6 +144,7 @@ THREE.MTLLoader.MaterialCreator = function( baseUrl, options ) {
 	this.materialsArray = [];
 	this.nameLookup = {};
 	this.defaultMaterialType = options.defaultMaterialType || THREE.MeshPhongMaterial; // AXC: Set default material
+	//console.log('got defaultMaterialType', this.defaultMaterialType);
 
 	this.side = ( this.options && this.options.side ) ? this.options.side : THREE.FrontSide;
 	this.wrap = ( this.options && this.options.wrap ) ? this.options.wrap : THREE.RepeatWrapping;
@@ -451,6 +454,11 @@ THREE.MTLLoader.MaterialCreator.prototype = {
 
 
 	loadTexture: function ( url, mapping, onLoad, onProgress, onError ) {
+		// console.log('loadTexture',this.options);
+		// AXC: custom loadTexture
+		if (this.options.loadTexture) {
+			return this.options.loadTexture(url,mapping,onLoad,onProgress,onError);
+		}
 		return Materials.loadTexture({ url: url, mapping: mapping,
 			onLoad: onLoad, onProgress: onProgress, onError: onError,
 			manager: this.manager, crossOrigin: this.crossOrigin });

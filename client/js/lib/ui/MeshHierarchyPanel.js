@@ -10,6 +10,8 @@ function MeshHierarchyPanel(params) {
   this.showMultiMaterial = params.showMultiMaterial;
   this.collapseNestedPaths = params.collapseNestedPaths;
   this.highlightByHidingOthers = params.highlightByHidingOthers;
+  this.__useSpecialMaterial = params.useSpecialMaterial;
+  this.specialMaterial = params.specialMaterial || Object3DUtil.ClearMat;
   this.treePanel = params.treePanel;
   this.app = params.app;
   this.onhoverCallback = params.onhoverCallback;
@@ -35,19 +37,33 @@ Object.defineProperty(MeshHierarchyPanel.prototype, 'maxHierarchyLevel', {
   }
 });
 
+Object.defineProperty(MeshHierarchyPanel.prototype, 'useSpecialMaterial', {
+  get: function () {
+    return this.__useSpecialMaterial;
+  },
+  set: function (flag) {
+    this.__useSpecialMaterial = flag;
+    this.refreshHighlighting();
+  }
+});
+
 //Gets all the mesh nodes in the model
-MeshHierarchyPanel.prototype.getMeshes = function () {
+MeshHierarchyPanel.prototype.getNodes = function () {
   return this.partNodes;
 };
+
+// MeshHierarchyPanel.prototype.getMeshes = function () {
+//   return _.filter(this.partNodes, function(x) { return (x instance THREE.Mesh; }));
+// };
 
 //Gets the mesh Id
 MeshHierarchyPanel.prototype.getMeshId = function (mesh) {
   return Constants.meshPrefix + Object3DUtil.getSceneGraphPath(mesh, this.partsNode);
 };
 
-MeshHierarchyPanel.prototype.findMeshes = function (meshIds) {
+MeshHierarchyPanel.prototype.findNodes = function (meshIds) {
   var nonSGIds = [];
-  var matchedMeshes = [];
+  var matchedNodes = [];
   for (var i = 0; i < meshIds.length; i++) {
     var meshId = meshIds[i];
 
@@ -61,25 +77,25 @@ MeshHierarchyPanel.prototype.findMeshes = function (meshIds) {
     }
   }
   if (nonSGIds.length > 0) {
-    matchedMeshes = this.findMeshesSlow(nonSGIds, matchedMeshes);
+    matchedNodes = this.findNodesSlow(nonSGIds, matchedNodes);
   }
-  return matchedMeshes;
+  return matchedNodes;
 };
 
-MeshHierarchyPanel.prototype.findMeshesSlow = function (meshIds, matched) {
+MeshHierarchyPanel.prototype.findNodesSlow = function (ids, matched) {
   // Does brute force find (slow!)
-  var allMeshes = this.getMeshes();
-  var matchedMeshes = matched || [];
-  for (var j = 0; j < meshIds.length; j++) {
-    var meshId = meshIds[j];
-    for (var i = 0; i < allMeshes.length; i++) {
-      var thisId = this.getMeshId(allMeshes[i]);
-      if (thisId === meshId) {
-        matchedMeshes.push(allMeshes[i]);
+  var allNodes = this.getNodes();
+  var matchedNodes = matched || [];
+  for (var j = 0; j < ids.length; j++) {
+    var id = ids[j];
+    for (var i = 0; i < allNodes.length; i++) {
+      var thisId = this.getMeshId(allNodes[i]);
+      if (thisId === id) {
+        matchedNodes.push(allNodes[i]);
       }
     }
   }
-  return matchedMeshes;
+  return matchedNodes;
 };
 
 MeshHierarchyPanel.prototype.setPartsNode = function(partsNode) {
@@ -124,7 +140,10 @@ MeshHierarchyPanel.prototype.__computePartHierarchyFromObject3D = function(objec
       break;
     }
   }
-  Object3DUtil.applyMaterial(this.partsNode, Object3DUtil.ClearMat, true, true);
+  Object3DUtil.saveMaterials(this.partsNode);
+  if (this.useSpecialMaterial) {
+    Object3DUtil.applyMaterial(this.partsNode, this.specialMaterial, true, true);
+  }
   if (this.treePanel && this.treePanel.length > 0) {
     this.__setPartHierarchy(this.partsNode);
   } else {
@@ -271,14 +290,14 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
       treeNodes[index]['li_attr'] = {};
       treeNodes[index]['li_attr']['title'] = JSON.stringify(titleJson, null, 2);
       if (showMultiMaterial && nmats > 1) {
-        var origMat = node.userData.origMaterial;
+        var origMat = node.cachedData? node.cachedData.origMaterial : null;
         for (var i = 0; i < nmats; i++) {
           var mi = treeNodes.length;
           var pId = 'ph-' + node.uuid;
           treeNodes[mi] = {
             id: 'ph-' + node.uuid + '-' + i,
             parent: pId,
-            text: origMat.materials[i].name,
+            text: origMat? origMat.materials[i].name : 'material' + i,
             metadata: { index: mi }
           };
           partNodes[mi] = { node: node, materialIndex: i };
@@ -313,10 +332,12 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
     'contextmenu':{
       "items": function(node) {
         console.log(node);
-        var partNode = scope.partNodes[node.original.metadata['index']];
-        var targets = [partNode];
-        var items = {
-          lookAtItem: {
+        //var partNode = scope.partNodes[node.original.metadata['index']];
+        //var clickedFrom = [partNode];
+        var targets = scope.getSelectedPartNodes();
+        var items = {};
+        if (targets && targets.length) {
+          items['lookAtItem'] = {
             "label": "Look at",
             "action": function (item) {
               // TODO: Handle look at item for multiple selected
@@ -325,17 +346,55 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
               }
             },
             "_class": "class"
+          };
+
+          function addSetVisibleOption(items, name, label, flag, recursive) {
+            items[name] = {
+              "label" : label,
+              "action" : function(item) {
+                _.each(targets, function(x) {
+                  Object3DUtil.setVisible(x, flag, recursive);
+                });
+              },
+              "_class" : "class"
+            };
+
           }
-        };
-        if (scope.app && scope.app.open) {
-          items['openItem'] = {
-            "label": "Open",
-              "action": function(item) {
-              if (targets && targets.length) {
-                scope.app.open(scope.partsNode, targets);
-              }
+
+          var isAllVisible = _.every(targets, function(x) { return x.visible; });
+          var isAllHidden = _.every(targets, function(x) { return !x.visible; });
+
+          if (isAllVisible) {
+            addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
+            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+          } else if (isAllHidden) {
+            addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+          } else {
+            addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
+            addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+          }
+
+          items['unselectAll'] = {
+            "label": "Unselect all",
+            "action": function(item) {
+              scope.tree.jstree('deselect_all', false);
+              scope.clearHighlighting();
             }
           };
+
+          if (scope.app && scope.app.open) {
+            items['openItem'] = {
+              "label": "Open",
+              "action": function(item) {
+                if (targets && targets.length) {
+                  scope.app.open(scope.partsNode, targets);
+                }
+              }
+            };
+          }
         }
         return items;
       }
@@ -382,6 +441,28 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
   }
 };
 
+MeshHierarchyPanel.prototype.getSelectedPartNodes = function() {
+  var selected = this.tree.jstree('get_selected', true);
+  return this.__getPartNodes(selected);
+};
+
+MeshHierarchyPanel.prototype.__getPartNodes = function(nodes, objects) {
+  objects = objects || [];
+  if (!Array.isArray(nodes)) {
+    nodes = [nodes];
+  }
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (node.original) {
+      var partNode = this.partNodes[node.original.metadata['index']];
+      if (partNode) {
+        objects.push(partNode);
+      }
+    }
+  }
+  return objects;
+};
+
 MeshHierarchyPanel.prototype.__computePartNodes = function (root) {
   var partNodes = [];
   var filterEmptyGeometries = this.filterEmptyGeometries;
@@ -420,6 +501,16 @@ MeshHierarchyPanel.prototype.clearHighlighting = function() {
   this.dehighlightPart(this.partsNode);
 };
 
+MeshHierarchyPanel.prototype.refreshHighlighting = function() {
+  this.dehighlightPart(this.partsNode);
+  var selected = this.getSelectedPartNodes();
+  if (selected && selected.length) {
+    for (var i = 0; i < selected.length; i++) {
+      this.highlightPart(selected[i]);
+    }
+  }
+};
+
 MeshHierarchyPanel.prototype.clear = function () {
   if (this.partsNode && this.partsNode.parent) {
     this.partsNode.parent.remove(this.partsNode);
@@ -429,17 +520,30 @@ MeshHierarchyPanel.prototype.clear = function () {
   this.treePanel.empty();
 };
 
-MeshHierarchyPanel.prototype.setPartMaterial = function (part, mat) {
-  Object3DUtil.applyPartMaterial(part, mat, true, true);
+MeshHierarchyPanel.prototype.setPartMaterial = function (part, mat, filter) {
+  Object3DUtil.applyPartMaterial(part, mat, true, true, filter);
 };
+
+MeshHierarchyPanel.prototype.__getPartMaterial = function(part, useColor) {
+  var color = part.userData.color;
+  if (useColor && color) {
+    return color;
+  } else if (this.useSpecialMaterial) {
+    return this.specialMaterial;
+  } else {
+    var origMaterial = part.cachedData? part.cachedData.origMaterial : null;
+    return origMaterial || this.specialMaterial;
+  }
+};
+
 
 MeshHierarchyPanel.prototype.dehighlightPart = function (part) {
   if (part) {
     if (this.highlightByHidingOthers) {
       this.showParts(true);
     } else {
-      var color = part.userData.color;
-      this.setPartMaterial(part, color || Object3DUtil.ClearMat);
+      var scope = this;
+      this.setPartMaterial(part, function(node) { return scope.__getPartMaterial(node, true); });
     }
   }
 };
@@ -457,9 +561,9 @@ MeshHierarchyPanel.prototype.highlightPart = function (part) {
 };
 
 //Colors a particular part of the model
-MeshHierarchyPanel.prototype.colorPart = function (part, colorMaterial) {
+MeshHierarchyPanel.prototype.colorPart = function (part, colorMaterial, filter) {
   if (part) {
-    this.setPartMaterial(part, colorMaterial);
+    this.setPartMaterial(part, colorMaterial, filter);
     Object3DUtil.setVisible(this.partsNode, true);
   }
 };
@@ -498,7 +602,8 @@ MeshHierarchyPanel.prototype.showPartOnly = function(part, flag) {
 //Decolors a particular part of the model
 MeshHierarchyPanel.prototype.decolorPart = function (part) {
   if (part) {
-    this.setPartMaterial(part, Object3DUtil.ClearMat);
+    var scope = this;
+    this.setPartMaterial(part, function(node) { return scope.__getPartMaterial(node, false); });
   }
 };
 

@@ -14,6 +14,22 @@ function Camera(fov, aspect, near, far) {
 Camera.prototype = Object.create(THREE.PerspectiveCamera.prototype);
 Camera.prototype.constructor = Camera;
 
+// Initializes Camera from pair of strings giving extrinsics and intrinsics.
+// extrinsics is 4x4 transformation matrix taking camera coordinates to world.
+// Camera axes are +x=right, +y=up, -z=view
+// intrinsics are given as: { width, height, fx, fy, cx, cy }
+Camera.prototype.initFromExtrinsicsIntrinsics = function (extrMatrix, intr) {
+  this.matrix.copy(extrMatrix);
+  this.matrix.decompose(this.position, this.quaternion, this.scale);
+  if (intr) {
+    this.fov = 2 * Math.atan(intr.height / (2 * intr.fy)) * (180 / Math.PI);
+    this.aspect = intr.width / intr.height;
+  }
+  this.matrixWorldNeedsUpdate = true;
+  this.updateMatrixWorld();
+  this.updateProjectionMatrix();
+};
+
 // Parse Camera representation from gaps string
 Camera.prototype.initFromGapsString = function (str, aspect) {
   var l = str.split(/\s+/).map(function (s) { return parseFloat(s); });
@@ -31,7 +47,7 @@ Camera.prototype.initFromGapsString = function (str, aspect) {
   //this.up.set(-ux, uy, -uz);
   //var towards = new THREE.Vector3(-tx, ty, -tz);
 
-  this.position.set(vx, vy, vz).multiplyScalar(Constants.metersToVirtualUnit);
+  this.position.set(vx, vy, vz);
   this.up.set(ux, uy, uz);
   var towards = new THREE.Vector3(tx, ty, tz);
   //var right = new THREE.Vector3();
@@ -68,19 +84,6 @@ Camera.prototype.applyTransform = (function () {
     return this;
   };
 }());
-
-Camera.readGapsCameras = function (camlines, aspect) {
-  var cameras = [];
-  for (var i = 0; i < camlines.length; i++) {
-    var camline = camlines[i];
-    if (camline && camline.length) {
-      var cam = new Camera();
-      cam.initFromGapsString(camline, aspect);
-      cameras.push(cam);
-    }
-  }
-  return cameras;
-};
 
 // Create camera from json
 Camera.fromJson = function(json, width, height) {

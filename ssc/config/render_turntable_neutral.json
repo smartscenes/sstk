@@ -1,0 +1,11 @@
+{
+  "color_by": "color",
+  "color": "wheat",
+  "render_turntable": true, 
+  "turntable_step": 15,
+  "framerate": 12,
+  "compress_png": false,
+  "tilt": 30,
+  "width": 500,
+  "height": 500
+}

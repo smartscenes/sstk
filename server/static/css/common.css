@@ -10,7 +10,7 @@ body {
   overflow: hidden;
 }
 
-#sidebar {
+#sidebar, .sidebar {
   position: absolute;
   top: 0;
   right: 0;
@@ -126,4 +126,13 @@ body {
 input[readonly] {
   background-color: white !important;
   cursor: text !important;
+}
+
+.readonly {
+  color: dimgray;
+}
+
+.modal-body {
+  max-height: calc(100vh - 212px);
+  overflow-y: auto;
 }

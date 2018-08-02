@@ -3,12 +3,13 @@ var sensors = {
   DepthSensor: require('sim/sensors/DepthSensor'),
   NormalSensor: require('sim/sensors/NormalSensor'),
   SemanticSensor: require('sim/sensors/SemanticSensor'),
+  SemanticTextureSensor: require('sim/sensors/SemanticTextureSensor'),
   SensorGroup: require('sim/sensors/SensorGroup'),
   Sensor: require('sim/sensors/Sensor')
 };
 
 /**
- *
+ * Get renderer to use for camera sensors
  * @param sensorConfig
  * @param sensorConfig.type {string}
  * @param sensorConfig.width {int}
@@ -31,11 +32,18 @@ function getRenderer(sensorConfig, opts) {
 }
 
 
-// TODO: Create new render for sensor based on sensor configuration instead of just reusing old prespecified
+/**
+ * Create the specified sensor
+ * @param sensorConfig
+ * @param opts
+ * @returns {*}
+ */
 sensors.getSensor = function(sensorConfig, opts) {
+  // TODO: Create new renderer for sensor based on sensor configuration instead of just reusing old prespecified
   opts = _.defaults(Object.create(null), opts, {
     getRenderer: getRenderer, getSensor: sensors.getSensor
   });
+  // console.log('got sensorConfig', sensorConfig);
   if (sensorConfig.type === 'color') {
     // TODO: Clean override of encoding up
     // If opts.colorEncoding specified, has it override sensorConfig.encoding
@@ -50,6 +58,8 @@ sensors.getSensor = function(sensorConfig, opts) {
     return new sensors.NormalSensor(sensorConfig, opts);
   } else if (sensorConfig.type === 'semantic') {
     return new sensors.SemanticSensor(sensorConfig, opts);
+  } else if (sensorConfig.type === 'semantic_texture') {
+    return new sensors.SemanticTextureSensor(sensorConfig, opts);
   } else if (sensorConfig.type === 'group') {
     return new sensors.SensorGroup(sensorConfig, opts);
   } else {
@@ -58,6 +68,23 @@ sensors.getSensor = function(sensorConfig, opts) {
     return null;
     //return new sensors.Sensor(sensorConfig);
   }
+};
+
+sensors.getSensors = function(sensorConfig, opts) {
+  var sensorConfigs;
+  if (_.isArray(sensorConfig.position)) {
+    var sz = sensorConfig.position.length;
+    sensorConfigs = _.map(sensorConfig.position, function(p,i) {
+      var index = (sz > 1 && i)? i : undefined;
+      return _.defaults({ position: p, orientation: sensorConfig.orientation[i], index: index }, sensorConfig);
+    });
+  } else {
+    sensorConfigs = [sensorConfig];
+  }
+  var res = _.map(sensorConfigs, function(sc) {
+    return sensors.getSensor(sc, opts);
+  });
+  return res;
 };
 
 module.exports = sensors;

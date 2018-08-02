@@ -16,6 +16,7 @@ function PartAnnotationViewer(params) {
     useSegments: useSegments,
     keepInstances: keepInstances,
     labelsPanel: {
+      allowMultiSelect: true,
       noTransparency: false,
       includeAllButton: true
     }
@@ -117,14 +118,25 @@ PartAnnotationViewer.prototype.getInitialPartLabels = function () {
   return partLabels;
 };
 
-PartAnnotationViewer.prototype.onSelectLabel = function (labelInfo) {
+PartAnnotationViewer.prototype.onSelectLabel = function (labelInfos) {
+  var labelInfo;
+  if (Array.isArray(labelInfos)) {
+    if (labelInfos.length === 1) {
+      labelInfo = labelInfos[0];
+    }
+  } else if (labelInfos) {
+    labelInfo = labelInfos;
+    labelInfos = [labelInfo];
+  }
   PartViewer.prototype.onSelectLabel.call(this, labelInfo);
   this.labelViewer.setLabelInfo(labelInfo);
-  if (labelInfo) {
-    if (labelInfo.id > this.labeler.labelInfos.length) {  // ALL labelInfo
+  if (labelInfos) {
+    var labelAll = _.find(labelInfos, function(info) {return info.isAll; })
+    if (labelAll) { // ALL labelInfo
       this.labelAllParts();
+      this.colorMeshesWithLabelInfos([labelAll]);
     } else {
-      this.colorMeshesWithLabelInfo(labelInfo);
+      this.colorMeshesWithLabelInfos(labelInfos);
     }
   }
 };
@@ -191,6 +203,24 @@ PartAnnotationViewer.prototype.labelAllParts = function () {
 //Highlights all meshes with the given meshIds
 PartAnnotationViewer.prototype.labelMeshes = function (labelInfo, meshIds) {
   this.labeler.labelMeshes(labelInfo, meshIds);
+};
+
+PartAnnotationViewer.prototype.colorMeshesWithLabelInfos = function (labelInfos) {
+  var allMeshes = this.labeler.getMeshes();
+  for (var i in allMeshes) {
+    if (!allMeshes.hasOwnProperty(i)) { continue; }
+    var mesh = allMeshes[i];
+    var labelInfo = null;
+    if (mesh.userData.labelInfo) {
+      var found = _.find(labelInfos, function (x) { return x.isAll || mesh.userData.labelInfo.id === x.id; });
+      if (found) { labelInfo = mesh.userData.labelInfo; }
+    }
+    if (labelInfo) {
+      this.labeler.colorPart(mesh, labelInfo.colorMat);
+    } else {
+      this.labeler.decolorPart(mesh);
+    }
+  }
 };
 
 PartAnnotationViewer.prototype.colorMeshesWithLabelInfo = function (labelInfo) {

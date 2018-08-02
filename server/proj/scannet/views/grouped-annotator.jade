@@ -1,7 +1,7 @@
 doctype html
 html(lang="en")
     head
-        title= "ScanNet"
+        title= title || 'ScanNet'
         meta(charset= "UTF-8")
         link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
         link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
@@ -29,9 +29,6 @@ html(lang="en")
         script(src="#{baseUrl}/three.min.js")
         script(src='#{baseUrl}/scanNet.bundle.js')
         script.
-            var group = STK.util.getUrlParam('group');
-            var assetPath = '#{baseUrl}/resources/data/scannet/scannet';
-            var assetIdsPath = '#{baseUrl}/solr/scannet/select?q=*%3A*&wt=csv&sort=&start=0&rows=1000000';
             var annotationConditions = ['manual'];
             var viewerParams = { condition: 'manual' };
             var annotationsViewer = new STK.GroupedAnnotationsViewer({
@@ -42,11 +39,7 @@ html(lang="en")
                 viewerUrl: '#{baseUrl}/scans/segment-annotator-single',
                 viewerParams: viewerParams,
                 alignParams: { condition: 'manual'},
-                assetGroup: {
-                    metadata: assetPath + '.json',
-                    assetIdsFileFormat: 'csv',
-                    ids: assetIdsPath
-                },
+                assetGroup: !{JSON.stringify(assetGroup || null)},
                 parentType: 'scene type',
                 childType: 'scan',
                 groupBy: 'sceneType'

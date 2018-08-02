@@ -384,11 +384,22 @@ function parseList(string, delimiter) {
 
 _.parseList = parseList;
 
+function parseVector(string, delimiter) {
+  delimiter = delimiter || ',';
+  if (string) {
+    var list = string.split(delimiter).map(function(x) { return parseFloat(x.trim()); });
+    return list;
+  }
+}
+
+_.parseVector = parseVector;
+
 _.cmd = {
   parseBoolean: function(x, accum) { return parseBoolean(x); },
   parseList: function(x, accum) { return parseList(x); },
   parseFloat: function(x, accum) { return parseFloat(x); },
   parseInt: function(x, accum) { return parseInt(x); },
+  parseVector: function(x, accum) { return parseVector(x); },
   collect: function(x, accum) {
     accum.push(x);
     return accum;
@@ -480,8 +491,8 @@ _.interpolate = function(obj, vars, options) {
     var root = stack? stack.get(obj) : {};
     var parentVars = stack? stack.get(parent) : {};
     if (_.isString(value) && (!options.isPossibleTemplate || options.isPossibleTemplate(value))) {
-      var v = _.merge(vars, root)
-      v = _.defaults(Object.create(null), parentVars, v)
+      var v = _.merge(vars, root);
+      v = _.defaults(Object.create(null), parentVars, v);
       var t = _.template(value, options);
       //console.log('resolving template ', value, v);
       var r = t(v);
@@ -705,6 +716,19 @@ _.replaceAll = function (str, find, replacement){
 _.addUnique = function(array, element) {
   if (array.indexOf(element) < 0) {
     array.push(element);
+  }
+};
+
+_.mapKeysDeep = function(object, iteratee) {
+  iteratee = iteratee || _.identity;
+  if (_.isPlainObject(object)) {
+    var remapped = _.mapKeys(object, iteratee);
+    remapped = _.mapValues(remapped, function (v) {
+      return _.mapKeysDeep(v, iteratee);
+    });
+    return remapped;
+  } else {
+    return object;
   }
 };
 

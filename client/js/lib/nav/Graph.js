@@ -400,7 +400,7 @@ SquareGrid.prototype.__populateEdges = function() {
 };
 
 SquareGrid.prototype.__computeEdgeWeight = function(dir, targetTileWeight) {
-  return Math.sqrt((dir[0]*dir[0] + dir[1]*dir[1])*targetTileWeight);
+  return Math.sqrt(dir[0]*dir[0] + dir[1]*dir[1])*targetTileWeight;
 };
 
 SquareGrid.prototype.__onTileWeightUpdated = function(id, w, oldWeight) {

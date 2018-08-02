@@ -1,0 +1,42 @@
+nyu40id,nyu40class,hex,r,g,b
+0,void,#000000,0,0,0
+1,wall,#aec7e8,174,199,232
+2,floor,#708090,112,128,144
+3,cabinet,#1f77b4,31,119,180
+4,bed,#e377c2,227,119,194
+5,chair,#98df8a,152,223,138
+6,sofa,#2ca02c,44,160,44
+7,table,#ff7f0e,255,127,14
+8,door,#c5b0d5,197,176,213
+9,window,#ff9896,255,152,150
+10,bookshelf,#c49c94,196,156,148
+11,picture,#d62728,214,39,40
+12,counter,#a55194,165,81,148
+13,blinds,#f7b6d2,247,182,210
+14,desk,#ffbb78,255,187,120
+15,shelves,#8c564b,140,86,75
+16,curtain,#de9ed6,222,158,214
+17,dresser,#9467bd,148,103,189
+18,pillow,#bcbd22,188,189,34
+19,mirror,#dbdb8d,219,219,141
+20,floor mat,#9edae5,158,218,229
+21,clothes,#ce6dbd,206,109,189
+22,ceiling,#9c9ede,156,158,222
+23,books,#5254a3,82,84,163
+24,refridgerator,#6b6ecf,107,110,207
+25,television,#d6616b,214,97,107
+26,paper,#637939,99,121,57
+27,towel,#8ca252,140,162,82
+28,shower curtain,#ad494a,173,73,74
+29,box,#bd9e39,189,158,57
+30,whiteboard,#c7c7c7,199,199,199
+31,person,#e7cb94,231,203,148
+32,night stand,#e7ba52,231,186,82
+33,toilet,#e7969c,231,150,156
+34,sink,#843c39,132,60,57
+35,lamp,#b5cf6b,181,207,107
+36,bathtub,#393b79,57,59,121
+37,bag,#cedb9c,206,219,156
+38,otherstructure,#7f7f7f,127,127,127
+39,otherfurniture,#8c6d31,140,109,49
+40,otherprop,#17becf,23,190,207

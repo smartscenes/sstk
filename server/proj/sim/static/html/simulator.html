@@ -5,7 +5,9 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css"/>
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/search-panel.css">
     <link rel="stylesheet" href="css/scene-viewer.css">
+    <link rel="stylesheet" href="css/toolbar.css">
     <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
     <title>Simulator</title>
     <meta charset="utf-8">
@@ -16,6 +18,7 @@
 
 <div id="main">
     <div id="canvas"></div>
+    <div id="sceneToolbar" class="toolbar" style="display:none"></div>
     <div id="console" class="console" style="display:none"></div>
 </div>
 <div id="sidebar" style="overflow: auto;">
@@ -26,6 +29,11 @@
     Observations
     <input id="autoUpdate" type="checkbox"/>Update
     <div id="sensors" style="z-index: 10;"></div>
+</div>
+<div id="editPanel" class="sidebar" style="display:none; background: white;">
+Search Panel
+<div id="modelSearchPanel" class="searchPanel">
+</div>
 </div>
 
 <!-- This is ridiculous!!!! We need a system where all dependencies are specified in one place.

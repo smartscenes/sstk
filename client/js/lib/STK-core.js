@@ -25,6 +25,8 @@ module.exports = {
   },
   /** @namespace exporters */
   exporters: {
+    AJSONExporter: require('./exporters/AJSONExporter'),
+    GLTFExporter: require('./exporters/GLTFExporter'),
     NRRDExporter: require('./exporters/NRRDExporter'),
     JSONExporter: require('./exporters/JSONExporter'),
     OBJMTLExporter: require('./exporters/OBJMTLExporter'),
@@ -89,7 +91,8 @@ module.exports = {
   },
   /** @namespace search */
   search: {
-    BasicSearchController: require('./search/BasicSearchController')
+    BasicSearchController: require('./search/BasicSearchController'),
+    SolrQuerier: require("./search/SolrQuerier")
   },
   /** @namespace sim */
   sim: {

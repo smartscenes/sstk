@@ -8,13 +8,14 @@ var STK = require('./stk-ssc');
 var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Takes semantically annotated segments and outputs a PLY with semantic data on vertices')
   .option('--id <id>', 'Model id [default: ScanNet-2016-07-24_10-48-40]', STK.util.cmd.parseList, ['ScanNet-2016-07-24_10-48-40'])
   .option('--ids_file <file>', 'File with model ids')
   .option('--parentId <parentId>', 'Parent model id', STK.util.cmd.parseList, [])
   .option('--source <source>', 'Model source [default: scan-checked]', 'scan-checked')
   .option('--labels <filename>', 'Labels file', 'none') //__dirname + '/data/scannet-category-color-index.txt')
   .option('--outlabels <filename>', 'Output labels file')
-  .option('--label_mapping <filename>', 'Label mappings file', __dirname + '/data/label-mappings.tsv')
+  .option('--label_mapping <filename>', 'Label mappings file', STK.Constants.assetsDir + '/data/labels/label-mappings.tsv')
   .option('--label_mapping_category <cat>', 'Label mapping category field', 'category')
   .option('--nyu40_colors <filename>', 'Color mapping for nyu40 colors', STK.Constants.assetsDir + '/data/labels/nyu40colors.csv')
   .option('--mpr40_colors <filename>', 'Color mapping for mpr40 colors', STK.Constants.assetsDir + '/data/labels/mpr40.tsv')

@@ -17,8 +17,8 @@ function SUNCGExporter(options) {
 SUNCGExporter.prototype.export = function (sceneState, opts) {
   var fileutil = this.__fs;
   opts = opts || {};
-  opts.name = opts.name || 'scene';
-  opts.dir = opts.dir ? opts.dir + '/' : '';
+  opts.name = (opts.name != undefined)? opts.name : 'scene';
+  opts.dir = (opts.dir != undefined)? opts.dir + '/' : '';
   var filename = opts.dir + opts.name + '.json';
   var callback = opts.callback;
 

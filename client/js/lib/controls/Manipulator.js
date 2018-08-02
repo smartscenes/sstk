@@ -155,8 +155,8 @@ Manipulator.prototype.addRotationCircle = function () {
 
   if (!this.allowRotation) return; // rotation not allowed
 
-  var circleRad = this.getTileDimension(50) / 2;
-  var circleGeo = new THREE.CircleGeometry(circleRad, 20);
+  var circleRad = this.getTileDimension(0.05*Constants.metersToVirtualUnit) / 2;
+  var circleGeo = new THREE.CircleGeometry(circleRad, 0.02*Constants.metersToVirtualUnit);
   var material = new THREE.MeshBasicMaterial({
     map: this.rotationCircleTexture,
     //color: new THREE.Color("green"),
@@ -191,7 +191,7 @@ Manipulator.prototype.addScaleTile = function () {
 
   if (!this.allowScaling) return; // scaling not allowed
 
-  var tileDim = this.getTileDimension(50);
+  var tileDim = this.getTileDimension(0.05*Constants.metersToVirtualUnit);
   var planeGeo = new THREE.PlaneBufferGeometry(tileDim, tileDim);
 
   var material = new THREE.MeshBasicMaterial({
@@ -245,7 +245,7 @@ Manipulator.prototype.addManipulatorPlane = function () {
  onto the plane of the manipulator.  This location is used for scaling/rotation via
  mouse interaction
  */
-Manipulator.prototype.getProjectedMouseLocation = function (x, y) {
+Manipulator.prototype.__getProjectedMouseLocation = function (x, y) {
   var proj2DIntersects = this.picker.getIntersected(x, y, this.camera, [this.manipulatorPlane]);
   if (proj2DIntersects.length > 0) {
     return proj2DIntersects[0].point;
@@ -316,7 +316,7 @@ Manipulator.prototype.onMouseDown = function (event, intersected) {
   this.mouseDown = true;
   if (this.active) {
     var mouse = this.picker.getCoordinates(this.container, event);
-    this.prevProjMouse = this.getProjectedMouseLocation(mouse.x, mouse.y);
+    this.prevProjMouse = this.__getProjectedMouseLocation(mouse.x, mouse.y);
     if (intersected === undefined) {
       // Need to figure out intersected for myself
       var pickables = (this.scene.pickables) ? this.scene.pickables : this.scene.children;
@@ -361,7 +361,7 @@ Manipulator.prototype.onMouseMove = function (event) {
     }
     if (this.componentClicked) {
       var mouse = this.picker.getCoordinates(this.container, event);
-      this.currProjMouse = this.getProjectedMouseLocation(mouse.x, mouse.y);
+      this.currProjMouse = this.__getProjectedMouseLocation(mouse.x, mouse.y);
 
       if (this.prevProjMouse && this.currProjMouse) {
         if (this.componentClicked === this.scaleTile) {

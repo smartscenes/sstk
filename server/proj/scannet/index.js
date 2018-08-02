@@ -21,14 +21,51 @@ app.get('/nyuv2', function (req, res) { res.render('nyuv2-annotations'); });
 app.get('/nyuv2-parts', function (req, res) { res.render('nyuv2-part-annotations'); });
 
 // ScanNet (official anonymized)
-app.get('/scannet/grouped', function (req, res) {
+function renderGrouped(req, res) {
+  res.locals.assetGroup = {
+    metadata: app.locals.baseUrl + '/assets/metadata/' + res.locals.assetName,
+    ids: app.locals.baseUrl + '/assets/ids/' + res.locals.assetName,
+    assetIdsFileFormat: 'csv'
+  };
   if (req.query['annotate']) {
     res.render('grouped-annotator');
   } else {
     res.render('grouped-viewer');
   }
+}
+
+app.get('/scannet/', function (req, res) { res.render('scannet'); });
+app.get('/scannet/grouped', function (req, res) {
+  res.locals.assetName = (req.query['group'] === 'hidden_test')? 'scan-hidden_test' : 'scannetv2';
+  renderGrouped(req, res);
 });
-app.get('/scannet/querier', function (req, res) { res.render('scan-querier'); });
+app.get('/scannet/v1/grouped', function (req, res) {
+  res.locals.assetName = (req.query['group'] === 'hidden_test')? 'scan-hidden_test' : 'scannet';
+  renderGrouped(req, res);
+});
+app.get('/scannet/v2/grouped', function (req, res) {
+  res.locals.assetName = (req.query['group'] === 'hidden_test')? 'scan-hidden_test' : 'scannetv2';
+  renderGrouped(req, res);
+});
+
+function renderQuerier(req, res) {
+  res.locals.assetGroup = {
+    metadata: app.locals.baseUrl + '/assets/metadata/' + res.locals.assetName
+  };
+  res.render('scan-querier');
+}
+app.get('/scannet/querier', function (req, res) {
+  res.locals.assetName = 'scannetv2';
+  renderQuerier(req, res);
+});
+app.get('/scannet/v1/querier', function (req, res) {
+  res.locals.assetName = 'scannet';
+  renderQuerier(req, res);
+});
+app.get('/scannet/v2/querier', function (req, res) {
+  res.locals.assetName = 'scannetv2';
+  renderQuerier(req, res);
+});
 
 // Scan viewer
 app.get('/', function (req, res) { res.render('scan-viewer'); });

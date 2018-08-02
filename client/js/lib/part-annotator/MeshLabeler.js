@@ -2,6 +2,7 @@ var BasePartLabeler = require('part-annotator/BasePartLabeler');
 var BBox = require('geo/BBox');
 var GeometryUtil = require('geo/GeometryUtil');
 var MeshHierarchyPanel = require('ui/MeshHierarchyPanel');
+var OBB = require('geo/OBB');
 var OBBFitter = require('geo/OBBFitter');
 var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util');
@@ -25,6 +26,7 @@ function MeshLabeler(params) {
     filterEmptyGeometries: this.filterEmptyGeometries,
     showMultiMaterial: this.showMultiMaterial,
     collapseNestedPaths: this.collapseNestedPaths,
+    useSpecialMaterial: true,
     getMeshId: params.getMeshId
   });
 }
@@ -32,8 +34,9 @@ function MeshLabeler(params) {
 MeshLabeler.prototype = Object.create(BasePartLabeler.prototype);
 MeshLabeler.prototype.constructor = MeshLabeler;
 
-MeshLabeler.prototype.colorPart = function (part, colorMaterial) {
-  this.meshHierarchy.colorPart(part, colorMaterial);
+MeshLabeler.prototype.colorPart = function (part, colorMaterial, opts) {
+  var filter = opts? opts.filter : null;
+  this.meshHierarchy.colorPart(part, colorMaterial, filter);
 };
 
 MeshLabeler.prototype.decolorPart = function (part) {
@@ -45,7 +48,7 @@ MeshLabeler.prototype.showParts = function(flag) {
 };
 
 MeshLabeler.prototype.getMeshes = function() {
-  return this.meshHierarchy.getMeshes();
+  return this.meshHierarchy.getNodes();
 };
 
 MeshLabeler.prototype.getMeshId = function(mesh) {
@@ -53,11 +56,11 @@ MeshLabeler.prototype.getMeshId = function(mesh) {
 };
 
 MeshLabeler.prototype.findMeshes = function(meshIds) {
-  return this.meshHierarchy.findMeshes(meshIds);
+  return this.meshHierarchy.findNodes(meshIds);
 };
 
 MeshLabeler.prototype.unlabelAll = function() {
-  var meshes = this.meshHierarchy.getMeshes();
+  var meshes = this.meshHierarchy.getNodes();
   this.unlabelParts(meshes);
 };
 
@@ -86,7 +89,7 @@ MeshLabeler.prototype.__getMeshesByAnnId = function(options) {
   meshes.forEach(function (mesh) {
     var data = mesh.userData;
     var meshInfo = options.getMeshFn(mesh);
-    if (data.labelInfo) {
+    if (meshInfo != undefined && data.labelInfo) {
       var id = data.labelInfo.id;
       if (!annotations[id]) {//First time seeing this label
         annotations[id] = [meshInfo];
@@ -326,6 +329,41 @@ MeshLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
     }
   });
 };
+
+MeshLabeler.prototype.restore = function(labels, savedLabelInfos, options) {
+  options = options || {};
+  console.time('restore');
+  if (!options.getMeshFn) {
+    var meshes = this.getMeshes();
+    options.getMeshFn = function(id) {
+      return meshes[id];
+    }
+  }
+  for (var i = 0; i < savedLabelInfos.length; i++) {
+    var savedLabelInfo = savedLabelInfos[i];
+    var labelInfo = labels.createLabelInfo(savedLabelInfo.label, savedLabelInfo );
+    labels.appendButton(labelInfo);
+    labels.labelInfos[labelInfo.index] = labelInfo;
+    if (savedLabelInfo.initialPoint) {
+      labelInfo.initialPoint = savedLabelInfo.initialPoint;
+    }
+    if (savedLabelInfo.obb) {
+      labelInfo.obb = new OBB();
+      labelInfo.obb.fromJSON(savedLabelInfo.obb);
+    }
+
+    var labelMeshes = savedLabelInfo.meshIds;
+    if (labelMeshes && labelMeshes.length > 0) {
+      for (var mi = 0; mi < labelMeshes.length; mi++) {
+        var part = options.getMeshFn(labelMeshes[mi]);
+        this.labelPart(part, labelInfo, {skipFitOBB: true});
+      }
+    }
+  }
+  this.updateLabels(labels.labelInfos);
+  console.timeEnd('restore');
+};
+
 
 module.exports = MeshLabeler;
 

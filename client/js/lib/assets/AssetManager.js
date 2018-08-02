@@ -28,6 +28,22 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       }
     }
 
+    function getExtensionEx(path, ignoreExtensions) {
+      var extension = getExtension(path);
+      if (ignoreExtensions) {
+        var p = path;
+        while (_.indexOf(ignoreExtensions, extension) >= 0) {
+           p = p.substr(0, p.length - extension.length-1);
+           var ext2 = getExtension(p);
+           if (ext2.length >= p.length) {
+             return extension;
+           }
+           extension = ext2;
+        }
+      }
+      return extension;
+    }
+
     /**
      * Class for handling loading and retrieving of assets
      * @param params Configuration for asset manager
@@ -331,6 +347,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       } else {
         if (source === 'models3d') {
           return Constants.assetTypeModel;
+        } else if (source === 'scans') {
+          return Constants.assetTypeScan;
         } else if (source === 'scenes') {
           return Constants.assetTypeScene;
         } else if (source === 'rooms') {
@@ -658,6 +676,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.__loadModel = function (modelinfo, callback, onerror) {
       // check whether we really want to load, or just filter out this model
+      //console.log("loading model", modelinfo);
       onerror = onerror || function (err) { console.error(err); };
       var isValidModel = this.modelFilter ? this.modelFilter(modelinfo) : true;
       if (!isValidModel) {
@@ -804,77 +823,54 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     };
 
     AssetManager.prototype.__loadObject3D = function(modelinfo, onsuccess, onerror) {
-      if (modelinfo.format === undefined) {
-        if (modelinfo.file) {
-          if (modelinfo.file instanceof File) {
-            modelinfo.format = getExtension(modelinfo.file.name);
-          } else if (typeof modelinfo.file === 'string') {
-            modelinfo.format = getExtension(modelinfo.file);
+      if (modelinfo.file) {
+        if (modelinfo.file instanceof File) {
+          if (modelinfo.format === undefined) {
+            modelinfo.format = getExtensionEx(modelinfo.file.name, ['zip']);
           }
+          modelinfo.isZipped = modelinfo.file.name.endsWith('.zip');
+        } else if (typeof modelinfo.file === 'string') {
+          if (modelinfo.format === undefined) {
+            modelinfo.format = getExtensionEx(modelinfo.file, ['zip']);
+          }
+          modelinfo.isZipped = modelinfo.file.endsWith('.zip');
         }
       }
 
       if (modelinfo.format === 'three.js') {
         return this.__loadThreeJsModel(modelinfo, onsuccess, onerror);
       } else if (modelinfo.format === 'obj') {
-        if (modelinfo.texture || (modelinfo.options && modelinfo.options.skipMtl) ) {
+        if (modelinfo.texture || (modelinfo.options && modelinfo.options.skipMtl)) {
           return this.__loadObjModel(modelinfo, onsuccess, onerror);
         } else {
           return this.__loadObjMtlModel(modelinfo, onsuccess, onerror);
         }
-      } else if (modelinfo.format === 'ply') {
-        return this.__loadPlyModel(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'kmz') {
-        return this.__loadKmzModel(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'p5d') {
-        return this.__loadP5dModel(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'collada' || modelinfo.format === 'dae') {
-        return this.__loadColladaModel(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'utf8') {
-        return this.__loadUTF8Model(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'utf8v2') {
-        return this.__loadUTF8v2Model(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'glb') {
-        return this.__loadGLTFModel(modelinfo, onsuccess, onerror);
-      } else if (modelinfo.format === 'gltf') {
-        return this.__loadGLTFModel(modelinfo, onsuccess, onerror);
+      } else if (!modelinfo.isZipped) {
+        if (modelinfo.format === 'ply') {
+          return this.__loadPlyModel(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'kmz') {
+          return this.__loadKmzModel(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'p5d') {
+          return this.__loadP5dModel(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'collada' || modelinfo.format === 'dae') {
+          return this.__loadColladaModel(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'utf8') {
+          return this.__loadUTF8Model(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'utf8v2') {
+          return this.__loadUTF8v2Model(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'glb') {
+          return this.__loadGLTFModel(modelinfo, onsuccess, onerror);
+        } else if (modelinfo.format === 'gltf') {
+          return this.__loadGLTFModel(modelinfo, onsuccess, onerror);
+        } else {
+          var message = (modelinfo.format == undefined) ? 'Unspecified format' : ('Unsupported format ' + modelinfo.format);
+          console.warn(message);
+          onerror(message);
+        }
       } else {
-        var message = (modelinfo.format == undefined)? 'Unspecified format' : ('Unsupported format ' + modelinfo.format);
+        var message = (modelinfo.format == undefined) ? 'Unspecified format' : ('Unsupported zipped format ' + modelinfo.format);
         console.warn(message);
         onerror(message);
-      }
-    };
-
-    AssetManager.prototype.__loadObjMtlModel = function (modelInfo, callback, onerror) {
-      var objFile = modelInfo.file;
-      var mtlFile = modelInfo.mtl;
-      // TODO: Move this material options to be less format specific
-      var options = modelInfo.options || {};
-      if (options) {
-        options.materialBase = options.materialBase || options.texturePath || modelInfo.materialBase || modelInfo.texturePath;
-        var materialType = options.defaultMaterialType || modelInfo.defaultMaterialType || Materials.DefaultMaterialType;
-        if (_.isString(materialType)) {
-          materialType = Materials.getMaterialType(materialType);
-        }
-        options.defaultMaterialType = materialType;
-      }
-      var onLoad = function (object) {
-        callback(object);
-      };
-
-      if (options.preserveMeshes == undefined || options.preserveMeshes) {
-        // Use old OBJMTLLoader so we have same number of meshes as something...
-        //console.log('Using old OBJMTLLoader (slow)');
-        var loader = new THREE.OBJMTLLoader();
-        return loader.load(objFile, mtlFile, options, onLoad, undefined, onerror);
-      } else {
-        // Use new OBJLoader
-        //console.log('Using new OBJLoader');
-        var loader = new THREE.OBJLoader();
-        loader.setOptions(options);
-        loader.setMtlOptions(options);
-        options.mtl = modelInfo.mtl;
-        return loader.load(objFile, onLoad, undefined, onerror);
       }
     };
 
@@ -887,11 +883,93 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           return THREE.FrontSide;
         } else if (sidedness === "back") {
           return THREE.BackSide;
+        } else if (sidedness === "double") {
+          return THREE.DoubleSide;
         } else {
           console.warn('Unknown sidedness: ' + sidedness);
         }
       }
       return THREE.DoubleSide;
+    };
+
+    AssetManager.prototype.__getMaterial = function(modelInfo, materialKey, materialTypeKey, defaultMaterialType) {
+      var materialType = this.__getMaterialType(modelInfo, materialTypeKey, defaultMaterialType);
+      if (materialType) {
+        var options = modelInfo.options || {};
+        var side = this.__getMaterialSide(modelInfo);
+        var material = (options[materialKey]) ? options[materialKey] : new materialType(
+          { name: materialKey, side: side });;
+        return material;
+      }
+    };
+
+    AssetManager.prototype.__getDefaultMaterial = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterial(modelInfo, 'defaultMaterial', 'defaultMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__getOverrideMaterial = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterial(modelInfo, 'overrideMaterial', 'overrideMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__getMaterialType = function(modelInfo, materialTypeKey, defaultMaterialType) {
+      var materialType = modelInfo.options? modelInfo.options[materialTypeKey] : null;
+      materialType = materialType || modelInfo[materialTypeKey] || defaultMaterialType;
+      if (_.isString(materialType)) {
+        materialType = Materials.getMaterialType(materialType);
+      }
+      return materialType;
+    };
+
+    AssetManager.prototype.__getDefaultMaterialType = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterialType(modelInfo, 'defaultMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__getOverrideMaterialType = function(modelInfo, defaultMaterialType) {
+      return this.__getMaterialType(modelInfo, 'overrideMaterialType', defaultMaterialType);
+    };
+
+    AssetManager.prototype.__updateMaterialOptions = function(modelInfo, options, defaultMaterialType) {
+      // var side = this.__getMaterialSide(modelInfo);
+      options.materialBase = options.materialBase || options.texturePath || modelInfo.materialBase || modelInfo.texturePath;
+      options.defaultMaterialType = this.__getDefaultMaterialType(modelInfo, defaultMaterialType);
+      options.defaultMaterial = this.__getDefaultMaterial(modelInfo, defaultMaterialType);
+      options.overrideMaterialType = this.__getOverrideMaterialType(modelInfo, null);
+      options.overrideMaterial = this.__getOverrideMaterial(modelInfo, null);
+    };
+
+    AssetManager.prototype.__loadObjMtlModel = function (modelInfo, callback, onerror) {
+      var objFile = modelInfo.file;
+      var mtlFile = modelInfo.mtl;
+      // TODO: Move this material options to be less format specific
+      var side = this.__getMaterialSide(modelInfo);
+      var options = _.defaults(Object.create(null), { side: side }, modelInfo.options || {});
+      this.__updateMaterialOptions(modelInfo, options, Materials.DefaultMaterialType);
+
+      var onLoad = function (object) {
+        callback(object);
+      };
+
+      //console.log('modelInfo', modelInfo);
+      options.mtl = mtlFile;
+      if (options.preserveMeshes == undefined || options.preserveMeshes) {
+        // Use old OBJMTLLoader so we have same number of meshes as something...
+        // console.log('Using old OBJMTLLoader (slow)');
+        var loader = modelInfo.isZipped? new THREE.ZippedObjMtlLoader(options) : new THREE.OBJMTLLoader();
+        if (modelInfo.isZipped) {
+          return loader.load(objFile, onLoad, undefined, onerror);
+        } else {
+          return loader.load(objFile, mtlFile, options, onLoad, undefined, onerror);
+        }
+      } else {
+        // Use new OBJLoader
+        // console.log('Using new OBJLoader');
+        var loader = modelInfo.isZipped? new THREE.ZippedObjLoader(options) : new THREE.OBJLoader();
+        if (!modelInfo.isZipped) {
+          loader.setOptions(options);
+          loader.setMtlOptions(options);
+        }
+        return loader.load(objFile, onLoad, undefined, onerror);
+      }
     };
 
     AssetManager.prototype.__loadPlyModel = function (modelInfo, callback, onerror) {
@@ -936,19 +1014,20 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     AssetManager.prototype.__loadObjModel = function (modelInfo, callback, onerror) {
       var objFile = modelInfo.file;
       var textureFile = modelInfo.texture;
+      var side = this.__getMaterialSide(modelInfo);
       var material;
       if (textureFile) {
         material = new Materials.DefaultMaterialType({
-          map: Object3DUtil.loadTexture(textureFile)
+          map: Object3DUtil.loadTexture(textureFile), side: side
         });
       } else if (modelInfo.options && modelInfo.options.defaultMaterial) {
         material = modelInfo.options.defaultMaterial;
       } else {
-        material = new Materials.DefaultMaterialType({});
+        material = new Materials.DefaultMaterialType({ side: side });
       }
 
       // model
-      var loader = new THREE.OBJLoader();
+      var loader = modelInfo.isZipped? new THREE.ZippedObjLoader() : new THREE.OBJLoader();
       var onload = function (object) {
         Object3DUtil.setMaterial(object, material, Object3DUtil.MaterialsAll);
         callback(object);
@@ -960,10 +1039,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       var file = modelInfo.file;
       // model
       if (file.endsWith('.zip')) {
-        var zipLoader = new THREE.ZIPLoader({
-          regex: /^.*\.js$/,
-          loader: new THREE.ZippedJsonLoader()
-        });
+        var zipLoader = new THREE.ZippedJsonLoader();
         var onload = function (object) {
           callback(object);
         };
@@ -1062,6 +1138,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
       var file = modelInfo.file;
       modelInfo.formatOptions = {};
+      this.__updateMaterialOptions(modelInfo, loader.options, Materials.DefaultMaterialType);
       if (!modelInfo.source) {
         loader.options.convertUpAxis = true;
         modelInfo.formatOptions['applyUp'] = true;
@@ -1076,9 +1153,11 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       var texture = modelInfo.texture;
       var metadata = modelInfo.metadata;
       var loader = new THREE.UTF8Loader();
+      var side = this.__getMaterialSide(modelInfo);
       return loader.load(file, function (geometry) {
         var material = new Materials.DefaultMaterialType({
-          map: Object3DUtil.loadTexture(texture)
+          map: Object3DUtil.loadTexture(texture),
+          side: side
         });
 
         var object = new THREE.Mesh(geometry, material);
@@ -1088,13 +1167,21 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.__loadUTF8v2Model = function (modelInfo, callback, onerror) {
       var loader = new THREE.UTF8Loader();
+      var side = this.__getMaterialSide(modelInfo);
       return loader.load(modelInfo.file, function (object) {
         callback(object);
-      }, onerror, modelInfo.options);
+      }, onerror, _.defaults(Object.create(null), { side: side }, modelInfo.options));
     };
 
     AssetManager.prototype.__loadGLTFModel = function (modelInfo, callback, onerror) {
       var loader = new THREE.GLTFLoader();
+      if (!_.isString(modelInfo.file)) {
+        loader.setPath('');
+      }
+      var options = _.defaults({}, modelInfo.options || {});
+      options.computeNormals = (options.computeNormals != undefined) ? options.computeNormals : modelInfo.computeNormals;
+      this.__updateMaterialOptions(modelInfo, options, Materials.DefaultMaterialType);
+      loader.setOptions(options)
       return loader.load(modelInfo.file, function (object) {
         //console.log(object);
         callback(object.scene);
@@ -1180,12 +1267,12 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           sceneInfo.data = {
             "format": "sceneState",
             "object": [
-              {
+              _.defaults({
                 "modelId": sceneInfo.fullId,
                 "index": 0,
                 "parentIndex": -1,
                 "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-              }
+              }, modelLoadInfo.modelMetadata || {})
             ]
           };
         }
@@ -1282,6 +1369,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         _.each(preloads, function(preload) {
           var preloadInfo = assetinfo[preload];
           if (preloadInfo && preloadInfo.path) {
+            scope.__updateMaterialOptions(preloadInfo, preloadInfo);
             var path = _.replaceVars(preloadInfo.path, assetinfo);
             var assetLoader;
             if (preloadInfo.assetType) {

@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 
 var async = require('async');
+var cmd = require('commander');
+var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var THREE = global.THREE;
+var _ = STK.util;
 
-var cmd = require('commander');
 cmd
   .version('0.0.1')
+  .description('Renders images for scene given a set of camera viewpoints')
   .option('--id <id>', 'Scene or model id [default: 0004dd3cb11e50530676f77b55262d38]', '0004dd3cb11e50530676f77b55262d38')
   .option('--source <source>', 'Scene or model source [default: p5dScene]', 'p5dScene')
   .option('--level <level>', 'Scene level to render', STK.util.cmd.parseInt)
   .option('--path <path>', 'File path to scene or model')
   .option('--format <format>', 'File format to use')
   .option('--assetType <type>', 'Asset type (scene or model)')
-  .option('--cameras <cameraFile>', 'Camera file')
+  .option('--cameras <cameraFile>', 'Read .cam or .conf file with camera extrinsics and intrinsics')
   .option('-n, --limit <num>', 'Limit on number of cameras to render', STK.util.cmd.parseInt, -1)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--width <width>', 'Image width [default: 640]', STK.util.cmd.parseInt, 640)
@@ -63,6 +66,29 @@ var assets = require('./data/assets.json');
 var assetsMap = _.keyBy(assets, 'name');
 STK.assets.registerCustomAssetGroupsSync(assetsMap, [argv.source]);
 
+function readConfFile(lines) {
+  var cameras = [];
+  var intrinsics;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.startsWith('intrinsics_matrix')) {
+      // intrinsics_matrix <fx> 0 <cx>  0 <fy> <cy> 0 0 1
+      var t = line.split(/\s+/).slice(1).map(function (s) { return parseFloat(s); });
+      intrinsics = { width: argv.width, height: argv.height, fx: t[0], fy: t[4], cx: t[2], cy: t[5] };
+    } else if (line.startsWith('scan')) {
+      // scan <depth_image_filename> <color_image_filename> <camera-to-world-matrix>
+      var parts = line.split(/\s+/);
+      var extrinsics_array = parts.slice(3).map(function (s) { return parseFloat(s); });
+      var extrinsics = STK.geo.Object3DUtil.arrayToMatrix4(extrinsics_array, true);
+      var cam = new STK.gfx.Camera();
+      cam.initFromExtrinsicsIntrinsics(extrinsics, intrinsics);
+      cam.name = parts[2].split('.')[0];  // color_image_filename without extension
+      cameras.push(cam);
+    }
+  }
+  return cameras;
+}
+
 var id = argv.id;
 var fullId = argv.source + '.' + id;
 var level = argv.level;
@@ -70,7 +96,18 @@ var aspect = width / height;
 var cameras = [];
 if (argv.cameras) {
   var camlines = STK.util.readSync(argv.cameras).split('\n');
-  cameras = STK.gfx.Camera.readGapsCameras(camlines, aspect);
+  if (camlines[0].startsWith('dataset')) {  // .conf file
+    cameras = readConfFile(camlines);
+  } else { // GAPS .cam file
+    for (var i = 0; i < camlines.length; i++) {
+      var camline = camlines[i];
+      if (camline && camline.length) {
+        var cam = new STK.gfx.Camera();
+        cam.initFromGapsString(camline, aspect);
+        cameras.push(cam);
+      }
+    }
+  }
 }
 var scene = new THREE.Scene();
 
@@ -98,10 +135,9 @@ assetManager.loadAsset(info, function (err, asset) {
   if (asset instanceof STK.scene.SceneState) {
     sceneState = asset;
   } else if (asset instanceof STK.model.ModelInstance) {
-    sceneState = new STK.scene.SceneState();
     var modelInstance = asset;
+    sceneState = new STK.scene.SceneState(null, modelInstance.model.info);
     sceneState.addObject(modelInstance);
-    sceneState.info = modelInstance.model.info;
   } else {
     console.error("Unsupported asset type " + fullId, asset);
     return;
@@ -125,21 +161,29 @@ assetManager.loadAsset(info, function (err, asset) {
     var nCams = (maxViews> 0)? Math.min(cameras.length, maxViews) : cameras.length;
     suffix = cmd.encode_index? '.encoded.png' : '.png';
     suffix = cmd.color_by? ('.' + cmd.color_by + suffix) : suffix;
+    shell.mkdir('-p', outdir);
     for (var i = 0; i < nCams; i++) {
       var cam = cameras[i];
-      renderer.renderToPng(scene, cam, basename + '-' + i + suffix);
+      var filename;
+      if (cam.name && cam.name.length > 0) {
+        filename = outdir + '/' + cam.name + suffix;
+      } else {
+        filename = basename + '-' + i + suffix
+      }
+      var opts = cmd.color_by === 'depth' ? { postprocess: 'unpackRGBAdepth' } : null;
+      renderer.renderToPng(scene, cam, filename, opts);
     }
 
-    // add camera frustums to scene
-    for (var j = 0; j < cameras.length; j++) {
-      var frustum = STK.geo.Object3DUtil.makeCameraFrustum(cameras[j]);
-      scene.add(frustum);
-    }
+    // // add camera frustums to scene
+    // for (var j = 0; j < cameras.length; j++) {
+    //   var frustum = STK.geo.Object3DUtil.makeCameraFrustum(cameras[j]);
+    //   scene.add(frustum);
+    // }
 
-    // render default view with frustums
-    var views = cameraControls.generateViews(sceneBBox, width, height);
-    cameraControls.viewTarget(views[0]);
-    renderer.renderToPng(scene, defaultCamera, basename + '-' + i + suffix);
+    // // render default view with frustums
+    // var views = cameraControls.generateViews(sceneBBox, width, height);
+    // cameraControls.viewTarget(views[0]);
+    // renderer.renderToPng(scene, defaultCamera, basename + '-' + i + suffix);
   };
 
   function waitImages() {
