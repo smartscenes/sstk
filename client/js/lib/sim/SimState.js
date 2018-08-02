@@ -394,8 +394,6 @@ SimState.prototype.computeGoals = function () {
     let sample = this.sample();
     goalsSpec = { type: 'position', position: sample.position, radius: goalsSpec.radius }
   }
-  const rooms = roomIds.map(this.sceneState.getRoomById.bind(this.sceneState));
-  const roomTypes = rooms.map(r => this.sceneState.getRoomInfo.bind(this.sceneState)(r).roomType);
 
   // check type and required fields, dispatch to type-specific handlers for specification field
   if (goalsSpec && goalsSpec.type) {
