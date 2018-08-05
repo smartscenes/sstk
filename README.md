@@ -100,3 +100,9 @@ Building the documentation
 - `cd client` from the repository root
 - run `npm run jsdoc`
 - Open the generated `jsdoc/index.html` page with a browser
+
+Changelog
+=========
+
+Refer to [CHANGELOG.md](CHANGELOG.md) for a record of notable changes.
+
