@@ -232,8 +232,7 @@ Agent.prototype.moveTo = function (opts) {
     this.rotation = opts.angle;
   }
   if (opts.tilt != undefined) {
-    this.__pitchObject3D.rotation.x = opts.tilt;
-    this.__pitchObject3D.rotation.x = Math.max(-this.__PI_2, Math.min(this.__PI_2, this.__pitchObject3D.rotation.x));
+    this.__tiltCameras(opts.tilt, true);
   }
   if (!opts.isTemporary) {
     this.velocity.set(0, 0, 0);
@@ -489,6 +488,13 @@ Agent.prototype.__parsePosition = function(sensor) {
 
   sensor.position = ps;
   sensor.orientation = ds;
+};
+
+Agent.prototype.__tiltCameras = function (theta, resetToValue) {
+  _.forOwn(this.sensors.camera, function (sensor) {
+    var newRotation = resetToValue ? theta : (sensor.camera.rotation.x + theta);
+    sensor.camera.rotation.x = THREE.Math.clamp(newRotation, -this.__PI_2, this.__PI_2);
+  }.bind(this));
 };
 
 module.exports = Agent;

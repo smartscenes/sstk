@@ -47,13 +47,11 @@ FirstPersonAgent.prototype.strafeRight = function (a) {
 };
 
 FirstPersonAgent.prototype.lookUp = function (a) {
-  this.__pitchObject3D.rotation.x += a.angle;
-  this.__pitchObject3D.rotation.x = Math.max(-this.__PI_2, Math.min(this.__PI_2, this.__pitchObject3D.rotation.x));
+  this.__tiltCameras(a.angle);
 };
 
 FirstPersonAgent.prototype.lookDown = function (a) {
-  this.__pitchObject3D.rotation.x -= a.angle;
-  this.__pitchObject3D.rotation.x = Math.max(-this.__PI_2, Math.min(this.__PI_2, this.__pitchObject3D.rotation.x));
+  this.__tiltCameras(-a.angle);
 };
 
 module.exports = FirstPersonAgent;
