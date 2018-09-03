@@ -824,7 +824,7 @@ THREE.OBJLoader.prototype = {
 
 			// AXC: Add reference to original vertex positions
 			if (geometry.origVertIndices.length > 0) {
-				buffergeometry.addAttribute( 'vertIndices', new THREE.BufferAttribute( new Uint32Array( geometry.origVertIndices ), 1))
+				buffergeometry.addAttribute( 'vertIndices', new THREE.BufferAttribute( new Uint32Array( geometry.origVertIndices ), 1));
 			}
 
 			// Create materials
@@ -850,7 +850,7 @@ THREE.OBJLoader.prototype = {
 
 					} else if ( isPoints && material && ! ( material instanceof THREE.PointsMaterial ) ) {
 
-						var materialPoints = new THREE.PointsMaterial( { size: 10, sizeAttenuation: false } );
+						var materialPoints = new THREE.PointsMaterial( { size: 1, sizeAttenuation: false } );
 						materialPoints.copy( material );
 						materialPoints.lights = false; // TODO: UNHACK
 						material = materialPoints;
@@ -878,7 +878,7 @@ THREE.OBJLoader.prototype = {
 
 				}
 
-				material.shading = sourceMaterial.smooth ? THREE.SmoothShading : THREE.FlatShading;
+				material.flatShading = sourceMaterial.smooth ? THREE.SmoothShading : THREE.FlatShading;
 				material.vertexColors = hasVertexColors ? THREE.VertexColors : THREE.NoColors;
 
 				createdMaterials.push(material);

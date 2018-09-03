@@ -72,7 +72,7 @@ SceneEditControls.prototype.reset = function (params) {
     this.cameraControls = params.cameraControls;
     if (this.transformControls) {
       this.scene.add(this.transformControls);
-      this.transformControls.setCamera(this.cameraControls.camera);
+      this.transformControls.camera = this.cameraControls.camera;
     }
     if (this.dragdrop) {
       this.dragdrop.reset(params);
@@ -145,9 +145,9 @@ SceneEditControls.prototype.update = function () {
   if (this.manipulator) {
     this.manipulator.update();
   }
-  if (this.transformControls) {
-    this.transformControls.update();
-  }
+  // if (this.transformControls) {
+  //   this.transformControls.update();
+  // }
 };
 
 // Make sure transform controls are initialized

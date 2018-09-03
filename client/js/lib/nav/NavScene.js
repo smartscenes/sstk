@@ -857,7 +857,7 @@ CellObjectDetector.prototype.identifyObjects = function(cellBox) {
     });
     return ud;
   }
-}
+};
 
 NavScene.prototype.__createGrid2D = function(opts) {
   this.__timings.start('createGrid2D');
@@ -898,7 +898,7 @@ NavScene.prototype.__createGrid2D = function(opts) {
     cellSize: this.cellSize,
     objects: _.concat(walls, objects),
     walls: walls
-  })
+  });
   for (var i = 0; i < grid.width; i++) {
     for (var j = 0; j < grid.height; j++) {
       var id = grid.toId(i,j);

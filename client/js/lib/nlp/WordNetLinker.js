@@ -179,7 +179,7 @@ WordNetLinker.prototype.showSynsets = function(label, callback, options) {
             }
             results.synsets = synsets;
           }
-          if (callback) { callback(null, results) };
+          if (callback) { callback(null, results); }
         }
       );
       if (wordparts) {
@@ -357,7 +357,7 @@ WordNetLinker.prototype.__link = function(labelInfo, synset) {
     this.__indicateLinked(labelInfo);
   }
   this.Publish('linkUpdated', { labelInfo: labelInfo, linked: synset, unlinked: oldSynset });
-}
+};
 
 WordNetLinker.prototype.__indicateLinked = function(labelInfo, synset) {
   var linkButton = $(labelInfo.element).find('.wordnet-link');

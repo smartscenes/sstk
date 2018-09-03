@@ -223,7 +223,7 @@ SUNCGExporter.prototype.exportArch = function (sceneState, opts) {
   var callback = opts.callback;
 
   var arch = this.getArch(sceneState, opts);
-  var walls = _.filter(arch.elements, function(x) { return x.type === 'Wall'; })
+  var walls = _.filter(arch.elements, function(x) { return x.type === 'Wall'; });
   var jsonFilename = filename;
   var textFilename = filename.replace('.json', '').replace('.arch','.wall');
   async.parallel([
@@ -636,6 +636,7 @@ SUNCGExporter.prototype.convert = function (sceneState, opts) {
     }
   }
   for (var i = 0; i < json.levels.length; i++) {
+    var level = json.levels[i];
     if (level.nodes.length === 0) {
       console.warn('Warning: keeping empty level ' + json.id + ' ' + (i + 1) + '/' + levels.length);
     }

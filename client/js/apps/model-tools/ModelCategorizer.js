@@ -135,6 +135,9 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
       var selectedSaveButton = $('#selectedSave');
       selectedSaveButton.click(this.saveSelected.bind(this));
 
+      var selectedSaveIdsButton = $('#selectedSaveIds');
+      selectedSaveIdsButton.click(this.saveSelectedIds.bind(this));
+
       var selectedLoad = UIUtil.createFileInput({
         id: 'selectLoad',
         label: 'Load',
@@ -745,7 +748,12 @@ define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'sear
 
     ModelCategorizer.prototype.saveSelected = function () {
       var categorized = this.getCategorizedSelectedModels();
-      console.log(JSON.stringify(categorized, null, ' '));
+      FileUtil.saveText(JSON.stringify(categorized, null, ' '), 'categorized.json');
+    };
+
+    ModelCategorizer.prototype.saveSelectedIds = function () {
+      var ids = _.keys(this.selectedModels);
+      FileUtil.saveText(ids.join('\n'), 'selected-ids.txt');
     };
 
     ModelCategorizer.prototype.addSelectedCategoriesToCached = function (fullId) {

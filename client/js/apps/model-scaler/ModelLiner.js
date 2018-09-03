@@ -13,7 +13,7 @@ var AssetLoader = require('assets/AssetLoader.js');
 var IOUtil = require('io/IOUtil');
 var Picker = require('controls/Picker.js');
 var OBJMTLExporter = require('exporters/OBJMTLExporter');
-var FileSaver = require('filesaverjs');
+var FileSaver = require('file-saver');
 var dat = require('dat.gui');
 
 function ModelLiner(container) {

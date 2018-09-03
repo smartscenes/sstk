@@ -845,10 +845,10 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
                   return !x.visible;
                 });
                 if (isAllVisible) {
-                  label += " (hide)"
+                  label += " (hide)";
                 }
                 else if (isAllHidden) {
-                  label += " (show)"
+                  label += " (show)";
                 }
               }
               return label;
@@ -902,16 +902,16 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
           var isAllHidden = _.every(targets, function(x) { return !x.visible; });
 
           if (isAllVisible) {
-            //addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
-            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
+            //addSetVisibleOption(basicItems, "setTreeVisibleFalse", "Hide tree", false, true);
+            addSetVisibleOption(basicItems, "setNodeVisibleFalse", "Hide node", false, false);
           } else if (isAllHidden) {
-            //addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
-            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+            //addSetVisibleOption(basicItems, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(basicItems, "setNodeVisibleTrue", "Show node", true, false);
           } else {
-            //addSetVisibleOption(items, "setTreeVisibleFalse", "Hide tree", false, true);
-            //addSetVisibleOption(items, "setTreeVisibleTrue", "Show tree", true, true);
-            addSetVisibleOption(items, "setNodeVisibleFalse", "Hide node", false, false);
-            addSetVisibleOption(items, "setNodeVisibleTrue", "Show node", true, false);
+            //addSetVisibleOption(basicItems, "setTreeVisibleFalse", "Hide tree", false, true);
+            //addSetVisibleOption(basicItems, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(basicItems, "setNodeVisibleFalse", "Hide node", false, false);
+            addSetVisibleOption(basicItems, "setNodeVisibleTrue", "Show node", true, false);
           }
         }
 

@@ -21,7 +21,7 @@ function LabelMapping(opts) {
 
 LabelMapping.prototype.index = function(label) {
   return _.get(this.mapping, [label, 'index'], this.defaultIndex);
-}
+};
 
 LabelMapping.prototype.indexOneOf = function(label) {
   if (_.isArray(label)) {
@@ -33,7 +33,7 @@ LabelMapping.prototype.indexOneOf = function(label) {
   } else {
     return this.index(label);
   }
-}
+};
 
 function Loader(params) {
   this.opts = params;
@@ -53,7 +53,7 @@ Loader.prototype.load = function(file, callback) {
 };
 
 Loader.prototype.parse = function(filename, data) {
-  opts = _.defaults(Object.create(null), { filename: filename }, this.opts);
+  var opts = _.defaults(Object.create(null), { filename: filename }, this.opts);
   if (opts.fields && !opts.remapFields) {
     opts.remapFields = _.invert(opts.fields);
   }
@@ -61,7 +61,7 @@ Loader.prototype.parse = function(filename, data) {
     opts.keyBy = _.get(opts, 'remapFields.label', 'label');
   }
   var IOUtil = require('io/IOUtil');
-  parsed = IOUtil.parseDelimited(data, opts);
+  var parsed = IOUtil.parseDelimited(data, opts);
   return new LabelMapping({ name: opts.name || filename, mapping: parsed.data, defaultIndex: opts.defaultIndex, maxIndex: opts.maxIndex });
 };
 

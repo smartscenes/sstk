@@ -43,14 +43,81 @@ function recolorImageData(image, recolorFn) {
 
 ImageUtil.recolorImageData = recolorImageData;
 
+function toSharpImage(image) {
+  if (ImageUtil.sharp) {
+    if (_.isPlainObject(image)) {
+      var imageData = {data: image.data, width: image.width, height: image.height, channels: image.channels};
+      // TODO(AXC): Remove this weird hack!!!!
+      var buffer = imageData.data.buffer || imageData.data;
+      if (Constants.sys && Constants.sys.Buffer) {
+        buffer = new Constants.sys.Buffer(buffer);
+      }
+      return ImageUtil.sharp(buffer, {raw: {width: image.width, height: image.height, channels: image.channels || 4}});
+    } else {
+      if (Constants.sys && Constants.sys.Buffer) {
+        return ImageUtil.sharp(Constants.sys.Buffer.from(image)).toColorspace('srgb');
+      }
+    }
+  }
+}
+
+function saveImage(image, path, callback) {
+  var sharpImage = toSharpImage(image);
+  try {
+    if (sharpImage) {
+      sharpImage.toFile(path, function (err, info) {
+        if (err) {
+          console.error('Error saving image to ' + path);
+        }
+        callback(err, info);
+      });
+    }
+  } catch (e) {
+    callback(e);
+  }
+}
+
+ImageUtil.saveImage = saveImage;
+
+function bufferToRawPixels(buffer, callback) {
+  var sharpImage = toSharpImage(buffer);
+  if (sharpImage) {
+    sharpImage
+      .raw()
+      .toBuffer(function (err, data, info) {
+        if (err) {
+          callback(err);
+        } else {
+          // Make sure it is there is alpha channel
+          if (info.channels === 3) {
+            var npixels = info.width*info.height;
+            var withAlpha = Constants.sys.Buffer.alloc(npixels*4, 255);
+            for (var i = 0; i < npixels; i++) {
+              withAlpha[i*4] = data[i*3];
+              withAlpha[i*4+1] = data[i*3+1];
+              withAlpha[i*4+2] = data[i*3+2];
+            }
+            callback(err, {data: withAlpha, width: info.width, height: info.height, channels: 4});
+          } else {
+            callback(err, {data: data, width: info.width, height: info.height, channels: info.channels});
+          }
+        }
+      });
+  } else {
+    callback("Error reading image");
+  }
+}
+
+ImageUtil.bufferToRawPixels = bufferToRawPixels;
+
 // Copied from THREE WebGLTextures
 function isPowerOfTwo( image ) {
   return THREE.Math.isPowerOfTwo(image.width) && THREE.Math.isPowerOfTwo(image.height);
 }
 
 function makePowerOfTwo(image, callback) {
-  var width = THREE.Math.nearestPowerOfTwo( image.width );
-  var height = THREE.Math.nearestPowerOfTwo( image.height );
+  var width = THREE.Math.floorPowerOfTwo( image.width );
+  var height = THREE.Math.floorPowerOfTwo( image.height );
   if (document) {
     var canvas = document.createElementNS( 'http://www.w3.org/1999/xhtml', 'canvas' );
     canvas.width = width;
@@ -62,28 +129,22 @@ function makePowerOfTwo(image, callback) {
       return;
     }
   }
-  if (ImageUtil.sharp) {
-    var imageData = ImageUtil.getImageData(image);
-    try {
-      // TODO(AXC): Remove this weird hack!!!!
-      var buffer = imageData.data.buffer || imageData.data;
-      if (Constants.sys && Constants.sys.Buffer) {
-        buffer = new Constants.sys.Buffer(buffer);
-      }
-      ImageUtil.sharp(buffer, {raw: {width: image.width, height: image.height, channels: image.channels || 4}})
-        .resize(width, height)
+  try {
+    var sharpImage = toSharpImage(image);
+    if (sharpImage) {
+        sharpImage.resize(width, height)
         .toBuffer(function (err, data, info) {
           if (err) {
             callback(err, image);
           } else {
-            callback(err, {src: image.src, path: image.path, data: data, width: info.width, height: info.height, channels: image.channels});
+            callback(err, {src: image.src, path: image.path, data: data, width: info.width, height: info.height, channels: info.channels});
           }
         });
-    } catch (e) {
-      callback(e, image);
+    } else {
+      callback('Cannot resize image to power of two', image);
     }
-  } else {
-    callback('Cannot resize image to power of two', image);
+  } catch (e) {
+    callback(e, image);
   }
 }
 

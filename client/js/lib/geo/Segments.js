@@ -419,7 +419,7 @@ Segments.prototype.colorRawSegmentsOriginal = function() {
     if (origMesh.geometry.attributes.color) {
       geometry.attributes.color.array.set(origMesh.geometry.attributes.color.array);
     } else {
-      console.log('No vertex color information')
+      console.log('No vertex color information');
     }
   }
   geometry.colorsNeedUpdate = true;

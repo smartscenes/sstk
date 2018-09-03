@@ -1,5 +1,5 @@
 var request = require('request');
-var config = require('../config');
+var log = require('../lib/logger')('solr-querier');
 
 // Class to communicate with Solr web services
 // params should contain members: host, user, password, database
@@ -27,16 +27,14 @@ SOLRQuerier.prototype.queryDbWithPromise = function (params) {
       if (!error && response.statusCode == 200) {
         resolve(JSON.parse(body));
       } else {
-        console.error('Error querying from solr: ' + url);
-        if (error) { console.error('Error is ' + error); }
+        log.error('Error querying from solr: ' + url, error);
         if (response) {
-          console.log('Response status is ' + response.statusCode);
-          console.log(body);
+          log.info('Response status is ' + response.statusCode, body);
         }
         reject('Error querying from solr: ' + url);
       }
     });
-  })
+  });
 };
 
 
@@ -62,11 +60,9 @@ SOLRQuerier.prototype.queryDb = function (params, res, onSuccessCallback, onErro
     if (!error && response.statusCode == 200) {
       if (onSuccess) { onSuccess(body); }
     } else {
-      console.error('Error querying from solr: ' + url);
-      if (error) { console.error(error); }
+      log.error('Error querying from solr: ' + url, error);
       if (response) {
-        console.log('Response status is ' + response.statusCode);
-        console.log(body);
+        log.info('Response status is ' + response.statusCode, body);
       }
       if (onError) { onError(error); }
     }

@@ -768,15 +768,15 @@ LabelsPanel.prototype.submitStatus = function() {
           }
         });
       }
-    }
-    if (ann && this.allowEditLabels) {
-      if (labelInfo.label !== ann['label']) {
-        annUpdate['label'] = labelInfo.label;
-        hasUpdate = true;
+      if (ann && this.allowEditLabels) {
+        if (labelInfo.label !== ann['label']) {
+          annUpdate['label'] = labelInfo.label;
+          hasUpdate = true;
+        }
       }
-    }
-    if (hasUpdate) {
-      updates[ann.id] = annUpdate;
+      if (hasUpdate) {
+        updates[ann.id] = annUpdate;
+      }
     }
   }
   console.log(updates);
@@ -1138,7 +1138,7 @@ LabelsPanel.prototype.__createRemapLabelsPanel = function() {
     panel: panel,
     mappingInput: mappingInput,
     colorsInput: colorsInput
-  }
+  };
 };
 
 LabelsPanel.prototype.showRemapLabelsPanel = function() {
@@ -1154,7 +1154,7 @@ LabelsPanel.prototype.showRemapLabelsPanel = function() {
         });
       }
     }
-  })
+  });
 };
 
 LabelsPanel.prototype.hide = function() {

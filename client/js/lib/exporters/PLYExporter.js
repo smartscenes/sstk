@@ -50,6 +50,34 @@ PLYExporter.VertexAttributes = {
       }
     ]
   },
+  normal: {
+    name: 'normal',
+    stride: 1,
+    properties: [
+      {
+        name: 'nx',
+        type: 'float'
+      },
+      {
+        name: 'ny',
+        type: 'float'
+      },
+      {
+        name: 'nz',
+        type: 'float'
+      }
+    ]
+  },
+  opacity: {
+    name: 'opacity',
+    stride: 1,
+    properties: [
+      {
+        name: 'opacity',
+        type: 'float'
+      }
+    ]
+  },
   // FIXME: Why are names inconsistent with property names? e.g. "Object" != "objectId".  Will need to fix Segments.colorSegments()
   // Segmentation types are upper case
   objectId: {
@@ -151,6 +179,33 @@ PLYExporter.prototype.__getHeader = function(opts) {
   return lines.join('\n') + '\n';
 };
 
+PLYExporter.prototype.exportSampledPoints = function(points, opts) {
+    opts = opts || {};
+    var callback = opts.callback;
+    var filename = (opts.name != undefined)? opts.name : 'points';
+    if (!filename.endsWith('.ply')) {
+        filename = filename + '.ply';
+    }
+    var nverts = points.length;
+    var params = _.defaults({ vertexOffset: 0, nverts: nverts, nfaces: 0 }, opts,
+        { format: this.format, vertexAttributes: this.vertexAttributes });
+    this.__computeProperties(params);
+    var header = this.__getHeader(params);
+    var data = this.__appendSampledPoints(points, params);
+    var fileutil = this.__fs;
+    function appendVertexData() {
+        fileutil.fsAppendToFile(filename, data.getVertexData(), appendFaceData);
+    }
+    function appendFaceData() {
+        fileutil.fsAppendToFile(filename, data.getFaceData(), finishFile);
+    }
+    function finishFile() {
+        fileutil.fsExportFile(filename, filename);
+        console.log('finished exporting mesh to ' + filename);
+        if (callback) { callback(); }
+    }
+    fileutil.fsWriteToFile(filename, header, appendVertexData);
+};
 
 PLYExporter.prototype.exportMesh = function(mesh, opts) {
   opts = opts || {};
@@ -260,6 +315,69 @@ PLYExporter.prototype.__createData = function(opts) {
   }
 };
 
+PLYExporter.prototype.__appendSampledPoints = function (sampledPoints, params, data) {
+  var vertexOffset = params.vertexOffset;
+  //console.log('appendMesh', JSON.stringify(params));
+
+  var result = data || this.__createData(params);
+  var transform = params.transform;
+  var normalMatrix;
+  if (transform) {
+    normalMatrix = new THREE.Matrix3().getNormalMatrix(transform);
+  }
+  var vattrs = params.vertexAttributes;
+  var tmpp = new THREE.Vector3();
+  var tmpn = new THREE.Vector3();
+  for (var i = 0; i < sampledPoints.length; i++) {
+    var point = sampledPoints[i];
+    var p = point.worldPoint;
+    var n = point.worldNormal;
+    var c = point.color;
+    if (transform) {
+      tmpp.copy(p);
+      tmpp.applyMatrix4(transform);
+      p = tmpp;
+      tmpn.copy(n);
+      tmpn.applyMatrix3(normalMatrix);
+      tmpn.normalize();
+      n = tmpn;
+    }
+    var row = p.toArray();
+    if (vattrs) {
+      for (var j = 0; j < vattrs.length; j++) {
+        var vattr = vattrs[j];
+        var attr = [];
+        if (vattr.name === 'index') {
+          attr = [i];
+        } else if (vattr.name === 'color') {
+          attr = [c.r, c.g, c.b];
+        } else if (vattr.name === 'opacity') {
+          attr = [point.opacity];
+        } else if (vattr.name === 'normal') {
+          attr = [n.x, n.y, n.z];
+        }
+        if (attr.length) {
+          var props = vattr.properties;
+          for (var k = 0; k < props.length; k++) {
+            var p = props[k];
+            if (p.convert) {
+              row.push(p.convert(attr));
+            } else {
+              row.push(_.isArray(attr)? attr[k] : attr);
+            }
+          }
+        }
+      }
+    }
+    result.appendVertex(row);
+  }
+
+  if (params) {
+      params.vertexOffset = vertexOffset + sampledPoints.length;
+  }
+  return result;
+};
+
 PLYExporter.prototype.__appendMesh = function (mesh, params, data) {
   var vertexOffset = params.vertexOffset;
   //console.log('appendMesh', JSON.stringify(params));
@@ -283,7 +401,7 @@ PLYExporter.prototype.__appendMesh = function (mesh, params, data) {
           if (p.convert) {
             row.push(p.convert(attr));
           } else {
-            row.push(attr);
+            row.push(_.isArray(attr)? attr[j] : attr);
           }
         }
       }

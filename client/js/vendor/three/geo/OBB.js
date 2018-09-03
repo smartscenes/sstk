@@ -614,7 +614,7 @@ OBB.prototype.intersectRay = ( function() {
 		rayLocal.applyMatrix4( transformationMatrixInverse.getInverse( transformationMatrix ) );
 
 		// do ray <-> AABB intersection
-		intersection = rayLocal.intersectBox( aabb );
+		intersection = rayLocal.intersectBox( aabb, new THREE.Vector3() );
 
 		if ( intersection !== null )
 		{

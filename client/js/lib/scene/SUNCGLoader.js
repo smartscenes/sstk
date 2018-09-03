@@ -43,6 +43,7 @@ function SUNCGLoader(params) {
   this.keepInvalid = params.keepInvalid; // Retain invalid objects
   this.keepParse = params.keepParse; // Retain intermediate parse
   this.useArchModelId = params.useArchModelId; // Use model id for room and ground instead of json id
+  this.ignoreOriginalArchHoles = params.ignoreOriginalArchHoles; // Whether to ignore precomputed architectural holes
 
   this.skipElements = params.skipElements;  // Set to ['Object'] to only load architecture elements (no Object)
                                             // Set to ['Object', 'Box'] to skip Object and Box
@@ -90,17 +91,20 @@ SUNCGLoader.prototype.constructor = SUNCGLoader;
 
 SUNCGLoader.textureRepeat = new THREE.Vector2(1, 1);
 
-SUNCGLoader.prototype.__createArch = function(context, loadOpts) {
+SUNCGLoader.prototype.__createArch = function(archData, json, context) {
   var scope = this;
   var archIds;
   //console.log('useArchModelId', scope.useArchModelId);
   if (scope.useArchModelId) {
     var archMappings = {};
     var archRegex = /[a-zA-Z]+_(\d+)[a-zA-Z]+_(\d+)/;
-    var rooms = _.flatten(_.map(json.levels, function(level) {
-      return _.filter(level.nodes, function(x) { return x.type === 'Room' || x.type === 'Ground'; }) }
+    var rooms = _.flatten(_.map(json.levels, function (level) {
+        return _.filter(level.nodes, function (x) {
+          return x.type === 'Room' || x.type === 'Ground';
+        });
+      }
     ));
-    _.each(rooms, function(arch) {
+    _.each(rooms, function (arch) {
       var archId = arch.id;
       if (arch.modelId) {
         // Get archId from modelId
@@ -116,13 +120,15 @@ SUNCGLoader.prototype.__createArch = function(context, loadOpts) {
     archIds = _.values(archMappings);
   }
 
-  context.arch = this.archCreator.createArch(loadOpts.arch.data, {
-    filterElements: function(element) {
+  context.arch = this.archCreator.createArch(archData, {
+    filterElements: function (element) {
       var include = true;
       if (!scope.includeCeiling) {
         include = (element.type !== 'Ceiling');
       }
-      if (!include) { return false; }
+      if (!include) {
+        return false;
+      }
       if (scope.room != undefined && scope.level != undefined) {
         return element.roomId === (scope.level + '_' + scope.room);
       } else if (scope.level != undefined) {
@@ -133,14 +139,70 @@ SUNCGLoader.prototype.__createArch = function(context, loadOpts) {
         return true;
       }
     },
-    getMaterials: function(w) {
-      return _.map(w.materials, function(m) {
+    getMaterials: function (w) {
+      return _.map(w.materials, function (m) {
         return scope.__getMaterial(m.diffuse, m.texture);
       });
     },
     groupWalls: false
   });
-}
+};
+
+// Extra functions for making new holes
+SUNCGLoader.prototype.__associateArchWithNewHoles = function(arch, objects) {
+  // console.log('objects', objects);
+  function isHoleFilter(x) {
+    return x.object3D && (x.json.type === 'Object' && (x.modelInstance.model.isDoor() || x.modelInstance.model.isWindow()));
+  }
+
+  // helper to get hole BBox and flip y-z
+  var left = this.archCreator.left;
+  function getBBox(hole) {
+    var bbox = Object3DUtil.computeBoundingBox(hole.object3D).clone();
+    // Shrink bbox along length, expand along perpendicular
+    var widthDir = left.clone().applyQuaternion(hole.object3D.getWorldQuaternion());
+    var x = Math.abs(widthDir.x);
+    var z = Math.abs(widthDir.z);
+    var bboxDelta = new THREE.Vector3(-0.05*x + 0.05*z, -0.02, -0.05*z + 0.05*x);
+    //console.log('bbox hole: ' + bbox.toString(), hole);
+    //console.log('adjusting bbox hole', widthDir, bboxDelta);
+    bbox = bbox.expandBy(bboxDelta);  // TODO(MS): Hack! - slightly contract hole bboxen to avoid over-merging and over-cutting
+    var miny = bbox.min.y;
+    var maxy = bbox.max.y;
+    bbox.min.y = bbox.min.z;
+    bbox.max.y = bbox.max.z;
+    bbox.min.z = miny;
+    bbox.max.z = maxy;
+    return bbox;
+  }
+
+  // TODO: Check this logic!!!
+  var holes = objects.filter(isHoleFilter);
+  var walls = arch.elements.filter(function(element) { return element.type === 'Wall'; });
+  _.each(walls, function(wall) { wall.holes = []; });
+  this.archCreator.associateWallsWithHoles(walls, holes, getBBox, function(wall) {
+    return [ new THREE.Vector2(wall.points[0][0], wall.points[0][2]), new THREE.Vector2(wall.points[1][0], wall.points[1][2]) ];
+  }, 0.25);
+  //console.log('walls',walls);
+};
+
+// Extra functions for making new holes
+SUNCGLoader.prototype.__attachRoomArchWithNewHoles = function (archData, objects, json, context) {
+  this.__associateArchWithNewHoles(archData, objects);
+  this.__createArch(archData, json, context);
+  var holeToWalls = context.arch.holeToWalls;
+  for (var i = 0; i < objects.length; i++) {
+    var r = objects[i];
+    if (r.json.type === 'Room') {
+      var room = this.__parseRoomCached(r.json, context);
+      while (room.object3D.children.length) {
+        r.object3D.add(room.object3D.children[0]);
+      }
+    } else if (r.json.type === 'Object' && r.object3D && holeToWalls[r.id]) {
+      r.object3D.userData.wallIds = holeToWalls[r.id];
+    }
+  }
+};
 
 // Parses json of P5D scene
 SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
@@ -155,21 +217,40 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
     scene: sceneResult,
     sceneHash: json.id
   };
-  if (this.archCreator && loadOpts.arch && loadOpts.arch.data) {
-    context.hasArch = true;
-    this.__createArch(context, loadOpts);
-  }
   if (json.camera) {
     this.__parseCamera(json.camera, sceneResult);
   }
+
+  if (this.archCreator && loadOpts.arch && loadOpts.arch.data) {
+    context.hasArch = true;
+    if (this.ignoreOriginalArchHoles) {
+      // Skip room for now so that we can create rooms with custom cut out holes
+      this.__createDummyRoom = true;
+      this.keepParse = true;
+    } else {
+      this.__createArch(loadOpts.arch.data, json, context);
+    }
+  }
+
+  var scope = this;
   this.__parseItemDeferred(json, json.levels, context, ['Level'], function(err, parsed, results) {
+    // Load or create room
+    if (context.hasArch && scope.ignoreOriginalArchHoles) {
+      // Hack to have delayed creation of new architecture, now that we loaded the windows/doors
+      scope.__createDummyRoom = false;
+      // TODO: handle ground
+      var archData = _.cloneDeep(loadOpts.arch.data);
+      var objects = _.flatMap(results, function(x) { return x.children; });
+      scope.__attachRoomArchWithNewHoles(archData, objects, json, context);
+    }
+
     __addChildren(scene, results);
 
     // Finalize our scene
-    this.__onSceneCompleted(null, sceneResult);
+    scope.__onSceneCompleted(null, sceneResult);
     // our callback expect the sceneResult and then error
     callback(sceneResult, err);
-  }.bind(this));
+  });
 };
 
 SUNCGLoader.prototype.__parseCamera = function(cameraJson, sceneResult) {
@@ -192,7 +273,7 @@ SUNCGLoader.prototype.__parseCamera = function(cameraJson, sceneResult) {
         var w = (v.right - v.left)/2;
         var h = (v.top - v.bottom)/2;
         v.left = -w; v.right = w;
-        v.top = h, v.bottom = -h;
+        v.top = h; v.bottom = -h;
         delete v['near'];
         delete v['far'];
       }
@@ -334,9 +415,11 @@ SUNCGLoader.prototype.__parseLevel = function (json, context, callback) {
           }).filter(function(x) { return x; });
           for (var j = 0; j < m.length; j++) {
             var ci = m[j];
-            if (ci !== i) {
-              var item = results[ci];
-              if (item && item.object3D) {
+            var item = results[ci];
+            if (item && item.object3D) {
+              if (item.json.type === 'Room') {
+                console.warn('Skipping attaching Room ' + item.object3D.userData.id + ' to Room ' + room.object3D.userData.id);
+              } else {
                 if (!item.object3D.userData.roomIds) {
                   item.object3D.userData.roomIds = [];
                 }
@@ -365,6 +448,7 @@ SUNCGLoader.prototype.__parseLevel = function (json, context, callback) {
 };
 
 SUNCGLoader.prototype.__parseGround = function (json, context, callback) {
+  // console.log('parse ground');
   var scope = this;
   var parts = ['f'].map(function(suffix) {
     return {
@@ -388,12 +472,28 @@ SUNCGLoader.prototype.__parseGround = function (json, context, callback) {
 
 
 SUNCGLoader.prototype.__parseRoom = function (json, context, callback) {
-  if (context.arch) {
+  if (this.__createDummyRoom) {
+    // console.log('dummy room creation');
+    this.__parseItemSimple(json, context, function (err, parsed) {
+      var group = new THREE.Group();
+      group.name = 'Room#' + json.id;
+      group.userData.id = json.id;
+      group.userData.type = 'Room';
+
+      if (json.roomTypes) {
+        group.userData.roomType = json.roomTypes;  // Room types as array
+      }
+      parsed.object3D = group;
+      callback(err, parsed);
+    });
+  } else if (context.arch) {
+    // console.log('parse room cached');
     this.__parseRoomCached(json, context, callback);
   } else {
+    // console.log('parse room load');
     this.__parseRoomLoad(json, context, callback);
   }
-}
+};
 
 SUNCGLoader.prototype.__parseRoomCached = function (json, context, callback) {
   //console.log('parseRoomCached', json, context);
@@ -417,7 +517,11 @@ SUNCGLoader.prototype.__parseRoomCached = function (json, context, callback) {
     }
   }
 
-  callback(null, parsed);
+  if (callback) {
+    callback(null, parsed);
+  } else {
+    return parsed;
+  }
 };
 
 SUNCGLoader.prototype.__parseRoomLoad = function (json, context, callback) {
@@ -463,7 +567,7 @@ SUNCGLoader.prototype.__parseRoomLoad = function (json, context, callback) {
     }
     parsed.object3D = group;
     callback(err, parsed);
-  }.bind(this));
+  });
 };
 
 SUNCGLoader.prototype.__parseObject = function (json, context, callback) {
@@ -476,7 +580,7 @@ SUNCGLoader.prototype.__parseArch = function (json, context, callback) {
   } else {
     this.__parseArchLoad(json, context, callback);
   }
-}
+};
 
 SUNCGLoader.prototype.__parseBox = function (json, context, callback) {
   // Procedurally generated content
@@ -668,7 +772,7 @@ SUNCGLoader.prototype.__parseArchCached = function (json, context, callback) {
   } else if (element) {
     parsed.object3D = (element instanceof THREE.Object3D)? element : element.object3D;
   } else {
-    console.warn('Cannot find arch element', json.id)
+    console.warn('Cannot find arch element', json.id);
   }
   if (parsed.object3D) {
     // HACK!!!!
@@ -727,15 +831,16 @@ SUNCGLoader.prototype.__applyTransform = function (object3D, json) {
     Object3DUtil.setMatrix(object3D, transform);
   }
 
-  if (json.isMirrored) {
-    // console.log('Flip normals!!!', object3D);
-    var mi = Object3DUtil.getModelInstance(object3D);
-    if (mi) {
-      mi.useFlippedModel(this.assetManager);
-    } else {
-      Object3DUtil.flipForMirroring(object3D);
-    }
-  }
+  // AXC: Not needed as of r89 (maybe even a bit before)
+  // if (json.isMirrored) {
+  //   // console.log('Flip normals!!!', object3D);
+  //   var mi = Object3DUtil.getModelInstance(object3D);
+  //   if (mi) {
+  //     mi.useFlippedModel(this.assetManager);
+  //   } else {
+  //     Object3DUtil.flipForMirroring(object3D);
+  //   }
+  // }
 
   Object3DUtil.clearCache(object3D);
 };

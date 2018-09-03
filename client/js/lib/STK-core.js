@@ -41,6 +41,7 @@ module.exports = {
     Distances: require('./geo/Distances'),
     GeometryUtil: require('./geo/GeometryUtil'),
     MeshHelpers: require('./geo/MeshHelpers'),
+    MeshSampling: require('./geo/MeshSampling'),
     Object3DUtil: require('./geo/Object3DUtil'),
     Segments: require('./geo/Segments'),
     ShapeGenerator: require('./geo/ShapeGenerator'),
@@ -76,11 +77,12 @@ module.exports = {
   /** @namespace gfx */
   gfx: {
     Camera: require('./gfx/Camera'),
+    EDLPass: require('./gfx/EDLPass'),
     Lights: require('./gfx/Lights'),
-    MeshSampling: require('./gfx/MeshSampling'),
     Renderer: require('./gfx/Renderer'),
     RendererFactory: require('./gfx/RendererFactory'),
-    ViewOptimizer: require('./gfx/ViewOptimizer')
+    ViewOptimizer: require('./gfx/ViewOptimizer'),
+    ViewUtils: require('./gfx/ViewUtils')
   },
   /** @namespace scene */
   scene: {
@@ -109,6 +111,7 @@ module.exports = {
   Colors: require('./util/Colors'),
   LabelRemap: require('./util/LabelRemap'),
   ImageUtil: require('./util/ImageUtil'),
+  Timings: require('./util/Timings'),
   PubSub: require('./PubSub'),
   util: require('./util')
 };

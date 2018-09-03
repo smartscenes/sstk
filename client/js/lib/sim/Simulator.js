@@ -6,6 +6,7 @@ var ActionTraceLog = require('sim/ActionTraceLog');
 var AudioSimulator = require('sim/AudioSimulator');
 var CollisionProcessorFactory = require('sim/CollisionProcessorFactory');
 var Constants = require('Constants');
+var ModelInstance = require('model/ModelInstance');
 var Object3DUtil = require('geo/Object3DUtil');
 var PubSub = require('PubSub');
 var Renderer = require('gfx/Renderer');
@@ -355,6 +356,38 @@ Simulator.prototype._logAction = function(actionname, actionArgs) {
 };
 
 /**
+ * Apply temporary modifications to the simulation environment
+ * @param modifications {sim.ModificationCmd[]}
+ * @param convertForSerialization {boolean} Whether to convert return data for serialization
+ * @param callback {callback} Error first callback
+ */
+Simulator.prototype.modify = function(modifications, convertForSerialization, callback) {
+  function convert(m) {
+    if (_.isArray(m)) {
+      return _.map(m, convert);
+    } else if (m instanceof THREE.Object3D) {
+      return m.userData.objectId;
+    } else if (m instanceof ModelInstance) {
+      return m.object3D.userData.objectId;
+    } else if (_.isPlainObject(m) || _.isNumber(m) || _.isString(m) || _.isBoolean(m)) {
+      return m;
+    }
+  }
+
+  // TODO: track the modifications
+  if (!_.isArray(modifications)) {
+    modifications = [modifications];
+  }
+  this.__simOperations.modify(this.state, modifications, function(err, data) {
+    var convertedData = data;
+    if (convertForSerialization && data) {
+      convertedData = _.map(data, convert);
+    }
+    callback(err, convertedData);
+  });
+};
+
+/**
  * Tells agent to take action.  Action is tracked in action log (before action) and time is updated.
  * The state of the simulator won't be fully updated until `update` is called.
  * @param {Object|Object[]} [action] What action or sequence of actions to take.  Each action should have a `name`
@@ -667,7 +700,14 @@ Simulator.prototype.prepareTopDownMapProjection = function() {
   return this.topDownMapProjection;
 };
 
-Simulator.prototype.__setSceneState = function(sceneState, callback) {
+/**
+ * Set the simulator to this the specified scene state.  If there
+ * @param sceneState {scene.SceneState} Scene state for the simulator
+ * @param modifications {Array[]} Array of modifications to apply to the scene state
+ * @param callback {callback} Error first callback returning modifications to the scene if scene loaded successfully
+ * @private
+ */
+Simulator.prototype.__setSceneState = function(sceneState, modifications, callback) {
   this.state.reset(sceneState);
 
   if (this._actionTrace) {
@@ -680,10 +720,10 @@ Simulator.prototype.__setSceneState = function(sceneState, callback) {
     }
   }
 
-  if (this.state.sceneState && this.__modifications) {
+  if (this.state.sceneState && modifications) {
     // TODO: handle clearing state of scene to initial state before all times of modifications (not just this one)
     this.__simOperations.removeObjects(this.state, function(x) { return x.object3D.userData.inserted; });
-    this.__simOperations.modify(this.state, this.__modifications, callback);
+    this.modify(modifications, true, callback);
   } else {
     callback(null);
   }
@@ -703,7 +743,7 @@ Simulator.prototype.reset = function (callback) {
     [
       function(cb) {
         if (scope.state.sceneState) {
-          scope.__setSceneState(scope.state.sceneState, cb);
+          scope.__setSceneState(scope.state.sceneState, scope.__modifications, cb);
         } else {
           setTimeout( function() { cb(); }, 0);
         }
@@ -723,7 +763,7 @@ Simulator.prototype.reset = function (callback) {
     function(err,res) {
       callback(err, scope.state.sceneState);
     }
-  )
+  );
 };
 
 Simulator.prototype.render = function(camera) {
@@ -908,7 +948,7 @@ Simulator.prototype.__loadScene = function (opts, callback) {
       });
     }
 
-    scope.__setSceneState(sceneState, function(err, ss) {
+    scope.__setSceneState(sceneState, scope.__modifications, function(err, ss) {
       if (scope.audioSim) {
         // Local configure
         console.time('Timing startAudio');

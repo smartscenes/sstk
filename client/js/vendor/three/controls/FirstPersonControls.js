@@ -184,7 +184,7 @@ THREE.FirstPersonControls = function ( object, domElement ) {
 
 	};
 
-	this.update = function( delta ) {
+	this.update = function ( delta ) {
 
 		if ( this.enabled === false ) return;
 
@@ -260,7 +260,7 @@ THREE.FirstPersonControls = function ( object, domElement ) {
 
 	}
 
-	this.dispose = function() {
+	this.dispose = function () {
 
 		this.domElement.removeEventListener( 'contextmenu', contextmenu, false );
 		this.domElement.removeEventListener( 'mousedown', _onMouseDown, false );

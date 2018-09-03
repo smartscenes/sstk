@@ -367,7 +367,7 @@ SimViewer.prototype.registerCustomEventListeners = function() {
         event.stopPropagation();
       }
       return r;
-    }
+    };
   }
 
   this.renderer.domElement.addEventListener('click', __wrappedEventListener(function (event) {
@@ -502,7 +502,7 @@ SimViewer.prototype.__visualizeImageData = function(container, imageId, image, o
   var targetWidth = container.width();
   var r = targetWidth? targetWidth/image.shape[0] : 1;
   var rescaledShape = [Math.round(image.shape[0]*r), Math.round(image.shape[1]*r)];
-  //console.log('rescaledShape', rescaledShape);
+  //console.log('rescaledShape', rescaledShape, image.shape);
   elem.attr('width', rescaledShape[0]);
   elem.attr('height',rescaledShape[1]);
   elem.attr('src', this.__tmpCanvas.toDataURL());
@@ -541,7 +541,7 @@ SimViewer.prototype.visualizeSensorData = function(container, actionResult, debu
           var convertFn = function(x) { return x; };
           if (sensor.encoding === 'depth') {
             var r = 255/_.max(pixelBuffer);
-            convertFn = function(x) { return r*x; }
+            convertFn = function(x) { return r*x; };
           }
           for (var i = 0, k = 0; i < sensor_data.length; i++, k+=4) {
             var v = convertFn(pixelBuffer[i]);

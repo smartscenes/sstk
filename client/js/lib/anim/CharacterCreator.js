@@ -8,7 +8,7 @@ function CharacterCreator() {
   this.debug = false;
   this.boneColor = [1.0, 242.0/255.0, 181.0/255.0, 1.0];
   this.boneMaterial = Object3DUtil.getSimpleFalseColorMaterial(1, new THREE.Color(this.boneColor[0], this.boneColor[1], this.boneColor[2]));
-  if (debug) {
+  if (this.debug) {
     Object3DUtil.setMaterialOpacity(this.boneMaterial, 0.5);
   }
   this.alwaysIncludeCustomSkel = true;

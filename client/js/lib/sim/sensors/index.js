@@ -1,3 +1,5 @@
+var _ = require('util');
+
 var sensors = {
   CameraSensor: require('sim/sensors/CameraSensor'),
   DepthSensor: require('sim/sensors/DepthSensor'),

@@ -372,9 +372,9 @@ BBoxCreator.prototype.getBoxCorners = function () {
 
 BBoxCreator.prototype.getOBB = function () {
   // Returns OBB representing this bbox
-  var position = this.__boxMesh.getWorldPosition();
+  var position = this.__boxMesh.getWorldPosition(new THREE.Vector3());
   var radius = new THREE.Vector3(this.width, this.height, this.depth);
-  var quaternion = this.__boxMesh.getWorldQuaternion();
+  var quaternion = this.__boxMesh.getWorldQuaternion(new THREE.Quaternion());
   var obb = new OBB({ centroid: position, radius: radius, quaternion: quaternion });
   console.log(obb);
   return obb;

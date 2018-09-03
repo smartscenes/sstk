@@ -131,7 +131,7 @@ PartAnnotationViewer.prototype.onSelectLabel = function (labelInfos) {
   PartViewer.prototype.onSelectLabel.call(this, labelInfo);
   this.labelViewer.setLabelInfo(labelInfo);
   if (labelInfos) {
-    var labelAll = _.find(labelInfos, function(info) {return info.isAll; })
+    var labelAll = _.find(labelInfos, function(info) {return info.isAll; });
     if (labelAll) { // ALL labelInfo
       this.labelAllParts();
       this.colorMeshesWithLabelInfos([labelAll]);

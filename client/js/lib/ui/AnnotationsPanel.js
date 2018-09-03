@@ -43,7 +43,7 @@ function AnnotationsPanel(params) {
   this.__displayableAttributes = [].concat(this.attributes);
   for (var i = 0; i < this.attributesReadOnly.length; i++) {
     var attr = this.attributesReadOnly[i];
-    var iAttr = this.attributes.indexOf(attr)
+    var iAttr = this.attributes.indexOf(attr);
     if (iAttr < 0) {
       this.__displayableAttributes.push(attr);
     } else {
@@ -93,8 +93,8 @@ AnnotationsPanel.prototype.init = function () {
 };
 
 /**
- * Set the specified model instance as target for annotaiton
- * @param target {model.ModelInstance|[model.ModelInstance]}
+ * Set the specified model instance as target for annotation
+ * @param target {model.ModelInstance|model.ModelInstance[]}
  */
 AnnotationsPanel.prototype.setTarget = function(target, keepNewAnnotations) {
   var scope = this;
@@ -111,7 +111,7 @@ AnnotationsPanel.prototype.setTarget = function(target, keepNewAnnotations) {
   // Get linked attributes
   scope.__setAnnotationsFromModelInfo(modelInfo, keepNewAnnotations);
   if (modelInfo) {
-    //console.log('got modelinfo', modelInfo);
+    // console.log('annotations panel got modelinfo', modelInfo);
     async.each(this.linkedAttributes, function (name, cb) {
       var field = scope.attributesMap[name];
       if (modelInfo.hasOwnProperty(name)) {
@@ -175,11 +175,12 @@ AnnotationsPanel.prototype.__setAnnotationsFromModelInfo = function (modelInfo, 
     // Display readonly attributes
     for (var i = 0; i < this.attributesReadOnly.length; i++) {
       var name = this.attributesReadOnly[i];
+      var field = this.attributesMap[name];
       if (modelInfo.hasOwnProperty(name)) {
-        var field = this.attributesMap[name];
         var value = modelInfo[name];
         this.showAttribute(name, field, value, 'noedit');
       } else {
+        this.showAttribute(name, field, undefined, 'noedit');
         if (this.hideEmptyFields) {
           var field = this.attributesMap[name];
           field.div.hide();
@@ -190,6 +191,7 @@ AnnotationsPanel.prototype.__setAnnotationsFromModelInfo = function (modelInfo, 
 };
 
 AnnotationsPanel.prototype.showAttribute = function (fieldName, field, value, update) {
+  // console.log('showAttribute', fieldName, field, value, update);
   // Update the UI
   if (field && field.div) {
     var fieldInput = field.div.find('#anno_' + fieldName);
@@ -210,8 +212,10 @@ AnnotationsPanel.prototype.showAttribute = function (fieldName, field, value, up
         var updateMap = update;
         if (typeof (update) === 'string') {
           updateMap = {};
-          for (var j = 0; j < value.length; j++) {
-            updateMap[value[j]] = update;
+          if (value) {
+            for (var j = 0; j < value.length; j++) {
+              updateMap[value[j]] = update;
+            }
           }
         }
         this.updateLabels(fieldValues, fieldName, updateMap);

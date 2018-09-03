@@ -2,6 +2,8 @@
 
 //var bootbox = require('bootbox');
 
+var _ = require('util');
+
 var self = {};
 
 // Hookup bootbox stuff

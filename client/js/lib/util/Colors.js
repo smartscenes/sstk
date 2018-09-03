@@ -120,7 +120,7 @@ function createPalette(name, colors, n, interpolateSpace) {
       var finalColors = [];
       if (interpolateSpace === 'hsl') {
         var hslColors = colors.map(function (x) {
-          return toColor(x).getHSL();
+          return getHSL(toColor(x));
         });
         for (var i = 0; i < colors.length - 1; i++) {
           var c1 = hslColors[i];
@@ -158,6 +158,13 @@ function createPalette(name, colors, n, interpolateSpace) {
 }
 self.createPalette = createPalette;
 
+function getHSL(color) {
+  var hsl = { h: 0, s: 0, l: 0 };
+  color.getHSL(color);
+  return hsl;
+}
+self.getHSL = getHSL;
+
 // Interpolate between color c1 and c2, with weight being weight in the direction of c2
 function interpolateColor(color1, color2, opts) {
   if (typeof(opts) === 'number') {
@@ -168,8 +175,8 @@ function interpolateColor(color1, color2, opts) {
   var c = opts.result || new THREE.Color();
   var weight = (opts.weight != undefined)? opts.weight : 0.5;
   if (opts.space === 'hsl') {
-    var c1 = color1.getHSL();
-    var c2 = color2.getHSL();
+    var c1 = getHSL(color1);
+    var c2 = getHSL(color2);
     var offset = {h: c2.h - c1.h, s: c2.s - c1.s, l: c2.l - c1.l};
     c.setHSL(c1.h + weight * offset.h, c1.s + weight * offset.s, c1.l + weight * offset.l);
   } else {
@@ -246,7 +253,7 @@ var phi = (1 + Math.sqrt(5))/2;
 var invPhi = 1.0/phi;
 function generatePhiColor(colorIdx) {
   var startColor = new THREE.Color(0x4FD067);
-  var hsb = startColor.getHSL();
+  var hsb = getHSL(startColor);
   var hue = hsb.h + colorIdx*invPhi;
   hue = hue - Math.floor(hue);
   var c = new THREE.Color();
@@ -263,7 +270,7 @@ self.isValidColor = isValidColor;
 
 function lighten(color) {
   var c = toColor(color).clone();
-  var hsl = c.getHSL();
+  var hsl = getHSL(c);
   c.offsetHSL(0, 0, (1.0 - hsl.l)/2);
   return c;
 }
@@ -271,7 +278,7 @@ self.lighten = lighten;
 
 function darken(color) {
   var c = toColor(color).clone();
-  var hsl = c.getHSL();
+  var hsl = getHSL(c);
   c.offsetHSL(0, 0, -hsl.l/2);
   return c;
 }

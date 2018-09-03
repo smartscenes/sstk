@@ -67,7 +67,7 @@ SemanticSensor.prototype.__getFrame = function(sceneState) {
     shape: [this.renderer.width, this.renderer.height, 4]
   };
   if (this.config.includeIndex) {
-    output.index = pixelFrame.index? pixelFrame.index.objects() : null
+    output.index = pixelFrame.index? pixelFrame.index.objects() : null;
   }
   if (this.config.visualize) {
     // add data_color that converts from indexed to bright pretty colors

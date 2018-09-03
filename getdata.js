@@ -9,7 +9,7 @@ var METADATA = {
   'VER': 'master',
   'DIR': 'metadata',
   'REPO': 'https://github.com/smartscenes/sstk-metadata.git',
-  'DATA_DIRS': ['labels', 'matterport', 'nyuv2', 'shapenet', 'suncg']
+  'DATA_DIRS': ['labels', 'matterport', 'nyuv2', 'shapenet', 'suncg', 'scannet']
 };
 
 var my_path = path.dirname(__filename);

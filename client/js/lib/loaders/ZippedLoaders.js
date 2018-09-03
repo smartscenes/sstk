@@ -81,7 +81,7 @@ THREE.ZippedObjLoader = function(params) {
         onLoad(text);
       },
       setPath: function() {}
-    }
+    };
   };
 
   params.loader = baseLoader;
@@ -121,7 +121,7 @@ THREE.ZippedObjMtlLoader = function(params) {
         onLoad(text);
       },
       setPath: function() {}
-    }
+    };
   };
   baseLoader.load = function(url, onLoad, onProgress, onError ) {
 

@@ -268,7 +268,8 @@ TriangleLabeler.prototype.setBrushSize = function(brushSize) {
   Object3DUtil.traverseMeshes(this.partsNode, false, function(mesh) {
     if (brushSize) {
       // NOTE: Estimate of scale we need to multiply by
-      var worldScale = mesh.getWorldScale();
+      var worldScale = new THREE.Vector3();
+      mesh.getWorldScale(worldScale);
       console.log(worldScale);
       var wsl = Math.min(worldScale.x, worldScale.y, worldScale.z) || 1.0;
       var worldToLocalScale = 1.0 / wsl;
@@ -319,7 +320,8 @@ TriangleLabeler.prototype.setTarget = function(target) {
     var simplifyModifier = new THREE.SimplifyModifier();
     Object3DUtil.traverseMeshes(this.partsNode, false, function(mesh) {
       // NOTE: Estimate of scale we need to multiply by
-      var worldScale = mesh.getWorldScale();
+      var worldScale = new THREE.Vector3();
+      mesh.getWorldScale(worldScale);
       //console.log('worldScale', worldScale);
       var wsl = Math.min(worldScale.x, worldScale.y, worldScale.z) || 1.0;
       var worldToLocalScale = 1.0/wsl;

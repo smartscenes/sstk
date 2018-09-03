@@ -14,7 +14,7 @@ function fitOBB(points, opts) {
   }
 
   if (opts.constrainVertical) {
-    var res = findOBB2D_Points3D(points)
+    var res = findOBB2D_Points3D(points);
     obb = findOBB3DVertical(res.obb2d, res.minV, res.maxV);
   } else {
     obb = findOBB3DUnconstrained(points);
@@ -31,7 +31,7 @@ function fitMeshOBB(meshes, opts) {
   opts = opts || {};
   var obb;
   if (opts.constrainVertical) {
-    var res = findOBB2D_Meshes(meshes)
+    var res = findOBB2D_Meshes(meshes);
     obb = findOBB3DVertical(res.obb2d, res.minV, res.maxV);
   } else {
     throw 'fitOBBMeshes unimplemented for opts.constrainVertical=false';

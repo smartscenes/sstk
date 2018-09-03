@@ -61,11 +61,11 @@ SceneStatistics.prototype.bbfaceIndexToAttachmentTypeIndex = function(i) {
 
 SceneStatistics.prototype.getAttachmentType = function(i) {
   return this.__bbfaceTypeIndex.get(i);
-}
+};
 
 SceneStatistics.prototype.getSupportSurfaceType = function(i) {
   return this.__supportSurfaceTypeIndex.get(i);
-}
+};
 
 function __getKey(obj, attrnames) {
   var attributes = attrnames.map(function (attr) {
@@ -329,7 +329,7 @@ SceneStatistics.prototype.__run = function(names, opts) {
       } else {
         console.error('No function with name: SceneStatistics.' + name);
       }
-    }
+    };
   });
   async.parallel(jobs, function(err, results) {
     opts.callback(err, results);
@@ -344,7 +344,7 @@ SceneStatistics.prototype.__exportStats = function(stats, opts) {
         filename: opts.basename + '.' + stat.filename + '.csv',
         callback: cb
       });
-    }
+    };
   });
   async.parallel(jobs, function(err, results) {
     opts.callback(err, results);
@@ -360,7 +360,7 @@ SceneStatistics.prototype.__importStats = function(stats, opts) {
         useSavedIndex: opts.useSavedIndex,
         callback: cb
       });
-    }
+    };
   });
   async.parallel(jobs, function(err, results) {
     opts.callback(err, results);
@@ -381,7 +381,7 @@ SceneStatistics.prototype.__relations_importCsvs = function(opts) {
           basename: opts.basename,
           callback: function(err,res) {
             console.log('imported relation indices');
-            callback(err, res)
+            callback(err, res);
           }
         }
       );
@@ -397,7 +397,7 @@ SceneStatistics.prototype.__relations_importCsvs = function(opts) {
           useSavedIndex: true,
           callback: function(err,res) {
             console.log('imported relation counts');
-            callback(err, res)
+            callback(err, res);
           }
         }
       );
@@ -434,7 +434,7 @@ SceneStatistics.prototype.__materials_importCsvs = function(opts) {
           basename: opts.basename,
           callback: function(err,res) {
             console.log('imported material indices');
-            callback(err, res)
+            callback(err, res);
           }
         }
       );
@@ -448,7 +448,7 @@ SceneStatistics.prototype.__materials_importCsvs = function(opts) {
           useSavedIndex: true,
           callback: function(err,res) {
             console.log('imported material counts');
-            callback(err, res)
+            callback(err, res);
           }
         }
       );

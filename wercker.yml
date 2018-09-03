@@ -36,8 +36,13 @@ build:
         code: |
           # https://docs.npmjs.com/misc/config#unsafe-perm
           npm config set unsafe-perm true
-    # A step that executes `npm install` command
-    - npm-install
+
+    # A step that builds everything
+    - script:
+        name: build everything
+        code: |
+          ./build.sh
+
     # Generate relevant artifacts
     - script:
         name: build release code
@@ -53,6 +58,7 @@ build:
           mkdir dist
           cp client/build/STK.bundle.js dist/STK.bundle.js
           cp client/build-min/STK.bundle.js dist/STK.bundle.min.js
+
 
 test-client:
   steps:

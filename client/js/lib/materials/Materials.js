@@ -80,6 +80,13 @@ function loadTexture(opts) {
 }
 Materials.loadTexture = loadTexture;
 
+/**
+ * Apply coloring to texture pixels (without changing alpha)
+ * @param texture {THREE.Texture} Texture to recolor
+ * @param opts Options for how to recolor
+ * @param opts.color
+ * @returns THREE.Texture
+ */
 Materials.recolorTexture = function(texture, opts) {
   // Apply recoloring function to texture
   if (opts.color) {
@@ -103,6 +110,14 @@ Materials.recolorTexture = function(texture, opts) {
   return texture;
 };
 
+Materials.createMultiMaterial = function(materials) {
+  materials.isMultiMaterial = true;
+  materials.materials = materials;
+  materials.clone = function () {
+    return materials.slice();
+  };
+  return materials;
+};
 
 Materials.getBasicMaterial = function (color, alpha) {
   if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
@@ -183,7 +198,11 @@ Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
 
 
 Materials.setMaterialOpacity = function (material, opacity) {
-  if (material instanceof THREE.MultiMaterial) {
+  if (Array.isArray(material)) {
+    for (var i = 0; i < material.length; i++) {
+      Materials.setMaterialOpacity(material[i], opacity);
+    }
+  } else if (material instanceof THREE.MultiMaterial) {
     for (var i = 0; i < material.materials.length; i++) {
       Materials.setMaterialOpacity(material.materials[i], opacity);
     }
@@ -224,7 +243,7 @@ Materials.createMaterial = function(params) {
 
   var materialType = Materials.getMaterialType(params.type);
   return new materialType(p);
-}
+};
 
 Materials.getMaterialType = function(mtype) {
   switch (mtype) {
@@ -250,7 +269,7 @@ Materials.getMaterialType = function(mtype) {
       console.log('Unknown material type: ' + mtype + ', default to ' + Materials.DefaultMaterialType.constructor.name);
       return Materials.DefaultMaterialType;
   }
-}
+};
 
 Materials.getMaterialParams = function (material) {
   var includeFields = [
@@ -290,5 +309,26 @@ Materials.getTextureParams = function (texture) {
   return params;
 };
 
+Materials.cloneMaterial = function(m) {
+  if (Array.isArray(m)) {
+    var copy = [];
+    for (var i = 0; i < m.length; i++) {
+      copy[i] = m[i].clone();
+    }
+    return copy;
+  } else {
+    return m.clone();
+  }
+};
 
 module.exports = Materials;
+
+
+/**
+ * Material definition
+ * @memberOf materials
+ * @typedef MaterialDef
+ * @type {object}
+ * @property {string} type - Material type (`basic|phong|physical`)
+ * @property {THREE.Color|string} [color] - Material color
+ */

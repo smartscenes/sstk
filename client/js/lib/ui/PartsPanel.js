@@ -158,18 +158,34 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       }
       //this.container.append(this.partTypeSelect);
       var hierarchyMaterials = ['clear', 'original'];
-      var meshHierarchMaterialSelect = $('#hierarchyMaterial');
+      var meshHierarchyMaterialSelect = $('#hierarchyMaterial');
       for (var i = 0; i < hierarchyMaterials.length; i++) {
         var s = hierarchyMaterials[i];
-        meshHierarchMaterialSelect.append('<option value="' + s + '">' + s + '</option>');
+        meshHierarchyMaterialSelect.append('<option value="' + s + '">' + s + '</option>');
       }
-      meshHierarchMaterialSelect.change(function () {
-        meshHierarchMaterialSelect.find('option:selected').each(function () {
+      meshHierarchyMaterialSelect.change(function () {
+        meshHierarchyMaterialSelect.find('option:selected').each(function () {
           if ($(this).val() === 'clear') {
             scope.meshHierarchy.useSpecialMaterial = true;
           } else if ($(this).val() === 'original') {
             scope.meshHierarchy.useSpecialMaterial = false;
           }
+        });
+      });
+      var selectedMaterials = ['colored', 'original'];
+      var selectedMaterialSelect = $('#selectedMaterial');
+      for (var i = 0; i < selectedMaterials.length; i++) {
+        var s = selectedMaterials[i];
+        selectedMaterialSelect.append('<option value="' + s + '">' + s + '</option>');
+      }
+      selectedMaterialSelect.change(function () {
+        selectedMaterialSelect.find('option:selected').each(function () {
+          if ($(this).val() === 'colored') {
+            scope.meshHierarchy.highlightMaterial = Object3DUtil.getSimpleFalseColorMaterial(1);
+          } else if ($(this).val() === 'original') {
+            scope.meshHierarchy.highlightMaterial = "original";
+          }
+          scope.meshHierarchy.refreshHighlighting();
         });
       });
       this.meshHierarchy = new MeshHierarchyPanel({
@@ -299,7 +315,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       } else {
         segments.colorSegments(labelType, labelColors, null, null, null, true);
       }
-    }
+    };
 
     PartsPanel.prototype.__updateLabelsPanel = function(rawLabels, labelColors) {
       var colorIndex = labelColors;
@@ -313,7 +329,7 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
       }
       //console.log('setLabels', labels, colorIndex);
       this.labelsPanel.setLabels(labels, colorIndex);
-    }
+    };
 
     PartsPanel.prototype.__getLabelColorIndex = function (partType, labelType) {
       partType = partType || this.partType;

@@ -7,7 +7,7 @@ var GeometryUtil = require('geo/GeometryUtil');
 var ImageUtil = require('util/ImageUtil');
 var Index = require('ds/Index');
 var MeshHelpers = require('geo/MeshHelpers');
-var MeshSampling = require('gfx/MeshSampling');
+var MeshSampling = require('geo/MeshSampling');
 var Object3DUtil = require('geo/Object3DUtil');
 var VPTreeFactory = require('ds/VPTree');
 var RNG = require('math/RNG');
@@ -252,7 +252,14 @@ SceneUtil.__colorSceneByMaterial = function (sceneState, opts) {
   var materialIdMap = materialIndex? materialIndex.materialIdMap || SceneUtil.__getMaterialIdMap(materialIndex, opts) : null;
 
   var getMeshMaterial = opts.getMeshMaterialFn || function(mesh) {
-    if (mesh.material instanceof THREE.MultiMaterial) {
+    if (Array.isArray(mesh.materials)) {
+      var materials = mesh.material.map(function (m, i) {
+        var category = materialIdMap ? materialIdMap[m.id] : m.id;
+        var colorIdx = (category != undefined) ? categoryIndex.indexOf(category, true) : unknownIdx;
+        return getMaterialFn(colorIdx, null, palette);
+      });
+      return new THREE.MultiMaterial(materials);
+    } else if (mesh.material instanceof THREE.MultiMaterial) {
       var materials = mesh.material.materials.map(function(m, i) {
         var category = materialIdMap? materialIdMap[m.id] : m.id;
         var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
@@ -474,11 +481,11 @@ SceneUtil.__colorSceneByObjectType = function (sceneState, opts) {
           c = undefined;
         }
         return c;
-      }
+      };
     } else {
       getCategory = function(mi) {
         return mi.model.getMatchingCategory(validCategories);
-      }
+      };
     }
   } else {
     categoryIndex.indexOf('Wall', true);
@@ -749,7 +756,12 @@ SceneUtil.recolorWithCompatibleMaterials = function(sceneState, opts) {
         }
       }
       //console.log('texturedObjects', texturedObjects, sampleTexturedMaterialsOnly, objectType);
-      if (mesh.material instanceof THREE.MultiMaterial) {
+      if (Array.isArray(mesh.material)) {
+        var materials = mesh.material.map(function (m, i) {
+          return getRemappedMaterial(m, objectType, meshKey + '#' + i, sampleTexturedMaterialsOnly);
+        });
+        return new THREE.MultiMaterial(materials);
+      } else if (mesh.material instanceof THREE.MultiMaterial) {
         var materials = mesh.material.materials.map(function(m, i) {
           return getRemappedMaterial(m, objectType, meshKey + '#' + i, sampleTexturedMaterialsOnly);
         });
@@ -1566,7 +1578,7 @@ SceneUtil.getAggregatedSceneStatistics = function(cache, cb, opts) {
         }
         cb(err, cache.aggregatedSceneStatistics);
       }
-    })
+    });
   }
 };
 

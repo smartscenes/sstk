@@ -26,7 +26,7 @@ IndexedCounters.prototype.sample = function(keys, opts) {
   var c = this.get(keys, isIndexedKeys);
   if (c) {
     var sampled = [];
-    while (c && !c instanceof Counter) {
+    while (c && !(c instanceof Counter)) {
       var ckeys = _.keys(c);
       // TODO: Sampling here should be on aggregated weights (NOT uniform)
       var i = rng.random() * ckeys.length;

@@ -42,7 +42,7 @@ function BasicSearchController(params) {
   }
   // Restrict sources for overall models3d search
   if (params.restrictModelSources) {
-    var sources = this.sources.filter(function (elem) { return elem !== 'models3d'; }) ;
+    var sources = this.sources.filter(function (elem) { return elem !== 'models3d' && elem !== 'scans'; }) ;
     this.restrictModelSources(sources);
   }
 

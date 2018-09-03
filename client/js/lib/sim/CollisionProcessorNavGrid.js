@@ -63,9 +63,9 @@ CollisionProcessorNavGrid.prototype.__ensureNavScene = function(sceneState) {
   // Make sure navgrid is available for sceneState
   if (sceneState.navscene) {
     // TODO check that cell size is smaller than agent radius
-    return sceneState.navscene
+    return sceneState.navscene;
   } else {
-    console.error('CollisionProcessorNavGrid requires SceneState NavScene member to be initialized.')
+    console.error('CollisionProcessorNavGrid requires SceneState NavScene member to be initialized.');
   }
 };
 

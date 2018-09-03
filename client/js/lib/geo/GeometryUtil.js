@@ -111,7 +111,7 @@ GeometryUtil.colorVertices = function(geometry, color, vertices) {
  */
 GeometryUtil.grayOutVertices = function(mesh, center, maxRadius, grayColor) {
   if (!(mesh.geometry instanceof THREE.BufferGeometry)) {
-    console.error('grayOutVertices not supported if not BufferGeometry', geometry);
+    console.error('grayOutVertices not supported if not BufferGeometry', mesh.geometry);
     return;
   }
   if (grayColor == undefined) { grayColor = 'gray'; }
@@ -193,12 +193,12 @@ GeometryUtil.getGeometryVertex = function (geometry, index, transform, out) {
 };
 
 // Convert vertices to world coordinates
-GeometryUtil.forMeshVertices = function (mesh, callback, attributes) {
+GeometryUtil.forMeshVertices = function (mesh, callback, attributes, checkExit) {
   var transform = mesh.matrixWorld;
-  return GeometryUtil.forMeshVerticesWithTransform(mesh, callback, transform, attributes);
+  return GeometryUtil.forMeshVerticesWithTransform(mesh, callback, transform, attributes, checkExit);
 };
 
-GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform, attributes) {
+GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform, attributes, checkExit) {
   //Basic logic (rolled out for performance)
   //var v = new THREE.Vector3();
   //var nVerts = GeometryUtil.getGeometryVertexCount(mesh.geometry);
@@ -263,6 +263,9 @@ GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform,
         } else {
           callback(v);
         }
+        if (checkExit && checkExit()) {
+          break;
+        }
       }
     } else if (geometry instanceof THREE.BufferGeometry) {
       var pos = geometry.attributes['position'].array;
@@ -309,6 +312,9 @@ GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform,
           } else {
             callback(v);
           }
+          if (checkExit && checkExit()) {
+            break;
+          }
         }
       } else {
         console.warn('No vertices for BufferedGeometry');
@@ -324,7 +330,7 @@ GeometryUtil.forFaceVerticesWithTransform = function (geometry, transform, callb
     var v0 = GeometryUtil.getGeometryVertex(geometry, vIndices[0], transform);
     var v1 = GeometryUtil.getGeometryVertex(geometry, vIndices[1], transform);
     var v2 = GeometryUtil.getGeometryVertex(geometry, vIndices[2], transform);
-    callback(v0, v1, v2);
+    callback(v0, v1, v2, iFace);
   });
 };
 
@@ -373,7 +379,7 @@ GeometryUtil.computeFaceNormal = function (vA, vB, vC) {
 
 GeometryUtil.getSurfaceArea = function (geometry, transform) {
   var area = 0;
-  GeometryUtil.forFaceVerticesWithTransform(geometry, transform, function (v0, v1, v2) {
+  GeometryUtil.forFaceVerticesWithTransform(geometry, transform, function (v0, v1, v2, iFace) {
     area += GeometryUtil.triangleArea(v0, v1, v2);
   });
   return area;
@@ -381,8 +387,8 @@ GeometryUtil.getSurfaceArea = function (geometry, transform) {
 
 GeometryUtil.getSurfaceAreaFiltered = function (geometry, transform, filter) {
   var area = 0;
-  GeometryUtil.forFaceVerticesWithTransform(geometry, transform, function (v0, v1, v2) {
-    if (!filter || filter(v0, v1, v2)) {
+  GeometryUtil.forFaceVerticesWithTransform(geometry, transform, function (v0, v1, v2, iFace) {
+    if (!filter || filter(v0, v1, v2, iFace)) {
       area += GeometryUtil.triangleArea(v0, v1, v2);
     }
   });
@@ -814,17 +820,17 @@ GeometryUtil.mergeMeshes = function (input) {
   } else if (Array.isArray(input)) {
     if (input.length > 1) {
       var mergedGeometry = new THREE.Geometry();
-      var meshFaceMaterials = new THREE.MultiMaterial();
+      var meshFaceMaterials = [];
       for (var i = 0; i < input.length; i++) {
         var mesh = GeometryUtil.mergeMeshes(input[i]);
         if (mesh instanceof THREE.Mesh) {
-          var materialIndex = meshFaceMaterials.materials.length;
+          var materialIndex = meshFaceMaterials.length;
           var geom = GeometryUtil.toGeometry(mesh.geometry);
           mergedGeometry.merge(geom, mesh.matrix, materialIndex);
-          meshFaceMaterials.materials.push(mesh.material);
+          meshFaceMaterials.push(mesh.material);
         }
       }
-      return new THREE.Mesh(mergedGeometry, meshFaceMaterials);
+      return new THREE.Mesh(mergedGeometry, new THREE.MultiMaterial(meshFaceMaterials));
     } else {
       return GeometryUtil.mergeMeshes(input[0]);
     }
@@ -851,14 +857,14 @@ GeometryUtil.mergeMeshesWithTransform = function (input, opts) {
     toMerge = [input];
   }
   var mergedGeometry = new THREE.Geometry();
-  var meshFaceMaterials = new THREE.MultiMaterial();
+  var meshFaceMaterials = [];
   //console.log('merging ', toMerge.length);
   for (var i = 0; i < toMerge.length; i++) {
     var m = toMerge[i];
     m.updateMatrixWorld();
     m.traverse(function(node) {
       if (node instanceof THREE.Mesh) {
-        var materialIndex = meshFaceMaterials.materials.length;
+        var materialIndex = meshFaceMaterials.length;
         var geom = GeometryUtil.toGeometry(node.geometry);
         var t = node.matrixWorld;
         if (transform) {
@@ -866,18 +872,22 @@ GeometryUtil.mergeMeshesWithTransform = function (input, opts) {
           t.multiply(node.matrixWorld);
         }
         mergedGeometry.merge(geom, t, materialIndex);
-        if (node.material instanceof THREE.MultiMaterial) {
+        if (Array.isArray(node.material)) {
+          for (var j = 0; j < node.material.length; j++) {
+            meshFaceMaterials.push(node.material[j]);
+          }
+        } else if (node.material instanceof THREE.MultiMaterial) {
           for (var j = 0; j < node.material.materials.length; j++) {
-            meshFaceMaterials.materials.push(node.material.materials[j]);
+            meshFaceMaterials.push(node.material.materials[j]);
           }
         } else {
-          meshFaceMaterials.materials.push(node.material);
+          meshFaceMaterials.push(node.material);
         }
       }
     });
   }
   //console.log('merged mesh', mergedGeometry, meshFaceMaterials);
-  return new THREE.Mesh(mergedGeometry, meshFaceMaterials);
+  return new THREE.Mesh(mergedGeometry, new THREE.MultiMaterial(meshFaceMaterials));
 };
 
 // Flattens and merged nested objects into one mesh

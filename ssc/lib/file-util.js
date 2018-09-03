@@ -4,8 +4,19 @@ var csv = require('papaparse');
 var cpExecSync = require('child_process').execSync;
 var deasync = require('deasync');
 var fs = require('fs');
+var path = require('path');
+var shell = require('shelljs');
 var request = require('request');
 var _ = require('lodash');
+
+// file system options
+var __globalOptions = {
+  cache: { enabled: false, dir: "cache", force: false, rewriteFilePath: null }
+};
+
+function ensureDirExists(dir) {
+  shell.mkdir('-p', dir);
+}
 
 // https://github.com/jhiesey/to-arraybuffer/blob/master/index.js
 function toArrayBuffer(buf) {
@@ -34,24 +45,53 @@ function toArrayBuffer(buf) {
 }
 
 
-// Synchronously get from url
-var wgetSync = deasync(function (url, opts, cb) {
-  var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
+// Asynchronously get from url
+function download(url, opts, cb) {
   // Reinterpret encoding to handle binary arraybuffer (see https://github.com/request/request)
+  var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
   var enc = (encoding === 'arraybuffer') ? null : encoding;
   request({ method: 'GET', url: url, encoding: enc },
     function (err, resp, body) {
       if (err) {
         cb(err, null);
+      } else if (resp.statusCode >= 400 && resp.statusCode < 600) {
+        // Interpret error codes
+        cb(body.toString(), null);
       } else {
         if (encoding === 'arraybuffer') {
           body = toArrayBuffer(body);
         }
+        if (opts.saveFile) {
+          // save file at cache location
+          fsWriteToFileEnsureDir(opts.saveFile, body);
+        }
         cb(null, body);
       }
     });
-});
+}
 
+function downloadWithCache(url, opts, cb) {
+  var cacheOptions = __globalOptions.cache;
+  if (!opts.saveFile && cacheOptions && cacheOptions.enabled && cacheOptions.dir) {
+    var urlpath = url.replace(/.+?:/, '');
+    var cacheFile = cacheOptions.dir + '/' + urlpath;
+    if (cacheOptions.rewriteFilePath) {
+      cacheFile = cacheOptions.rewriteFilePath(cacheFile);
+    }
+    // check if cacheFile exists
+    if (!cacheOptions.force && fs.existsSync(cacheFile)) {
+      readAsync(cacheFile, opts, cb);
+    } else {
+      opts = opts || {};
+      if (typeof opts === 'string') {
+        opts = { encoding: opts };
+      }
+      download(url, _.defaults({ saveFile: cacheFile}, opts), cb);
+    }
+  } else {
+    download(url, opts, cb);
+  }
+}
 
 function fsReadFile(filename, successCallback, errorCallback) {
   var content = fs.readFileSync(filename, 'utf8');
@@ -64,7 +104,7 @@ function readSync(uri, opts) {
   opts = opts || 'utf8';
   //console.log('readSync ' + uri, opts);
   if (uri.startsWith('http')) {
-    return wgetSync(uri, opts);
+    return deasync(downloadWithCache);
   } else {
     if (uri.startsWith('file://')) { uri = uri.substr(7); }
     if (!fs.existsSync(uri)) {
@@ -86,25 +126,11 @@ function readSync(uri, opts) {
 // read URL/file from uri asynchronously
 function readAsync(uri, opts, cb) {
   //console.log('readAsync ' + uri, opts);
-  var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
   if (uri.startsWith('http')) {
-    // Reinterpret encoding to handle binary arraybuffer (see https://github.com/request/request)
-    var enc = (encoding === 'arraybuffer') ? null : encoding;
-    request({ method: 'GET', url: uri, encoding: enc },
-    function (err, resp, body) {
-      if (err) {
-        cb(err, null);
-      } else if (resp.statusCode >= 400 && resp.statusCode < 600) {
-        cb(body.toString(), null);
-      } else {
-        if (encoding === 'arraybuffer') {
-          body = toArrayBuffer(body);
-        }
-        cb(null, body);
-      }
-    });
+    downloadWithCache(uri, opts, cb);
   } else {
     if (uri.startsWith('file://')) { uri = uri.substr(7); }
+    var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
     var enc = (encoding === 'arraybuffer') ? null : encoding;
     var fsOpts = (typeof opts === 'string') ? enc : _.defaults({ encoding: enc }, opts);
     fs.readFile(uri, fsOpts, function (err, data) {
@@ -123,6 +149,12 @@ function readAsync(uri, opts, cb) {
 
 function fsExportFile(fsFilename, finalFilename) {
 
+}
+
+function fsWriteToFileEnsureDir(filename, content, successCallback, errorCallback) {
+  var dir = path.dirname(filename);
+  ensureDirExists(dir);
+  return fsWriteToFile(filename, content, successCallback, errorCallback);
 }
 
 
@@ -259,14 +291,17 @@ function readLines(filename) {
 
 //TODO(MS) More properly wrap fs
 var self = {
+  options: __globalOptions,
   existsSync: fs.existsSync,
   writeFileSync: fs.writeFileSync,
   fsReadFile: fsReadFile,
   readSync: readSync,
   readAsync: readAsync,
   readLines: readLines,
+  ensureDirExists: ensureDirExists,
   fsExportFile: fsExportFile,
   fsWriteToFile: fsWriteToFile,
+  fsWriteToFileEnsureDir:   fsWriteToFileEnsureDir,
   fsAppendToFile: fsAppendToFile,
   writeToFile: writeToFile,
   loadDelimited: loadDelimited,

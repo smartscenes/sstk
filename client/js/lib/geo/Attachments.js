@@ -26,7 +26,7 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
 
   function getRoomIds(object3D) {
     var roomIds = _.get(object3D, ['userData', 'roomIds']);
-    if (roomIds) { return roomIds; };
+    if (roomIds) { return roomIds; }
     var roomId = _.get(object3D, ['userData', 'roomId']);
     if (roomId != undefined) {
       return [roomId];

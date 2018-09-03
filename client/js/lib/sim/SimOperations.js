@@ -1,5 +1,4 @@
 var Constants = require('Constants');
-var Object3DUtil = require('geo/Object3DUtil');
 var SceneOperations = require('scene/SceneOperations');
 var SimUtil = require('sim/SimUtil');
 var ImageUtil = require('util/ImageUtil');
@@ -35,7 +34,7 @@ SimOperations.selectRandom = function(res, opts) {
 SimOperations.selectors = {
   'first': SimOperations.selectFirst,
   'random': SimOperations.selectRandom
-}
+};
 
 SimOperations.prototype.init = function() {
   this.__sceneOperations = new SceneOperations({
@@ -46,8 +45,8 @@ SimOperations.prototype.init = function() {
 /**
  * Performs a set of modifications on the scene
  * @param simState {SimState}
- * @param modifications
- * @param callback
+ * @param modifications {sim.ModificationCmd[]}
+ * @param callback Error first callback
  */
 SimOperations.prototype.modify = function(simState, modifications, callback) {
   if (!_.isArray(modifications)) {
@@ -61,10 +60,70 @@ SimOperations.prototype.modify = function(simState, modifications, callback) {
 };
 
 /**
+ * Information about modification to apply.
+ * @memberOf sim
+ * @typedef ModificationCmd
+ * @type {sim.AddModificationCmd|sim.RemoveModificationCmd|sim.ColorModificationCmd|sim.SetMaterialModificationCmd}
+ * @property {string} name - Name of the modification (`add|remove|color|set_material`)
+ */
+
+/**
+ * Command to add objects to the scene (specify one of modelIds, keywords, categories, and query)
+ * @memberOf sim
+ * @typedef AddModificationCmd
+ * @type {object}
+ * @property {string} name - Name of the modification (`add`)
+ * @property {string[]} [modelIds] - The new object should match one of the modelIds
+ * @property {string[]} [keywords] - The new object should match (one of?) the given keywords
+ * @property {string[]} [categories] - The new object should match (one of?) the given categories
+ * @property {string} [query] - Custom solr query to use for searching for the object
+ * @property {string|THREE.Vector3} positionAt - Where to position the object at ('goal' or 3D position)
+ * @property {number|string} [rotation] - Rotation about vertical ('random' or radians)
+ * @property {string} [format] - What format to use for the fetched model
+ */
+
+/**
+ * Command to removes objects from the scene (specify one of objectIds, modelIds, categories, and filter)
+ * @memberOf sim
+ * @typedef RemoveModificationCmd
+ * @type {object}
+ * @property {string} name - Name of the modification (`remove`)
+ * @property {string[]} [objectIds] - List of object ids to operate on
+ * @property {string[]} [modelIds] - List of model ids to operate on
+ * @property {string[]} [categories] - List of categories to operate on
+ * @property {function(ModelInstance): boolean} [filter] - Filter indicating what objects to operate on
+ */
+
+/**
+ * Command to color objects with a specific color (specify one of objectIds, modelIds, categories, and filter)
+ * @memberOf sim
+ * @typedef ColorModificationCmd
+ * @type {object}
+ * @property {string} name - Name of the modification (`color`)
+ * @property {string[]} [objectIds] - List of object ids to operate on
+ * @property {string[]} [modelIds] - List of model ids to operate on
+ * @property {string[]} [categories] - List of categories to operate on
+ * @property {function(THREE.Object3D): boolean} [filter] - Filter indicating what objects to operate on
+ */
+
+/**
+ * Command to set material of objects with a specific material (specify one of objectIds, modelIds, categories, and filter)
+ * @memberOf sim
+ * @typedef SetMaterialModificationCmd
+ * @type {object}
+ * @property {string} name - Name of the modification (`set_material`)
+ * @property {string[]} [objectIds] - List of object ids to operate on
+ * @property {string[]} [modelIds] - List of model ids to operate on
+ * @property {string[]} [categories] - List of categories to operate on
+ * @property {function(THREE.Object3D): boolean} [filter] - Filter indicating what objects to operate on
+ * @property {materials.MaterialDef} [material] - Specification of what material to apply
+ */
+
+/**
  * Performs one modification on the scene
- * @param simState
- * @param modification
- * @param cb
+ * @param simState {sim.SimState}
+ * @param modification {sim.ModificationCmd}
+ * @param cb Error first callback function.
  */
 SimOperations.prototype.__modify = function(simState, modification, cb) {
   var scope = this;
@@ -114,15 +173,15 @@ SimOperations.prototype.__modify = function(simState, modification, cb) {
     } else if (modification.categories) {
       this.addObjectWithCategory(simState, modification.categories, placementOptions, cb);
     } else if (modification.query) {
-      this.addQueriedObject(simState, modification.categories, placementOptions, cb);
+      this.addQueriedObject(simState, modification.query, placementOptions, cb);
     } else {
       cb('Please specify modelIds, keywords, categories, or query for add');
     }
   } else if (modification.name === 'remove') {
-    if (modification.modelIds) {
-      this.removeObjects(simState, function(modelInstance) { return modification.modelIds.indexOf(modelInstance.model.getFullID()) >= 0; }, cb);
-    } else if (modification.objectIds) {
+    if (modification.objectIds) {
       this.removeObjects(simState, function(modelInstance) { return modification.objectIds.indexOf(modelInstance.object3D.userData.id) >= 0; }, cb);
+    } else if (modification.modelIds) {
+      this.removeObjects(simState, function(modelInstance) { return modification.modelIds.indexOf(modelInstance.model.getFullID()) >= 0; }, cb);
     } else if (modification.categories) {
       this.removeObjects(simState, function(modelInstance) { return modelInstance.model.hasCategoryIn(modification.categories); }, cb);
     } else if (modification.filter) {
@@ -136,16 +195,33 @@ SimOperations.prototype.__modify = function(simState, modification, cb) {
       cb('Please specify color to use');
       return;
     }
-    if (modification.modelIds) {
-      this.colorObjects(this.findObjectsInSceneByModelId(simState, modification.modelIds), color, cb);
-    } else if (modification.objectIds) {
+    if (modification.objectIds) {
       this.colorObjects(this.findObjectsInSceneByObjectId(simState, modification.objectIds), color, cb);
+    } else if (modification.modelIds) {
+      this.colorObjects(this.findObjectsInSceneByModelId(simState, modification.modelIds), color, cb);
     } else if (modification.categories) {
       this.colorObjects(this.findObjectsInSceneByCategory(simState, modification.categories), color, cb);
     } else if (modification.filter) {
-      this.colorObjects(this.findObjectsInScene(simState, filter), color, cb);
+      this.colorObjects(this.findObjectsInScene(simState, modification.filter), color, cb);
     } else {
       cb('Please specify modelIds, objectIds, categories, or filter for color');
+    }
+  } else if (modification.name === 'set_material' || modification.name === 'setMaterial') {
+    if (modification.material == undefined) {
+      cb('Please specify material to use');
+      return;
+    }
+    var material = (modification.material instanceof THREE.Material)? modification.material : Object3DUtil.createMaterial(modification.material);
+    if (modification.objectIds) {
+      this.setObjectMaterial(this.findObjectsInSceneByObjectId(simState, modification.objectIds), material, cb);
+    } else if (modification.modelIds) {
+      this.setObjectMaterial(this.findObjectsInSceneByModelId(simState, modification.modelIds), material, cb);
+    } else if (modification.categories) {
+      this.setObjectMaterial(this.findObjectsInSceneByCategory(simState, modification.categories), material, cb);
+    } else if (modification.filter) {
+      this.setObjectMaterial(this.findObjectsInScene(simState, modification.filter), material, cb);
+    } else {
+      cb('Please specify modelIds, objectIds, categories, or filter for ' + modification.name);
     }
   } else {
     cb('Unsupported operation ' + modification.name);
@@ -154,9 +230,9 @@ SimOperations.prototype.__modify = function(simState, modification, cb) {
 
 /**
  * Color specified objects
- * @param objects {Array[THREE.Object3D|{node: THREE.Object3D}]}
+ * @param objects {Array<THREE.Object3D[]|{node: THREE.Object3D}>}
  * @param color {THREE.Color}}
- * @param cb
+ * @param cb Error first callback function
  */
 SimOperations.prototype.colorObjects = function(objects, color, cb) {
   var object3Ds = _.map(objects, function(x) { return (x instanceof THREE.Object3D)? x : x.node; });
@@ -166,14 +242,26 @@ SimOperations.prototype.colorObjects = function(objects, color, cb) {
 };
 
 /**
+ * Set object material
+ * @param objects {Array<THREE.Object3D|{node: THREE.Object3D}>}
+ * @param material {THREE.Material}}
+ * @param cb Error first callback function
+ */
+SimOperations.prototype.setObjectMaterial = function(objects, material, cb) {
+  var object3Ds = _.map(objects, function(x) { return (x instanceof THREE.Object3D)? x : x.node; });
+  this.__sceneOperations.setObjectMaterial({ objects: object3Ds, material: material });
+  if (cb) { cb(); }
+};
+
+/**
  * Removes objects matching filter condition
  * @param simState {SimState}
  * @param filter {function(ModelInstance)}
- * @param cb
+ * @param cb Error first callback function returning array of objects that were removed
  */
 SimOperations.prototype.removeObjects = function(simState, filter, cb) {
-  this.__sceneOperations.removeObjects({ sceneState: simState.sceneState, filter: filter });
-  if (cb) { cb(); }
+  var removed = this.__sceneOperations.removeObjects({ sceneState: simState.sceneState, filter: filter });
+  if (cb) { cb(null, removed); }
 };
 
 /**
@@ -217,7 +305,7 @@ SimOperations.prototype.selectModelInDb = function(simState, query, options, cb)
  * @param simState {SimState}
  * @param modelIds {string[]}
  * @param options {PlacementOption}
- * @param cb
+ * @param cb {addObjectCallback}
  */
 SimOperations.prototype.addObjectWithId = function(simState, modelIds, options, cb) {
   if (!_.isArray(modelIds)) { modelIds = [modelIds]; }
@@ -232,7 +320,7 @@ SimOperations.prototype.addObjectWithId = function(simState, modelIds, options, 
       }
     }, options));
   } else {
-    cb(err || 'Cannot find any matching object models');
+    cb('Cannot find any matching object models');
   }
 };
 
@@ -241,7 +329,7 @@ SimOperations.prototype.addObjectWithId = function(simState, modelIds, options, 
  * @param simState {SimState}
  * @param query {string}
  * @param options {PlacementOption}
- * @param cb
+ * @param cb {addObjectCallback}
  */
 SimOperations.prototype.addQueriedObject = function(simState, query, options, cb) {
   var scope = this;
@@ -354,7 +442,7 @@ SimOperations.prototype.findObjectsInScene = function(simState, filter) {
       id: node.userData.id,
       node: node,
       modelInstance: Object3DUtil.getModelInstance(node)
-    }
+    };
   });
   objectInfos = _.sortBy(objectInfos, 'id');
   return objectInfos;
@@ -498,7 +586,7 @@ function scoreObjectById(sensedObjects, obj) {
 }
 
 function scoreObjectByIds(sensedObjects, objs) {
-  var objIndices = _.map(objs, function(obj) { return sensedObjects.index.indexOf(obj.id) });
+  var objIndices = _.map(objs, function(obj) { return sensedObjects.index.indexOf(obj.id); });
   // TODO: Have the final score be proportional to the pixel count
   return function(v) { return (objIndices.indexOf(v) >= 0)? 1 : 0; };
 }
@@ -583,5 +671,11 @@ SimOperations.prototype.findPlacementPosition = function(simState, observations,
   }
 };
 
+/**
+ * Callback for adding an object
+ * @callback addObjectCallback
+ * @param error
+ * @param {model.ModelInstance} Added object
+ */
 
 module.exports = SimOperations;

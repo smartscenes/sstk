@@ -1,5 +1,5 @@
-var request = require('request'),
-    config = require('../config');
+var request = require('request');
+var log = require('../lib/logger')('solr-poster');
 
 exports.addSolrRecord = function(url, record, successCallback, errorCallback) {
     var solrCommands = {
@@ -34,19 +34,16 @@ exports.postToSolrData = function(url, data, successCallback, errorCallback) {
         body: data
     };
 
-    console.log('Posting to ' + url);
-    console.log(data);
+    log.info('Posting to ' + url, data);
 
     request(options, function(error, response, body) {
         if (!error && response.statusCode == 200) {
             if (successCallback) successCallback(body);
         } else {
-            console.error("Error posting to solr: " + url);
-            if (error) console.error("Error is " + error);
+            log.error("Error posting to solr: " + url, error);
             var status;
             if (response) {
-                console.log("Response status is " + response.statusCode);
-                console.log(body);
+                log.info("Response status is " + response.statusCode, body);
                 status = response.statuscode;
             }
             if (errorCallback) errorCallback(status, "Error submitting annotation");

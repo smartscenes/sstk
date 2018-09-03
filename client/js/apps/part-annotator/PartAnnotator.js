@@ -41,6 +41,7 @@ require('physijs');
  */
 function PartAnnotator(params) {
   params = params || {};
+  var scope = this;
   var uihookups = [];
   uihookups.push(
     {
@@ -225,7 +226,6 @@ function PartAnnotator(params) {
   // List of parts that have already been removed from the model
   this.removedParts = [];
 
-  var scope = this;
   this.Subscribe('modelLoadStart', this, function(modelInfo) {
     scope.__rawAnnotations = null;
     if (scope.taskMode !== 'new') {

@@ -49,7 +49,7 @@ function BasePartViewer(params) {
     });
     customizeLabel = function(labelInfo) {
       wordnetLinker.indicateLinked(labelInfo);
-    }
+    };
     this.wordnetLinker = wordnetLinker;
   }
   var defaultContextMenuOptions;
@@ -140,7 +140,9 @@ function BasePartViewer(params) {
   // Debug node
   this.debugNode = new THREE.Group();
   this.debugNode.name = 'debugNode';
-  this.useAmbientOcclusion = true;
+  this.useAmbientOcclusion = this.urlParams.useAmbientOcclusion;
+  this.useEDLShader = this.urlParams.useEDLShader;
+  this.__isWireframe = false;
 
   this.labelsPanel = null;
   this.excludeFromPicking = [];
@@ -183,6 +185,7 @@ BasePartViewer.prototype.init = function (container) {
     camera: this.camera,
     useLights: false,
     useAmbientOcclusion: this.useAmbientOcclusion,
+    useEDLShader: this.useEDLShader,
     antialias: true
   });
 
@@ -269,13 +272,13 @@ BasePartViewer.prototype.createPanel = function () {
 
   this.__uis = {
     'label': { panels: [this.labelsPanel] }
-  }
+  };
   if (this.hierarchyPanelConfig) {
     if (!this.hierarchyPanel) {
       var options = _.defaults(Object.create(null), this.hierarchyPanelConfig);
       this.hierarchyPanel = new LabelHierarchyPanel(options);
     }
-    this.__uis['group'] = { panels: [this.hierarchyPanel] }
+    this.__uis['group'] = { panels: [this.hierarchyPanel] };
   }
   var allPanels = _.flatMap(_.values(this.__uis), function(x) { return x.panels || []; });
   this.__uis['all'] = { panels: allPanels };
@@ -288,7 +291,7 @@ BasePartViewer.prototype.__showUIs = function(mode) {
   if (ui.panels) {
     _.each(ui.panels, function(x) { x.show(); });
   }
-}
+};
 
 BasePartViewer.prototype.showAlert = function(message, style) {
   UIUtil.showAlert(null, message, style);

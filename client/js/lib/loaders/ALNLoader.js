@@ -44,7 +44,7 @@ ALNLoader.prototype.__parseMatrices = function(filename, data) {
       var filename = lines[lineno++].trim();
       var sep = lines[lineno++].trim();
       if (sep !== '#') {
-        throw 'Unexpected line at ' + filename + ':' + linenoe;
+        throw 'Unexpected line at ' + filename + ':' + lineno;
       }
       var r0 = lines[lineno++].trim().split(ws);
       var r1 = lines[lineno++].trim().split(ws);

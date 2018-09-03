@@ -1,6 +1,6 @@
 var CollisionProcessorNull = require('sim/CollisionProcessorNull');
 var Constants = require('Constants');
-var MeshSampling = require('gfx/MeshSampling');
+var MeshSampling = require('geo/MeshSampling');
 var VPTreeFactory = require('ds/VPTree');
 var _ = require('util');
 

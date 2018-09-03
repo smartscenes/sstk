@@ -13,12 +13,12 @@ cmd
   .version('0.0.1')
   .description('Export parts as separate objs')
   .option('--input <filename>', 'Input path')
+  .option('--input_type <type>', 'Input type (id or path)',  /^(id|path)$/, 'path')
   .option('--filter_empty [flag]', STK.util.cmd.parseBoolean, false)
   .option('--collapse_nested [flag]', STK.util.cmd.parseBoolean, false)
   .option('--auto_align [flag]', STK.util.cmd.parseBoolean, false)
   .option('--world_up <vector3>', STK.util.cmd.parseVector)
   .option('--world_front <vector3>', STK.util.cmd.parseVector)
-  .option('--use_ids [flag]', STK.util.cmd.parseBoolean, false)
   .option('--split_by_material [flag]', STK.util.cmd.parseBoolean, false)
   .option('--input_format <format>', 'File format to use')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
@@ -122,13 +122,13 @@ function processFiles() {
     var basename;
     var info;
     var outname;
-    if (cmd.use_ids) {
+    if (cmd.input_type === 'id') {
       var id = name;
       var split = id.split('.');
       outname = split[split.length-1];
       basename = cmd.output_dir + '/' + outname;
       info = {fullId: id, format: cmd.format};
-    } else {
+    } else if (cmd.input_type === 'path') {
       var file = name;
       var split = path.basename(file).split('.');
       outname = split[0];

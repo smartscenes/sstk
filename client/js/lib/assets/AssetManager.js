@@ -4,14 +4,14 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     'loaders/P5DTextureLoader', 'assets/LightsLoader',
     'assets/AssetGroups', 'assets/AssetsDb', "assets/AssetLoaders",
     'assets/CachedAssetLoader', 'assets/AssetCache', 'assets/AssetLoader',
-    'geo/Object3DUtil', 'materials/Materials', 'util/TaskQueue', 'util/Util', 'PubSub', 'async', 'util',
+    'geo/Object3DUtil', 'materials/Materials', 'util/TaskQueue', 'PubSub', 'async', 'util',
     'three-loaders', 'base'],
   function (Constants, Sounds, Model, SceneState,
             P5DTextureLoader, LightsLoader,
             AssetGroups, AssetsDb, AssetLoaders,
             CachedAssetLoader, AssetCache, AssetLoader, 
             Object3DUtil, Materials,
-            TaskQueue, Util, PubSub,
+            TaskQueue, PubSub,
             async, _) {
     // TODO: Cache model, geometries, materials, textures
     // TODO: Simplify convoluted model loading code
@@ -158,7 +158,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
       // Fields we want to preserve and send to the scene loaders
       this.__sceneLoadInfoFields = ['preload', 'freezeObjects', 'floor', 'room',
-        'includeCeiling', 'attachWallsToRooms', 'useVariants', 'createArch', 'useArchModelId',
+        'includeCeiling', 'attachWallsToRooms', 'useVariants',
+        'createArch', 'useArchModelId', 'ignoreOriginalArchHoles',
         'keepInvalid', 'keepHidden', 'keepParse', 'precomputeAttachments',
         'hideCategories', 'replaceModels', 'loadModelsFilter', 'skipElements',
         'emptyRoom', 'archOnly', 'defaultModelFormat'];
@@ -247,7 +248,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         var p5dLoader = new P5DTextureLoader();
         path = p5dLoader.getTexturePath(sid.id, origExt);
       }
-      var assetGroup = AssetGroups.getAssetGroup(source);
+
+      var assetGroup = AssetGroups.getAssetGroup(sid.source);
       if (assetGroup && assetGroup.type === 'texture') {
         return assetGroup.getImageUrl(sid.id, 'texture', metadata);
       } else if (assetGroup && assetGroup.texturePath) {
@@ -310,14 +312,18 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         }
       }
       return merged;
-    }
+    };
 
     AssetManager.prototype.__getCachedModelInfo = function (source, id, loadinfo) {
       var fullId = AssetManager.toFullId(source, id);
       var cached = this.__modelInfoCache.get(fullId);
       if (cached && loadinfo) {
+        // TODO: consider if we dropped anything else from loadinfo
         var info = _.defaults(Object.create(null), cached, { format: loadinfo.formatName });
         var merged = this.__getMergedModelLoadInfo(info);
+        if (loadinfo.options) {
+          merged.options = _.merge(merged.options || {}, loadinfo.options);
+        }
         merged.format = loadinfo.format || merged.format;  // HACK: Fix format
         return merged;
       } else {
@@ -551,7 +557,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           var scope = this;
           // Handle when we don't yet have info for this model.... need to explicitly fetch it
           var fullId = AssetManager.toFullId(modelInfo.source, modelInfo.id);
-          var query = this.searchController.getQuery('fullId', fullId);;
+          var query = this.searchController.getQuery('fullId', fullId);
           //console.log('search for ' + query);
           // NOTE: Use modelinfo cache
           var loader = this.__getCachingLoader('modelinfo');
@@ -898,7 +904,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         var options = modelInfo.options || {};
         var side = this.__getMaterialSide(modelInfo);
         var material = (options[materialKey]) ? options[materialKey] : new materialType(
-          { name: materialKey, side: side });;
+          { name: materialKey, side: side });
         return material;
       }
     };
@@ -999,7 +1005,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           callback(mesh);
         } else {
           // NO faces!  TODO: have reasonable size....
-          var size = 0.1*(modelInfo.unit || 1.0) / Constants.virtualUnitToMeters ;
+          var size = 1;//0.1*(modelInfo.unit || 1.0) / Constants.virtualUnitToMeters ;
+          //console.log('using size', size, 'for points material', modelInfo.unit, Constants.virtualUnitToMeters);
           material = new THREE.PointsMaterial({ size: size, vertexColors: THREE.VertexColors });
           var points = new THREE.Points(geometry, material);
           callback(points);
@@ -1090,7 +1097,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     // Kmz = zipped collada model
     AssetManager.prototype.__loadKmzModel = function (modelInfo, callback, onerror) {
-      var loader = new THREE.KMZLoader();
+      // var loader = new THREE.KMZLoader(modelInfo.options);
+      var loader = new THREE.KMZLoader(_.pick(modelInfo.options || {}, ['textureCacheOpts']));
       return this.__loadColladaOrKmzModel(loader, modelInfo, callback, onerror);
     };
 
@@ -1145,6 +1153,10 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       } else {
         loader.options.convertUpAxis = false;
       }
+      var skipLines = _.get(modelInfo, ['options', 'skipLines']);
+      if (skipLines != undefined) {
+        loader.options.skipLines = skipLines;
+      }
       return loader.load(file, colladaReady, undefined, onerror);
     };
 
@@ -1181,7 +1193,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       var options = _.defaults({}, modelInfo.options || {});
       options.computeNormals = (options.computeNormals != undefined) ? options.computeNormals : modelInfo.computeNormals;
       this.__updateMaterialOptions(modelInfo, options, Materials.DefaultMaterialType);
-      loader.setOptions(options)
+      loader.setOptions(options);
       return loader.load(modelInfo.file, function (object) {
         //console.log(object);
         callback(object.scene);
@@ -1345,7 +1357,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           var loadInfo = this.getLoadInfo(sid.source, sid.id, sceneinfo);
           if (loadInfo) {
             // HACK!!! Copy some important info from my sceneinfo to loadInfo
-            Util.copy(sceneinfo, loadInfo, this.__sceneLoadInfoFields);
+            _.merge(loadInfo, _.pick(sceneinfo, this.__sceneLoadInfoFields));
             return this.loadScene(loadInfo, callback);
           }
           console.error('Please implement me: AssetManager.loadScene from fullId');
@@ -1468,7 +1480,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         callback(error, sceneState);
       };
       var loadOptions = { assetManager: this };
-      Util.copy(sceneinfo, loadOptions, this.__sceneLoadInfoFields);
+      _.merge(loadOptions, _.pick(sceneinfo, this.__sceneLoadInfoFields));
 
       // Replaced with more generic asset loader registry
       var loaderClass = this.__lookupAssetLoader('scene', sceneinfo.format);

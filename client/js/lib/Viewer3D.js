@@ -29,6 +29,8 @@ var _ = require('util');
  * @param [params.uihookup] {Object.<string, {name: string, element: string, click: callback, shortcut: string}>} Map of ui controls (by name) to basic ui definition.
  * @param [params.instructions] {string} HTML string for instructions
  * @param [params.useAmbientOcclusion=false] {boolean} Whether to use ambient occlusion for rendering or not
+ * @param [params.ambientOcclusionType=ssao] {string} What type of ambient occlusion to use (ssao|sao)
+ * @param [params.useEDLShader=false] {boolean} Whether to use eye-dome lighting shader pass for rendering or not
  * @param [params.useShadows=false] {boolean} Whether to use shadows for rendering or not
  * @param [params.loadingIconUrl] {string} URL to use for loading icon
  * @param [params.maxGridCells] {int} The maximum number of cells to have for display of a 2D grid plane
@@ -55,6 +57,8 @@ var Viewer3D = function (params) {
   this.maxGridCells = (params.maxGridCells !== undefined)? params.maxGridCells : 200;
 
   this.useAmbientOcclusion = (params.useAmbientOcclusion !== undefined) ? params.useAmbientOcclusion : false;
+  this.ambientOcclusionType = params.ambientOcclusionType || 'ssao';
+  this.useEDLShader = (params.useEDLShader !== undefined) ? params.useEDLShader : false;
   this.useShadows = (params.useShadows !== undefined) ? params.useShadows : false;
   this.useLights = (params.useLights !== undefined) ? params.useLights : false;
 
@@ -718,11 +722,11 @@ Viewer3D.prototype.animate = function () {
 
 // Errors
 Viewer3D.prototype.showError = function (msg) {
-  showAlert(msg, 'alert-danger');
+  UIUtil.showAlert(null, msg, 'alert-danger');
 };
 
 Viewer3D.prototype.showWarning = function (msg) {
-  showAlert(msg, 'alert-warning');
+  UIUtil.showAlert(null, msg, 'alert-warning');
 };
 
 // Hookups for event registration
@@ -813,7 +817,7 @@ Viewer3D.prototype.searchForAsset = function (searchController, defaultSource, a
   if (assetId) {
     var sid = AssetManager.toSourceId(defaultSource, assetId);
     source = sid.source;
-    initialSearch = 'fullId:' + modelId;
+    initialSearch = 'fullId:' + assetId;
   }
   this.setSourceAndSearch(searchController, source, initialSearch);
 };
@@ -945,6 +949,7 @@ Viewer3D.prototype.setupBasicRenderer = function() {
     container: this.container,
     camera: this.camera,
     useAmbientOcclusion: this.useAmbientOcclusion,
+    useEDLShader: this.useEDLShader,
     useShadows: this.useShadows,
     useLights: this.useLights
   });

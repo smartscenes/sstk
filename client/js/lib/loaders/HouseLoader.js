@@ -718,7 +718,7 @@ House.prototype.createGeometry = function(opts) {
 
         if (regionFloorShapes.length > 0 && opts.includeParts['RegionShape']) {
           var height = region.bbox.max.z - regionFloorHeight;
-          var extrudeGeom = new THREE.ExtrudeGeometry(regionFloorShapes, { amount: height, bevelEnabled: false });
+          var extrudeGeom = new THREE.ExtrudeGeometry(regionFloorShapes, { depth: height, bevelEnabled: false });
           var mat2 = Object3DUtil.getSimpleFalseColorMaterial(i);
           mat2.transparent = true;
           mat2.opacity = 0.25;

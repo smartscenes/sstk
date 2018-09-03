@@ -656,6 +656,8 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         container: this.container,
         camera: this.camera,
         useAmbientOcclusion: this.useAmbientOcclusion,
+        ambientOcclusionType: this.ambientOcclusionType,
+        useEDLShader: this.useEDLShader,
         useShadows: this.useShadows,
         useLights: this.useLights
       });
@@ -790,7 +792,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       // Hack so we recolor room wss.room01
       this.assetManager.addMaterialBinding('wss.room01', {
         'materials': [
-          { name: 'floor', textureId: 'textures.47237' },
+          { name: 'floor', textureId: 'a3dTexture.47237' },
           { name: 'wall', color: 'aad4ff' },
           { name: 'trim', color: '617991' }],
         'materialMappings': {
@@ -1774,7 +1776,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
         assetManager: this.assetManager,
         renderer: this.renderer,
         camera: this.camera
-      })
+      });
 
       this.Publish("ModelLoaded", modelInstance, { loadTime: loadOptions.loadTime });
 

@@ -8,6 +8,7 @@ Example config files for use with various ssc scripts.
   render_scan.json - Configuration for rendering screenshot of a scan
   render_shapenetv1_obj.json - Specifies up/front for ShapeNetCore v1 OBJ files (for use with render_file.js)
   render_shapenetv2_obj.json - Specifies up/front for ShapeNetCore v2 OBJ files (for use with render_file.js)
+  render_suncg.json - Configuration for rendering suncg scenes
   render_turntable.json - Configuration for rendering turntable 
   render_turntable_neutral.json - Configuration for rendering turntable with a neutral coloring
 ```

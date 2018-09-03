@@ -1,0 +1,84 @@
+doctype html
+html(lang='en')
+  head
+    title='Scan Model Aligner'
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='https://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href=`${baseUrl}/client/js/vendor/jquery-ui/css/opentip.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/part-annotator.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/pagination.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/search-panel.css`)
+    link(rel='stylesheet', href='css/scan-model-aligner.css')
+  body
+    #main
+      #contextQueryResultsContainer
+      #canvas
+        #mouseToolTip.mouse-tooltip
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        #nameButtonsDiv.btn-group.btn-group-vertical.hidden
+      #instructionsPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-question-sign
+        p#instructions
+      #alert(style="display:none")
+        a.close.alert-close(href="#", aria-label="close") &times;
+        #alertMessage
+      #counterBox.panel.panel-default.overlay
+      button.overlay.btn.btn-lg.btn-success(id='submitBtn', type='button') Submit
+      //button.overlay.btn.btn-lg.btn-primary(id='saveBtn', type='button') Save
+      //button.overlay.btn.btn-lg.btn-primary(id='colorBtn', type='button') Show/hide colors (C)
+      //button.overlay.btn.btn-lg.btn-danger(id='passBtn', type='button') Pass - Can't do it!
+
+    // globals stores data we want to be able to access in the js code
+    script.
+      window.globals = {
+        modelId: "#{modelId}",
+        modelsAnnotated: #{modelsAnnotated},
+        totalToAnnotate: #{totalToAnnotate},
+        userId: "#{userId}",
+        sessionId: "#{sessionId}",
+        condition: "#{condition}",
+        task: "#{task}"
+      };
+
+    // Load require.js and start the app
+    script(src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/4.4.0/bootbox.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js")
+    script(src=`${baseUrl}/three.min.js`)
+    script(src=`${baseUrl}/scanNet.bundle.js`)
+    script.
+      var annotator = new STK.ScanModelAligner({
+        container: document.getElementById('canvas'),
+        addGround: false,
+        loadingIconUrl: STK.Constants.defaultLoadingIconUrl,
+        allowSelectMode: false,
+        allowConsole: false,
+        allowScenePrevNext: false,
+        enableUILog: false,
+        showInstructions: true,
+        useSidePanelSearch: false,
+        toolbarOptions: {},
+        //useDatGui: false,
+        labelViewer: false,
+        rotateBy: Math.PI / 32
+      });
+
+      // manual hooking up of scan models
+      var viewer = annotator.viewer;
+      viewer.launch();
+      viewer.assetManager.registerCustomAssetGroups({
+        assetFiles: STK.Constants.scanAssetsFile,
+        filterByAssetId: annotator.getAnnotationItemId(),
+          callback: function(err, res) {
+            annotator.launch();
+        }
+      });
+
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
+      $('#donePage').hide();
+      window.app = annotator; // for console debugging
+    link(rel='stylesheet', href=`${baseUrl}/css/datgui-light.css`)

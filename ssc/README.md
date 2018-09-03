@@ -29,6 +29,10 @@ Rendering scripts:
 
         `./render --color_by objectPartId --encode_index --write_index`
 
+    5. Render scenes with neutral coloring
+        
+        `./render --color_by color --color '#fef9ed'`
+
 2. `./render-file  --input <filename>` - Renders model from file
 
 3. `./scn2img --limit <n> --cameras <camfile> --id <sceneId>` - Renders images for scene based on set of camera viewpoints 
@@ -75,7 +79,7 @@ Annotation tools:
 
 1. `./project-annotations` - Project segment annotations from one mesh to another mesh
     
-    1. Project annotations from one mesh to annother (the two meshes should represent the same environment)
+    1. Project annotations from one mesh to another (the two meshes should represent the same environment)
 
        ./project-annotations.js --source <id> --target <id> --output_dir <dir>  --sourceSegmentType segment-annotations-latest --targetSegmentType surfaces --max_dist 0.01       
 
@@ -86,9 +90,16 @@ Annotation tools:
 
 1. './export-part-meshes' - Export part meshes as OBJ/MTL
 
+   1. Export part meshes (each leaf part is a separate OBJ/MTL with json file specifying the hierarchy) to output directory and aligned
+      ./export-part-meshes --output_dir out/meshes --input 3dw.25524f6bfa80e05b713decb1a0563b12 --use_ids --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller
+
 1. './export-mesh' - Export mesh
 
 1. './create-pts-bvh' - Create BVH given a directory of object point clouds
+
+1. './sample-points' - Samples points from a mesh (sampled points are output as a PLY file)
+
+See `scripts` directory for examples of how to batch run these scripts.
 
 Known Issues:
 

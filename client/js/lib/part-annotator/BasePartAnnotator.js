@@ -542,7 +542,7 @@ function BasePartAnnotatorFactory(baseClass) {
     var labeler = this.labeler;
     var selected = this.labelsPanel.getAllSelected();
     // filter out selected that don't have any parts
-    selected = selected? selected.filter(function(x) { return labeler.hasParts(x) }) : null;
+    selected = selected? selected.filter(function(x) { return labeler.hasParts(x); }) : null;
     return selected;
   };
 
@@ -607,7 +607,7 @@ function BasePartAnnotatorFactory(baseClass) {
             var label = results['group'];
             scope.labelsPanel.groupLabels(selected, label);
           }
-          if (callback) { callback(null, results) };
+          if (callback) { callback(null, results); }
         }
       );
     }
@@ -629,7 +629,7 @@ function BasePartAnnotatorFactory(baseClass) {
             var label = results['label'];
             scope.labelsPanel.renameLabels(selected, label);
           }
-          if (callback) { callback(null, results) };
+          if (callback) { callback(null, results); }
         }
       );
     }

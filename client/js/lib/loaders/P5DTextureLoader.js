@@ -36,7 +36,12 @@ TextureLoader.prototype.getTexturePath = function(name, origExt) {
 };
 
 TextureLoader.prototype.updateMaterials = function (mesh, config) {
-  if (mesh.material instanceof THREE.MultiMaterial) {
+  if (Array.isArray(mesh.material)) {
+    for (var i = 0, l = mesh.material.length; i < l; i++) {
+      var meshMaterial = mesh.material[i];
+      mesh.material[i] = this.updateMaterial(meshMaterial, config, i);
+    }
+  } else if (mesh.material instanceof THREE.MultiMaterial) {
     for (var i = 0, l = mesh.material.materials.length; i < l; i++) {
       var meshMaterial = mesh.material.materials[i];
       mesh.material.materials[i] = this.updateMaterial(meshMaterial, config, i);

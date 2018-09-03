@@ -400,7 +400,7 @@ ContextQueryControls.prototype.replace = function (modelInstanceOrObject, option
     lastChosenObject: modelInstance,
     op: 'replace',
     replaceObject: modelInstance,
-    replaceObjectQuaternion: object.getWorldQuaternion().clone()
+    replaceObjectQuaternion: object.getWorldQuaternion(new THREE.Quaternion())
   };
   // do context query with this category and orientation
   // (TODO: indicate this is a replace, and upweigh our category and current orientation)

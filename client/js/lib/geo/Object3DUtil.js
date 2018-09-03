@@ -54,15 +54,34 @@ function setNodeMaterial(node, material, materialIndex) {
   //if (!node.userData.origMaterial) {
   //  node.userData.origMaterial = node.material;
   //}
-  if (node.material instanceof THREE.MultiMaterial) {
+  var materials = null;
+  if (material instanceof THREE.MultiMaterial) {
+    materials = material.materials;
+  } else if (Array.isArray(material)) {
+    materials = material;
+  }
+  if (Array.isArray(node.material)) {
+    var oldMaterials = node.material;
+    node.material = [];
+    if (materialIndex !== undefined) {
+      var i = materialIndex;
+      if (i < 0 || i >= oldMaterials.length) {
+        console.warn('Invalid materialIndex ' + materialIndex + ' for node');
+        console.log(node);
+        return false;
+      }
+      for (var i = 0; i < oldMaterials.length; i++) {
+        node.material[i] = oldMaterials[i];
+      }
+      node.material[i] = materials? materials[i] : material;
+    } else {
+      for (var i = 0; i < oldMaterials.length; i++) {
+        node.material[i] = materials? materials[i] : material;
+      }
+    }
+  } else if (node.material instanceof THREE.MultiMaterial) {
     node.material = node.material.clone();
 
-    var materials = null;
-    if (material instanceof THREE.MultiMaterial) {
-      materials = material.materials;
-    } else if (Array.isArray(material)) {
-      materials = material;
-    }
     if (materialIndex !== undefined) {
       var i = materialIndex;
       if (i < 0 || i >= node.material.materials.length) {
@@ -227,6 +246,11 @@ Object3DUtil.processMaterial = function (object3D, callback) {
         }
       }
     });
+  } else if (Array.isArray(object3D) && object3D.length && (object3D[0] instanceof THREE.MultiMaterial)) {
+    var material = object3D;
+    for (var i = 0; i < material.length; i++) {
+      Object3DUtil.processMaterial(material[i], callback);
+    }
   } else if (object3D instanceof THREE.MultiMaterial) {
     var material = object3D;
     for (var i = 0; i < material.materials.length; i++) {
@@ -756,6 +780,15 @@ Object3DUtil.getObjectStats = function(object3D, includeChildModelInstance) {
   return { nverts: nverts, nfaces: nfaces, nmeshes: nmeshes };
 };
 
+/**
+ * Returns surfaces area of the object3D
+ * @param object3D {THREE.Object3D}
+ * @param [opts] Additional options
+ * @param [opts.transform] {THREE.Matrix4} Additional transform to apply to vertices
+ * @param [opts.meshFilter] {function(THREE.Mesh): boolean} Whether to include mesh in surface area computation
+ * @param [opts.triFilter] {function(v0,v1,v2,iFace): boolean} Whether to include triangle in surface area computation
+ * @returns {number}
+ */
 Object3DUtil.getSurfaceArea = function(object3D, opts) {
   opts = opts || {};
   var includeChildModelInstance = opts.includeChildModelInstance;
@@ -1099,24 +1132,29 @@ Object3DUtil.rotateObject3DEuler = function (obj, delta, order, stationaryBbBoxP
   Object3DUtil.placeObject3D(obj, base, stationaryBbBoxPoint);
 };
 
-Object3DUtil.rotateObject3DAboutAxis = function (obj, axis, delta, stationaryBbBoxPoint) {
-  //console.time('rotateObject3DAboutAxis');
-  obj.updateMatrixWorld();
-  var bb = Object3DUtil.getBoundingBox(obj);
-  var base = bb.getWorldPosition(stationaryBbBoxPoint);
-  Object3DUtil.placeObject3D(obj, new THREE.Vector3(), stationaryBbBoxPoint);
-
-  var qwi = obj.getWorldQuaternion().inverse();
-  var localAxis = axis.clone().applyQuaternion(qwi);
+Object3DUtil.rotateObject3DAboutAxis = function() {
+  var origin = new THREE.Vector3();
   var q = new THREE.Quaternion();
-  q.setFromAxisAngle(localAxis, delta);
-  obj.quaternion.multiply(q);
-  obj.updateMatrix();
+  var v = new THREE.Vector3();
+  return function (obj, axis, delta, stationaryBbBoxPoint) {
+      //console.time('rotateObject3DAboutAxis');
+      obj.updateMatrixWorld();
+      var bb = Object3DUtil.getBoundingBox(obj);
+      var base = bb.getWorldPosition(stationaryBbBoxPoint);
+      Object3DUtil.placeObject3D(obj, origin, stationaryBbBoxPoint);
 
-  Object3DUtil.clearCache(obj);
-  Object3DUtil.placeObject3D(obj, base, stationaryBbBoxPoint);
-  //console.timeEnd('rotateObject3DAboutAxis');
-};
+      var qwi = obj.getWorldQuaternion(q).inverse();
+      v.copy(axis);
+      var localAxis = v.applyQuaternion(qwi);
+      q.setFromAxisAngle(localAxis, delta);
+      obj.quaternion.multiply(q);
+      obj.updateMatrix();
+
+      Object3DUtil.clearCache(obj);
+      Object3DUtil.placeObject3D(obj, base, stationaryBbBoxPoint);
+      //console.timeEnd('rotateObject3DAboutAxis');
+  }
+}();
 
 Object3DUtil.rotateObject3DWrtBBFace = function (obj, axis, delta, bbface) {
   if (bbface === undefined) {
@@ -1126,21 +1164,25 @@ Object3DUtil.rotateObject3DWrtBBFace = function (obj, axis, delta, bbface) {
   Object3DUtil.rotateObject3DAboutAxis(obj, axis, delta, stationaryBbBoxPoint);
 };
 
-Object3DUtil.rotateObject3DAboutAxisSimple = function (obj, axis, delta, isWorld) {
-  //console.time('rotateObject3DAboutAxisSimple');
-  var localAxis = axis;
-  if (isWorld) {
-    var qwi = obj.getWorldQuaternion().inverse();
-    localAxis = axis.clone().applyQuaternion(qwi);
-  }
-
+Object3DUtil.rotateObject3DAboutAxisSimple = function() {
   var q = new THREE.Quaternion();
-  q.setFromAxisAngle(localAxis, delta);
-  obj.quaternion.multiplyQuaternions(obj.quaternion, q);
-  obj.updateMatrix();
-  Object3DUtil.clearCache(obj);
-  //console.timeEnd('rotateObject3DAboutAxisSimple');
-};
+  var v = new THREE.Vector3();
+  return function (obj, axis, delta, isWorld) {
+      //console.time('rotateObject3DAboutAxisSimple');
+      var localAxis = axis;
+      if (isWorld) {
+          var qwi = obj.getWorldQuaternion(q).inverse();
+          v.copy(axis);
+          localAxis = v.applyQuaternion(qwi);
+      }
+
+      q.setFromAxisAngle(localAxis, delta);
+      obj.quaternion.multiplyQuaternions(obj.quaternion, q);
+      obj.updateMatrix();
+      Object3DUtil.clearCache(obj);
+      //console.timeEnd('rotateObject3DAboutAxisSimple');
+  }
+}();
 
 // Helper functions  for rotating objects
 Object3DUtil.applyAlignment = function (obj, alignment, stationaryBbBoxPoint) {
@@ -1800,7 +1842,7 @@ Object3DUtil.toBBox = function(b) {
       return null;
     }
   }
-}
+};
 
 Object3DUtil.toBox2 = function(b) {
   if (b) {
@@ -1813,7 +1855,7 @@ Object3DUtil.toBox2 = function(b) {
       return null;
     }
   }
-}
+};
 
 
 Object3DUtil.toBox3 = function(b) {
@@ -1827,7 +1869,7 @@ Object3DUtil.toBox3 = function(b) {
       return null;
     }
   }
-}
+};
 
 Object3DUtil.arrayToMatrix4 = function(m, isRowMajor) {
   var matrix = new THREE.Matrix4();
@@ -2136,6 +2178,7 @@ Object3DUtil.clearCache = function (object3D) {
 
 Object3DUtil.dispose = function(parentObject) {
   parentObject.traverse(function (node) {
+    // TODO: properly dispose of materials, textures and lights
     if (node instanceof THREE.Mesh || node instanceof THREE.Line || node instanceof THREE.Points) {
       if (node.geometry) {
         node.geometry.dispose();
@@ -2143,8 +2186,8 @@ Object3DUtil.dispose = function(parentObject) {
 
       if (node.material) {
 
-        if (node.material instanceof THREE.MultiMaterial) {
-          node.material.materials.forEach(function (mtrl, idx) {
+        if (Array.isArray(node.material)) {
+          node.material.forEach(function (mtrl, idx) {
             if (mtrl.map) mtrl.map.dispose();
             if (mtrl.lightMap) mtrl.lightMap.dispose();
             if (mtrl.bumpMap) mtrl.bumpMap.dispose();
@@ -2317,7 +2360,7 @@ Object3DUtil.setState = function (object, field, value, filter) {
  * @param [options] Additional options
  * @param [options.splitByMaterial=false] Whether to split nodes with Material into separate multiple meshes.
  *   The old mesh in the scene graph is replaced with the split up meshes.
- * @returns {nodes: Array[THREE.Object3D], geometries: Array[THREE.Geometry], materials: Array[THREE.Material], leafNodes: Array[THREE.Mesh]}
+ * @returns {{nodes: THREE.Object3D[], geometries: THREE.Geometry[], materials: THREE.Material[], leafNodes: THREE.Mesh[]}}
  */
 Object3DUtil.getIndexedNodes = function (object3D, options) {
   options = options || {};
@@ -2325,7 +2368,7 @@ Object3DUtil.getIndexedNodes = function (object3D, options) {
     nodes: [],
     geometries: [],
     materials: []
-  }
+  };
   object3D.traverse(function (node) {
     node.userData.nodeIndex = result.nodes.length;
     result.nodes.push(node);
@@ -2748,7 +2791,14 @@ Object3DUtil.getMeshMaterials = function(object3D) {
   var materials = [];
   Object3DUtil.traverseMeshes(object3D, true, function (node) {
     if (node instanceof THREE.Mesh && node.material) {
-      if (node.material instanceof THREE.MultiMaterial) {
+      if (Array.isArray(node.material)) {
+        // Actual material definition is embedded in geometry...
+        var mats = node.material;
+        for (var j = 0; j < mats.length; j++) {
+          var m = mats[j];
+          materials.push({mesh: node, material: m, index: j});
+        }
+      } else if (node.material instanceof THREE.MultiMaterial) {
         // Actual material definition is embedded in geometry...
         var mats = node.material.materials;
         for (var j = 0; j < mats.length; j++) {
@@ -2763,6 +2813,47 @@ Object3DUtil.getMeshMaterials = function(object3D) {
   return materials;
 };
 
+/**
+ * Represents a subset of a mesh
+ * @typedef PartialMesh
+ * @type {object}
+ * @property {THREE.Mesh} mesh
+ * @property {int[]} List of face indices to include
+ * @property {int} materialIndex Index of material
+ * @memberOf geo
+ */
+
+
+/**
+ * Information about a material
+ * @typedef MaterialSetMeshInfo
+ * @type {object}
+ * @property {string} id
+ * @property {string} name
+ * @property {string} type material
+ * @property {THREE.Material} material - Material
+ * @property {Array<THREE.Mesh|PartialMesh>} meshes - Meshes associated with this material
+ * @memberOf geo
+ */
+
+/**
+ * Information about a set of material
+ * @typedef MaterialMeshInfo
+ * @type {object}
+ * @property {string} id
+ * @property {string} name
+ * @property {string} type material_set
+ * @property {Array<THREE.Material>} materials - Set of materials
+ * @property {Array<THREE.Mesh|PartialMesh>} meshes - Meshes associated with a material in this set of materials
+ * @memberOf geo
+ */
+
+/**
+ * Returns map of material id to material-mesh info
+ * @param object3D {THREE.Object3D}
+ * @return Map<string, MaterialMeshInfo|MaterialSetMeshInfp>
+ * @memberOf geo
+ */
 Object3DUtil.getMaterials = function (object3D) {
   // each entry of materials holds
   //   name: name of material
@@ -2815,9 +2906,8 @@ Object3DUtil.getMaterials = function (object3D) {
 
   object3D.traverse(function (node) {
     if (node instanceof THREE.Mesh && node.material) {
-      if (node.material instanceof THREE.MultiMaterial) {
+      if (Array.isArray(node.material) || node.material instanceof THREE.MultiMaterial) {
         // Actual material definition is embedded in geometry...
-        var meshFaceMaterial = node.material;
         var meshFaces = [];
         // Break down materials into individual faces...
         // TODO: Same as geometryGroups/geometryGroupsList in geometry?
@@ -2846,9 +2936,10 @@ Object3DUtil.getMaterials = function (object3D) {
             }
           }
         }
-        for (var i = 0; i < meshFaceMaterial.materials.length; i++) {
+        var mats = node.material.materials || node.material;
+        for (var i = 0; i < mats.length; i++) {
           if (meshFaces.length > 0) {
-            addMaterial({mesh: node, faceIndices: meshFaces[i], materialIndex: i}, meshFaceMaterial.materials[i]);
+            addMaterial({mesh: node, faceIndices: meshFaces[i], materialIndex: i}, mats[i]);
           }
         }
       } else {
@@ -2871,7 +2962,7 @@ Object3DUtil.getMaterials = function (object3D) {
 Object3DUtil.populateSceneGraphPath = function (node, parentRoot) {
   node.traverse(function(n) {
     n.userData.sceneGraphPath = Object3DUtil.getSceneGraphPath(n, parentRoot);
-  })
+  });
 };
 
 Object3DUtil.getSceneGraphPath = function (node, parentRoot) {
@@ -2949,15 +3040,16 @@ Object3DUtil.findMaterials = function(object3D, nonrecursive, materialFilter) {
   Object3DUtil.traverseMeshes(object3D, nonrecursive, function(mesh) {
     //console.log('traverse', mesh);
     var material = mesh.material;
-    if (material instanceof THREE.MultiMaterial) {
-      for (var i = 0; i < material.materials.length; i++) {
-        var mat = material.materials[i];
+    if (Array.isArray(material) || material instanceof THREE.MultiMaterial) {
+      var mats = material.materials || material;
+      for (var i = 0; i < mats.length; i++) {
+        var mat = mats[i];
         if (materialFilter(mat)) {
           materials.push({
             mesh: mesh,
             material: mat,
             setMaterial: function(index, newMat) {
-              material.materials[index] = newMat;
+              mats[index] = newMat;
             }.bind(mesh, i)
           });
         }
@@ -3091,9 +3183,10 @@ Object3DUtil.setMaterialState = function (object3D, matOverrides, flag) {
   }
 
   Object3DUtil.traverseMeshes(object3D, true, function (mesh) {
-    if (mesh.material instanceof THREE.MultiMaterial) {
-      for (var i = 0, l = mesh.material.materials.length; i < l; i++) {
-        var meshMaterial = mesh.material.materials[i];
+    if (Array.isArray(mesh.material) || mesh.material instanceof THREE.MultiMaterial) {
+      var mats = mesh.material.materials || mesh.material;
+      for (var i = 0, l = mats.length; i < l; i++) {
+        var meshMaterial = mats[i];
         setMatState(meshMaterial, i);
       }
     } else if (mesh.material.index != undefined) {
@@ -3363,7 +3456,7 @@ Object3DUtil.__makeWallWithHolesGeometry = function(opts) {
     }
   }
 
-  var extrudeSettings = { amount: depth / 2, bevelEnabled: false };
+  var extrudeSettings = { depth: depth / 2, bevelEnabled: false };
   var geo = new THREE.ExtrudeGeometry(wallShape, extrudeSettings);
   return geo;
 };
@@ -3394,8 +3487,8 @@ Object3DUtil.makeWallWithHoles = function (baseStart, baseEnd, wallUpDir, wallHe
   });
 
   var materialBetween = Object3DUtil.getBasicMaterial('gray');
-  var materialIn  = new THREE.MultiMaterial([materials[0], materialBetween]);
-  var materialOut = new THREE.MultiMaterial([materials[1], materialBetween]);
+  var materialIn  = [materials[0], materialBetween];
+  var materialOut = [materials[1], materialBetween];
   var meshIn = new THREE.Mesh(geo, materialIn);
   var meshOut = new THREE.Mesh(geo, materialOut);
   meshIn.name = 'WallInside';

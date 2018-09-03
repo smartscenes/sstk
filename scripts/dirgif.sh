@@ -14,4 +14,4 @@ dir=$1
 imFirst=6
 imLast=13
 
-find "$dir" -type d -print0 | parallel -0 convert -resize 50% -delay 40 $(seq -f {}/{.}-%g.png $imFirst $imLast) -coalesce -layers OptimizePlus -loop 0 {}/{.}.gif
+find "$dir" -type d -print0 | parallel --eta -0 convert -resize 50% -delay 40 $(seq -f {}/{.}-%g.png $imFirst $imLast) -coalesce -layers OptimizePlus -loop 0 {}/{.}.gif

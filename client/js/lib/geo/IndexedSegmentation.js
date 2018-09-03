@@ -65,6 +65,8 @@ IndexedSegmentation.prototype.__makeSegments = function(opts) {
     mesh.name = object3D.name + '-segmented';
     _.merge(mesh.userData, object3D.userData, { segmentType: opts.segmentType, segmentName: opts.segmentName });
     var segmentation = segmentationsByName[opts.segmentName];
+    var mats = (mesh.material instanceof THREE.MultiMaterial)? mesh.material.materials :
+      (Array.isArray(mesh.material)? mesh.material : [mesh.material]);
     var segMatToSegInfoIndex = {};
     if (segmentation) {
       var maxIndex = -1;
@@ -83,7 +85,7 @@ IndexedSegmentation.prototype.__makeSegments = function(opts) {
           if (si == undefined) {
             si = segInfos.length;
             segMatToSegInfoIndex[segMat] = si;
-            segInfos[si] = { partIndex: bsi, label: labels[bsi], material: mesh.material.materials[mi] };
+            segInfos[si] = { partIndex: bsi, label: labels[bsi], material: mats[mi] };
           }
           mesh.geometry.faces[i].materialIndex = si;
           if (si > maxIndex) {
@@ -103,7 +105,7 @@ IndexedSegmentation.prototype.__makeSegments = function(opts) {
         }
       }
 
-      //console.log('Make segments: ', this.data.id, mesh, mesh.material.materials, segInfos, segMatToSegInfoIndex);
+      //console.log('Make segments: ', this.data.id, mesh, mats, segInfos, segMatToSegInfoIndex);
       var materials = _.range(maxIndex + 1).map(function (i) {
         return opts.getMaterial(object3D, segInfos[i]);
       });
@@ -112,7 +114,7 @@ IndexedSegmentation.prototype.__makeSegments = function(opts) {
     } else {
       console.warn('No ' + opts.segmentType + '.' + opts.segmentName + ' segmentation for ' + this.data.id, segmentationsByName);
       if (opts.useOriginalMaterial) {
-        var materials = mesh.material.materials.map(function (m, i) {
+        var materials = mats.map(function (m, i) {
           return opts.getMaterial(object3D, { partIndex: 0, material: m });
         });
         mesh.material = new THREE.MultiMaterial(materials);

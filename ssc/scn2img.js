@@ -21,7 +21,7 @@ cmd
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--width <width>', 'Image width [default: 640]', STK.util.cmd.parseInt, 640)
   .option('--height <height>', 'Image height [default: 480]', STK.util.cmd.parseInt, 480)
-  .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, true)
+  .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, false)
   .option('--compress_png', 'Compress PNG output using pngquant [false]')
   .option('--lights [flag]', 'Whether to use lights', STK.util.cmd.parseBoolean, false)
   .option('--compress_png [flag]', 'Compress PNG output using pngquant', STK.util.cmd.parseBoolean, false)

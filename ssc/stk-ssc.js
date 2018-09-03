@@ -67,6 +67,7 @@ if (STK.Constants.baseUrl.startsWith('http:') || STK.Constants.baseUrl.startsWit
   global.XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
 }
 STK.ImageUtil.getPixelsSync = deasync(getPixels);
+STK.ImageUtil.bufferToRawPixelsSync = deasync(STK.ImageUtil.bufferToRawPixels);
 
 var AssetGroups = STK.assets.AssetGroups;
 var AssetsDb = STK.assets.AssetsDb;
@@ -83,6 +84,13 @@ var cachedImagesLoader = new STK.assets.CachedAssetLoader({
   loadFn: function (loadOpts, callback) {
     //console.log('request image: ' + loadOpts.url);
     getPixels(loadOpts.url, loadOpts.mimeType, callback);
+    // fs.readAsync(loadOpts.url, 'arraybuffer', function(err, buffer) {
+    //   if (buffer) {
+    //     STK.ImageUtil.bufferToRawPixels(buffer, callback);
+    //   } else {
+    //     callback(err);
+    //   }
+    // });
   }
 });
 
@@ -153,9 +161,9 @@ THREE.ImageLoaderQueue = async.queue(function (task, callback) {
         var image = {
           src: key,
           data: pixels.data,
-          width: pixels.shape[0],
-          height: pixels.shape[1],
-          channels: pixels.shape[2]
+          width: pixels.shape? pixels.shape[0] : pixels.width,
+          height: pixels.shape? pixels.shape[1] : pixels.height,
+          channels: pixels.shape? pixels.shape[2] : pixels.channels
         };
         // console.log('ImageLoaded: ' + key + ' ' + image.width + 'x' + image.height);
         // TODO(AXC): HACK!!! Added extra argument waitForImageReady

@@ -121,7 +121,7 @@ AlignPanel.prototype.__ensureTransformControls = function() {
     this.transformControls.addEventListener('change', function() {
       if (scope.target) {
         scope.updateUpFrontAxes(scope.target);
-      };
+      }
       scope.app.render();
     });
     scope.addControlCallback(this.transformControls);
@@ -129,9 +129,9 @@ AlignPanel.prototype.__ensureTransformControls = function() {
 };
 
 AlignPanel.prototype.redisplay = function() {
-  if (this.transformControls) {
-    this.transformControls.update();
-  }
+  // if (this.transformControls) {
+  //   this.transformControls.update();
+  // }
 };
 
 AlignPanel.prototype.__keyHandler = function (event) {

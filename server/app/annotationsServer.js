@@ -3,6 +3,7 @@ var _ = require('lodash');
 var AnnotationsServer = function (params) {
   this.sqlDB = params.sqlDB;
   this.config = params.config;
+  this.log = params.log;
 };
 
 AnnotationsServer.prototype.registerRoutes = function(app, mountPath) {
@@ -34,6 +35,7 @@ AnnotationsServer.prototype.submit = function (req, res) {
 // List annotations
 AnnotationsServer.prototype.list = function (req, res) {
   var sqlDB = this.sqlDB;
+  var log = this.log;
   function convertAnnotationRows(rows) {
     if (!rows) return;
     //console.time('convertAnnotationRows');
@@ -76,6 +78,7 @@ AnnotationsServer.prototype.list = function (req, res) {
 // Get a single annotation
 AnnotationsServer.prototype.get = function (req, res) {
   var sqlDB = this.sqlDB;
+  var log = this.log;
   // Query general annotations table for a summary of segment annotations
   sqlDB.queryAnnotations(req.params, res, function (rows) {
     var row = (rows && rows.length)? rows[0] : null;
@@ -98,6 +101,7 @@ AnnotationsServer.prototype.get = function (req, res) {
 AnnotationsServer.prototype.getLatest = function (req, res) {
   var sqlDB = this.sqlDB;
   var queryParams = _.defaults({}, req.body, req.query);
+  var log = this.log;
   // Query general annotations table for a summary of segment annotations
   sqlDB.queryAnnotations(queryParams, res, function (rows) {
     if (rows && rows.length) {

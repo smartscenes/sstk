@@ -1,6 +1,6 @@
+var util = require('util');
 var winston = require('winston');
 var expressWinston = require('express-winston');
-var WinstonContext = require('winston-context');
 
 var expressLogger = expressWinston.logger({
   transports: [
@@ -13,14 +13,89 @@ var expressLogger = expressWinston.logger({
   //ignoreRoute: function (req, res) { return false; } // optional: allows to skip some log messages based on request and/or response
 });
 
-var defaultLogger = new (winston.Logger)({
-  level: 'info',
-  transports: [
-    new (winston.transports.Console)({handleExceptions: true}),
-    new (winston.transports.File)({ filename: 'logs/server.log', handleExceptions: true })
-  ],
-  exitOnError: false
-});
+function createBaseLogger(name) {
+  if (winston.loggers.has(name)) {
+    return winston.loggers.get(name);
+  }
+
+  var transports = [
+    new (winston.transports.Console)({
+      timestamp: true,
+      label: name,
+      // timestamp: function () { return Date.now(); },
+      // formatter: function (options) {
+      //   // - Return string will be passed to logger.
+      //   // - Optionally, use options.colorize(options.level, <string>) to
+      //   //   colorize output based on the log level.
+      //   console.log(options);
+      //   return new Date(options.timestamp()).toISOString() + ' ' +
+      //     winston.config.colorize(options.level, options.level.toUpperCase()) + ' - ' +
+      //     (name? '[' + name + '] ' : '' ) +
+      //     (options.message ? options.message : '') +
+      //     (options.meta && Object.keys(options.meta).length ? '\n\t' + util.inspect(options.meta) : '');
+      // },
+      colorize: true,
+      handleExceptions: true
+    }),
+    new (winston.transports.File)({
+      filename: 'logs/server.log',
+      label: name,
+      handleExceptions: true
+    })
+  ];
+
+  var logger = winston.loggers.add(name);
+  logger.configure({
+    level: 'info',
+    transports: transports,
+    exitOnError: false
+  });
+  return logger;
+}
+
+var defaultLogger = createBaseLogger();
+
+var myloggers = {};
+function createNamedLogger(name) {
+  var logger = myloggers[name];
+  if (logger) {
+    return logger;
+  }
+
+  if (winston.loggers.has(name)) {
+    logger = winston.loggers.get(name);
+    myloggers[name] = logger;
+    return logger;
+  }
+
+  // Weird hack to set name of logger so we can have one global logger with multiple labels
+  var logProps = ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly', 'log'];
+  var proxy = new Proxy(defaultLogger, {
+    get: function(target, propKey) {
+      if (logProps.indexOf(propKey) >= 0) {
+        return function() {
+          var transportKeys = Object.keys(target.transports);
+          var oldLabels = {};
+          transportKeys.forEach(function (key) {
+            var transport = target.transports[key];
+            oldLabels[key] = transport.label;
+            transport.label = name;
+          });
+          target[propKey].apply(target, arguments);
+          transportKeys.forEach(function (key) {
+            var transport = target.transports[key];
+            transport.label = oldLabels[key];
+          });
+        };
+      } else {
+        return target[propKey];
+      }
+    }
+  });
+  myloggers[name] = proxy;
+  return proxy;
+}
+
 
 // winston.add(winston.transports.File, {
 //   filename: 'logs/server.log',
@@ -34,14 +109,11 @@ winston.loggers.add('reverse-proxy', {
 // TODO: This is automatic in winston >= 3.0 so remove when updated
 winston.loggers.get('reverse-proxy').remove(winston.transports.Console);
 
-var Logger = function(name, meta) {
+var Logger = function(name) {
   //console.log('Get logger: ' + name);
-  var logger = winston.loggers.has(name) ? winston.loggers.get(name) : defaultLogger;
-  meta = meta || {};
-  if (logger === defaultLogger && !meta.name) { meta.name = name; }
-  var ctx = new WinstonContext(logger, '', meta);
-  ctx.expressLogger = expressLogger;
-  return ctx;
+  var logger = (name != undefined)? createNamedLogger(name) : defaultLogger;
+  logger.expressLogger = expressLogger;
+  return logger;
 };
 
 module.exports = Logger;

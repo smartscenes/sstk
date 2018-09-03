@@ -181,7 +181,7 @@ AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
   var splitFields = assetGroup.arrayFields;
   if (!splitFields) {
     splitFields = _.get(Constants.assetTypes, [assetGroup.type, 'arrayFields']);
-  };
+  }
   var assetInfos = parsed.data;
   for (var i = 0; i < assetInfos.length; i++) {
     if (this.convertDataFn) {

@@ -22,7 +22,7 @@ app.use(log.expressLogger);
 
 // app configuration
 app.set('views', path.join(__dirname, '../views'));
-app.set('view engine', 'jade');
+app.set('view engine', 'pug');
 app.use(compression());
 app.use(bodyParser.urlencoded({ extended: true }));  // extended can probably be false?
 app.use(bodyParser.json({
@@ -71,7 +71,7 @@ var AnnotationsServer = require('./annotationsServer');
 // Initialize MySQL DB connections
 var annDb = new SQLAnnotationDb(config.annDb);
 // Annotation server (handles all routes to /annotations
-var annServer = new AnnotationsServer({ sqlDB: annDb, config: config });
+var annServer = new AnnotationsServer({ sqlDB: annDb, config: config, log: log });
 annServer.registerRoutes(app, '/annotations');
 
 // Query scenes and annotations

@@ -1,0 +1,47 @@
+doctype html
+html(lang="en")
+    head
+        title= "NYUv2 Annotations Overview"
+        meta(charset= "UTF-8")
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+        link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+        link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+        style.
+            table tr.row-odd {
+                border-bottom: 1px solid silver;
+            }
+            table tr.row-even {
+                border-bottom: 1px solid silver;
+            }
+            table td.cell-parent {
+                background-color: palegoldenrod;
+            }
+    body
+        // UI Markup
+        #main
+            #container(style='width: 100%;')
+                span#loading Loading...
+
+        script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+        script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+        script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+        script(src=`${baseUrl}/three.min.js`)
+        script(src=`${baseUrl}/scanNet.bundle.js`)
+        script.
+          var assetPath = '#{baseUrl}/resources/data/scannet/nyuv2';
+          var annotationConditions = ['manual'];
+          var source = 'nyuv2';
+          var viewerParams = { condition: 'manual', task: 'instance-annotation' };
+          var annotationsViewer = new STK.GroupedAnnotationsViewer({
+            annotationConditions: annotationConditions,
+            container: '#container',
+            loadingMessageSelector: '#loading',
+            viewerUrl: '#{baseUrl}/scans/instance-annotations/list',
+            viewerParams: viewerParams,
+            //alignParams: { condition: 'manual'},
+            assetGroup: { metadata: assetPath + '.json', ids: assetPath + '.csv'},
+            groupBy: 'sceneType'
+          });
+          annotationsViewer.init();
+          window.app = annotationsViewer;  // For console debugging

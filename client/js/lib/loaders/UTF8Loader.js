@@ -742,7 +742,7 @@ THREE.UTF8Loader.prototype.downloadMesh = function ( path, name, meshEntry, deco
 
 		}
 
-    };
+    }
 
 	getHttpRequest( path, function( req, e ) {
 
@@ -930,6 +930,8 @@ THREE.UTF8Loader.prototype.downloadModelJson = function ( jsonUrl, callback, one
 
 function getHttpRequest( url, onload, opt_onprogress ) {
 
+    var req = new XMLHttpRequest();
+
 	var LISTENERS = {
 
         load: function( e ) { onload( req, e ); },
@@ -937,7 +939,6 @@ function getHttpRequest( url, onload, opt_onprogress ) {
 
     };
 
-	var req = new XMLHttpRequest();
 	addListeners( req, LISTENERS );
 
 	req.open( 'GET', url, true );

@@ -10,7 +10,7 @@ app.use(express.static(path.join(__dirname, './static/')));
 
 // set views for scannet
 app.set('views', __dirname + '/views');
-app.set('view engine', 'jade');
+app.set('view engine', 'pug');
 
 // Hookup to annotations
 var SQLAnnotationDb = require('../../app/sqlAnnotationDb');

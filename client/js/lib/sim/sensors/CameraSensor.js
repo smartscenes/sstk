@@ -19,18 +19,34 @@ var _ = require('util');
  */
 function CameraSensor(config, opts) {
   Sensor.call(this, config);
-  this.renderer = opts.getRenderer(config, opts);
   this.showDebugNode = !!opts.showDebugNode;  // Coerce into boolean
-  var aspectRatio = this.renderer.width / this.renderer.height;
-  var fov = config.fov || 45;
-  var cam = new Camera(fov, aspectRatio,
-    ((config.near != undefined)? config.near : 0.001)*Constants.metersToVirtualUnit,
-    ((config.far != undefined)? config.far : 20)*Constants.metersToVirtualUnit);  // TODO: consider near/far parameters
-  var camPos = config.position[0];
-  cam.position.copy(camPos);
-  //cam.lookAt(sensor.orientation[0]); // TODO(MS): verify orientation is set correctly
+  var cameraConfig = _.defaults(Object.create(null), config, {
+    fov: 45,
+    near: 0.001, // default near in meters
+    far: 20      // default far in meters
+  });
+  cameraConfig.near = cameraConfig.near*Constants.metersToVirtualUnit;
+  cameraConfig.far = cameraConfig.far*Constants.metersToVirtualUnit;
+  cameraConfig.width = cameraConfig.resolution[0];
+  cameraConfig.height = cameraConfig.resolution[1];
+  //console.log('cameraConfig', cameraConfig);
+  var rendererConfig = config;
+  var cam;
+  if (cameraConfig.position.length > 1) {
+    cam = Camera.createArrayCamera(cameraConfig);
+    rendererConfig = _.clone(config);
+    rendererConfig.resolution = cam.userData.imageShape;
+  } else {
+    cam = new Camera(cameraConfig.fov, cameraConfig.width/cameraConfig.height,
+      cameraConfig.near, cameraConfig.far
+    );
+    var camPos = config.position[0];
+    cam.position.copy(camPos);
+  }
   cam.name = config.name;  // Store sensor name as camera name
   this.camera = cam;
+  this.renderer = opts.getRenderer(rendererConfig, opts);
+
   this.numFramesRendered = 0;
 }
 
@@ -51,11 +67,11 @@ CameraSensor.prototype.getFrame = function(sceneState) {
   }
 
   return result;
-}
+};
 
 // Override this function to have custom frames
 CameraSensor.prototype.__getFrame = function(sceneState) {
-  scene = sceneState.fullScene || sceneState;
+  var scene = sceneState.fullScene || sceneState;
   var pixels = null;
   var numChannels = 4;
   var renderer = this.renderer;
@@ -119,13 +135,16 @@ CameraSensor.prototype.getMetadata = function() {
     shape: this.getShape(),
     dataType: this.config.datatype || 'uint8',
     dataRange: this.getDataRange()
-  }
+  };
 };
 
 CameraSensor.prototype.setSize = function(width, height) {
   console.log('resize sensor ' + this.name + ' to ' + width + 'x' + height);
   this.camera.aspect = width / height;
   this.camera.updateProjectionMatrix();
+  if (this.camera.isArrayCamera) {
+    this.camera.resizeCameras(width, height);
+  }
   this.renderer.setSize(width, height);
 };
 

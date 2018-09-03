@@ -2,7 +2,7 @@
 
 var AssetManager = require('assets/AssetManager');
 var DataUtils = require('data/DataUtils');
-var FileSaver = require('filesaverjs');
+var FileSaver = require('file-saver');
 
 var ScatterPlot = require('viz/ScatterPlot');
 var PieChart = require('viz/PieChart');

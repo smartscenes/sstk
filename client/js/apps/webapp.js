@@ -7,4 +7,4 @@ Constants.sys = {
 module.exports = {
   Constants: Constants,
   util: require('util')
-}
+};

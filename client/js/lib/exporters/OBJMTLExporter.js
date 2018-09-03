@@ -1,6 +1,8 @@
 var GeometryUtil = require('geo/GeometryUtil');
 var FileUtil = require('io/FileUtil');
+var ImageUtil = require('util/ImageUtil');
 var Index = require('ds/Index');
+var TaskQueue = require('util/TaskQueue');
 var async = require('async');
 var _ = require('util');
 
@@ -97,6 +99,7 @@ var getObjMtl = function (root, params, data) {
       materials = [materials];
     }
 
+    var det = t.determinant();
     for (var iMat = 0; iMat < materials.length; iMat++) {
       // material
       var material = materials[iMat];
@@ -104,7 +107,7 @@ var getObjMtl = function (root, params, data) {
       if (!params.skipMtl) {
         if (material.uuid) {
           var matIndex = params.materialsIndex.indexOf(material.uuid, true) + materialOffset;
-          var mtlId = 'material_' + matIndex;
+          var mtlId = 'material_' + matIndex + '_' + material.side;
           data.f.push('usemtl ' + mtlId);
           params.materials[mtlId] = material;
         } else {
@@ -126,6 +129,9 @@ var getObjMtl = function (root, params, data) {
             var ni = hasNormals ? (attrInfos[1].mapping[verts[i]] + normalOffset) : -1;
             faceStrings[i] = toVertexStr(vi, ti, ni);
           }
+          if (det < 0) {
+            faceStrings.reverse();  // reverse order if determinant < 0
+          }
           var fs = toObjStr('f', faceStrings);
           data.f.push(fs);
         }
@@ -140,12 +146,32 @@ var getObjMtl = function (root, params, data) {
   return data;
 };
 
-// Exports object3D to file using OBJ format
+/**
+ * Exports object3D to file using OBJ format.  To handle large scenes, export of objects is done incrementally.
+ * Output is put into the specified directory with the specified filename: `<dir>/<name>.obj` and `<dir>/<name>.mtl`
+ * @param objects {THREE.Object3D|THREE.Object3D[]}
+ * @param opts Options for how to export the OBJ MTL files
+ * @param [opts.callback] {function(err,metadata)} Callback function for when export is done
+ * @param [opts.dir=''] {string} Output directory
+ * @param [opts.name='scene'] {string} File name
+ * @param [opts.skipMtl=false] {boolean} Whether to skip generation of the MTL
+ * @param [opts.includeNotVisible=false] {boolean} Whether to include meshes that are not visible
+ * @param [opts.exportTextures=false] {boolean} Whether to export textures or not
+ * @param [opts.transform] {THREE.Matrix4} Global transform to apply to the mesh when exporting
+ * @param [opts.defaultUvScale] {THREE.Vector2} How much to scale the uv coordinates if `map.repeat` is not specified
+ * @param [opts.getGroupName] {function(THREE.Object3D):string} Function to generate name to use for non-leaf nodes.
+ *   If provided and name is returned, then the line `g <name>` is added to the output.  Otherwise, groups are not named.
+ * @param [opts.getMeshName] {function(THREE.Mesh):string} Function to generate name to use for meshes (leaf objects).
+ *   If provided, then the line `o <name>` is added to the output.  Otherwise, the `<name>` will the of the format `<mesh.name>#<mesh.userData.id>`
+ * @param [opts.rewriteTexturePathFn] {function(string):string} Function to rewrite the texture path to be something more canonical
+ */
 OBJMTLExporter.prototype.export = function (objects, opts) {
   var fileutil = this.__fs;
   opts = opts || {};
   opts.name = (opts.name != undefined)? opts.name : 'scene';
   opts.dir = (opts.dir != undefined)? opts.dir + '/' : '';
+  opts.texturePath = (opts.texturePath != undefined)? opts.texturePath : 'images'; // Relative path wrt to obj where images are placed
+  opts.textureExportPath = _.getPath(opts.dir, opts.texturePath);
   var callback = opts.callback;
   var objfilename = opts.dir + opts.name + '.obj';
   var objfile = objfilename;
@@ -161,7 +187,10 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
 
   console.log('processing ' + objects.length + ' objects');
   // Set the vertexOffset and such
-  var params = _.defaults({ vertexOffset: 0, normalOffset: 0, uvOffset: 0, materialsOffset: 0 }, opts);
+  var taskQueue = new TaskQueue();
+  var params = _.defaults({
+      vertexOffset: 0, normalOffset: 0, uvOffset: 0, materialsOffset: 0,
+      textures: {}, texturesIndex: new Index(), taskQueue: taskQueue }, opts);
 
   // Set up functions to append to obj/mtl files
   // Each should takes in a string (to append to the file) and a callback function to let the caller know its safe to proceed
@@ -200,10 +229,21 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
         if (mtlfile) {
           fileutil.fsExportFile(mtlfile, mtlfile);
         }
-        console.log('finished processing ' + objects.length + ' objects');
-        if (callback) {
-          callback();
-        }
+        taskQueue.awaitAll(function(err2, res2) {
+          console.log('finished processing ' + objects.length + ' objects');
+          if (callback) {
+            var exportResults = {};
+            if (params.texturesIndex.size() > 0) {
+              var remappedTextures = [];
+              for (var j = 0; j < params.texturesIndex.size(); j++) {
+                var metadata = params.texturesIndex.metadata(j);
+                remappedTextures.push(metadata);
+              }
+              exportResults['remappedTextures'] = remappedTextures;
+            }
+            callback(err, exportResults);
+          }
+        });
       }
     );
   };
@@ -333,6 +373,7 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
       }
     }
 
+    var det = transform.determinant();
     for (var iMat = 0; iMat < materials.length; iMat++) {
       // material
       var material = materials[iMat];
@@ -340,7 +381,7 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
       if (!params.skipMtl) {
         if (material.uuid) {
           var matIndex = result.materialsIndex.indexOf(material.uuid, true) + result.indexMaterials;
-          var mtlId = 'material_' + matIndex;
+          var mtlId = 'material_' + matIndex + '_' + material.side;
           obj += 'usemtl ' + mtlId + '\n';
           result.materials[mtlId] = material;
         } else {
@@ -359,9 +400,16 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
         var nis = [normIndexRemap[j]+1, normIndexRemap[j+1]+1, normIndexRemap[j+2]+1];
         var faceHasUvs = hasVertexUvs && faceVertexUvs[iFace];
         obj += 'f ';
-        obj += (result.indexVertex + face.a + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[0]) : '') + '/' + (result.indexNormals + nis[0]) + ' ';
-        obj += (result.indexVertex + face.b + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[1]) : '') + '/' + (result.indexNormals + nis[1]) + ' ';
-        obj += (result.indexVertex + face.c + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[2]) : '') + '/' + (result.indexNormals + nis[2]) + '\n';
+        if (det >= 0) {
+          obj += (result.indexVertex + face.a + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[0]) : '') + '/' + (result.indexNormals + nis[0]) + ' ';
+          obj += (result.indexVertex + face.b + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[1]) : '') + '/' + (result.indexNormals + nis[1]) + ' ';
+          obj += (result.indexVertex + face.c + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[2]) : '') + '/' + (result.indexNormals + nis[2]) + '\n';
+        } else {
+          // Flip vertex order for faces
+          obj += (result.indexVertex + face.c + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[2]) : '') + '/' + (result.indexNormals + nis[2]) + ' ';
+          obj += (result.indexVertex + face.b + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[1]) : '') + '/' + (result.indexNormals + nis[1]) + ' ';
+          obj += (result.indexVertex + face.a + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[0]) : '') + '/' + (result.indexNormals + nis[0]) + '\n';
+        }
       }
     }
   } else {  // BufferGeometry
@@ -399,6 +447,37 @@ OBJMTLExporter.prototype.__getTexturePath = function(src, params) {
   }
 };
 
+OBJMTLExporter.prototype.__handleTexture = function(texture, materialType, matId, params) {
+  var origPath = texture.image.path || texture.image.src;
+  var jpgExts = ['jpg', 'jpeg', 'jfif'];
+  if (origPath) {
+    if (params.exportTextures) {
+      var textureIndex = params.texturesIndex.indexOf(origPath, true, {});
+      if (!params.textures[origPath]) {
+        params.textures[origPath] = texture;
+        var origExt = _.getFileExtension(origPath);
+        var ext = jpgExts.indexOf(origExt) >= 0? "jpg" : "png";
+        var remappedPath = params.texturePath + "/texture_" + textureIndex + "." + ext;
+        var filePath = params.textureExportPath + "/texture_" + textureIndex + "." + ext;
+        params.texturesIndex.metadata(textureIndex)['originalPath'] = origPath;
+        params.texturesIndex.metadata(textureIndex)['path'] = remappedPath;
+        params.taskQueue.push(function(cb) {
+          ImageUtil.saveImage(texture.image, filePath, cb);
+        });
+        return remappedPath;
+      } else {
+        var remappedPath = params.texturesIndex.metadata(textureIndex)['path'];
+        return remappedPath;
+      }
+    } else {
+      return this.__getTexturePath(origPath, params);
+    }
+  } else {
+    console.warn('Cannot get path to image for material ' + materialType + ' for ' + matId);
+  }
+};
+
+
 OBJMTLExporter.prototype.__getMaterialString = function(mat, matId, params) {
   var mtl = '';
   mtl += 'newmtl ' + matId + '\n';
@@ -406,8 +485,10 @@ OBJMTLExporter.prototype.__getMaterialString = function(mat, matId, params) {
   var opacity = (mat.transparent)? mat.opacity : 1.0;
   if (opacity < 1.0) {
     mtl += 'illum 4\n';
-  } else {
+  } else if (mat.specular || mat.shininess != null) {
     mtl += 'illum 2\n';
+  } else {
+    mtl += 'illum 1\n';
   }
   mtl += 'd ' + opacity + '\n';
   if (mat.shininess != null) {
@@ -423,20 +504,17 @@ OBJMTLExporter.prototype.__getMaterialString = function(mat, matId, params) {
     mtl += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n';
   }
   // mtl += 'Ke 0.0000 0.0000 0.0000\n';
+  // var maps = ['map', 'bumpMap', 'normalMap', 'specularMap', 'envMap'];
   if (mat.map && mat.map.image) {
-    if (mat.map.image.path || mat.map.image.src) {
-      var file = this.__getTexturePath(mat.map.image.path || mat.map.image.src, params);
+    var file = this.__handleTexture(mat.map, 'map', matId, params);
+    if (file) {
       mtl += 'map_Kd ' + file + '\n';
-    } else {
-      console.warn('Cannot get path to image for material map for ' + matId);
     }
   }
   if (mat.bumpMap && mat.bumpMap.image) {
-    if (mat.bumpMap.image.path || mat.bumpMap.image.src) {
-      var file = this.__getTexturePath(mat.bumpMap.image.path || mat.bumpMap.image.src, params);
+    var file = this.__handleTexture(mat.bumpMap, 'bumpMap', matId, params);
+    if (file) {
       mtl += 'map_bump ' + file + '\n';
-    } else {
-      console.warn('Cannot get path to image for material bumpMap for ' + matId);
     }
   }
   return mtl;

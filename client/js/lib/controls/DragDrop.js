@@ -217,7 +217,7 @@ define(['Constants', 'controls/Picker', 'model/ModelInstance', 'geo/Object3DUtil
           // Reorient so normal from attachment point is in same direction as the norm
           var selected = this.selected;
           var localObjInNormal = selected.userData['attachmentDir1'];
-          var quaternion = selected.getWorldQuaternion();
+          var quaternion = selected.getWorldQuaternion(new THREE.Quaternion());
           var worldObjInNormal = localObjInNormal?
             localObjInNormal.clone() : Object3DUtil.InNormals[Constants.BBoxFaceCenters.BOTTOM].clone();
           worldObjInNormal.applyQuaternion(quaternion);

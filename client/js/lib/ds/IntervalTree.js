@@ -55,7 +55,7 @@ IntervalTree.TreeNode.prototype.search = function(targetInterval, searchFn) {
   var todo = [];
   todo.push(this);
 
-  while (!todo.length > 0) {
+  while (!(todo.length > 0)) {
     var n = todo.pop();
     // Don't search nodes that don't exist
     if (!n || n.isEmpty) continue;

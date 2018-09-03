@@ -7,6 +7,7 @@ var Picker = require('controls/Picker');
 var SceneOperations = require('scene/SceneOperations');
 var SceneEditControls = require('controls/SceneEditControls');
 var ContextQueryControls = require('controls/ContextQueryControls');
+var Model = require('model/Model');
 var Object3DUtil = require('geo/Object3DUtil');
 var OBBQueryControls = require('controls/OBBQueryControls');
 var BBoxQueryControls = require('controls/BBoxQueryControls');
@@ -611,7 +612,7 @@ SceneEditUI.prototype.onModelLoad = function (loadOptions, modelInstance) {
     assetManager: this.assetManager,
     renderer: this.app.renderer,
     camera: this.cameraControls.camera
-  })
+  });
   if (modelInstance.model.getDatasets().length === 0) {
     var resizeTo = 0.25*Constants.metersToVirtualUnit;
     Object3DUtil.rescaleObject3DToFit(modelInstance.object3D, resizeTo, [0.1, 2]);

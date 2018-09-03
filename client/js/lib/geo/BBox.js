@@ -17,7 +17,7 @@ if (!_.isFunction(THREE.Box2.prototype.includeBBox)) {
 if (!_.isFunction(THREE.Box2.prototype.contains)) {
   THREE.Box2.prototype.contains = function (box) {
     return this.containsBox(box);
-  }
+  };
 }
 
 /**
@@ -569,8 +569,11 @@ BBox.prototype.toString = function() {
     ', dims: ' + vtoString(this.dimensions()) + ', centroid: ' + vtoString(this.centroid()) + '}';
 };
 
-BBox.prototype.toJSON = function () {
+BBox.prototype.toJSON = function (name) {
   var json = {};
+  if (name) {
+    json.name = name;
+  }
   json.min = [this.min.x, this.min.y, this.min.z];
   json.max = [this.max.x, this.max.y, this.max.z];
   return json;

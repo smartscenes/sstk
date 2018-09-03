@@ -81,6 +81,7 @@ THREE.Mesh.prototype.raycastWithID = ( function () {
   var inverseMatrix = new THREE.Matrix4();
   var ray = new THREE.Ray();
   var triangle = new THREE.Triangle();
+  var plane = new THREE.Plane();
 
   return function (elID, raycaster) {
     var geometry = this.geometry;
@@ -101,7 +102,8 @@ THREE.Mesh.prototype.raycastWithID = ( function () {
       c = b + 1;
     }
     triangle.set(vA, vB, vC);
-    var intersectionPoint = ray.intersectPlane(triangle.plane());
+    var targetPoint = new THREE.Vector3();
+    var intersectionPoint = ray.intersectPlane(triangle.getPlane(plane), targetPoint);
 
     if (intersectionPoint == null) {
       // console.log("WARNING: intersectionPoint missing");
@@ -114,10 +116,12 @@ THREE.Mesh.prototype.raycastWithID = ( function () {
 
     if (distance < raycaster.near || distance > raycaster.far) { return; }
 
+    var normal = new THREE.Vector3();
+    THREE.Triangle.getNormal(vA, vB, vC, normal);
     var intersect = {
       distance: distance,
       point: intersectionPoint,
-      face: new THREE.Face3(a, b, c, THREE.Triangle.normal(vA, vB, vC)),
+      face: new THREE.Face3(a, b, c, normal),
       index: elID, // triangle number in positions buffer semantics
       object: this
     };

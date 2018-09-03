@@ -3,28 +3,34 @@ var ImageUtil = require('util/ImageUtil');
 var FileLoader = require('io/FileLoader');
 var _ = require('util');
 
-function loadFile(zip, basePath, relPath) {
+function loadFile(zip, basePath, relPath, cacheOpts) {
   var path = _.getPath(basePath, relPath);
   path = path.replace(/^.\//, '');
   var file = zip.file(path);
+  if (file && cacheOpts) {
+    // Rewrite path
+    var p = cacheOpts.rewritePath? cacheOpts.rewritePath(path) : path;
+    var cachePath = cacheOpts.dir + '/' + p;
+    cacheOpts.fs.fsWriteToFileEnsureDir(cachePath, file._data);
+  }
   return file;
 }
 
-function loadTextFile(zip, basePath, relPath) {
-  var file = loadFile(zip, basePath, relPath);
+function loadTextFile(zip, basePath, relPath, cacheOpts) {
+  var file = loadFile(zip, basePath, relPath, cacheOpts);
   if (file) {
     return file.asText();
   }
 }
 
-function loadBinaryFile(zip, basePath, relPath) {
-  var file = loadFile(zip, basePath, relPath);
+function loadBinaryFile(zip, basePath, relPath, cacheOpts) {
+  var file = loadFile(zip, basePath, relPath, cacheOpts);
   if (file) {
     return file.asBinary();
   }
 }
 
-function loadTexture(zip, basePath, relPath, images) {
+function loadTexture(zip, basePath, relPath, images, cacheOpts) {
   var path = _.getPath(basePath, relPath);
   path = path.replace(/^.\//, '');
   var img = images[path];
@@ -36,6 +42,10 @@ function loadTexture(zip, basePath, relPath, images) {
     var imgfile = zip.file(path);
     if (imgfile) {
       var imageData = imgfile.asBinary(); // Note: this is string
+      if (cacheOpts) {
+        var cachePath = cacheOpts.dir + '/' + path;
+        cacheOpts.fs.fsWriteToFileEnsureDir(cachePath, imgfile._data);
+      }
       // Let the file extension be the image type
       var extIndex = relPath.lastIndexOf(".");
       var imageType = (extIndex >= 0) ? relPath.substring(extIndex + 1) : "jpg";
@@ -62,12 +72,13 @@ function loadTexture(zip, basePath, relPath, images) {
       } else {
         // Not in browser
         var pixels = ImageUtil.getPixelsSync(datauri, 'image/' + imageType);
+        //var pixels = ImageUtil.bufferToRawPixelsSync(imgfile._data);
         img = {
           src: path,
           data: pixels.data,
-          width: pixels.shape[0],
-          height: pixels.shape[1],
-          channels: pixels.shape[2]
+          width: pixels.shape? pixels.shape[0] : pixels.width,
+          height: pixels.shape? pixels.shape[1] : pixels.height,
+          channels: pixels.shape? pixels.shape[2] : pixels.channels
         };
         ImageUtil.ensurePowerOfTwo(img, texture, function(err, resizedImage) {
           if (err) {
@@ -158,19 +169,19 @@ ZIPLoader.prototype = {
 
 
   loadFile: function(basePath, relPath) {
-    return loadFile(this.zip, basePath, relPath);
+    return loadFile(this.zip, basePath, relPath, this.options.cacheOpts);
   },
 
   loadBinaryFile: function(basePath, relPath) {
-    return loadBinaryFile(this.zip, basePath, relPath);
+    return loadBinaryFile(this.zip, basePath, relPath, this.options.cacheOpts);
   },
 
   loadTextFile: function(basePath, relPath) {
-    return loadTextFile(this.zip, basePath, relPath);
+    return loadTextFile(this.zip, basePath, relPath, this.options.cacheOpts);
   },
 
   loadTexture: function(basePath, relPath) {
-    return loadTexture(this.zip, basePath, relPath, this.__cached);
+    return loadTexture(this.zip, basePath, relPath, this.__cached, this.options.textureCacheOpts || this.options.cacheOpts);
   }
 };
 

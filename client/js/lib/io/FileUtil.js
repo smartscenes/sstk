@@ -1,9 +1,16 @@
 // Utility functions for working with the file system
 
-var FileSaver = require('filesaverjs');
+var FileSaver = require('file-saver');
 var _ = require('util');
 
 var self = {};
+
+function saveText(string, filename) {
+  var blob = new Blob([string], {type: "text/plain;charset=utf-8"});
+  FileSaver.saveAs(blob, filename);
+}
+
+self.saveText = saveText;
 
 function saveJson(object, filename, replacer) {
   var blob = new Blob([JSON.stringify(object, replacer)], {type: "text/plain;charset=utf-8"});

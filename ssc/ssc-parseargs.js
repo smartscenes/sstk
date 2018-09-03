@@ -13,11 +13,18 @@ cmd.Command.prototype.optionGroups = function(opts) {
   }
   // Options for renderer
   if (opts.render_options) {
-    this.option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, true)
+    this.option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, false)
+      .option('--ambient_occlusion_type <type>', 'Type of ambient occlusion to use', /^(ssao|sao|edl)$/, 'ssao')
+      .option('--use_outline_shader [flag]', 'Use outline shader or not', STK.util.cmd.parseBoolean, false)
+      .option('--outline_color <color>', 'Color for outlines', 'white')
       .option('--use_lights [flag]', 'Use lights or not', STK.util.cmd.parseBoolean, false)
       .option('--use_shadows [flag]', 'Use shadows or not', STK.util.cmd.parseBoolean, false)
       .option('--width <width>', 'Image width [default: 1000]', STK.util.cmd.parseInt, 1000)
-      .option('--height <height>', 'Image height [default: 1000]', STK.util.cmd.parseInt, 1000);
+      .option('--height <height>', 'Image height [default: 1000]', STK.util.cmd.parseInt, 1000)
+      .option('--max_width <width>', 'Maximum image width [default: 20000]', STK.util.cmd.parseInt, 20000)
+      .option('--max_height <height>', 'Maximum image height [default: 20000]', STK.util.cmd.parseInt, 20000)
+      .option('--max_pixels <pixels>', 'Maximum image pixels [default: 10000*100000]', STK.util.cmd.parseInt, 10000*10000)
+      .option('--save_view_log [flag]', 'Whether to save a view log', STK.util.cmd.parseBoolean);
   }
   // Options for rendering views
   if (opts.render_views) {
@@ -32,7 +39,7 @@ cmd.Command.prototype.optionGroups = function(opts) {
   }
   // Options for specifying view point
   if (opts.view) {
-    this.option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt, 0);
+    this.option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt);
     this.option('--use_scene_camera <camera_name>', 'Use camera from scene');
   }
   // Options for special color by
@@ -125,6 +132,20 @@ cmd.Command.prototype.getIds = function(ids, assetGroup) {
     }
   }
   return ids;
+};
+
+cmd.Command.prototype.checkImageSize = function(options, limits) {
+  limits = limits || options;
+  if (options.width > limits.max_width) {
+    return 'width ' + options.width + ' exceeds max width of ' + limits.max_width;
+  }
+  if (options.height > limits.max_height) {
+    return 'height ' + options.height + ' exceeds max height of ' + limits.max_height;
+  }
+  if ((options.width*options.height) > limits.max_pixels) {
+    return 'total pixels of ' + (options.width*options.height) + ' for width x height of '
+      + options.width + 'x' + options.height + ' exceeds max pixels of ' + limits.max_pixels;
+  }
 };
 
 module.exports = cmd;

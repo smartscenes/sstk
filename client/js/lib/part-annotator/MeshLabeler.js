@@ -252,20 +252,20 @@ MeshLabeler.prototype.__updateLabelOBB = function(labelInfo, excludeParts) {
     });
   }
   if (parts && parts.length) {
-    labelInfo.obb = this.__fitOBB(parts)
+    labelInfo.obb = this.__fitOBB(parts);
   }
   return labelInfo.obb;
-}
+};
 
 MeshLabeler.prototype.getLabelOBB = function(labelInfo) {
   if (!labelInfo.obb) {
     var parts = this.getMeshesForLabel(labelInfo);
     if (parts && parts.length) {
-      labelInfo.obb = this.__fitOBB(parts)
+      labelInfo.obb = this.__fitOBB(parts);
     }
   }
   return labelInfo.obb;
-}
+};
 
 MeshLabeler.prototype.getPartOBB = function (part) {
   var labelInfo = (part && part.userData)? part.userData.labelInfo : part;
@@ -337,7 +337,7 @@ MeshLabeler.prototype.restore = function(labels, savedLabelInfos, options) {
     var meshes = this.getMeshes();
     options.getMeshFn = function(id) {
       return meshes[id];
-    }
+    };
   }
   for (var i = 0; i < savedLabelInfos.length; i++) {
     var savedLabelInfo = savedLabelInfos[i];

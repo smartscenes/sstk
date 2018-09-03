@@ -1,6 +1,6 @@
 'use strict';
 
-define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
+define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/EDLPass'], function (Constants, ImageUtil, Object3DUtil) {
 
   /**
    * Main rendering class (wrapper around THREE.Renderer)
@@ -14,14 +14,19 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
     this.renderer = opt.renderer;
     this.width = opt.width || opt.container.clientWidth;
     this.height = opt.height || opt.container.clientHeight;
-    this.useAmbientOcclusion = false; //(opt.useAmbientOcclusion !== undefined) ? opt.useAmbientOcclusion : true;
+    this.useAmbientOcclusion = (opt.useAmbientOcclusion !== undefined) ? opt.useAmbientOcclusion : false;
+    this.useOutlineShader = (opt.useOutlineShader !== undefined) ? opt.useOutlineShader : false;
+    this.useEDLShader = (opt.useEDLShader !== undefined) ? opt.useEDLShader : false;
+    this.outlineColor = (opt.outlineColor !== undefined) ? opt.outlineColor : 0xffffff;
+    this.ambientOcclusionOptions = _.merge({
+      type: opt.ambientOcclusionType || 'ssao'
+    }, this.ambientOcclusionOptions);
     this.useShadows = (opt.useShadows !== undefined) ? opt.useShadows : false;
     this.useLights = (opt.useLights !== undefined) ? opt.useLights : false; // Default to false
     this.__reuseBuffers = opt.reuseBuffers;  // Reuse buffers?
     this.renderPass = null;
+    this.ssaoPass = null;
     this.domElement = null;
-    this.depthMaterial = null;
-    this.depthTarget = null;
     this.composer = null;
 
     this.__needFlipY = false;  // Do we need to flip about Y for rendering?
@@ -64,42 +69,86 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     }
 
-    if (this.useAmbientOcclusion) {
-      // Set up depth pass
-      var depthShader = THREE.ShaderLib['distanceRGBA'];
-      var depthUniforms = THREE.UniformsUtils.clone(depthShader.uniforms);
-      this.depthMaterial = new THREE.ShaderMaterial({
-        fragmentShader: depthShader.fragmentShader,
-        vertexShader: depthShader.vertexShader,
-        uniforms: depthUniforms
-      });
-      this.depthMaterial.blending = THREE.NoBlending;
-
+    if (this.useAmbientOcclusion || this.useOutlineShader || this.useEDLShader) {
       //var pixelRatio = this.renderer.getPixelRatio();
       //var width  = Math.floor(this.width  / pixelRatio) || 1;
       //var height = Math.floor(this.height / pixelRatio) || 1;
       var rt = new THREE.WebGLRenderTarget(this.width, this.height,
         { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, stencilBuffer: true });
       this.composer = new THREE.EffectComposer(this.renderer, rt);
+      this.composer.renderTarget1.stencilBuffer = true;
+      this.composer.renderTarget2.stencilBuffer = true;
       this.renderPass = new THREE.RenderPass();
       this.composer.addPass(this.renderPass);
 
-      var fxaa = new THREE.ShaderPass(THREE.FXAAShader);
-      fxaa.uniforms['resolution'].value = new THREE.Vector2(1 / this.width, 1 / this.height);
-      this.shaderPassFXAA = fxaa;
-      this.composer.addPass(fxaa);
+      var scene = {};
+      var camera = new THREE.PerspectiveCamera( 65, this.width / this.height, 1, 4000 );
 
-      this.depthTarget = new THREE.WebGLRenderTarget(this.width, this.height,
-        { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RGBAFormat });
+      if (this.useAmbientOcclusion) {
+        var ssao = null;
+        if (this.ambientOcclusionOptions.type === 'ssao') {
+          ssao = new THREE.SSAOPass(scene, camera /*, this.width, this.height*/);
+          ssao.radius = this.ambientOcclusionOptions.radius || (0.5*Constants.virtualUnitToMeters);
+          console.log('set ssao.radius to ', ssao.radius);
+          ssao.lumInfluence = 0.1;
+        } else if (this.ambientOcclusionOptions.type === 'sao') {
+          ssao = new THREE.SAOPass(scene, camera, false, true);
+          ssao.params.saoScale = this.ambientOcclusionOptions.scale || 20000;  // TODO(MS): set this parameter more intelligently
+          // ssao.params.saoScaleFixed = 0.03;
+          // ssao.params.saoScale = ssao.params.saoScaleFixed*camera.far;  // TODO(MS): set this parameter more intelligently
+          //console.log('set sao.params.soaScale to ', ssao.params.saoScale, camera.far );
+        } else {
+          console.warn('Unsupported ambientOcclusion configuration', this.ambientOcclusionOptions)
+        }
+        if (ssao) {
+          if (!this.useOutlineShader) {
+            ssao.renderToScreen = true;
+          }
+          this.composer.addPass(ssao);
+        }
+        this.ssaoPass = ssao;
+      }
 
-      var effect = new THREE.ShaderPass(THREE.SSAOShader);
-      effect.uniforms['tDepth'].value = this.depthTarget;
-      effect.uniforms['size'].value.set(this.width, this.height);
-      effect.uniforms['cameraNear'].value = (opt.camera !== undefined) ? opt.camera.near : 1;
-      effect.uniforms['cameraFar'].value = (opt.camera !== undefined) ? opt.camera.far : 4000;
-      effect.renderToScreen = true;
-      this.shaderPassSSAO = effect;
-      this.composer.addPass(effect);
+      if (this.useOutlineShader) {
+        var outline = new THREE.OutlinePass(new THREE.Vector2(this.width, this.height), scene, camera);
+        outline.edgeStrength = 100.0;
+        outline.edgeThickness = 1.0;
+        outline.visibleEdgeColor.set(this.outlineColor);
+        outline.hiddenEdgeColor.set(this.outlineColor);
+        // outline.clear = false;
+        // if (!this.useAmbientOcclusion) { outline.renderToScreen = true; }
+        if (!this.useEDLShader) { outline.renderToScreen = true; }
+        this.outlinePass = outline;
+        // this.outlineMaskPass = new THREE.MaskPass(scene, camera);
+        // this.outlineMaskPass.inverse = true;
+        // var colorCorrection = new THREE.ShaderPass(THREE.ColorCorrectionShader);
+        // colorCorrection.uniforms.mulRGB.value = new THREE.Vector3(0, 0, 0);
+        // var clearMaskPass = new THREE.ClearMaskPass();
+        // var copyPass = new THREE.ShaderPass(THREE.CopyShader);
+        // copyPass.renderToScreen = true;
+
+        // this.composer.addPass(this.outlineMaskPass);
+        this.composer.addPass(outline);
+        // this.composer.addPass(colorCorrection);
+        // this.composer.addPass(clearMaskPass);
+        // this.composer.addPass(copyPass);
+
+        // var effectGrayScale = new THREE.ShaderPass( THREE.LuminosityShader );
+        // this.composer.addPass(effectGrayScale);
+        // effectSobel = new THREE.ShaderPass( THREE.SobelOperatorShader );
+        // effectSobel.renderToScreen = true;
+        // effectSobel.uniforms.resolution.value.x = this.width;
+        // effectSobel.uniforms.resolution.value.y = this.height;
+        // this.composer.addPass(effectSobel);
+      }
+
+      if (this.useEDLShader) {
+        var edlPass = new THREE.EDLPass(scene, camera, this.width, this.height);
+        edlPass.renderToScreen = true;
+        this.edlPass = edlPass;
+        this.composer.addPass(edlPass);
+      }
+
     }
 
     if (this.renderer.domElement) {
@@ -122,45 +171,6 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
       this.__pixelBuffer = this.createPixelBuffer();
     }
     return this.__pixelBuffer;
-  };
-
-  Renderer.prototype.__render = function (scene, camera, opts) {
-    if (this.useAmbientOcclusion) {
-      // Render to composer
-      // Bad RenderPass API design requires setting scene and camera
-      this.renderPass.scene = scene; this.renderPass.camera = camera;
-      var oldOverrideMat = scene.overrideMaterial;
-      scene.overrideMaterial = this.depthMaterial;
-      this.renderer.render(scene, camera, this.depthTarget);
-      scene.overrideMaterial = oldOverrideMat;
-      this.composer.render();
-    } else {
-      if (this.domElement) {
-        // Render to canvas
-        this.renderer.render(scene, camera);
-      } else {
-        // Render to offscreen texture
-        this.renderer.render(scene, camera, this.__rtTexture, true);
-      }
-    }
-
-    if (this.isOffscreen) {
-      var height = opts.height;
-      var width = opts.width;
-      var offsetX = opts.offsetX || 0;
-      var offsetY = opts.offsetY || 0;
-      if (this.domElement) {
-        // We also want to return the pixels
-        // Let's try to read it from the domElement
-        var pixels = opts.pixelBuffer;
-        this.renderer.context.readPixels(offsetX, offsetY, width, height, this.renderer.context.RGBA, this.renderer.context.UNSIGNED_BYTE, pixels);
-      } else {
-        var renderTarget = this.useAmbientOcclusion ? this.composer.writeBuffer : this.__rtTexture;
-        var pixels = opts.pixelBuffer;
-        this.renderer.readRenderTargetPixels(renderTarget, offsetX, offsetY, width, height, pixels);
-      }
-      return pixels;
-    }
   };
 
   // handle y flip due to WebGL render target
@@ -211,8 +221,110 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
     }
   }
 
-  Renderer.prototype.render = function (scene, camera, opts) {
+  function updateSAO(sao, scene, camera) {
+    sao.scene = scene;
+    sao.camera = camera;
+    //sao.params.saoScale = sao.params.saoScaleFixed*camera.far;  // TODO(MS): set this parameter more intelligently
+    //console.log('set sao.params.soaScale to ', sao.params.saoScale, camera.far );
+    sao.saoMaterial.uniforms[ 'cameraNear' ].value = camera.near;
+    sao.saoMaterial.uniforms[ 'cameraFar' ].value = camera.far;
+    sao.saoMaterial.uniforms[ 'cameraInverseProjectionMatrix' ].value.getInverse(camera.projectionMatrix);
+    sao.saoMaterial.uniforms[ 'cameraProjectionMatrix' ].value = camera.projectionMatrix;
+    sao.saoMaterial.defines[ 'PERSPECTIVE_CAMERA' ] = (camera.isPerspectiveCamera || camera.inPerspectiveMode) ? 1 : 0;
+  }
+
+  function updateAmbientOcclusion(ssaoPass, scene, camera) {
+    if (ssaoPass instanceof THREE.SSAOPass) {
+      ssaoPass.setScene(scene);
+      ssaoPass.setCamera(camera);
+    } else if (ssaoPass instanceof THREE.SAOPass) {
+      updateSAO(ssaoPass, scene, camera);
+    }
+  }
+
+  Renderer.prototype.__render = function(scene, camera, fullWidth, fullHeight, renderTarget, forceClear) {
+    if (camera.isArrayCamera) {
+      var oldAutoClear = this.renderer.autoClear;
+      for (var i = 0; i < camera.cameras.length; i++) {
+        var cam = camera.cameras[i];
+        var bounds = cam.bounds;
+
+        var x = bounds.x * fullWidth;
+        var y = bounds.y * fullHeight;
+        var width = bounds.z * fullWidth;
+        var height = bounds.w * fullHeight;
+
+        this.renderer.autoClear = (i === 0)? oldAutoClear : false;
+        this.renderer.setViewport( x, y, width, height );
+        this.renderer.render(scene, cam, renderTarget, forceClear);
+      }
+      this.renderer.autoClear = oldAutoClear;
+      this.renderer.setViewport( 0, 0, fullWidth, fullHeight );
+    } else {
+      this.renderer.render(scene, camera, renderTarget, forceClear);
+    }
+  };
+
+
+  Renderer.prototype.__renderScene = function (scene, camera, opts) {
     opts = opts || {};
+    var height = opts.height;
+    var width = opts.width;
+    var offsetX = opts.offsetX || 0;
+    var offsetY = opts.offsetY || 0;
+    if ((this.useAmbientOcclusion && this.ssaoPass.enabled) ||
+        (this.useOutlineShader && this.outlinePass.enabled) ||
+        (this.useEDLShader && this.edlPass.enabled)) {
+      // Render to composer
+      // Bad RenderPass API design requires setting scene and camera
+      this.renderPass.scene = scene; this.renderPass.camera = camera;
+      if (this.useAmbientOcclusion) {
+        updateAmbientOcclusion(this.ssaoPass, scene, camera);
+      }
+      if (this.useOutlineShader) {
+        this.outlinePass.renderScene = scene;
+        this.outlinePass.renderCamera = camera;
+        // this.outlineMaskPass.scene = scene;
+        // this.outlineMaskPass.camera = camera;
+        var meshes = Object3DUtil.getVisibleMeshList(scene, true);
+        meshes = meshes.filter(function (m) { return !m.name.startsWith('Wall') && !m.name.startsWith('Floor'); });
+        this.outlinePass.selectedObjects = meshes;
+        // console.log(this.outlinePass.selectedObjects);
+      }
+      if (this.useEDLShader) {
+        this.edlPass.setScene(scene);
+        this.edlPass.setCamera(camera);
+      }
+      this.composer.render();
+    } else {
+      if (this.domElement) {
+        // Render to canvas
+        this.__render(scene, camera, width, height);
+      } else {
+        // Render to offscreen texture
+        this.__render(scene, camera, width, height, this.__rtTexture, true);
+      }
+    }
+    if (this.isOffscreen) {
+      if (this.domElement) {
+        // We also want to return the pixels
+        // Let's try to read it from the domElement
+        var pixels = opts.pixelBuffer;
+        this.renderer.context.readPixels(offsetX, offsetY, width, height, this.renderer.context.RGBA, this.renderer.context.UNSIGNED_BYTE, pixels);
+        return pixels;
+      } else {
+        var renderTarget = this.useAmbientOcclusion ? this.composer.writeBuffer : this.__rtTexture;
+        var pixels = opts.pixelBuffer;
+        this.renderer.readRenderTargetPixels(renderTarget, offsetX, offsetY, width, height, pixels);
+        return pixels;
+      }
+    }
+  };
+
+  Renderer.prototype.__renderTiles = function (scene, camera, opts) {
+    // TODO: Handle array cameras and tiles!
+    var fullWidth = this.width;
+    var fullHeight = this.height;
     if (this.__tiles) {
       //console.log('render with tiles');
       var tileBuffer = this.__getTileBuffer();
@@ -222,8 +334,8 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
       for (var i = 0; i < this.__tiles.length; i++) {
         var tile = this.__tiles[i];
         //console.log('render with tile', tile.x, tile.y, tile.width, tile.height);
-        camera.setViewOffset(this.width, this.height, tile.x, tile.y, this.__tileWidth, this.__tileHeight);
-        var tilePixels = this.__render(scene, camera, _.defaults({pixelBuffer: tileBuffer, width: this.__tileWidth, height: this.__tileHeight}, opts));
+        camera.setViewOffset(fullWidth, fullHeight, tile.x, tile.y, this.__tileWidth, this.__tileHeight);
+        var tilePixels = this.__renderScene(scene, camera, _.defaults({pixelBuffer: tileBuffer, width: this.__tileWidth, height: this.__tileHeight}, opts));
         if (opts.postprocess) {
           tilePixels = this.postprocessPixels(tilePixels, opts.postprocess, camera);
         }
@@ -231,7 +343,7 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
           // copy from tilePixels into our pixels
           copyPixels(
             { buffer: tilePixels, x: 0, y: 0, width: tile.width, height: tile.height, fullWidth: this.__tileWidth, fullHeight: this.__tileHeight },
-            { buffer: pixels, x: tile.x, y: tile.y, width: tile.width, height: tile.height, fullWidth: this.width, fullHeight: this.height },
+            { buffer: pixels, x: tile.x, y: tile.y, width: tile.width, height: tile.height, fullWidth: fullWidth, fullHeight: fullHeight },
             this.__needFlipY
           );
         }
@@ -242,7 +354,7 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
     } else {
       //console.log('render no tiles');
       var pixelBuffer = opts.pixelBuffer || this.__getPixelBuffer();
-      var pixels = this.__render(scene, camera, _.defaults({pixelBuffer: pixelBuffer, width: this.width, height: this.height}, opts));
+      var pixels = this.__renderScene(scene, camera, _.defaults({pixelBuffer: pixelBuffer, width: fullWidth, height: fullHeight}, opts));
       if (this.__needFlipY) {
         this.__flipY(pixels);
       }
@@ -251,6 +363,11 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
       }
       return pixels;
     }
+  };
+
+  Renderer.prototype.render = function (scene, camera, opts) {
+    opts = opts || {};
+    return this.__renderTiles(scene, camera, opts);
   };
 
   Renderer.prototype.setSize = function (width, height) {
@@ -302,17 +419,13 @@ define(['util/ImageUtil','three-shaders'], function (ImageUtil) {
       this.__rtTexture.setSize(width, height);
     }
     // Update ambient occlusion sizes
-    if (this.useAmbientOcclusion && this.composer) {
+    if (this.composer) {
       this.composer.setSize(width, height);
-      this.depthTarget.setSize(width, height);
-      this.shaderPassFXAA.uniforms['resolution'].value = new THREE.Vector2(
-        width > 0? 1 / width : 0, height > 0? 1 / height : 0);
-      this.shaderPassSSAO.uniforms['size'].value.set(width, height);
     }
   };
 
   Renderer.prototype.getMaxAnisotropy = function() {
-    return this.renderer.getMaxAnisotropy();
+    return this.renderer.capabilities.getMaxAnisotropy();
   };
 
   Renderer.prototype.postprocessPixels = function(pixels, operation, camera) {

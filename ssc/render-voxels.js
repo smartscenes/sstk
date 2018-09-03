@@ -15,7 +15,7 @@ cmd
   .option('--input <filename>', 'Input voxels')
   .option('--output <filename>', 'Output filename base')
   .option('--output_dir <dir>', 'Base directory for output files')
-  .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, true)
+  .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, false)
   .option('--mesher <mesher>', 'Mesher to use for visualization' , /^(greedy|stupid|monotone|culled)$/i, 'stupid')
   .option('--size <size>', 'Size to use for voxels when using stupid mesher (default: alpha)', STK.util.cmd.parseFloat)
   .optionGroups(['config_file', 'render_views'])

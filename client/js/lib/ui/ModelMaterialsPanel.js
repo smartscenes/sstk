@@ -129,7 +129,10 @@ define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util', 'jquery.
       if (mesh.saveMaterial) {
         material = mesh.saveMaterial;
       }
-      if (material instanceof THREE.MultiMaterial) {
+      if (Array.isArray(material)) {
+        var materialIndex = mesh.geometry.faces[faceIndex].materialIndex;
+        material = material[materialIndex];
+      } else if (material instanceof THREE.MultiMaterial) {
         var materialIndex = mesh.geometry.faces[faceIndex].materialIndex;
         material = material.materials[materialIndex];
       }
@@ -293,7 +296,7 @@ define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util', 'jquery.
             if (entry.meshes.length === 1) {
               var mesh = entry.meshes[0];
               //console.log(mesh);
-              var matSpec = _.pick(entry.material, ['name', 'color', 'emissive', 'specular', 'shininess', 'opacity', 'transparent', 'reflectivity', 'shading', 'metalness', 'roughness']);
+              var matSpec = _.pick(entry.material, ['name', 'color', 'emissive', 'specular', 'shininess', 'opacity', 'transparent', 'reflectivity', 'flatShading', 'metalness', 'roughness']);
               matSpec.map = entry.material.map ? entry.material.map.name : null;
               if (mesh.faceIndices) {
                 var m = mesh.mesh;
@@ -388,9 +391,11 @@ define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util', 'jquery.
 
 
     function setMeshMaterial(meshEntry, newMaterial, revertTemporary, temporary) {
-      var multiMaterial = meshEntry.materialIndex !== undefined && meshEntry.mesh && meshEntry.mesh.material instanceof THREE.MultiMaterial;
+      var multiMaterial = meshEntry.materialIndex !== undefined && meshEntry.mesh &&
+        (Array.isArray(meshEntry.mesh.material) || meshEntry.mesh.material instanceof THREE.MultiMaterial);
       if (multiMaterial && !meshEntry.material) {
-        meshEntry.material = meshEntry.mesh.material.materials[meshEntry.materialIndex];
+        var mats = meshEntry.mesh.material.materials || meshEntry.mesh.material;
+        meshEntry.material = mats[meshEntry.materialIndex];
       }
 
       if (revertTemporary) {
@@ -409,7 +414,8 @@ define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util', 'jquery.
       if (multiMaterial) {
         // individual materials for faces
         if (meshEntry.material) {
-          meshEntry.mesh.material.materials[meshEntry.materialIndex] = meshEntry.material;
+          var mats = meshEntry.mesh.material.materials || meshEntry.mesh.material;
+          mats[meshEntry.materialIndex] = meshEntry.material;
         } else {
           console.log('No material for meshEntry');
           console.log(meshEntry);

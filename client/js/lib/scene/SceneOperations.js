@@ -187,9 +187,9 @@ SceneOperations.prototype.removeObjects = function(opts) {
 /**
  * Set object material
  * @param opts
- * @param [opts.objects] {THREE.Object3D|Array[THREE.Object3D]}
- * @param {opts.sceneState} {SceneState}
- * @param {opts.filter} {Function(THREE.Object3D)}
+ * @param [opts.objects] {THREE.Object3D|THREE.Object3D[]}
+ * @param [opts.sceneState] {SceneState}
+ * @param [opts.filter] {Function(THREE.Object3D)}
  * @param opts.material {THREE.Material}
  */
 SceneOperations.prototype.setObjectMaterial = function(opts) {

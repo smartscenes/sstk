@@ -5,7 +5,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
     'search/SearchController','ui/ModelMaterialsPanel', 'ui/ImagesPanel',
     'ui/ColorsPanel','ui/AlignPanel','ui/PartsPanel', 'ui/AnnotationsPanel',
     'controls/CameraControls','geo/Object3DUtil','gfx/Renderer',
-    'geo/BBox','exporters/PLYExporter', 'Viewer3D', 'gfx/MeshSampling', 'model/ModelInstanceVoxels',
+    'geo/BBox','exporters/PLYExporter', 'Viewer3D', 'geo/MeshSampling', 'model/ModelInstanceVoxels',
     'gfx/ViewOptimizer',
     'util','three-shaders','jquery-lazy'],
   function (Constants, Picker, AssetManager, AssetGroups,
@@ -29,7 +29,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       this.urlParams = _.getUrlParams();
       var defaults = {
         useDatGui: true,
-        useAmbientOcclusion: true,
+        useAmbientOcclusion: false,
         nImagesPerModel: 14,
         useShadows: true,
         useLights: false
@@ -308,8 +308,8 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
       var annotationsPanel = $('#annotationsPanel');
       if (annotationsPanel && annotationsPanel.length > 0) {
         var modelAttributes = ['id', 'wnsynset', 'category', 'color', 'material', 'shape', 'depicts',
-          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection', 'modelQuality'];
-        var readOnlyAttributes = ['id', 'isAligned', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
+          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject', 'hasMultipleObjects', 'isCollection', 'modelQuality', 'baseVariantId' ];
+        var readOnlyAttributes = ['id', 'datasets', 'datatags', 'isAligned', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
           'staticFrictionForce' /*, "aligned.dims" */];
         var attributeInfos = {
           "modelQuality": { min: 0, max: 7, step: 1 }
@@ -425,6 +425,8 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
         container: this.container,
         camera: this.camera,
         useAmbientOcclusion: this.useAmbientOcclusion,
+        ambientOcclusionType: this.ambientOcclusionType,
+        useEDLShader: this.useEDLShader,
         useShadows: this.useShadows,
         useLights: this.useLights
       });

@@ -747,6 +747,9 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       }
     };
 
+    /**
+     * Removes all objects from this scene
+     */
     SceneState.prototype.removeAll = function () {
       // Explicitly remove objects since some objects are attached to the extraObjects (not the scene)
       var indices = _.range(0, this.modelInstances.length);
@@ -767,6 +770,10 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       this.compactify();
     };
 
+    /**
+     * Remove selected objects from this scene
+     * @returns {model.ModelInstance[]} List of model instances that were removed
+     */
     SceneState.prototype.removeSelected = function () {
       var selectedIndices = this.getSelectedModelIndices();
       var removed = this.removeObjects(selectedIndices, true);
@@ -774,6 +781,13 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return removed;
     };
 
+    /**
+     * Removes objects from the scene.  Selected objects are automatically updated to not include removed objects
+     * unless `skipSelectedUpdated` is true.
+     * @param indices {int[]} Indices of model instances to remove
+     * @param skipSelectedUpdate {boolean} Whether to skip updating of selected objecs.
+     * @returns {model.ModelInstance[]} List of removed model instances
+     */
     SceneState.prototype.removeObjects = function (indices, skipSelectedUpdate) {
       var removedIndicesSet = {};
       for (var i = 0; i < indices.length; i++) {
@@ -906,7 +920,12 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           }
         };
         var getMeshMaterial = function(mesh) {
-          if (mesh.material instanceof THREE.MultiMaterial) {
+          if (Array.isArray(mesh.material)) {
+            var materials = mesh.material.map(function (m) {
+              return getMaterialFn(object3D, m, mesh.index);
+            });
+            return new THREE.MultiMaterial(materials);
+          } else if (mesh.material instanceof THREE.MultiMaterial) {
             var materials = mesh.material.materials.map(function(m) {
               return getMaterialFn(object3D, m, mesh.index);
             });
@@ -1316,7 +1335,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         if (level) {
           level.__roomsOrHouseRegions = rooms;
         } else {
-          this.__roomsOrHouseRegion = rooms;
+          this.__roomsOrHouseRegions = rooms;
         }
       }
       if (filter) {
@@ -1687,7 +1706,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       }
       var rooms = this.getRoomsOrHouseRegions(level);
       return this.__getIntersectedRoomAt(rooms, position, distThreshold);
-    }
+    };
 
     SceneState.prototype.getIntersectedGroundAt = function(position, level, distThreshold) {
       if (distThreshold == undefined) {
@@ -1695,7 +1714,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       }
       var rooms = this.getGrounds(level);
       return this.__getIntersectedRoomAt(rooms, position, distThreshold);
-    }
+    };
 
     SceneState.prototype.computeFloorHeight = function (room, defaultFloorHeight) {
       if (room instanceof THREE.Object3D) {
@@ -1704,7 +1723,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         });
         if (floors.length > 0) {
           if (floors.length === 1) {
-            return Object3DUtil.getBoundingBox(floors[0]).max.y
+            return Object3DUtil.getBoundingBox(floors[0]).max.y;
           } else {
             var weightedHeights = _.map(floors, function(floor) {
               return {

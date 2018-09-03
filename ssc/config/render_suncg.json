@@ -1,0 +1,19 @@
+{
+	"view": {
+		"cameraPositionStrategy": "positionToFit",
+		"viewIndex": 4
+	},
+	"camera": {
+		"type": "perspective"
+	},
+	"assetGroups": ["p5d"],
+	"assetInfo": {
+		"source": "p5dScene",
+		"format": "suncg",
+		"assetType": "scene",
+		"includeCeiling": false,
+		"useArchModelId": true,
+		"attachWallsToRoom": false,
+		"createArch": true
+	}
+}

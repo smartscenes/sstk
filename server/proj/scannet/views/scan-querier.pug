@@ -1,0 +1,86 @@
+doctype html
+html(lang='en')
+  head
+    meta(charset='utf-8')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href=`${baseUrl}/client/js/vendor/visualsearch/visualsearch-datauri.css`, media='screen')
+    link(rel='stylesheet', href=`${baseUrl}/css/bootstrap-slider.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/pagination.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/search-panel.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/dataVis.css`)
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    title ScanNet Search
+  body
+    #main.container
+      .queryPanel
+        // <h2>Scene Search</h2>
+        #searchOptions
+          .input-group(style='width:100%', title='Select additional query filters')
+            #filters
+          .input-group(style='width:100%')
+            input#searchText.form-control(type='text', placeholder='Search for... (PRESS ? TO THE RIGHT FOR HELP)')
+            span.input-group-btn
+              button#searchButton.btn.btn-default(type='button', title='Search')
+                i.glyphicon.glyphicon-search
+              button#helpButton.btn.btn-default(type='button', title='Help', data-toggle='modal', data-target='#helpModal')
+                i.glyphicon.glyphicon-question-sign
+        #searchPanel(class='.searchPanel')
+    // Help panel modal
+    #helpModal.modal.fade(tabindex='-1')
+      .modal-dialog
+        .modal-content
+          .modal-body
+            button.close(type='button', data-dismiss='modal')
+              span(aria-hidden='true') ×
+              span.sr-only Close
+            #helpPanel
+        // /.modal-content
+      // /.modal-dialog
+    // /.modal
+    script(src='https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js')
+    script(src='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js')
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js')
+    script(src='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js')
+    script(src=`${baseUrl}/three.min.js`)
+    script(src=`${baseUrl}/STK.bundle.js`)
+    script.
+      var scanQuerier = new STK.ScanQuerier({
+        entriesPerRow: 8,
+        assetTypes: ['scan'],
+        sources: [!{JSON.stringify(assetName || 'scannet')}],
+        screenshots: ['original', 'category', 'instance', 'mpr40', 'nyu40'],
+        viewerUrl: '#{baseUrl}/scans/simple-viewer',
+        filterPanel: '#filters',
+        filters: [{ field: 'datasets', values: [ 'ScanNet' ], required: true, limited: true }],
+        showAnimatedOnHover: false,
+        searchPanel: '#searchPanel',
+        searchButton: '#searchButton',
+        searchTextElem: '#searchText',
+        assetFiles: [!{JSON.stringify(assetGroup.metadata)}],
+        helpPanel: {
+          selector: '#helpPanel',
+          close: function() { $('#helpModal').modal('hide'); }
+        },
+        initialQuery: '*:*'
+      });
+      scanQuerier.getViewResultUrl = function (fullId, result) {
+        var defaultPartType = 'surfaces';
+        var defaultLabelType = 'Object';
+        var palette = 'd3_unknown_category19p';
+        var imageType = scanQuerier.assetManager.previewImageIndex;
+        if (imageType === 'original') {
+          defaultPartType = 'none';
+        } else if (imageType === 'category') {
+          defaultLabelType = 'Category';
+        } else if (imageType === 'instance') {
+          defaultLabelType = 'Object';
+        } else if (imageType === 'nyu40') {
+          defaultLabelType = 'nyu40';
+        } else if (imageType === 'mpr40') {
+          defaultLabelType = 'mpr40';
+        }
+        return this.viewerUrl + '?palette=' + palette + '&modelId=' + fullId + '&defaultLabelType=' + defaultLabelType + '&defaultPartType=' + defaultPartType;
+      };
+
+

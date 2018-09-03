@@ -1,0 +1,147 @@
+doctype html
+html(lang="en")
+  head
+    title= "ScanNet"
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href=`${baseUrl}/css/common.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/search-panel.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/model-viewer.css`)
+  body
+    // UI Markup
+    #main
+      #canvas
+      #alert.alert(style="display:none")
+        button.close(type="button", onclick="hideAlert()") &times;
+        span#alertMessage
+
+      #accordion.overlay.panel-group(style='top:80px; left:10px; max-height:100vh; overflow:auto;')
+        .panel.panel-default
+          h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#partsPanel') Parts
+          #partsPanel.panel-body.panel-collapse.collapse
+            p
+              div PGUP/PGDN: slice voxels
+              div Shift+PGUP/PGDN: change plane
+            p#partTypeSelectDiv
+              label(for="partType") Part Type
+              select#partType
+            p#labelTypeSelectDiv
+              label(for="labelType") Label
+              select#labelType
+            p
+              input(type="checkbox", id="keepSegmentColors", checked)
+              label(for="keepSegmentColors") Keep segment colors
+            p#showSegmentOBBsDiv
+              input(type="checkbox", id="showSegmentOBBs")
+              label(for="showSegmentOBBs") Show segment OBBs
+        .panel.panel-default
+          h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#images') Images
+          #images.panel-collapse.collapse
+            .panel-body
+              #imagesPanel(style='height:450px; width:300px;')
+
+      #instructionsPanel.roundBorder.grayBackground
+        span Instructions
+        p#instructions
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        #nameButtonsDiv.btn-group.btn-group-vertical
+
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src=`${baseUrl}/three.min.js`)
+    script(src=`${baseUrl}/STK.bundle.js`)
+    link(rel='stylesheet', href=`${baseUrl}/css/datgui-light.css`)
+    script.
+      var defaultPaletteName = 'd3_category19p';
+      var paletteName = STK.util.getUrlParam('palette') || defaultPaletteName;
+      STK.Constants.defaultPalette = STK.Colors.palettes[paletteName] || STK.Colors.palettes[defaultPaletteName];
+      var canvas = document.getElementById('canvas');
+      var modelViewer = new STK.ModelViewer({
+        container: canvas,
+        sources: ['vf'],
+        showSearchOptions: false,
+        useNewImages: true,
+        partsPanel: {
+          partTypes: ['none', 'surfaces', 'voxels-solid', 'voxels-surface', 'voxels-labeled'],
+          labelTypes: ['Raw', 'Category', 'Object'],
+          defaultPartType: 'none',
+          defaultLabelType: 'Object'
+        }
+      });
+      function setLabelColors(labelMappings, cb) {
+        var labelMappingsFile = STK.Constants.assetsDir + 'data/labels/label-mappings.tsv';
+        var remapCategoryField = 'category';
+        var categoryField = 'category';
+        var indexField = 'index';
+        if (labelMappings) {
+          labelMappingsFile = labelMappings.path || labelMappingsFile;
+          remapCategoryField = labelMappings.remapCategoryField || remapCategoryField;
+          categoryField = labelMappings.categoryField || categoryField;
+          indexField = labelMappings.indexField || indexField;
+        }
+        STK.FileUtil.loadDelimited(labelMappingsFile, null, function(err, parsed) {
+          if (parsed) {
+            var index = _.keyBy(parsed.data, categoryField);
+            index = _.mapValues(index, function (v) {
+              return v[indexField];
+            });
+            modelViewer.partsPanel.initLabelRemaps(_.keyBy(parsed.data, remapCategoryField), remapCategoryField);
+            modelViewer.partsPanel.setLabelColorIndex('Category', index);
+            modelViewer.partsPanel.setLabelColorIndex('voxels-labeled', index);
+            modelViewer.partsPanel.labeledVoxels.setLabelColorIndex(index);
+            modelViewer.partsPanel.setLabelColorIndex('Label', index);
+          }
+          if (cb) {
+            cb();
+          }
+        });
+      }
+      modelViewer.Subscribe('Launch', modelViewer, function () {
+        modelViewer.showLoadingIcon(true);
+      });
+      var modelId = STK.util.getUrlParam('modelId');
+      modelViewer.launch();
+      modelViewer.assetManager.registerCustomAssetGroups({
+        assetFiles: STK.Constants.scanAssetsFile,
+        filterByAssetId: modelId,
+        callback: function(err, res) {
+          //console.log(res);
+          var labelMappings;
+          if (res) {
+            for (var i = 0; i < res.length; i++) {
+              if (res[i].labelMappings) {
+                labelMappings = res[i].labelMappings;
+                break;
+              }
+            }
+          }
+          setLabelColors(labelMappings, function() {
+            if (!err) {
+
+              if (modelId != undefined) {
+                var modelIdParts = modelId.split('.');
+                modelViewer.setSourceAndSearch(modelViewer.modelSearchController, modelIdParts[0], 'fullId:' + modelId);
+              } else {
+                modelViewer.showLoadingIcon(false);
+              }
+            }
+          });
+        }
+      });
+
+      $('#partsPanel').collapse('show')
+      $('#images').on('shown.bs.collapse', function () {
+        modelViewer.modelImagesPanel.onResize();
+      });
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () {
+        $('#instructions').toggle();
+      });
+      // Make various components draggable
+      $('#namesPanel').draggable();
+      $('#instructionsPanel').draggable();
+      window.app = modelViewer;  // For console debugging

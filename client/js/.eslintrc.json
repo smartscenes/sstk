@@ -1,0 +1,96 @@
+{
+  "rules": {
+    "curly": [
+      2,
+      "all"
+    ],
+    "keyword-spacing": [
+      2,
+      {}
+    ],
+    "space-before-blocks": [
+      2,
+      "always"
+    ],
+    "wrap-iife": 2,
+    "space-before-function-paren": [
+      2,
+      {
+        "anonymous": "ignore",
+        "named": "never"
+      }
+    ],
+    "no-spaced-func": 2,
+    "brace-style": [
+      2,
+      "1tbs",
+      {
+        "allowSingleLine": true
+      }
+    ],
+    "array-bracket-spacing": [
+      2,
+      "always",
+      {
+        "objectsInArrays": false
+      }
+    ],
+    "space-in-parens": [
+      2,
+      "never"
+    ],
+    "dot-notation": 0,
+    "key-spacing": [
+      2,
+      {
+        "beforeColon": false,
+        "afterColon": true
+      }
+    ],
+    "comma-style": [
+      2,
+      "last"
+    ],
+    "space-unary-ops": [
+      2,
+      {
+        "words": false,
+        "nonwords": false
+      }
+    ],
+    "space-infix-ops": 2,
+    "camelcase": [
+      2,
+      {
+        "properties": "always"
+      }
+    ],
+    "no-with": 2,
+    "no-multi-str": 2,
+    "no-mixed-spaces-and-tabs": 2,
+    "no-trailing-spaces": 2,
+    "eol-last": 2,
+    "comma-dangle": [
+      2,
+      "never"
+    ],
+    "linebreak-style": [
+      2,
+      "unix"
+    ],
+    "indent": [
+      2,
+      2,
+      {
+        "SwitchCase": 1
+      }
+    ],
+    "quotes": [
+      2,
+      "single",
+      {
+        "avoidEscape": true
+      }
+    ]
+  }
+}

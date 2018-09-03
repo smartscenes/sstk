@@ -19,7 +19,6 @@ cmd
   .option('--use_subdir','Put output into subdirectory per id [false]')
   .optionGroups(['config_file', 'scene', 'render_options', 'view', 'render_views', 'color_by', 'asset_cache'])
   .option('--skip_existing', 'Skip rendering existing images [false]')
-  .option('--use_lights', 'Use local lights and shadows [false]')
   .option('--voxels <voxel-type>', 'Type of voxels to use [default: none]', 'none')
   .option('--extra <extra>', 'Additional stuff to render [wall|navmap]',
   /*/^(wall|navmap)$/, */ STK.util.cmd.collect, [])
@@ -33,6 +32,12 @@ cmd
   .option('--material_type <material_type>')
   .parse(process.argv);
 
+var msg = cmd.checkImageSize(cmd);
+if (msg) {
+  console.error(msg);
+  process.exit(-1);
+}
+
 var useSearchController = STK.Constants.baseUrl.startsWith('http://') || STK.Constants.baseUrl.startsWith('https://');
 // Parse arguments and initialize globals
 STK.Constants.setVirtualUnit(1);  // set to meters
@@ -40,10 +45,17 @@ if (cmd.material_type) {
   STK.materials.Materials.DefaultMaterialType = STK.materials.Materials.getMaterialType(cmd.material_type)
 }
 
+var use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
 var renderer = new STK.PNGRenderer({
   width: cmd.width,
   height: cmd.height,
-  useAmbientOcclusion: cmd.encode_index? false : cmd.use_ambient_occlusion,
+  useAmbientOcclusion: cmd.encode_index? false : use_ambient_occlusion,
+  useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
+  useOutlineShader: cmd.encode_index? false : cmd.use_outline_shader,
+  ambientOcclusionOptions: {
+    type: use_ambient_occlusion? cmd.ambient_occlusion_type : undefined
+  },
+  outlineColor: cmd.encode_index? false : cmd.outline_color,
   useLights: cmd.encode_index? false : cmd.use_lights,
   useShadows: cmd.encode_index? false : cmd.use_shadows,
   compress: cmd.compress_png,
@@ -108,6 +120,19 @@ var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
 
 main();
 
+/**
+ * Retexture scene
+ * @param opts {Object} Options for retexturing
+ * @param opts.cache
+ * @param opts.sceneState {STK.scene.SceneState}
+ * @param opts.assetManager {STK.assets.AssetManager}
+ * @param opts.rng
+ * @param opts.waitTextures {boolean} Whether to wait for texture images to load
+ * @param opts.retexture.textureOnly
+ * @param opts.retexture.texturedObjects
+ * @param opts.retexture.textureSet
+ * @param cb
+ */
 function retexture(opts, cb) {
   STK.scene.SceneUtil.getAggregatedSceneStatistics(opts.cache, function(err, aggregatedSceneStatistics) {
     STK.scene.SceneUtil.recolorWithCompatibleMaterials(opts.sceneState, {
@@ -127,6 +152,91 @@ function retexture(opts, cb) {
       setTimeout(function() { cb(); }, 0);
     }
   }, { fs: STK.fs });
+}
+
+/**
+ * Render scene
+ * @param scene {THREE.Object3D}
+ * @param renderer {STK.PNGRenderer}
+ * @param renderOpts {Object} Options on how to render and where to save the rendered file
+ * @param renderOpts.cameraControls {STK.controls.CameraControls} cameraControls
+ * @param renderOpts.targetBBox {STK.geo.BBox} Bounding box of the target
+ * @param renderOpts.basename {string} basename to output to
+ * @param renderOpts.angleStep {number} turntable_step
+ * @param renderOpts.framerate {number} framerate
+ * @param renderOpts.tilt {number} tilt from horizontal
+ * @param renderOpts.skipVideo {boolean} Whether to skip outputing of video
+ * @param cmdOpts {Object} Options on the view to render
+ * @param [cmdOpts.render_all_views] {boolean}
+ * @param [cmdOpts.render_turntable] {boolean}
+ * @param [cmdOpts.view] {Object}
+ * @param [cmdOpts.view_index] {int}
+ * @param [cmdOpts.width] {int} Requested image width
+ * @param [cmdOpts.height] {int} Requested image height
+ * @param [cmdOpts.max_width] {int} Maximum number of pixels in the horizontal dimension
+ * @param [cmdOpts.max_height] {int} Maximum number of pixels in the vertical dimension
+ * @param [cmdOpts.max_pixels] {int} Maximum number of pixels
+ * @param renderOpts.callback {function(err,res)} Callback
+ */
+function render(scene, renderer, renderOpts, cmdOpts) {
+  var sceneBBox = renderOpts.targetBBox;
+  var outbasename = renderOpts.basename;
+  var cameraControls = renderOpts.cameraControls;
+  var camera = renderOpts.cameraControls.camera;
+  var cb = renderOpts.callback;
+  console.log('cmdOpts', cmdOpts);
+  var logdata = _.defaults({}, renderOpts.logdata || {});
+  if (cmdOpts.render_all_views) {
+    // Render a bunch of views
+    renderer.renderAllViews(scene, renderOpts);
+  } else if (cmdOpts.render_turntable) {
+    // Render turntable
+    renderer.renderTurntable(scene, renderOpts);
+  } else {
+    var errmsg  = null;  // Set to error message
+    // Set view
+    if (cmdOpts.use_scene_camera) {
+      // No need to set view (using scene camera)
+      console.log('use scene camera');
+    } else if (cmdOpts.view_index != undefined) {
+      // Using view index
+      var views = cameraControls.generateViews(sceneBBox, cmdOpts.width, cmdOpts.height);
+      cameraControls.viewTarget(views[cmdOpts.view_index]);  // default
+    } else if (cmdOpts.view) {
+      // Using more complex view parameters
+      var viewOpts = cmdOpts.view.position? cmdOpts.view : cameraControls.getView(_.merge(Object.create(null), cmdOpts.view, { target: scene }));
+
+      if (viewOpts.imageSize) {
+        //console.log('got', viewOpts);
+        var width = viewOpts.imageSize[0];
+        var height = viewOpts.imageSize[1];
+        errmsg = cmd.checkImageSize({ width: width, height: height }, cmdOpts);
+        if (!errmsg && (width !== renderer.width || height !== renderer.height)) {
+          renderer.setSize(width, height);
+          camera.aspect = width / height;
+        }
+      }
+      if (!errmsg) {
+        cameraControls.viewTarget(viewOpts);
+      } else {
+        console.warn('Error rendering scene', msg);
+      }
+    } else {
+      // angled view is default
+      cameraControls.viewTarget({
+        targetBBox: sceneBBox,
+        phi: -Math.PI / 4,
+        theta: Math.PI / 6,
+        distanceScale: 2.0
+      });
+    }
+
+    if (!errmsg) {
+      logdata.cameraConfig = cameraControls.lastViewConfig;
+      renderer.renderToPng(scene, camera, outbasename, { logdata: logdata });
+    }
+    setTimeout( function() { cb(errmsg); }, 0);
+  }
 }
 
 var rng = new STK.math.RNG();
@@ -242,7 +352,19 @@ function processIds(assetsDb) {
           }
         }
 
-        function render(outbasename, cb) {
+        var cmdOpts = _.defaults(
+          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
+            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), { view_index: 0} );
+        if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
+          cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
+        }
+        if (cmdOpts.save_view_log) {
+          renderer.viewlogFilename = outbasename + '.views.jsonl';
+          shell.rm(renderer.viewlogFilename);
+        } else {
+          renderer.viewlogFilename = null;
+        }
+        function doRender(outbasename, cb) {
           var renderOpts = {
             cameraControls: cameraControls,
             targetBBox: sceneBBox,
@@ -251,36 +373,15 @@ function processIds(assetsDb) {
             framerate: cmd.framerate,
             tilt: cmd.tilt,
             skipVideo: cmd.skip_video,
+            logdata: _.defaults({ assetType: assetGroup.type, toWorld: sceneState.scene.matrixWorld.toArray() }, sceneOpts),
             callback: cb
           };
 
-          if (cmd.render_all_views) {
-            renderer.renderAllViews(scene, renderOpts);
-          } else if (cmd.render_turntable) {
+          if (cmd.render_turntable) {
             // farther near for scenes to avoid z-fighting
             camera.near = 4 * STK.Constants.metersToVirtualUnit;
-            renderer.renderTurntable(scene, renderOpts);
-          } else if (cmd.view) {
-            var viewOpts = cmd.view.position? cmd.view : cameraControls.getView(_.merge(Object.create(null), cmd.view, { target: scene }));
-            if (viewOpts.imageSize) {
-              //console.log('got', viewOpts);
-              var width = viewOpts.imageSize[0];
-              var height = viewOpts.imageSize[1];
-              if (width !== renderer.width || height !== renderer.height) {
-                renderer.setSize(width, height);
-                camera.aspect = width / height;
-              }
-            }
-            cameraControls.viewTarget(viewOpts);
-            renderer.renderToPng(scene, camera, outbasename);
-            setTimeout( function() { cb(); }, 0);
-          } else {  // top down view is default
-            var views = cameraControls.generateViews(sceneBBox, cmd.width, cmd.height);
-            cameraControls.viewTarget(views[cmd.view_index]);  // default
-            // cameraControls.viewTarget({ targetBBox: sceneBBox, viewIndex: 4, distanceScale: 1.1 });
-            renderer.renderToPng(scene, camera, outbasename);
-            setTimeout( function() { cb(); }, 0);
           }
+          render(scene, renderer, renderOpts, cmdOpts);
         }
 
         function onDrained() {
@@ -290,7 +391,7 @@ function processIds(assetsDb) {
               return count < cmd.retexture;
             }, function(cb) {
               count++;
-              // reseed and retexure
+              // reseed and retexture
               var name = outbasename + '.' + count;
               var retextureOpts = _.get(cmd, 'scene.retexture') || {};
               var newseed = (count === 1 && retextureOpts.seed)? retextureOpts.seed : rng.randBits(31);
@@ -304,13 +405,16 @@ function processIds(assetsDb) {
                 rng: rng,
                 retexture: retextureOpts
               }, function(err, res) {
-                render(name, cb);
+                if (err) {
+                  console.warn('Error retexturing scene: ', err);
+                }
+                doRender(name, cb);
               });
             }, function(err, n) {
               wrappedCallback();
             });
           } else {
-            render(outbasename, wrappedCallback);
+            doRender(outbasename, wrappedCallback);
           }
         }
 
@@ -357,6 +461,19 @@ function processIds(assetsDb) {
           outbasename = outbasename + '.encoded';
         }
 
+        var cmdOpts = _.defaults(
+          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
+            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']));
+        if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
+          cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
+        }
+        if (cmdOpts.save_view_log) {
+          renderer.viewlogFilename = outbasename + '.views.jsonl';
+          shell.rm(renderer.viewlogFilename);
+        } else {
+          renderer.viewlogFilename = null;
+        }
+
         var renderOpts = {
           cameraControls: cameraControls,
           targetBBox: sceneBBox,
@@ -365,45 +482,9 @@ function processIds(assetsDb) {
           framerate: cmd.framerate,
           tilt: cmd.tilt,
           skipVideo: cmd.skip_video,
+          logdata: { fullId: fullId, assetType: assetGroup.type, toWorld: mInst.getObject3D('Model').matrixWorld.toArray() },
           callback: wrappedCallback
         };
-
-        function render() {
-          if (cmd.render_all_views) {
-            renderer.renderAllViews(scene, renderOpts);
-          } else if (cmd.render_turntable) {
-            renderer.renderTurntable(scene, renderOpts);
-          } else if (cmd.view) {
-            var viewOpts = cmd.view.position? cmd.view : cameraControls.getView(_.merge(Object.create(null), cmd.view, { target: scene }));
-            if (viewOpts.imageSize) {
-              //console.log('got', viewOpts);
-              var width = viewOpts.imageSize[0];
-              var height = viewOpts.imageSize[1];
-              if (width !== renderer.width || height !== renderer.height) {
-                renderer.setSize(width, height);
-                camera.aspect = width / height;
-              }
-            }
-            cameraControls.viewTarget(viewOpts);
-            renderer.renderToPng(scene, camera, outbasename);
-            setTimeout( function() { cb(); }, 0);
-          } else if (cmd.view_index) {
-            var views = cameraControls.generateViews(sceneBBox, cmd.width, cmd.height);
-            cameraControls.viewTarget(views[cmd.view_index]);  // default
-            renderer.renderToPng(scene, camera, outbasename);
-            setTimeout( function() { wrappedCallback(); }, 0);
-          } else {  // angled view is default
-            cameraControls.viewTarget({
-              targetBBox: sceneBBox,
-              //viewIndex: 4,
-              phi: 0,
-              theta: Math.PI / 4,
-              distanceScale: 1.5
-            });
-            renderer.renderToPng(scene, camera, outbasename);
-            setTimeout( function() { wrappedCallback(); }, 0);
-          }
-        }
 
         function onDrained() {
           if (cmd.voxels && cmd.voxels !== 'none') {
@@ -412,10 +493,10 @@ function processIds(assetsDb) {
             mInst.voxels.loadVoxels(function (v) {
               STK.geo.Object3DUtil.setVisible(mInst.object3D, false);
               scene.add(v.getVoxelNode());
-              render();
+              render(scene, renderer, renderOpts, cmdOpts);
             });
           } else {
-            render();
+            render(scene, renderer, renderOpts, cmdOpts);
           }
         }
 

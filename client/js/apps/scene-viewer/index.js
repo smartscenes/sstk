@@ -38,7 +38,7 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
       showSearchSourceOption: true,
       showInstructions: true,
       contextQueryOptions: { showPriorsViz: true, allowGroupExpansion: true },
-      useAmbientOcclusion: true,
+      useAmbientOcclusion: false,
       useLights: true,
       useShadows: true,
       useDatGui: true

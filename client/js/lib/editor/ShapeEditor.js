@@ -478,6 +478,11 @@ PolygonEditor.prototype.__projectPoint = function(point) {
 
 PolygonEditor.prototype.addEndpoint = function (point) {
   // TODO: Draw some balls to mark endpoints
+  this.__pointMeshes = this.__pointMeshes || [];
+  var pointMesh = new THREE.Mesh(new THREE.SphereBufferGeometry(this.lineWidth, 32, 16), this.material);
+  pointMesh.position.copy(point);
+  this.__pointMeshes.push(pointMesh);
+  this.object.add(pointMesh);
 
   // TODO: More generic plane than with y up
   // Need to project onto plane
@@ -494,7 +499,7 @@ PolygonEditor.prototype.addEndpoint = function (point) {
     this.__shape.moveTo(p.x, p.y);
   }
   if (this.currentSegment.length >= 3) {
-    var geometry = this.height? this.__shape.extrude({ amount: this.height }) : this.__shape.makeGeometry();
+    var geometry = this.height? new THREE.ExtrudeGeometry(this.__shape, { amount: this.height }) : new THREE.ShapeGeometry(this.__shape);
     if (this.__mesh) {
       this.object.remove(this.__mesh);
       Object3DUtil.dispose(this.__mesh);
@@ -526,15 +531,27 @@ PolygonEditor.prototype.createObject = function (objData, opts) {
     var material = this.__getMaterial(labelInfo) || this.material;
     var height = objData.height || this.height;
     var object = new THREE.Object3D();
-    var start = null;
+    var shape = new THREE.Shape();
+
     for (var i = 0; i < objData.points.length; i++) {
       var point = Object3DUtil.toVector3(objData.points[i]);
-      Object3DUtil.addColumn(object, point, wallUp, wallHeight, lineWidth, material);
-      if (start) {
-        Object3DUtil.addWall(object, start, point, wallUp, wallHeight, lineWidth, material);
+      if (i === 0) {
+        this.__planeOrigin = new THREE.Vector3(point.x, point.y, point.z);
+        this.__transform.setPosition(this.__planeOrigin);
+        this.__transformInverse = new THREE.Matrix4();
+        this.__transformInverse.getInverse(this.__transform);
+        var p = this.__projectPoint(point);
+        shape.moveTo(p.x, p.y);
+      } else {
+        var p = this.__projectPoint(point);
+        shape.lineTo(p.x, p.y);
       }
-      start = point;
     }
+    var geometry = height? new THREE.ExtrudeGeometry(shape, { amount: height }) : new THREE.ShapeGeometry(shape);
+    var mesh = new THREE.Mesh(geometry, material);
+    Object3DUtil.setMatrix(mesh, this.__transform);
+    object.add(mesh);
+
     object.name = objData.label;
     object.userData = objData;
     this.__applyTransform(object, objData, opts);
@@ -627,7 +644,7 @@ BoxEditor.prototype.__onMouseDown = function (event) {
         // Just update object (we want to reuse this object for some reason...)
         this.box.update(this.min, this.max);
         if (this.boxwf) {
-          this.boxwf.update(this.box);
+          this.boxwf.update();
         }
         if (this.boxwffat) {
           this.boxwffat.update(this.boxwf);
@@ -914,7 +931,7 @@ ShapeEditor.prototype.reset = function (params) {
   this.scene.add(this.node);
   if (this.transformControls) {
     this.scene.add(this.transformControls);
-    this.transformControls.setCamera(this.camera);
+    this.transformControls.camera = this.camera;
   }
   this.objects = [];
   this.objectsByType = {};

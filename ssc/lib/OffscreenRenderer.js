@@ -28,6 +28,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     this.__needFlipY = true;
     this.__maxViewportDims = [1000, 1000];
     this.canvas = params.canvas;  // Reference to dummy canvas
+    this.viewlogFilename = params.viewlogFilename;  // Log of views that were generated
   };
   OffscreenRenderer.prototype = Object.create(baseRendererClass.prototype);
   OffscreenRenderer.prototype.super = baseRendererClass.prototype;
@@ -42,6 +43,14 @@ function OffscreenRendererFactory (baseRendererClass) {
     }
     var pixels = this.render(scene, camera, opts);
     this.writePNG(pngfile, this.width, this.height, pixels);
+    var viewlogFilename = (opts? opts.viewlogFilename : null) || this.viewlogFilename;
+    if (viewlogFilename) {
+      var logdata = { filename: pngfile, width: this.width, height: this.height, worldCamera: camera.toJSON() };
+      if (opts && opts.logdata) {
+        _.defaults(logdata, opts.logdata);
+      }
+      this.__fs.writeToFile(viewlogFilename, JSON.stringify(logdata) + '\n', { append: true });
+    }
     if (this.compress) {
       this.__fs.execSync('pngquant -f --ext .png ' + pngfile, { encoding: 'utf8' });
     }
@@ -98,14 +107,18 @@ function OffscreenRendererFactory (baseRendererClass) {
     var scope = this;
     var angles = _.range(angleStart, angleEnd, angleStep);
     async.forEachOfSeries(angles, function (angle, key, callback) {
+      var phi = angle / 180 * Math.PI;
       cameraControls.viewTarget({
         targetBBox: targetBBox, distanceScale: distanceScale,
         theta: theta,
-        phi: angle / 180 * Math.PI
+        phi: phi
       });
       var pngfile = basename + '-' + _.padStart(key.toString(), 4, '0') + '.png';
       cameraControls.camera.updateProjectionMatrix();
-      scope.renderToPng(scene, cameraControls.camera, pngfile, opts);
+      var renderOpts = _.clone(opts);
+      renderOpts.logdata = _.defaults({ cameraConfig: cameraControls.lastViewConfig },
+        opts.logdata || {});
+      scope.renderToPng(scene, cameraControls.camera, pngfile, renderOpts);
       setTimeout(function () { callback(); });
     }, function () {
       if (!opts.skipVideo) {

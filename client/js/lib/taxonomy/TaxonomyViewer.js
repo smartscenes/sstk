@@ -268,6 +268,7 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
             if (node !== -1) {
               var nodeId = node.data('name');
               var p = { 'n': nodeId };
+              var appendChar = jsonUrl.indexOf('?')? '&' : '?';
               url = url + appendChar + $.param(p);
             }
             console.log('url is ' + url);
@@ -377,10 +378,10 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
           });
           button.show();
         } else {
-          buttonhide();
+          button.hide();
         }
       }
-    };
+    }
 
     TaxonomyViewer.prototype.showModel = function (source, id) {
       var fullId = AssetManager.toFullId(source, id);

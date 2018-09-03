@@ -134,10 +134,10 @@ ConnectivitySearch.prototype.gatherFaces = function(mainFaceIndex, maxLength, no
   if (!point) {
     var positions = mainFaceVertexPositions;
     var tri = new THREE.Triangle(positions[0], positions[1], positions[2]);
-    point = tri.midpoint();
+    point = tri.getMidpoint(new THREE.Vector3());
   }
   var maxRadius = maxLength/2;
-  var neighboringFaceIndices = this.vptree.search(mainFaceIndex, null, maxRadiusSq*1.1).map( function(x) {
+  var neighboringFaceIndices = this.vptree.search(mainFaceIndex, null, maxRadius*1.1).map( function(x) {
     return x.i;  // x has dist and i
   });
 

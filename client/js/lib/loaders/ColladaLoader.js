@@ -33,6 +33,7 @@ THREE.ColladaLoader = function () {
 	var baseUrl;
 	var morphs;
 	var skins;
+	var __reportedMessages = {};
 
 	var flip_uv = true;
 	var preferredShading = THREE.SmoothShading;
@@ -52,7 +53,10 @@ THREE.ColladaLoader = function () {
 		upAxis: 'Y',
 
 		// For reflective or refractive materials we'll use this cubemap
-		defaultEnvMap: null
+		defaultEnvMap: null,
+
+		// If we want to skip lines (AXC)
+		skipLines: false
 
 	};
 
@@ -663,8 +667,8 @@ THREE.ColladaLoader = function () {
 				var vidx = w.index;
 				var weight = w.weight;
 
-				o = geometry.vertices[vidx];
-				s = skinned[vidx];
+				var o = geometry.vertices[vidx];
+				var s = skinned[vidx];
 
 				v.x = o.x;
 				v.y = o.y;
@@ -1193,7 +1197,7 @@ THREE.ColladaLoader = function () {
 					for ( j = 0; j < geom.faces.length; j ++ ) {
 
 						var face = geom.faces[ j ];
-						face.materialIndex = used_materials[ face.daeMaterial ]
+						face.materialIndex = used_materials[ face.daeMaterial ];
 						// AXC: Log error and use default material
 						if (face.materialIndex === undefined && !warned_materials[face.daeMaterial]) {
 							console.warn('Unknown material when loading collada model', face.daeMaterial);
@@ -1253,24 +1257,36 @@ THREE.ColladaLoader = function () {
 
 				} else {
 
-					if ( geom.isLineStrip === true ) {
-
-						mesh = new THREE.LineSegments( geom );
-						// AXC: Set line color and opacity
-						mesh.material.color.set(material.color);
-						mesh.material.transparent = material.transparent;
-						mesh.material.opacity = material.opacity;
-
-					} else {
-
-						mesh = new THREE.Mesh( geom, material );
-
-					}
+					mesh = new THREE.Mesh( geom, material );
 
 				}
 
-				obj.add(mesh);
+				if (geom.faces.length) {
+                    obj.add(mesh);
+                }
 
+                // AXC: Handle lines separately
+                if (!options.skipLines) {
+                    for (var gi = 0; gi < geometry.mesh.lineGeometries.length; gi++) {
+                        var geom = geometry.mesh.lineGeometries[gi];
+                        if (geom.isLineStrip === true) {
+
+                            mesh = new THREE.Line(geom); // drawn using gl.LINE_STRIP (vertices keep going to next)
+                            mesh.material.color.set(material.color);
+                            mesh.material.transparent = material.transparent;
+                            mesh.material.opacity = material.opacity;
+
+                        } else if (geom.isLine === true) {
+                            // AXC: Handle line strip vs line  // drawn using gl.LINE (pairs of vertices)
+                            mesh = new THREE.LineSegments(geom);
+                            // AXC: Set line color and opacity
+                            mesh.material.color.set(material.color);
+                            mesh.material.transparent = material.transparent;
+                            mesh.material.opacity = material.opacity;
+                        }
+                        obj.add(mesh);
+                    }
+                }
 			}
 
 		}
@@ -2827,7 +2843,7 @@ THREE.ColladaLoader = function () {
 
 				case 'lines': // AXC: Add lines
 
-					this.primitives.push( ( new LineStrips().parse( child ) ) );
+					this.primitives.push( ( new Lines().parse( child ) ) );
 					break;
 
 				case 'linestrips':
@@ -2857,6 +2873,7 @@ THREE.ColladaLoader = function () {
 
 		}
 
+		this.lineGeometries = [];
 		this.geometry3js = new THREE.Geometry();
 		this.geometry3js.colladaId = this.geometry;  // AXC: Add colladaId here (in the variable this.geometry)
 
@@ -2876,6 +2893,9 @@ THREE.ColladaLoader = function () {
 
 		}
 
+        // TODO (AXC): Switch to revamped ColladaLoader that handles multiple primitives per mesh
+		// mesh can have primitives in any order and any number!
+		// Code here assumes one primitive (or at least one primitive type) for Collada mesh
 		var vertexData = sources[ this.vertices.input['POSITION'].source ].data;
 
 		for ( var i = 0; i < vertexData.length; i += 3 ) {
@@ -2889,7 +2909,10 @@ THREE.ColladaLoader = function () {
 			var primitive = this.primitives[ i ];
 			primitive.setVertices( this.vertices );
 			this.handlePrimitive( primitive, this.geometry3js );
-
+			var isLine = (primitive.geometry.isLine || primitive.geometry.isLineStrip);
+			if (isLine) {
+				this.lineGeometries.push(primitive.geometry);
+			}
 		}
 
 		if ( this.geometry3js.calcNormals ) {
@@ -2905,22 +2928,29 @@ THREE.ColladaLoader = function () {
 
 	Mesh.prototype.handlePrimitive = function ( primitive, geom ) {
 
-		if ( primitive instanceof LineStrips ) {
+		if ( primitive instanceof LineStrips || primitive instanceof Lines ) {
 
 			// TODO: Handle indices. Maybe easier with BufferGeometry?
 			// AXC: handle indices
 			var pLists = primitive.p;
 			if (pLists) {
 				var vertices = geom.vertices;
-				geom.vertices = [];
+				primitive.geometry.vertices = [];
+                primitive.geometry.colladaId = geom.colladaId;
 				for (var i = 0; i < pLists.length; i++) {
 					var pList = pLists[i];
 					for (var j = 0; j < pList.length; j++) {
-						geom.vertices.push(vertices[pList[j]]);
+                        primitive.geometry.vertices.push(vertices[pList[j]]);
+						if (vertices[pList[j]] == null) {
+                            if (!__reportedMessages['lineMissingVertex']) {   // AXC: Make reporting of these messages quieter
+                                console.warn('THREE.ColladaLoader.Mesh.handlePrimitive: Missing vertex!');
+                                __reportedMessages['lineMissingVertex'] = true;
+                            }
+						}
 					}
 				}
 			}
-			geom.isLineStrip = true;
+
 			return;
 
 		}
@@ -3264,11 +3294,24 @@ THREE.ColladaLoader = function () {
 		Polygons.call( this );
 
 		this.vcount = 1;
+		this.geometry.isLineStrip = true;
 
 	};
 
 	LineStrips.prototype = Object.create( Polygons.prototype );
 	LineStrips.prototype.constructor = LineStrips;
+
+    function Lines() {
+
+        Polygons.call( this );
+
+        this.vcount = 1;
+        this.geometry.isLine = true;
+
+    };
+
+    Lines.prototype = Object.create( Polygons.prototype );
+    Lines.prototype.constructor = Lines;
 
 	function Triangles () {
 
@@ -3853,7 +3896,7 @@ THREE.ColladaLoader = function () {
 
 		}
 
-		props[ 'shading' ] = preferredShading;
+		props[ 'flatShading' ] = preferredShading;
 		props[ 'side' ] = this.effect.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
 
 		switch ( this.type ) {

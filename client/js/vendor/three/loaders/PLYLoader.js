@@ -27,14 +27,12 @@
  */
 
 
-THREE.PLYLoader = function ( params ) {
-	var manager = ( params ) ? params.manager : undefined;
-	this.computeNormals = params.computeNormals;
+THREE.PLYLoader = function ( manager ) {
+
 	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
 
-	this.propertyNameMapping = params.propertyNameMapping || {};
-	this.customFaceAttributes = params.customFaceAttributes;
-  this.customVertexAttributes = params.customVertexAttributes;
+	this.propertyNameMapping = {};
+
 };
 
 THREE.PLYLoader.prototype = {
@@ -63,47 +61,6 @@ THREE.PLYLoader.prototype = {
 
 	parse: function ( data ) {
 
-		// AXC: Convert header to string
-		function bin2str_header( buf ) {
-
-			var array_buffer = new Uint8Array( buf );
-			var str = '';
-			for ( var i = 0; i < buf.byteLength; i ++ ) {
-				var ch = String.fromCharCode( array_buffer[ i ] ); // implicitly assumes little-endian
-				str += ch;
-				if (ch === '\n') {
-					// Check if header ended
-					if (str.indexOf('end_header') >= 0) {
-						break;
-					}
-				}
-			}
-
-			return str;
-		}
-
-		function isASCII( data ) {
-
-			var header = parseHeader( bin2str_header( data ) );
-			return header.format === "ascii";
-
-		}
-
-		function bin2str( buf ) {
-
-			var array_buffer = new Uint8Array( buf );
-			var str = '';
-
-			for ( var i = 0; i < buf.byteLength; i ++ ) {
-
-				str += String.fromCharCode( array_buffer[ i ] ); // implicitly assumes little-endian
-
-			}
-
-			return str;
-
-		}
-
 		function parseHeader( data ) {
 
 			var patternHeader = /ply([\s\S]*)end_header\s/;
@@ -113,7 +70,7 @@ THREE.PLYLoader.prototype = {
 
 			if ( result !== null ) {
 
-				headerText = result [ 1 ];
+				headerText = result[ 1 ];
 				headerLength = result[ 0 ].length;
 
 			}
@@ -216,21 +173,7 @@ THREE.PLYLoader.prototype = {
 
 			}
 
-      var elementsByName = {};
-      for (var i = 0; i < header.elements.length; i++) {
-      	var element = header.elements[i];
-        elementsByName[element.name] = element;
-
-      	var propertiesByName = {};
-      	for (var j = 0; j < element.properties.length; j++) {
-      		var prop = element.properties[j];
-      		propertiesByName[prop.name] = prop;
-        }
-        element.propertiesByName = propertiesByName;
-      }
-      header.elementsByName = elementsByName;
-
-      return header;
+			return header;
 
 		}
 
@@ -238,14 +181,14 @@ THREE.PLYLoader.prototype = {
 
 			switch ( type ) {
 
-			case 'char': case 'uchar': case 'short': case 'ushort': case 'int': case 'uint':
-			case 'int8': case 'uint8': case 'int16': case 'uint16': case 'int32': case 'uint32':
+				case 'char': case 'uchar': case 'short': case 'ushort': case 'int': case 'uint':
+				case 'int8': case 'uint8': case 'int16': case 'uint16': case 'int32': case 'uint32':
 
-				return parseInt( n );
+					return parseInt( n );
 
-			case 'float': case 'double': case 'float32': case 'float64':
+				case 'float': case 'double': case 'float32': case 'float64':
 
-				return parseFloat( n );
+					return parseFloat( n );
 
 			}
 
@@ -284,48 +227,25 @@ THREE.PLYLoader.prototype = {
 
 		}
 
-		function createBuffer(header) {
-      //console.log(header);
-      var buffer = {
-        indices : [],
-        vertices : [],
-        normals : [],
-        uvs : [],
-        colors : []
-      };
-
-      // Additional attributes to keep
-      if (scope.customVertexAttributes) {
-      	var customVertexAttributes = scope.customVertexAttributes;
-        buffer.customVertexAttributes = {};
-        for (var i = 0; i < customVertexAttributes.length; i++) {
-					buffer.customVertexAttributes[customVertexAttributes[i]] = [];
-        }
-      }
-      if (scope.customFaceAttributes) {
-        var customFaceAttributes = scope.customFaceAttributes;
-      	buffer.customFaceAttributes = {};
-      	for (var i = 0; i < customFaceAttributes.length; i++) {
-          buffer.customFaceAttributes[customFaceAttributes[i]] = [];
-				}
-			}
-      return buffer;
-		}
-
-		function parseASCII( data ) {
+		function parseASCII( data, header ) {
 
 			// PLY ascii format specification, as per http://en.wikipedia.org/wiki/PLY_(file_format)
 
+			var buffer = {
+				indices: [],
+				vertices: [],
+				normals: [],
+				uvs: [],
+				colors: []
+			};
+
 			var result;
 
-			var header = parseHeader( data );
-      var buffer = createBuffer(header);
-			
-      var patternBody = /end_header\s([\s\S]*)$/;
+			var patternBody = /end_header\s([\s\S]*)$/;
 			var body = '';
 			if ( ( result = patternBody.exec( data ) ) !== null ) {
 
-				body = result [ 1 ];
+				body = result[ 1 ];
 
 			}
 
@@ -364,24 +284,24 @@ THREE.PLYLoader.prototype = {
 
 		function postProcess( buffer ) {
 
-      console.time('postProcess');
 			var geometry = new THREE.BufferGeometry();
 
 			// mandatory buffer data
 
-			geometry.setIndex( new ( buffer.indices.length > 65535 ? THREE.Uint32BufferAttribute : THREE.Uint16BufferAttribute )( buffer.indices, 1 ) );
+			if ( buffer.indices.length > 0 ) {
+
+				geometry.setIndex( buffer.indices );
+
+			}
+
 			geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( buffer.vertices, 3 ) );
 
 			// optional buffer data
-			if (scope.computeNormals) {
-				geometry.computeFaceNormals();
-				geometry.computeVertexNormals();
-			} else {
-				if (buffer.normals.length > 0) {
 
-					geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( buffer.normals, 3 ) );
+			if ( buffer.normals.length > 0 ) {
 
-				}
+				geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( buffer.normals, 3 ) );
+
 			}
 
 			if ( buffer.uvs.length > 0 ) {
@@ -398,15 +318,6 @@ THREE.PLYLoader.prototype = {
 
 			geometry.computeBoundingSphere();
 
-      if (buffer.customVertexAttributes) {
-      	geometry.customVertexAttributes = buffer.customVertexAttributes;
-			}
-      if (buffer.customFaceAttributes) {
-        geometry.customFaceAttributes = buffer.customFaceAttributes;
-      }
-
-      console.timeEnd('postProcess');
-
 			return geometry;
 
 		}
@@ -415,7 +326,7 @@ THREE.PLYLoader.prototype = {
 
 			if ( elementName === 'vertex' ) {
 
-        buffer.vertices.push( element.x, element.y, element.z );
+				buffer.vertices.push( element.x, element.y, element.z );
 
 				if ( 'nx' in element && 'ny' in element && 'nz' in element ) {
 
@@ -435,14 +346,6 @@ THREE.PLYLoader.prototype = {
 
 				}
 
-        if (buffer.customVertexAttributes) {
-          for (var k in buffer.customVertexAttributes) {
-            if (buffer.customVertexAttributes.hasOwnProperty(k) && k in element) {
-              buffer.customVertexAttributes[k].push(element[k]);
-            }
-          }
-        }
-
 			} else if ( elementName === 'face' ) {
 
 				var vertex_indices = element.vertex_indices || element.vertex_index; // issue #9338
@@ -458,18 +361,6 @@ THREE.PLYLoader.prototype = {
 
 				}
 
-				if (buffer.customFaceAttributes) {
-					for (var k in buffer.customFaceAttributes) {
-						if (buffer.customFaceAttributes.hasOwnProperty(k) && k in element) {
-              if ( vertex_indices.length === 3 ) {
-                buffer.customFaceAttributes[k].push(element[k]);
-              } else if ( vertex_indices.length === 4) {
-                buffer.customFaceAttributes[k].push(element[k]);
-                buffer.customFaceAttributes[k].push(element[k]);
-							}
-						}
-					}
-				}
 			}
 
 		}
@@ -478,7 +369,7 @@ THREE.PLYLoader.prototype = {
 
 			switch ( type ) {
 
-				// correspondences for non-specific length types here match ply:
+				// corespondences for non-specific length types here match rply:
 				case 'int8':		case 'char':	 return [ dataview.getInt8( at ), 1 ];
 				case 'uint8':		case 'uchar':	 return [ dataview.getUint8( at ), 1 ];
 				case 'int16':		case 'short':	 return [ dataview.getInt16( at, little_endian ), 2 ];
@@ -531,15 +422,20 @@ THREE.PLYLoader.prototype = {
 
 		}
 
-		function parseBinary( data ) {
+		function parseBinary( data, header ) {
 
-			var header = parseHeader( bin2str_header( data ) );
-      var buffer = createBuffer(header);
-      var little_endian = ( header.format === 'binary_little_endian' );
+			var buffer = {
+				indices: [],
+				vertices: [],
+				normals: [],
+				uvs: [],
+				colors: []
+			};
+
+			var little_endian = ( header.format === 'binary_little_endian' );
 			var body = new DataView( data, header.headerLength );
 			var result, loc = 0;
 
-			console.time('parseBinary');
 			for ( var currentElement = 0; currentElement < header.elements.length; currentElement ++ ) {
 
 				for ( var currentElementCount = 0; currentElementCount < header.elements[ currentElement ].count; currentElementCount ++ ) {
@@ -553,7 +449,6 @@ THREE.PLYLoader.prototype = {
 				}
 
 			}
-      console.timeEnd('parseBinary');
 
 			return postProcess( buffer );
 
@@ -566,11 +461,14 @@ THREE.PLYLoader.prototype = {
 
 		if ( data instanceof ArrayBuffer ) {
 
-			geometry = isASCII( data ) ? parseASCII( bin2str( data ) ) : parseBinary( data );
+			var text = THREE.LoaderUtils.decodeText( new Uint8Array( data ) );
+			var header = parseHeader( text );
+
+			geometry = header.format === 'ascii' ? parseASCII( text, header ) : parseBinary( data, header );
 
 		} else {
 
-			geometry = parseASCII( data );
+			geometry = parseASCII( data, parseHeader( data ) );
 
 		}
 

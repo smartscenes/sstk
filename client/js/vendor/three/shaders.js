@@ -1,8 +1,17 @@
 define(["vendor/three/shaders/CopyShader",
         "vendor/three/shaders/SSAOShader",
+        "vendor/three/shaders/SAOShader",
         "vendor/three/shaders/FXAAShader",
+        "vendor/three/shaders/DepthLimitedBlurShader",
+        "vendor/three/shaders/UnpackDepthRGBAShader",
+        "vendor/three/shaders/LuminosityShader",
+        "vendor/three/shaders/SobelOperatorShader",
+        "vendor/three/shaders/ColorCorrectionShader",
         "vendor/three/postprocessing/EffectComposer",
         "vendor/three/postprocessing/MaskPass",
         "vendor/three/postprocessing/RenderPass",
-        "vendor/three/postprocessing/ShaderPass"], function () {
+        "vendor/three/postprocessing/ShaderPass",
+        "vendor/three/postprocessing/SSAOPass",
+        "vendor/three/postprocessing/SAOPass",
+        "vendor/three/postprocessing/OutlinePass"], function () {
 });

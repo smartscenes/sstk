@@ -1,5 +1,6 @@
 var FileUtil = require('io/FileUtil');
 var Object3DUtil = require('geo/Object3DUtil');
+var _ = require('util');
 
 /**
  * Export a mesh in Assimp json format
@@ -24,13 +25,11 @@ JSONExporter.prototype.export = function(obj, opts) {
   // Linearize nodes and put meshes into an array
   var indexed = Object3DUtil.getIndexedNodes(obj, { splitByMaterial: opts.splitByMaterial });
   var nodes = _.map(indexed.nodes, function(node) {
-    var meshIds = undefined;
-    var childids = undefined;
+    var meshIds;
+    var childIds;
     if (node instanceof THREE.Mesh) {
       meshIds = [node.geometry.userData.geometryIndex];
-      childIds = undefined;
     } else {
-      meshIds = undefined;
       childIds = _.map(node.children, function(x) { return x.userData.nodeIndex; });
     }
     return {
@@ -40,7 +39,7 @@ JSONExporter.prototype.export = function(obj, opts) {
       transformation: node.matrix.toArray(),
       meshes: meshIds,
       children: childIds
-    }
+    };
   });
   // TODO: Export meshes and materials
   var meshes;

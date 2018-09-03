@@ -63,7 +63,7 @@ BVHNode.prototype.intersects = function(intersector, options) {
     options.intersectObject = options.intersectObject || function(object, recursive) { return raycaster.intersectObject(object, recursive); };
     // returns if bbox is intersected
     options.intersectBBox = options.intersectBBox || function(bbox) {
-      var intersectedPoint = raycaster.ray.intersectBox(bbox);
+      var intersectedPoint = raycaster.ray.intersectBox(bbox, new THREE.Vector3());
       if (intersectedPoint) {
         var insideBBox = bbox.contains(raycaster.ray.origin);
         if (!insideBBox) {

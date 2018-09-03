@@ -2,7 +2,6 @@
 
 var async = require('async');
 var path = require('path');
-var fs = require('fs');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
@@ -11,22 +10,27 @@ var _ = STK.util;
 
 cmd
   .version('0.0.1')
+  .description('Export asset as single mesh.  Tested with kmz to obj/mtl only.')
   .option('--input <filename>', 'Input path')
   .option('--input_format <format>', 'Input file format to use')
-  .option('--inputType <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
+  .option('--input_type <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')
   .option('--output_format <format>', 'Output file format to use', /^(obj|gltf)$/, 'obj')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .optionGroups(['config_file', 'color_by'])
   .option('--skip_existing', 'Skip exporting of existing meshes [false]')
   .option('--compress', 'Compress output [false]')
-  .option('--texture_path <dir>', 'Texture path', '../../texture')
+  .option('--export_textures <type>',
+    'How to export textures (`copy` will make copy of original textures, `export` will exporte jpn or png directly from the images with simple filenames)',
+    /^(none|copy|export)$/, 'export')
+  .option('--texture_path <dir>', 'Texture path for exported textures', 'images')
   .option('--center', 'Center so scene is at origin')
   .option('--normalize_size <flag>', 'What to normalize (diagonal or max dimension)', /^(diagonal|max)$/)
   .option('--normalize_size_to <target>', 'What to normalize the size to', STK.util.cmd.parseFloat, 1.0)
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .option('--require_faces [flag]', 'Whether to skip geometry without faces when exporting', STK.util.cmd.parseBoolean, false)
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
+  .option('--include_group [flag]', 'Whether to include group g commands in the output obj file', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 // Parse arguments and initialize globals
@@ -86,8 +90,10 @@ function exportScene(exporter, exportOpts, sceneState, callback) {
 
 //STK.Constants.setVirtualUnit(1);
 var meshNameFunc = function (node) {
-  if (node.userData.id) {
+  if (node.userData.type && node.userData.id) {
     return node.userData.type + '#' + node.userData.id;
+  } else {
+    return node.name || ('mesh_' + node.id);
   }
 };
 var groupNameFunc = function (node) {
@@ -117,13 +123,13 @@ function processFiles() {
       scenename = basename;
       basename = outputDir? outputDir + '/' + basename : basename;
     } else {
-      if (cmd.inputType === 'id') {
+      if (cmd.input_type === 'id') {
         var idparts = file.split('.');
         var id = idparts[idparts.length-1];
         basename = id;
         scenename = basename;
         basename = (outputDir ? outputDir : '.') + '/' + basename;
-      } else if (cmd.inputType === 'path') {
+      } else if (cmd.input_type === 'path') {
         basename = path.basename(file, path.extname(file)) || 'mesh';
         scenename = basename;
         basename = (outputDir ? outputDir : path.dirname(file)) + '/' + basename;
@@ -134,30 +140,53 @@ function processFiles() {
       console.warn('Skipping existing scene at ' + basename);
       setTimeout(function () { callback(); }, 0);
     } else {
+      var texturePath = cmd.texture_path;
       shell.mkdir('-p', basename);
       var info;
-      if (cmd.inputType === 'id') {
-        info = { id: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial }
-      } else if (cmd.inputType === 'path') {
-        info = { file: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial }
+      var timings = new STK.Timings();
+      timings.start('exportMesh');
+      var metadata = {};
+      if (cmd.input_type === 'id') {
+        info = { id: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
+        metadata.id = id;
+      } else if (cmd.input_type === 'path') {
+        info = { file: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
+        metadata.path = path;
       }
       if (cmd.assetInfo) {
         info = _.defaults(info, cmd.assetInfo);
       }
 
+      var exportTexturesFlag = false;
+      if (cmd.export_textures === 'none') {
+      } else if (cmd.export_textures === 'copy') {
+        info.options = {
+          textureCacheOpts: {
+            dir: basename, //+ '/' + texturePath,
+            rewritePath: rewriteTexturePath,
+            fs: STK.fs
+          }
+        };
+      } else if (cmd.export_textures === 'export') {
+        shell.mkdir('-p', basename + '/' + texturePath);
+        exportTexturesFlag = true;
+      }
+
+      timings.start('load');
       assetManager.loadAsset(info, function (err, asset) {
+        timings.stop('load');
         var sceneState;
         if (asset instanceof STK.scene.SceneState) {
           sceneState = asset;
         } else if (asset instanceof STK.model.ModelInstance) {
           var modelInstance = asset;
           sceneState = new STK.scene.SceneState(null, modelInstance.model.info);
-          console.time('toGeometry');
+          timings.start('toGeometry');
           // Ensure is normal geometry (for some reason, BufferGeometry not working with ssc)
           STK.geo.Object3DUtil.traverseMeshes(modelInstance.object3D, false, function(m) {
             m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
           });
-          console.timeEnd('toGeometry');
+          timings.stop('toGeometry');
           sceneState.addObject(modelInstance);
         } else if (err) {
           console.error("Error loading asset", info, err);
@@ -173,6 +202,8 @@ function processFiles() {
         var bbdims = sceneBBox.dimensions();
         console.log('Loaded ' + file +
           ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
+        var bboxes = [];
+        bboxes.push(sceneBBox.toJSON('loaded'));
         if (cmd.require_faces) {
           //STK.geo.Object3DUtil.removeLines(sceneState.scene);
           //STK.geo.Object3DUtil.removePoints(sceneState.scene);
@@ -182,6 +213,7 @@ function processFiles() {
           bbdims = sceneBBox.dimensions();
           console.log('Removed empty geometry, lines, points ' + file +
             ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
+          bboxes.push(sceneBBox.toJSON('cleaned'));
         }
         if (cmd.normalize_size) {
           STK.geo.Object3DUtil.rescaleObject3DToFit(sceneState.fullScene,
@@ -190,6 +222,7 @@ function processFiles() {
           bbdims = sceneBBox.dimensions();
           console.log('After rescaling ' + file +
             ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']', bbdims.length());
+          bboxes.push(sceneBBox.toJSON('rescaled'));
         }
         if (cmd.center) {
           STK.geo.Object3DUtil.placeObject3D(sceneState.fullScene);
@@ -197,6 +230,7 @@ function processFiles() {
           sceneBBox = STK.geo.Object3DUtil.getBoundingBox(sceneState.fullScene);
           bbdims = sceneBBox.dimensions();
           console.log('After centering ' + file, sceneBBox.toString());
+          bboxes.push(sceneBBox.toJSON('centered'));
         }
 
         var unit = 1;
@@ -209,25 +243,42 @@ function processFiles() {
             scaleMat.makeScale(unit, unit, unit);
             sceneTransformMatrixInverse.multiply(scaleMat);
           }
+        } else {
+          metadata.transform = sceneState.scene.matrixWorld.toArray();
         }
+        // Export scene
         var exportOpts = {
           dir: basename,
           name: scenename,
           skipMtl: false,
+          exportTextures: exportTexturesFlag,
+          texturePath: texturePath,
           rewriteTexturePathFn: rewriteTexturePath,
           transform: sceneTransformMatrixInverse,
-          defaultUvScale: new THREE.Vector2(0.01, 0.01),
+          //defaultUvScale: new THREE.Vector2(0.01, 0.01),
           getMeshName: meshNameFunc,
-          getGroupName: groupNameFunc
+          getGroupName: cmd.include_group? groupNameFunc : null
         };
         function waitImages() {
           STK.util.waitImagesLoaded(function () {
-            exportScene(objExporter, exportOpts, sceneState, function () {
+            timings.start('export');
+            exportScene(objExporter, exportOpts, sceneState, function (err, result) {
               if (cmd.compress) {
                 var objfile = basename + '/' + scenename + '.obj';
                 //console.log('Compressing ' + objfile);
                 STK.util.execSync('xz -f ' + objfile, {encoding: 'utf8'});
               }
+              timings.stop('export');
+              timings.stop('exportMesh');
+              // Output metadata
+              metadata['bbox'] = sceneBBox.toJSON();
+              metadata['bboxes'] = bboxes;
+              metadata['timings'] = timings;
+              metadata['command'] = process.argv;
+              if (result) {
+                _.defaults(metadata, result);
+              }
+              STK.fs.writeToFile(basename + '/' + scenename + ".metadata.json", JSON.stringify(metadata));
               callback();
             });
           });

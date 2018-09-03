@@ -145,7 +145,7 @@ define(['geo/Object3DUtil', 'geo/GeometryUtil', 'geo/RaycasterUtil'],
           console.error('Picker.createRaycaster: Unsupported camera type.');
         }
         return raycaster;
-      }
+      };
     })();
 
     Picker.prototype.__colorObject = function (object3D, highlighted, highlightMaterial) {

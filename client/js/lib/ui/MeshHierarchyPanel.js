@@ -12,6 +12,7 @@ function MeshHierarchyPanel(params) {
   this.highlightByHidingOthers = params.highlightByHidingOthers;
   this.__useSpecialMaterial = params.useSpecialMaterial;
   this.specialMaterial = params.specialMaterial || Object3DUtil.ClearMat;
+  this.highlightMaterial = params.highlightMaterial || Object3DUtil.getSimpleFalseColorMaterial(1);
   this.treePanel = params.treePanel;
   this.app = params.app;
   this.onhoverCallback = params.onhoverCallback;
@@ -70,7 +71,7 @@ MeshHierarchyPanel.prototype.findNodes = function (meshIds) {
     if (meshId.startsWith('SGPath-')) {
       var mesh = Object3DUtil.getNodeFromSceneGraphPath(this.partsNode, meshId.substr(7));
       if (mesh) {
-        matchedMeshes.push(mesh);
+        matchedNodes.push(mesh);
       }
     } else {
       nonSGIds.push(meshId);
@@ -235,7 +236,8 @@ MeshHierarchyPanel.prototype.__computeNodeStatistics = function(root) {
       nfaces = GeometryUtil.getGeometryFaceCount(node.geometry);
       nleafs = 1;
       if (showMultiMaterial) {
-        var nmats = (node.material instanceof THREE.MultiMaterial) ? node.material.materials.length : 1;
+        var nmats = (node.material instanceof THREE.MultiMaterial) ? node.material.materials.length :
+          (Array.isArray(node.material)? node.material.length : 1);
         nleafs = nmats;
       }
     } else if (node.children && node.children.length > 0) {
@@ -285,7 +287,8 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
     var titleJson = _.defaults({nfaces: nfaces}, _.omit(node.userData, ['origMaterial']));
     if (node instanceof THREE.Mesh) {
       //var nfaces = GeometryUtil.getGeometryFaceCount(node.geometry);
-      var nmats = (node.material instanceof THREE.MultiMaterial) ? node.material.materials.length : 1;
+      var nmats = (node.material instanceof THREE.MultiMaterial) ? node.material.materials.length :
+        (Array.isArray(node.material)? node.material.length : 1);
       titleJson['nmats'] = nmats;
       treeNodes[index]['li_attr'] = {};
       treeNodes[index]['li_attr']['title'] = JSON.stringify(titleJson, null, 2);
@@ -417,12 +420,17 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
         console.log('SGPATH-' + sgpath);
         this.currentSelectedPart = partNode;
       }
-      this.clearHighlighting();
-      this.highlightPart(partNode);
+      this.refreshHighlighting();
       Object3DUtil.setVisible(this.origObject3D, false);
       this.Publish('SelectNode', partNode);
     }.bind(this)
   );
+  this.tree.bind('changed.jstree',
+    function (event, data) {
+      scope.refreshHighlighting();
+    }.bind(this)
+  );
+
 
   if (this.onhoverCallback) {
     this.tree.bind('hover_node.jstree',
@@ -554,7 +562,14 @@ MeshHierarchyPanel.prototype.highlightPart = function (part) {
     if (this.highlightByHidingOthers) {
       this.showPartOnly(part, true);
     } else {
-      this.setPartMaterial(part, Object3DUtil.getSimpleFalseColorMaterial(1));
+      if (this.highlightMaterial === 'original') {
+        this.setPartMaterial(part, function(node) {
+          var material = node.cachedData? node.cachedData.origMaterial : null;
+          return material;
+        });
+      } else {
+        this.setPartMaterial(part, this.highlightMaterial);
+      }
       Object3DUtil.setVisible(this.partsNode, true);
     }
   }

@@ -74,7 +74,7 @@ RelationGraph.prototype.removeNode = function(id) {
     for (var i = 0; i < g.children.length; i++) {
       var c = g.children[i];
       if (c.parents) {
-        _.pull(p.parents, id);
+        _.pull(c.parents, id);
       }
     }
   }
@@ -118,7 +118,7 @@ RelationGraph.prototype.getRelation = function(rid) {
 RelationGraph.prototype.getRelations = function(opts) {
   // Lookup relation by relationType, relationName, relationId or nodeIds
   if (opts.relationId != undefined) {
-    var r = this.relations[rid];
+    var r = this.relations[opts.relationId];
     return r? [r] : [];
   }
   var candidates = [];

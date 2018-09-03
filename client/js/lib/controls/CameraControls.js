@@ -26,6 +26,10 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
   CameraControls.prototype = Object.create(ViewGenerator.prototype);
   CameraControls.prototype.constructor = CameraControls;
 
+  Object.defineProperty(CameraControls.prototype, 'lastViewConfig', {
+    get: function () {return this.__lastViewConfig; }
+  });
+
   CameraControls.prototype.setControls = function () {
     //console.log("Using control type " + this.controlType);
     var oldControls = this.controls;
@@ -141,9 +145,12 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
       // Use orbit controls for the auto rotate
 
       controls = new THREE.OrbitControls(this.camera, this.container);
-      controls.panRequiresShift = true;
+      controls.mouseMappings = [
+        { action: controls.actions.PAN,    button: THREE.MOUSE.RIGHT, keys: ['shiftKey'] },
+        { action: controls.actions.ORBIT,  button: THREE.MOUSE.RIGHT },
+        { action: controls.actions.ZOOM,   button: THREE.MOUSE.MIDDLE }
+      ];
       controls.enableKeys = false;
-      controls.mouseButtons = { ORBIT: THREE.MOUSE.RIGHT, ZOOM: THREE.MOUSE.MIDDLE, PAN: THREE.MOUSE.RIGHT };
       controls.userRotate = false;
       this.updateAutoRotate(controls);
       controls.addEventListener('change', this.renderCallback);
@@ -246,12 +253,24 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
    * @param [options.far] {number} Far in virtual units
    */
   CameraControls.prototype.viewTarget = function (options) {
+    // console.log('view', options);
     var target = Object3DUtil.toVector3(options.target);        // Target to look at
     var position = Object3DUtil.toVector3(options.position);    // Camera position
     var up = Object3DUtil.toVector3(options.up);  // Up direction
     var lookatUp = Object3DUtil.toVector3(options.lookatUp) || up;  // Up to use for looking at target
     var distanceScale = options.distanceScale || this.defaultDistanceScale;
 
+    this.__lastViewConfig = {
+      target: target? target.toArray() : undefined,
+      targetBBox: options.targetBBox? options.targetBBox.toJSON() : undefined,
+      eye: position? position.toArray() : undefined,
+      lookatUp: lookatUp? lookatUp.toArray() : undefined,
+      distanceScale: distanceScale,
+      theta: options.theta,
+      phi: options.phi,
+      fitRatio: options.fitRatio,
+      viewIndex: options.viewIndex
+    };
     if ((!target || !position) && options.targetBBox) {
       // Don't have a precise point, but a bbox
       var bb = options.targetBBox;
@@ -437,27 +456,27 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
   };
 
   CameraControls.prototype.panLeft = function (delta) {
-    this.orbitControls.constraint.panLeft(delta);
+    this.orbitControls.panLeft(delta);
   };
 
   CameraControls.prototype.panUp = function (delta) {
-    this.orbitControls.constraint.panUp(delta);
+    this.orbitControls.panUp(delta);
   };
 
   CameraControls.prototype.rotateLeft = function (delta) {
-    this.orbitControls.constraint.rotateLeft(delta);
+    this.orbitControls.rotateLeft(delta);
   };
 
   CameraControls.prototype.rotateUp = function (delta) {
-    this.orbitControls.constraint.rotateUp(delta);
+    this.orbitControls.rotateUp(delta);
   };
 
   CameraControls.prototype.dollyIn = function (dollyScale) {
-    this.orbitControls.constraint.dollyIn(dollyScale);
+    this.orbitControls.dollyIn(dollyScale);
   };
 
   CameraControls.prototype.dollyOut = function (dollyScale) {
-    this.orbitControls.constraint.dollyOut(dollyScale);
+    this.orbitControls.dollyOut(dollyScale);
   };
   //    CameraControls.prototype.toCameraCoords = function(position) {
   //        return this.camera.matrixWorldInverse.multiplyVector3(position.clone());
@@ -476,6 +495,12 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
     } else {
       return this.camera;
     }
+  };
+
+  CameraControls.prototype.toJSON = function () {
+    var baseCamera = this.getBaseCamera();
+    var json = baseCamera.toJSON();
+    return json;
   };
 
   CameraControls.prototype.setCameraMatrix = function(xform) {

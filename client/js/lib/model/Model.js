@@ -1,7 +1,7 @@
 'use strict';
 
-define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/AssetGroups','Constants'],
-    function (ModelInstance, Object3DUtil, GeometryUtil, AssetGroups, Constants) {
+define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/AssetGroups','Constants', 'util'],
+    function (ModelInstance, Object3DUtil, GeometryUtil, AssetGroups, Constants, _) {
 
       /**
        * Metadata associated with each model.  The metadata is pretty much a freeform set of attributes and values.

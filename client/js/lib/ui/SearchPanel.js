@@ -261,7 +261,7 @@ function SearchPanel(params) {
       var saveListButton = $('<input class="btn btn-default" type="button" value="Save Ids" class="saveButton"/>');
       saveListButton.attr('title', 'Save search results');
       saveListButton.click(function() {
-        var url = scope.getLastQueryURL({ format: 'csv', fields: 'id' });
+        var url = scope.getLastQueryURL({ format: 'csv', fields: 'id', start: 0, limit: scope.totalResults });
         if (url) {
           window.open(url, 'Search Results');
         } else {
@@ -452,7 +452,7 @@ SearchPanel.prototype.setResultMessage = function (message) {
 
 SearchPanel.prototype.updatePreviewImages = function (previewImageIndex) {
   if (!this.resultsElem) return;
-  var scope = this
+  var scope = this;
   var searchResults = this.resultsElem.find('.searchResult');
   this.previewImageIndex = previewImageIndex;
   searchResults.each(function (index, elem) {

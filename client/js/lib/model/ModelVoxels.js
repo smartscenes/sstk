@@ -2,7 +2,7 @@
 
 var ColorGrid = require('geo/ColorGrid');
 var crossfilter = require('crossfilter');
-var MeshSampling = require('gfx/MeshSampling');
+var MeshSampling = require('geo/MeshSampling');
 var Object3DUtil = require('geo/Object3DUtil');
 var RNG = require('math/RNG');
 var Voxels = require('geo/Voxels');
@@ -325,6 +325,10 @@ ModelVoxels.prototype.__populateColorGridTwoPass = function(colorGrid, opts) {
  * @param [opts.keepOriginalVoxels=false] {boolean} Whether to keep original voxelization
  * @param [opts.skipInnerMaterial=false] {boolean} Whether to skip inner material
  * @param [opts.skipPropagateToUncolored=false] {boolean} Whether to skip propagation of colors
+ * @param [opts.weightFn] {function(THREE.Mesh,MeshSampling.Face): number|{name:string, args:{}}|string} Function for weighted scoring of mesh faces
+ * @param [opts.scoreFn] {function(THREE.Mesh,MeshSampling.Face): number|{name:string, args:{}}|string} Function for scoring final sample
+ * @param [opts.visibleTriangles] {Object<int, Object<int, int>>} Map of mesh id to map of pickable face indices to counts
+ * @param [opts.minMaterialScoreRange] {number[]} Min and max (as array) of low and high material score
  * @param [opts.rng] {math.RNG} Random number generator
  * @return {geo.ColorGrid}
  * @private
@@ -348,7 +352,8 @@ ModelVoxels.prototype.__populateColorGridPass = function(colorGrid, opts) {
     scoreFn: {
       name: opts.scoreFn || (opts.limitToVisible? 'smoothedVisibility' : 'area'),
       args: { scene: modelObject3D, visibleTriangles: opts.visibleTriangles }
-    }
+    },
+    rng: rng
   });
   var flatSamples = _.flatten(samples);
   //console.log('samples', flatSamples, modelObject3D);
@@ -466,7 +471,8 @@ ModelVoxels.prototype.__populateColorGridPass = function(colorGrid, opts) {
   }
   function reduceAdd(acc, s) {
     if (isFiniteColor(s.color)) {
-      var hsl = s.color.getHSL();
+      var hsl = { h: 0, s: 0, l: 0};
+      s.color.getHSL(hsl);
       hsl.w = computeWeight(acc, s);
       acc.colors.push(hsl);
     } else {

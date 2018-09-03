@@ -1,0 +1,90 @@
+doctype html
+html(lang="en")
+  head
+    title='House Viewer'
+    meta(charset='UTF-8')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href=`${baseUrl}/client/js/vendor/jquery-ui/css/opentip.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/common.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/search-panel.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/model-viewer.css`)
+    link(rel='stylesheet', href='css/scan-annotator.css')
+  body
+    #sidebar
+      #info House Viewer
+      #tabs
+        ul
+          li: a(href='#tabs-1') Search
+        #tabs-1
+          #searchPanel
+    #main
+      #canvas
+        #mouseToolTip.mouse-tooltip
+      #accordion.overlay.panel-group(style='top:80px; left:10px; max-height:100vh; overflow:auto;')
+        .panel.panel-default
+          h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#loadAnnotationsPanel') Regions
+          #loadAnnotationsPanel.panel-body.panel-collapse.collapse.in
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        #nameButtonsDiv.btn-group.btn-group-vertical
+      #instructionsPanel.roundBorder.grayBackground
+        span Instructions
+        p#instructions
+
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/bootbox.js/4.4.0/bootbox.min.js")
+    script(src=`${baseUrl}/three.min.js`)
+    script(src=`${baseUrl}/scanNet.bundle.js`)
+    link(rel='stylesheet', href=`${baseUrl}/css/datgui-light.css`)
+    script.
+      var tabsDiv = $('#tabs');
+      tabsDiv.tabs().css({'min-height': '400px', 'overflow': 'auto'});
+      var app = new STK.HouseViewer({
+        container: document.getElementById('canvas'),
+        sources: ['vf'],
+        useNewImages: true,
+        tabs: ['models'],
+        regionsPanel: {
+          container: '#loadAnnotationsPanel',
+          fileTypes: ['regions'],
+          allowLocalLoading: false,
+          autoLoadDefault: true
+        },
+        defaultPartSource: 'mpr3d',
+        defaultPartType: 'region',
+        partViewerUrl: '#{baseUrl}/scans/simple-viewer?modelId=${id}',
+        partsPanel: {
+          labelsPanel: null
+        }
+      });
+      tabsDiv.bind('tabsactivate', function (event, ui) {
+        switch (ui.newPanel.attr('id')) {
+          case 'tabs-1':
+            scanAnnotator.modelSearchController.onResize();
+            break;
+        }
+      });
+      $('#instructions').hide();
+      $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
+      var mpBase = STK.Constants.assetsDir + 'data/matterport/matterport3d';
+      var assets = [{ids: mpBase + '.csv', metadata: mpBase + '.json'}];
+      console.log(assets);
+      app.Subscribe('Launch', app, function () {
+        app.regionsPanel.loadDefaultButton.hide();
+        app.registerCustomAssetGroups(app.modelSearchController, assets, function () {
+          var initialSearch = '';
+          if (app.urlParams['modelId']) {
+            initialSearch = 'fullId:' + app.urlParams['modelId'];
+          }
+          app.setSourceAndSearch(app.modelSearchController, 'mp3d', initialSearch);
+        });
+      });
+      app.launch();
+      // Make various components draggable
+      $('#namesPanel').draggable();
+      window.app = app;  // For console debugging

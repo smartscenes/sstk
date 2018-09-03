@@ -13,7 +13,7 @@ function SensorGroup(config, opts) {
   Sensor.call(this, config, opts);
   this.__sensors = _.map(config.modes, function(mode) {
     var modeConfig = _.defaults(Object.create(null), mode, _.omit(config, 'modes'));
-    console.log('modeConfig', modeConfig);
+    //console.log('modeConfig', modeConfig);
     return opts.getSensor(modeConfig, opts);
   });
 }

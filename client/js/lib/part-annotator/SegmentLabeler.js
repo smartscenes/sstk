@@ -218,7 +218,7 @@ SegmentLabeler.prototype.getLabelOBB = function(labelInfo) {
     labelInfo.obb = this.segments.fitOBB('Raw', labelInfo.segIndices);
   }
   return labelInfo.obb;
-}
+};
 
 SegmentLabeler.prototype.getPartOBB = function (part) {
   var labelInfo = (part.obb || part.segIndices)? part : part.userData.labelInfo;

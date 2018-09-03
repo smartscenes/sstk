@@ -456,7 +456,7 @@ function findVars(obj, vars) {
     }
   }
   return vars;
-};
+}
 
 _.findVars = function (obj) {
   var vars = findVars(obj, new Set());

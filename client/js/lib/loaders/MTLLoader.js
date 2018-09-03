@@ -319,7 +319,7 @@ THREE.MTLLoader.MaterialCreator.prototype = {
 			var scope = this;
 			this.materialsArray = this.materialInfosArray.map( function(m) {
 				return scope.create(m);
-			})
+			});
 		}
 
 		return this.materialsArray;

@@ -60,7 +60,7 @@ SQLQuerier.prototype.queryDb = function(queryString, queryParams, res, onSuccess
     } else {
       onError(err);
     }
-  })
+  });
 };
 
 
@@ -72,6 +72,7 @@ SQLQuerier.prototype.updateById = function(table, fields, ids, callback) {
 
   var begin = 0;
   var end = 0;
+  var scope = this;
   async.whilst(
     function() { return end < ids.length; },
     function(callback) {
@@ -180,7 +181,7 @@ SQLQuerier.prototype.queryColumnNames = function(tablename, onSuccessCallback, o
       }
       tables[tablename].columns = columns;
       onSuccessCallback(columns);
-    }, onErrorCallback)
+    }, onErrorCallback);
   }
 };
 

@@ -11,6 +11,8 @@ var fields = [
   { name: 'id', type: 'categorical', excludeFromFacet: false },
   { name: 'datasets', type: 'categorical',
     description: 'Dataset that the model belongs to' },
+  { name: 'datatags', type: 'categorical',
+    description: 'Additional tags for organizing the data' },
   { name: 'source', type: 'categorical',
     description: 'Prefix indicating where the model originated from'},
   { name: 'category', type: 'categorical',

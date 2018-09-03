@@ -133,7 +133,7 @@ AnnotationsViewer.prototype.createAnnotationsTable = function(params) {
         }
       }
       return anns;
-    }
+    };
   }
 
   $(loadingMessageSelector).css('visibility', 'visible');

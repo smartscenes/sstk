@@ -177,4 +177,61 @@ Camera.setView = function(camera, options) {
   camera.updateProjectionMatrix(target);
 };
 
+THREE.ArrayCamera.prototype.resizeCameras = function(totalWidth, totalHeight) {
+  var nCamsY = this.userData.shape[0];
+  var nCamsX = this.userData.shape[1];
+  var cameraWidth = Math.ceil(totalWidth/nCamsX);
+  var cameraHeight = Math.ceil(totalHeight/nCamsY);
+  var aspectRatio = cameraWidth / cameraHeight;
+  for (var i = 0; i < this.cameras.length; i++) {
+    var subcamera = this.cameras[i];
+    subcamera.aspect = aspectRatio;
+    subcamera.updateProjectionMatrix();
+  }
+};
+
+Camera.createArrayCamera = function(config) {
+  var nCameras = config.position.length;
+  var cameraArrayShape = config.cameraArrayShape;
+  if (!cameraArrayShape) {
+    if (config.stacking === 'vertical') {
+      cameraArrayShape = [nCameras, 1]
+    } else {
+      cameraArrayShape = [1, nCameras];
+    }
+  }
+  var nCamsY = cameraArrayShape[0];
+  var nCamsX = cameraArrayShape[1];
+  var sizeX = 1/nCamsX;
+  var sizeY = 1/nCamsY;
+  var aspectRatio = config.width / config.height;
+  //console.log("got aspectRatio", aspectRatio);
+  var cameras = [];
+  for (var y = 0; y < nCamsY; y++ ) {
+    for ( var x = 0; x < nCamsX; x++ ) {
+      var i = nCamsY*y + x;
+      var subcamera = new Camera(config.fov, aspectRatio, config.near, config.far );
+      subcamera.bounds = new THREE.Vector4( x / nCamsX, y / nCamsY, sizeX, sizeY );
+      subcamera.position.copy(config.position[i]);
+
+      // TODO: figure out orientation
+      if (config.orientation) {
+        var target = subcamera.position.clone();
+        target.add(config.orientation[i]);
+        subcamera.lookAt(target);
+      }
+      subcamera.updateMatrixWorld();
+      cameras.push( subcamera );
+    }
+  }
+  var arrayCamera = new THREE.ArrayCamera( cameras );
+  for (var i = 0; i < cameras.length; i++) {
+    arrayCamera.add(cameras[i]);
+  }
+  arrayCamera.userData.shape = cameraArrayShape;
+  arrayCamera.userData.imageShape = [cameraArrayShape[1]*config.width, cameraArrayShape[0]*config.height];
+  //console.log('got arrayCamera', arrayCamera, cameras);
+  return arrayCamera;
+}
+
 module.exports = Camera;

@@ -81,6 +81,6 @@ Ajax.__prepareAjaxOpts = function(opts) {
   }
   //console.log('opts', opts);
   return opts;
-}
+};
 
 module.exports = Ajax;
