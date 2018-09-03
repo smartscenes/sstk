@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2018-09-03
+### Fixes
+- Preliminary object coloring functionality
+- Preliminary semantic segmentation texture support
+- Using sstk-metadata v0.5.3 (rendering differences due to basic material use)
+- Updated to suncg version v2
+
 ## [0.5.3] - 2018-04-25
 ### Fixes
 - Improved downloading and packing of asset metadata
