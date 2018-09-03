@@ -1,6 +1,6 @@
 {
   "name": "sstk-ssc",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "SmartScenes ToolKit Server-side Compute: tools for rendering and exporting 3D models and scenes",
   "main": "stk-ssc",
   "scripts": {
