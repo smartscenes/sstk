@@ -20,7 +20,7 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/ED
     this.outlineColor = (opt.outlineColor !== undefined) ? opt.outlineColor : 0xffffff;
     this.ambientOcclusionOptions = _.merge({
       type: opt.ambientOcclusionType || 'ssao'
-    }, this.ambientOcclusionOptions);
+    }, opt.ambientOcclusionOptions);
     this.useShadows = (opt.useShadows !== undefined) ? opt.useShadows : false;
     this.useLights = (opt.useLights !== undefined) ? opt.useLights : false; // Default to false
     this.__reuseBuffers = opt.reuseBuffers;  // Reuse buffers?
@@ -88,15 +88,15 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/ED
         var ssao = null;
         if (this.ambientOcclusionOptions.type === 'ssao') {
           ssao = new THREE.SSAOPass(scene, camera /*, this.width, this.height*/);
-          ssao.radius = this.ambientOcclusionOptions.radius || (0.5*Constants.virtualUnitToMeters);
-          console.log('set ssao.radius to ', ssao.radius);
-          ssao.lumInfluence = 0.1;
+          ssao.radius = this.ambientOcclusionOptions.radius || (0.1*Constants.virtualUnitToMeters);
+          ssao.lumInfluence = (this.ambientOcclusionOptions.lumInfluence != undefined)? this.ambientOcclusionOptions.lumInfluence : 0.5;
+          console.log('set ssao.radius to', ssao.radius, 'ssao.lumInfluence to', ssao.lumInfluence);
         } else if (this.ambientOcclusionOptions.type === 'sao') {
           ssao = new THREE.SAOPass(scene, camera, false, true);
           ssao.params.saoScale = this.ambientOcclusionOptions.scale || 20000;  // TODO(MS): set this parameter more intelligently
           // ssao.params.saoScaleFixed = 0.03;
           // ssao.params.saoScale = ssao.params.saoScaleFixed*camera.far;  // TODO(MS): set this parameter more intelligently
-          //console.log('set sao.params.soaScale to ', ssao.params.saoScale, camera.far );
+          console.log('set sao.params.soaScale to', ssao.params.saoScale, 'with camera far', camera.far );
         } else {
           console.warn('Unsupported ambientOcclusion configuration', this.ambientOcclusionOptions)
         }

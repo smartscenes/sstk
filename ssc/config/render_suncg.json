@@ -13,6 +13,7 @@
 		"assetType": "scene",
 		"includeCeiling": false,
 		"useArchModelId": true,
+		"ignoreOriginalArchHoles": false,
 		"attachWallsToRoom": false,
 		"createArch": true
 	}

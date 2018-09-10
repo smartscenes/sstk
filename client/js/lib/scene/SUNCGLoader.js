@@ -256,7 +256,7 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
 SUNCGLoader.prototype.__parseCamera = function(cameraJson, sceneResult) {
   var cameras;
   if (_.isArray(cameraJson)) {
-    cameras = _.groupBy(cameraJson, 'name');
+    cameras = _.keyBy(cameraJson, 'name');
   } else {
     cameras = cameraJson;
   }
@@ -587,6 +587,7 @@ SUNCGLoader.prototype.__parseBox = function (json, context, callback) {
   var scope = this;
   var parsed = { json: json, parent: context.parent, floor: context.floor, id: context.id, index: context.index };
 
+  // See SUNCG house.json for 93cdd63ea3523de8fb5d56ac5dc1b7e4
   var dims = json.dimensions;
   var box = new THREE.BoxGeometry(dims[0], dims[1], dims[2], 1, 1, 1);
   for (var i = 0; i < box.faceVertexUvs.length; i++) {

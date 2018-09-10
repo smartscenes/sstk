@@ -16,6 +16,7 @@ cmd
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--output <filename>', 'Output path')
+  .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .optionGroups(['config_file', 'render_options', 'view', 'render_views', 'color_by'])
   .option('--skip_existing', 'Skip rendering existing images [false]')
   .option('--material_type <material_type>')
@@ -77,7 +78,7 @@ var renderer = new STK.PNGRenderer({
 });
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
-  autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
+  autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 100,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
 
@@ -182,7 +183,7 @@ function processFiles() {
     var basename = output_basename;
     if (basename) {
       // Specified output - append index
-      if (files.length > 0) {
+      if (files.length > 1) {
         basename = basename + '_' + index;
       }
       basename = outputDir? outputDir + '/' + basename : basename;
@@ -210,8 +211,10 @@ function processFiles() {
 
       assetManager.loadAsset(info, function (err, asset) {
         var sceneState;
+        var defaultViewOpts = {};
         if (asset instanceof STK.scene.SceneState) {
           sceneState = asset;
+          defaultViewOpts = { view_index: 0 };
         } else if (asset instanceof STK.model.ModelInstance) {
           var modelInstance = asset;
           sceneState = new STK.scene.SceneState(null, modelInstance.model.info);
@@ -221,7 +224,7 @@ function processFiles() {
             m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
           });
           console.timeEnd('toGeometry');
-          sceneState.addObject(modelInstance);
+          sceneState.addObject(modelInstance, cmd.auto_align);
         } else if (err) {
           console.error("Error loading asset", info, err);
           return;
@@ -300,7 +303,7 @@ function processFiles() {
 
         var cmdOpts = _.defaults(
           _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
-            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), { view_index: 0} );
+            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), defaultViewOpts);
         if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
           cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
         }
