@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2018-11-03
+### Changes
+- Update webpack to v4.19.0
+- Improved OBJ mesh exporting
+- Add new ViewGenerator mode positionByBBoxOffset
+- Follow redirects for reverse proxies
+- Improved computation of scene support relations
+- Support loading of more than 1000 ids in SearchPanel
+
 ## [0.7.0] - 2018-09-03
 ### Changes
 - Update to three.js r95 (changes to rendering behavior)
