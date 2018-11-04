@@ -3,7 +3,7 @@
 //var BinaryView = require('util/BinaryView');
 var zlib = require('pako');
 var Grid = require('geo/Grid');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * NRRDLoader

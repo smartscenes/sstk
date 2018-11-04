@@ -5,7 +5,7 @@ var Index = require('ds/Index');
 var Object3DUtil = require('geo/Object3DUtil');
 var SceneUtil = require('scene/SceneUtil');
 var async = require('async');
-var _ = require('util');
+var _ = require('util/util');
 
 var SUNCG_VERSION_STRING = 'suncg@1.0.2';
 var SUNCG_ARCH_VERSION_STRING = 'suncg-arch@1.0.2';

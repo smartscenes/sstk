@@ -1,5 +1,5 @@
 var path = require('path');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Log trace of simulator actions

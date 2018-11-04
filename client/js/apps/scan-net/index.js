@@ -12,5 +12,5 @@ module.exports = webapp.util.merge(webapp, {
   ScanModelAligner: require('./ScanModelAligner'),
   SegmentAnnotator: require('./SegmentAnnotator'),
   SegmentAnnotationViewer: require('./SegmentAnnotationViewer'),
-  util: require('util')
+  util: require('util/util')
 });

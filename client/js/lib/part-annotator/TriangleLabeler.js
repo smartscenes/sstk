@@ -3,7 +3,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var GeometryUtil = require('geo/GeometryUtil');
 var TessellateModifier = require('geo/TessellateModifier');
 var ConnectivityGraph = require('geo/ConnectivityGraph2');
-var _ = require('util');
+var _ = require('util/util');
 require('three-modifiers');
 
 /**

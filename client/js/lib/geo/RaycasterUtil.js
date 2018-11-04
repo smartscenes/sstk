@@ -9,6 +9,26 @@ var __raycaster = new THREE.Raycaster();
 var __backfaceRaycaster = new THREE.Raycaster();
 __backfaceRaycaster.intersectBackFaces = true;
 
+/**
+ * Intersection information
+ * @typedef Intersect
+ * @type {object}
+ * @property {number} distance
+ * @property {THREE.Vector3} point
+ * @property {int} index
+ * @property {THREE.Face3} face Face being interfacted
+ * @property {int} faceIndex Index of face
+ */
+
+/**
+ * Returns list of intersected for ray
+ * @param raycaster {THREE.Raycaster} Raycaster
+ * @param objects {THREE.Object3D[]} List objects to intersect
+ * @param ignore {THREE.Object3D} Object to ignore
+ * @param n {int} Number of intersects to return
+ * @param renderer {THREE.Renderer}
+ * @returns {Intersect[]}
+ */
 self.getIntersectedForRay = function (raycaster, objects, ignore, n, renderer) {
   var intersected = raycaster.intersectObjects(objects, true);
   intersected = self.filterClipped(intersected, renderer);

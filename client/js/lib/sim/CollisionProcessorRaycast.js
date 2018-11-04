@@ -4,7 +4,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var Octree = require('three-octree');
 var BVH = require('geo/BVH');
 var RaycasterUtil = require('geo/RaycasterUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Collision processor using raycasting to determine collisions

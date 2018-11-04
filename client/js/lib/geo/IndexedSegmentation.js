@@ -1,7 +1,7 @@
 var AssetLoader = require('assets/AssetLoader');
 var Object3DUtil = require('geo/Object3DUtil');
 var GeometryUtil = require('geo/GeometryUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 function IndexedSegmentation(params) {
   this.__options = params;

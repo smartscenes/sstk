@@ -3,7 +3,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var Materials = require('materials/Materials');
 var MeshHelpers = require('geo/MeshHelpers');
 var _sensors = require('sim/sensors');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Generic simulator agent which translates actions into changes on state.

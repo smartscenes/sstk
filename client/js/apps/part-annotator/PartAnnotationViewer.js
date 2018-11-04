@@ -3,7 +3,7 @@
 var Constants = require('Constants');
 var PartViewer = require('part-annotator/ModelPartViewer');
 var LabelViewer = require('controls/LabelViewer');
-var _ = require('util');
+var _ = require('util/util');
 
 function PartAnnotationViewer(params) {
   this.urlParams = _.getUrlParams();

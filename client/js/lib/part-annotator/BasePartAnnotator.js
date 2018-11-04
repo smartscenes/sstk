@@ -8,7 +8,7 @@ var LabelPainter = require('controls/LabelPainter');
 var MeshHelpers = require('geo/MeshHelpers');
 var Form = require('ui/Form');
 var UIUtil = require('ui/UIUtil');
-var _ = require('util');
+var _ = require('util/util');
 //var bootbox = require('bootbox');
 
 /**
@@ -173,7 +173,7 @@ function BasePartAnnotatorFactory(baseClass) {
           onCloseUrl = document.referrer;
         }
         if (onCloseUrl) {
-          gotoURL(onCloseUrl);
+          _.gotoURL(onCloseUrl);
         } else {
           bootbox.alert('Thank you for annotating!');
         }

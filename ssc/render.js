@@ -282,7 +282,7 @@ function processIds(assetsDb) {
       callback();
     };
 
-    // Planner5d scenes
+    // Scenes
     if (assetGroup.type === STK.Constants.assetTypeScene) {
       var floor = cmd.level;
       var room = cmd.room;
@@ -354,7 +354,10 @@ function processIds(assetsDb) {
 
         var cmdOpts = _.defaults(
           _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
-            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), { view_index: 0} );
+            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']) );
+        if (cmdOpts.view == undefined && cmdOpts.view_index == undefined) {
+          cmdOpts.view_index = 0;
+        }
         if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
           cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
         }
@@ -455,6 +458,10 @@ function processIds(assetsDb) {
         sceneState.addObject(mInst, cmd.auto_align);
         scene.add(sceneState.fullScene);
         var sceneBBox = STK.geo.Object3DUtil.getBoundingBox(mInst.object3D);
+        var bbdims = sceneBBox.dimensions();
+        console.log('Loaded ' + sceneState.getFullID() +
+          ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
+
         var suffix = cmd.output_suffix || cmd.color_by;
         var outbasename = suffix? (basename + '.' + suffix) : basename;
         if (cmd.encode_index) {

@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 
 var sensors = {
   CameraSensor: require('sim/sensors/CameraSensor'),

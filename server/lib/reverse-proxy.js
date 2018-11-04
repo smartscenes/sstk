@@ -1,5 +1,6 @@
 var util = require('util');
 var http = require('http');
+//var http = require('follow-redirects').http;
 var httpProxy = require('http-proxy');
 var HttpProxyRules = require('http-proxy-rules');
 var forwarded = require('forwarded-for');
@@ -77,6 +78,7 @@ module.exports = function run(options, cb) {
     if (target) {
       return proxy.web(req, res, {
         changeOrigin: true,
+        followRedirects: true,
         target: target
       });
     }

@@ -2,7 +2,7 @@
 
 var GeometryUtil = require('geo/GeometryUtil');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Helper for accessing faces of a mesh

@@ -5,7 +5,7 @@ var MeshHierarchyPanel = require('ui/MeshHierarchyPanel');
 var OBB = require('geo/OBB');
 var OBBFitter = require('geo/OBBFitter');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Class responsible for showing meshes to be labeled and handling mesh

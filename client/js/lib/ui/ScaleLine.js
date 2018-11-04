@@ -1,6 +1,6 @@
 'use strict';
 
-define(['geo/Object3DUtil', 'Constants', 'util'],
+define(['geo/Object3DUtil', 'Constants', 'util/util'],
 function (Object3DUtil, Constants, _) {
 
   function ScaleLine(params) {

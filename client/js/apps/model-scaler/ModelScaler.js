@@ -1,8 +1,8 @@
 'use strict';
 
 define(['lib/Constants','assets/AssetManager', 'assets/AssetGroups','search/SearchController','geo/Object3DUtil',
-        'ui/ScaleLine','controls/CameraControls', 'util/Util'],
-function (Constants, AssetManager, AssetGroups, SearchController, Object3DUtil, ScaleLine, CameraControls, Util) {
+        'ui/ScaleLine','controls/CameraControls'],
+function (Constants, AssetManager, AssetGroups, SearchController, Object3DUtil, ScaleLine, CameraControls) {
   function ModelScaler(container) {
     Constants.worldUp = new THREE.Vector3(0,0,1);
     // Set world front to -y so all models are aligned to that and our camera faces it
@@ -119,6 +119,10 @@ function (Constants, AssetManager, AssetGroups, SearchController, Object3DUtil, 
         );
   };
 
+  function isFiniteNumber(n) {
+    return !isNaN(parseFloat(n)) && isFinite(n);
+  }
+
   ModelScaler.prototype.init = function (container) {
 
     this.assetManager = new AssetManager({
@@ -214,7 +218,7 @@ function (Constants, AssetManager, AssetGroups, SearchController, Object3DUtil, 
     if (this.sizeTextbox) {
       this.sizeTextbox.change(function () {
         var val = this.sizeTextbox.val();
-        if (Util.isFiniteNumber(val)) {
+        if (isFiniteNumber(val)) {
           var f = parseFloat(val);
           this.scaleLine.setSize(f, 'textbox');
           this.rescaleToSize(f);

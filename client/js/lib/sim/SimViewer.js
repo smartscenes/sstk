@@ -13,7 +13,7 @@ var Simulator = require('sim/Simulator');
 var SimDialog = require('sim/SimDialog');
 var SimEditUI = require('sim/SimEditUI');
 var Viewer3D = require('Viewer3D');
-var _ = require('util');
+var _ = require('util/util');
 require('jquery-console');
 
 Constants.defaultPalette = Colors.palettes.d3_unknown_category18;

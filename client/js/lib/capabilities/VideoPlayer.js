@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 
 // Add functions to object3D that allows for toggling of video
 function VideoPlayer(params) {

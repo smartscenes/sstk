@@ -5,7 +5,7 @@ var SceneState = require('scene/SceneState');
 var SearchController = require('search/SearchController');
 var Skeleton = require('anim/Skeleton');
 var Viewer3D = require('Viewer3D');
-var _ = require('util');
+var _ = require('util/util');
 
 function InteractionViewer(params) {
   var defaults = {

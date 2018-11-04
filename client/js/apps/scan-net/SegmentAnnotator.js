@@ -13,7 +13,7 @@ var Survey = require('ui/Survey');
 var UIUtil = require('ui/UIUtil');
 var PLYExporter = require('exporters/PLYExporter');
 var VideoTrajControls = require('controls/VideoTrajControls');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Annotator for labeling scan segmentations. The output is a labeling on vertex-based segmentations.

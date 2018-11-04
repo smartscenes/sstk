@@ -7,7 +7,8 @@ var PubSub = require('PubSub');
 var Autocomplete = require('ui/Autocomplete');
 var SolrQueryParser = require('search/SolrQueryParser');
 var UIUtil = require('ui/UIUtil');
-var _ = require('util');
+var async = require('async');
+var _ = require('util/util');
 require('jquery-pagination');
 
 /**
@@ -349,20 +350,46 @@ Object.defineProperty(SearchPanel.prototype, 'isSearchBySize', {
   }
 });
 
+SearchPanel.prototype.loadIds = function(ids, options) {
+  //console.log('load ids', ids.length);
+  var scope = this;
+  var batchSize = 800;
+  ids = _.uniq(ids);
+  if (ids.length > batchSize) {
+    var batches = _.chunk(ids, batchSize);
+    async.map(batches, function(item, cb) {
+      scope.searchModule.queryIds(item, cb);
+    }, function(err, results) {
+      // Do some surgery on the results
+      if (err) {
+        scope.searchFailed(err);
+      } else {
+        var docs = _.flatMap(results, 'response.docs');
+        var total = _.sumBy(results, 'response.numFound');
+        var response = { start: 0, numFound: total, docs: docs };
+        var responseHeaders = _.map(results, 'responseHeaders');
+        scope.searchSucceeded(options, { response: response, responseHeaders: responseHeaders});
+      }
+    });
+  } else {
+    scope.searchModule.queryIds(ids, function (err, res) {
+      console.log(res);
+      if (err) {
+        scope.searchFailed(err);
+      } else {
+        scope.searchSucceeded(options, res);
+      }
+    });
+  }
+};
+
 SearchPanel.prototype.loadIdsFromFile = function(file) {
   var scope = this;
   var loader = new AssetLoader();
   loader.load(file, 'UTF-8', function(data) {
-    var ids = data.split('\n');
-    var options = {};//{ ordering: ids };
-    //console.log('load ids', ids.length);
-    scope.searchModule.queryIds(ids, function(err, res) {
-        if (err) {
-          scope.searchFailed(err);
-        } else {
-          scope.searchSucceeded(options, res);
-        }
-      });
+      var ids = data.split('\n');
+      var options = {};//{ ordering: ids };
+      scope.loadIds(ids, options);
     },
     undefined,
     function(err) {

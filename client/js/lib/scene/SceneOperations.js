@@ -1,6 +1,6 @@
 var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Various operations that can be performed to change the state of a scene

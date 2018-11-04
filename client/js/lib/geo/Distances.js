@@ -1,7 +1,7 @@
 var TriangleAccessor = require('geo/TriangleAccessor');
 var GeometryUtil = require('geo/GeometryUtil');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Utility functions to compute distances
@@ -45,11 +45,11 @@ function PointPointDistanceSquared(point1, point2, opts) {
       distanceSq: distanceSq,
       closestPoint0: point1,
       closestPoint1: point2
-    }
+    };
   } else {
     return {
       distanceSq: distanceSq
-    }
+    };
   }
 }
 
@@ -743,11 +743,11 @@ function PointsPointsMinDistanceSquared(points1, points2, opts) {
             distanceSq: sqrDist,
             closestPoint0: p1,
             closestPoint1: p2
-          }
+          };
         } else {
           result = {
             distanceSq: sqrDist
-          }
+          };
         }
         if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
           if (result.distanceSq <= opts.shortCircuit.minDistSq) {
@@ -773,11 +773,11 @@ function PointsPointsMaxDistanceSquared(points1, points2, opts) {
             distanceSq: sqrDist,
             farthestPoint0: p1,
             farthestPoint1: p2
-          }
+          };
         } else {
           result = {
             distanceSq: sqrDist
-          }
+          };
         }
       }
     }

@@ -1,6 +1,6 @@
 {
   "name": "sstk-server",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "SmartScenes ToolKit server: tools and interfaces for viewing, editing and annotating 3D models and scenes",
   "scripts": {
     "cover": "istanbul cover mocha",
@@ -26,7 +26,6 @@
     "http-proxy": "git+https://github.com/stanford-gfx/node-http-proxy.git",
     "http-proxy-rules": "^1.1.1",
     "http-server": "^0.11.1",
-    "jshint": "^2.9.5",
     "lodash": "^4.17.10",
     "method-override": "^2.3.10",
     "mysql": "^2.15.0",

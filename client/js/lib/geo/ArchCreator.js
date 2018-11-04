@@ -1,6 +1,6 @@
 var Intersections = require('geo/Intersections');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Create architecture consisting of walls with holes cut out for windows and door

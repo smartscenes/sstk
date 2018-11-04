@@ -16,7 +16,7 @@ var UIUtil = require('ui/UIUtil');
 var dat = require('dat.gui');
 var keymap = require('controls/keymap');
 var Stats = require('stats');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Basic 3D viewer.  This class includes some common hookup code for setting up the camera and handling redisplay

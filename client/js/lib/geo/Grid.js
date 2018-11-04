@@ -2,7 +2,7 @@
 
 //var BinaryView = require('util/BinaryView');
 var BBox = require('geo/BBox');
-var _ = require('util');
+var _ = require('util/util');
 //require('bitview');
 
 /**

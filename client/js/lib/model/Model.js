@@ -1,6 +1,6 @@
 'use strict';
 
-define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/AssetGroups','Constants', 'util'],
+define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/AssetGroups','Constants', 'util/util'],
     function (ModelInstance, Object3DUtil, GeometryUtil, AssetGroups, Constants, _) {
 
       /**

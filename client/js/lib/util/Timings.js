@@ -1,6 +1,6 @@
 // Utility functions for measuring timings
 // A structure that maps from objects to integers
-var _ = require('util');
+var _ = require('util/util');
 
 function TimeRecord(start) {
   this.start = start;

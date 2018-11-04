@@ -2,7 +2,7 @@
 
 define(['lib/Constants', 'assets/AssetManager', 'search/SearchController', 'search/SearchModule',
     'search/SolrQuerySuggester', 'model/ModelSchema',
-    'ui/AnnotationsPanel', 'io/FileUtil', 'ui/UIUtil', 'util', 'dragscrollable', 'jquery-lazy'],
+    'ui/AnnotationsPanel', 'io/FileUtil', 'ui/UIUtil', 'util/util', 'dragscrollable', 'jquery-lazy'],
   function (Constants, AssetManager, SearchController, SearchModule, SolrQuerySuggester, ModelSchema,
             AnnotationsPanel, FileUtil, UIUtil, _) {
     // Interface for categorizing models

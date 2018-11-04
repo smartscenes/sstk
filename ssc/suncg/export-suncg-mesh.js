@@ -86,7 +86,7 @@ function exportScene(exporter, exportOpts, sceneState, callback) {
 
 //STK.Constants.setVirtualUnit(1);
 var meshNameFunc = function (node) {
-  if (node.userData.id) {
+  if (node.userData.id != undefined) {
     return node.userData.type + '#' + node.userData.id;
   }
 };

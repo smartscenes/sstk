@@ -4,7 +4,7 @@ var NavScene = require('nav/NavScene');
 var SceneUtil = require('scene/SceneUtil');
 var Object3DUtil = require('geo/Object3DUtil');
 var Transform = require('geo/Transform');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Basic simulator state

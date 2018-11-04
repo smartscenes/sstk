@@ -3,7 +3,7 @@ var BBox = require('geo/BBox');
 var OBB = require('geo/OBB');
 var Index = require('ds/Index');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Loader for house files

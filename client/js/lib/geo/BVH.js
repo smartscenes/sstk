@@ -3,7 +3,7 @@
 var BBox = require('geo/BBox');
 var GeometryUtil = require('geo/GeometryUtil');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 var BVHNode = function (objects, params, parent) {
   this.id = _.uniqueId();
@@ -194,7 +194,16 @@ BVHNode.prototype.traverse = function (cbPre, cbPost, checkPre) {
 /**
  * Simple bounding volume hierarchy
  * @param objects
- * @param params
+ * @param params Options for how to construct the BVH
+ * @param [params.splitStrategy] {string|int} Strategy to use for splitting the BVH
+ *   (`'AXIS_MIDPOINT'=0, 'AXIS_MEDIAN'=1, '  SURFACE_AREA_HEURISTIC'=2, 'CUBICITY_HEURISTIC'=3`, 'HAC'=4`)
+ * @param [params.axisChoiceStrategy] {string|int} Strategy to use for selecting the axis to split along (`'FIXED'=0, 'LONGEST'=1, 'RANDOM'=2, 'OPTIMAL'=3`)
+ * @param [params.splitAxis] {string} Must be provided if `axisChoiceStrategy` is `FIXED`.  Ignored otherwise.
+ * @param [params.splittableAxes] {string[]} Which axes to consider for splitting (default is all axes `['x', 'y', 'z']`)
+ * @param [params.maxDepth] {int} Max depth of BVH tree
+ * @param [params.maxObjects=1] {int} Max number of objects per BVH node
+ * @param [params.obstacles] {THREE.Object3D[]} Set of obstacles (used for `splitStrategy` of `HAC`) to penalize combining nodes with obstacles together.
+ * @param [params.getBoundingBox] {function(object|object[]): BBox} Function returning the bounding of objects in a node
  * @constructor
  * @memberOf geo
  */
@@ -207,9 +216,16 @@ var BVH = function (objects, params) {
       return x;
     });
   }
+  // Parse parameters
+  var p = params || {};
+  p = _.defaults(p, BVH.DefaultOptions);
+  if (typeof(p.splitStrategy) === 'string') {
+    p.splitStrategy = _.getEnumValue(p.splitStrategy.toUpperCase(), 'splitStrategy', BVH.SplitStrategy);
+  }
+  if (typeof(p.axisChoiceStrategy) === 'string') {
+    p.axisChoiceStrategy = _.getEnumValue(p.axisChoiceStrategy.toUpperCase(), 'axisChoiceStrategy', BVH.AxisChoiceStrategy);
+  }
   if (objects && objects.length && (objects[0] instanceof THREE.Object3D || params.getBoundingBox)) {
-    var p = params || {};
-    p = _.defaults(p, BVH.DefaultOptions);
     //console.log('BVH params', p);
     this.params = p;
     if (p.splitStrategy === BVH.SplitStrategy.HAC) {
@@ -220,7 +236,7 @@ var BVH = function (objects, params) {
       this.root = new BVHNode(objects, p);
     }
   } else {
-    console.error('BVH requires objects = [THREE.Object3D] or getBoundingBox to be specified');
+    throw 'BVH requires objects = [THREE.Object3D] or getBoundingBox to be specified';
   }
 };
 BVH.prototype.constructor = BVH;

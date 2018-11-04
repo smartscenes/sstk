@@ -1,6 +1,6 @@
 'use strict';
 
-define(['Constants', 'geo/Object3DUtil', 'loaders/VoxelLoader', 'util', 'voxel-mesh', 'voxel-browser'],
+define(['Constants', 'geo/Object3DUtil', 'loaders/VoxelLoader', 'util/util', 'voxel-mesh', 'voxel-browser'],
   function (Constants, Object3DUtil, VoxelLoader, _, VoxelMesh) {
   /**
    * Helper class for handling loading of binary Voxel grids in binvox format,

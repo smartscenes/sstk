@@ -101,7 +101,6 @@ function processFiles() {
       shell.mkdir('-p', basename);
       var info;
       var timings = new STK.Timings();
-      timings.start('exportMesh');
       var metadata = {};
       if (cmd.inputType === 'id') {
         info = { fullId: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };

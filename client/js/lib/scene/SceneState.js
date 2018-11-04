@@ -1,7 +1,7 @@
 'use strict';
 
 define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','geo/RaycasterUtil','geo/Attachments',
-    'scene/SceneUtil', 'assets/AssetGroups', 'ds/Index', 'async', 'util'],
+    'scene/SceneUtil', 'assets/AssetGroups', 'ds/Index', 'async', 'util/util'],
   function (Constants, ModelInstance, Object3DUtil, GeometryUtil, RaycasterUtil, Attachments, SceneUtil, AssetGroups, Index, async, _) {
 
     /**
@@ -179,7 +179,10 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
     SceneState.prototype.__identifyCandidateAttachments = function (modelInst, candidateSupportObjects, opts) {
       opts = opts || {};
       var supportObjectsForMe = candidateSupportObjects.filter(function(x) {
-        return !Object3DUtil.isDescendantOf(x, modelInst.object3D);
+        var notDescOfSelf = !Object3DUtil.isDescendantOf(x, modelInst.object3D);
+        var sameLevel = (modelInst.object3D.userData.level != undefined)?
+          x.userData.level == undefined || modelInst.object3D.userData.level === x.userData.level : true;
+        return notDescOfSelf && sameLevel;
       });
       if (supportObjectsForMe.length > 0) {
         var attachments = Attachments.identifyAttachments(supportObjectsForMe,
@@ -211,8 +214,8 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         }
 
         async.each(doorsWithClosedVariants, function(door, cb) {
-            var capabilites = door.queryCapabilities(assetManager);
-            var variants = capabilites.variants;
+            var capabilities = door.queryCapabilities(assetManager);
+            var variants = capabilities.variants;
             variants.close(cb);
           },
           function(err){
@@ -253,7 +256,22 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return result;
     };
 
-    // Asynchronous version of identify support hierarchy that makes sure doors are closed
+    /**
+     * Identifies the support hierarchy.  Makes sure doors are closed and ceiling is in place
+     * before computing attachments
+     * Note, this function is asynchronous.
+     * @param opts
+     * @param [opts.groupBySupport] {boolean}
+     * If true, a group is made for all objects with the same support node.
+     * A dummy node is used to group the children node and support node.
+     * @param [opts.attachToParent] {boolean}
+     * If true, children are attached directly to the support parent.
+     * If `opts.groupBySupport` is also set to `true`, this is only applied for parents that are model instances
+     * @param [opts.checkOpposites] {boolean}
+     * @param [opts.assetManager] {assets.AssetManager} Used to retrieve model variants such as closed doors
+     * @param [opts.aggregatedSceneStatistics] Precomputed aggregated scene statistics of likely relations.
+     * @param callback {function(error, Attachment[])}
+     */
     SceneState.prototype.identifySupportHierarchy = function(opts, callback) {
       console.time('identifySupportHierarchyAll');
       var scope = this;
@@ -274,23 +292,44 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       var candidates = [];
       for (var i = 0; i < this.modelInstances.length; i++) {
         var m = this.modelInstances[i];
-        if (!m) { continue; }
+        if (!m) {
+          continue;
+        }
         var candidateAttachments = this.identifyCandidateAttachments(m, allCandidateSupportObjects,
-          { aggregatedSceneStatistics: opts.aggregatedSceneStatistics, includeCandidates: true,
-            keepSameLevel: true, disallowSameModelHorizontalAttachment: true });
+          {
+            aggregatedSceneStatistics: opts.aggregatedSceneStatistics, includeCandidates: true,
+            keepSameLevel: true, disallowSameModelHorizontalAttachment: true, checkOpposites: opts.checkOpposites
+          });
         if (candidateAttachments) {
           attachments[i] = candidateAttachments.best;
           candidates[i] = candidateAttachments.candidates;
         }
       }
+      var grouped = groupNodesByAttachmentChain(this.modelInstances, attachments);
+      breakAttachmentCycles(this.modelInstances, attachments, candidates, grouped.groups);
+      //console.log('attachments', attachments);
+      if (opts) {
+        this.__groupNodesByAttachment(attachments, grouped.indexToGroup, opts);
+      }
+      console.timeEnd('identifySupportHierarchy');
+      return attachments;
+    };
+
+    // Helper function for identifySupportHierarchy (groups nodes into attachment chains)
+    // @returns {groups: AttachmentChain[], indexToGroup:
+    function groupNodesByAttachmentChain(modelInstances, attachments) {
       // Go through attachments and identify groups of modelInstances
       var groups = [];
       var indexToGroup = {};
-      for (var i = 0; i < this.modelInstances.length; i++) {
-        if (indexToGroup[i]) { continue; } // We have visited this index before
-        var m = this.modelInstances[i];
+      for (var i = 0; i < modelInstances.length; i++) {
+        if (indexToGroup[i]) {
+          continue;
+        } // We have visited this index before
+        var m = modelInstances[i];
         var attachment = attachments[i];
-        if (!attachment) { continue; } // No attachment, continue
+        if (!attachment) {
+          continue;
+        } // No attachment, continue
         // Follow parent until root or cycle
         var p = attachment.parentInst;
         var indices = [];
@@ -330,6 +369,10 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           indexToGroup[index] = group;
         }
       }
+      return { groups: groups, indexToGroup: indexToGroup };
+    }
+
+    function breakAttachmentCycles(modelInstances, attachments, candidates, groups) {
 
       // Go through cycles and break cycles by marking one as parent of another
       // If one object contains another, it should be support of other...
@@ -392,7 +435,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         // See if there is better attachment for this node that doesn't create a cycle, if so add it
         var cs = candidates[largest.index];
         if (cs && cs.length) {
-          var descIndices = _.map(_.filter(this.modelInstances, function(m) {
+          var descIndices = _.map(_.filter(modelInstances, function(m) {
             return hasAncestor(attachments[m.index], [largest.index], true);
           }), function(m) {
             return m.index;
@@ -413,80 +456,102 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           }
         }
       }
+      return cycles;
+    }
 
-      //console.log('attachments', attachments);
-      if (opts) {
-        if (opts.groupBySupport) {
-          var parentToChildren = {};
-          for (var i = 0; i < this.modelInstances.length; i++) {
-            var m = this.modelInstances[i];
-            var attachment = attachments[i];
-            if (!attachment) { continue; }
+    SceneState.prototype.groupNodesByAttachment = function(attachments, opts) {
+      var attachmentsForModelsInstances = [];
+      for (var i = 0; i < attachments.length; i++) {
+        var attachment = attachments[i];
+        if (attachment.childInst) {
+          var index = attachment.childInst.index;
+          if (attachmentsForModelsInstances[index]) {
+            console.warn('Object ' + attachment.child.userData.id + ' already has attachment');
+          } else {
+            attachmentsForModelsInstances[index] = attachment;
+          }
+        } else {
+          console.warn('Object ' + attachment.child.userData.id + ' is not a model instance');
+        }
+      }
+      var grouped = groupNodesByAttachmentChain(this.modelInstances, attachmentsForModelsInstances);
+      breakAttachmentCycles(this.modelInstances, attachmentsForModelsInstances, grouped.indexToGroup, grouped.groups);
+      this.__groupNodesByAttachment(attachmentsForModelsInstances, grouped.indexToGroup, opts);
+    };
+
+    SceneState.prototype.__groupNodesByAttachment = function(attachments, indexToGroup, opts) {
+      if (opts.groupBySupport) {
+        var parentToChildren = {};
+        for (var i = 0; i < this.modelInstances.length; i++) {
+          var m = this.modelInstances[i];
+          var attachment = attachments[i];
+          if (!attachment) { continue; }
+          if (indexToGroup) {
             var group = indexToGroup[i];
             if (group.isCycle) { continue; } // skip
-
-            var parentId = attachment.parent.uuid; // userData.id;
-            if (!parentToChildren.hasOwnProperty(parentId)) {
-              parentToChildren[parentId] = { parent: attachment.parent, parentInst: attachment.parentInst, children: [m] };
-            } else {
-              parentToChildren[parentId].children.push(m);
-            }
           }
-          //console.log('parentToChildren', parentToChildren);
-          for (var parentId in parentToChildren) {
-            if (parentToChildren.hasOwnProperty(parentId)) {
-              var g = parentToChildren[parentId];
-              if (g.parentInst && opts.attachToParent) {
-                for (var i = 0; i < g.children.length; i++) {
-                  Object3DUtil.attachToParent(g.children[i].object3D, g.parentInst.object3D, this.scene);
-                }
-              } else {
-                var region = new THREE.Group();
-                region.name = 'Region-' + g.parent.userData.id;
-                region.userData.type = 'SupportGroup';
-                region.userData.sceneHierarchyGroup = true;
-                this.addExtraObject(region);
-                var grandParent = g.parent.parent;
-                Object3DUtil.attachToParent(g.parent, region, this.scene);
-                Object3DUtil.attachToParent(region, grandParent, this.scene);
 
-                var region2 = new THREE.Group();
-                region2.name = 'Region-' + g.parent.userData.id + '-children';
-                region2.userData.type = 'SupportGroupChildren';
-                region2.userData.sceneHierarchyGroup = true;
-                this.addExtraObject(region2);
-                Object3DUtil.attachToParent(region2, region, this.scene);
-                for (var i = 0; i < g.children.length; i++) {
-                  if (g.children[i].object3D.parent.userData.type === 'SupportGroup') {
-                    Object3DUtil.attachToParent(g.children[i].object3D.parent, region2, this.scene);
-                  } else {
-                    Object3DUtil.attachToParent(g.children[i].object3D, region2, this.scene);
-                  }
-                }
+          var parentId = attachment.parent.uuid; // userData.id;
+          if (!parentToChildren.hasOwnProperty(parentId)) {
+            parentToChildren[parentId] = { parent: attachment.parent, parentInst: attachment.parentInst, children: [m] };
+          } else {
+            parentToChildren[parentId].children.push(m);
+          }
+        }
+        //console.log('parentToChildren', parentToChildren);
+        for (var parentId in parentToChildren) {
+          if (parentToChildren.hasOwnProperty(parentId)) {
+            var g = parentToChildren[parentId];
+            if (g.parentInst && opts.attachToParent) {
+              for (var i = 0; i < g.children.length; i++) {
+                Object3DUtil.attachToParent(g.children[i].object3D, g.parentInst.object3D, this.scene);
               }
-            }
-          }
-        } else if (opts.attachToParent) {
-          for (var i = 0; i < this.modelInstances.length; i++) {
-            var m = this.modelInstances[i];
-            var attachment = attachments[i];
-            if (!attachment) { continue; }
-            var group = indexToGroup[i];
-            if (group.isCycle) { continue; } // skip
-            var parentInst = attachment.parentInst;
-            if (parentInst) {
-              if (parentInst.object3D) {
-                //console.log('attachToParent', m.object3D, parentInst.object3D);
-                Object3DUtil.attachToParent(m.object3D, parentInst.object3D, this.scene);
-              } else {
-                console.warn('No object3D for parent instance', parentInst);
+            } else {
+              var region = new THREE.Group();
+              region.name = 'Region-' + g.parent.userData.id;
+              region.userData.type = 'SupportGroup';
+              region.userData.sceneHierarchyGroup = true;
+              this.addExtraObject(region);
+              var grandParent = g.parent.parent;
+              Object3DUtil.attachToParent(g.parent, region, this.scene);
+              Object3DUtil.attachToParent(region, grandParent, this.scene);
+
+              var region2 = new THREE.Group();
+              region2.name = 'Region-' + g.parent.userData.id + '-children';
+              region2.userData.type = 'SupportGroupChildren';
+              region2.userData.sceneHierarchyGroup = true;
+              this.addExtraObject(region2);
+              Object3DUtil.attachToParent(region2, region, this.scene);
+              for (var i = 0; i < g.children.length; i++) {
+                if (g.children[i].object3D.parent.userData.type === 'SupportGroup') {
+                  Object3DUtil.attachToParent(g.children[i].object3D.parent, region2, this.scene);
+                } else {
+                  Object3DUtil.attachToParent(g.children[i].object3D, region2, this.scene);
+                }
               }
             }
           }
         }
+      } else if (opts.attachToParent) {
+        for (var i = 0; i < this.modelInstances.length; i++) {
+          var m = this.modelInstances[i];
+          var attachment = attachments[i];
+          if (!attachment) { continue; }
+          if (indexToGroup) {
+            var group = indexToGroup[i];
+            if (group.isCycle) { continue; } // skip
+          }
+          var parentInst = attachment.parentInst;
+          if (parentInst) {
+            if (parentInst.object3D) {
+              //console.log('attachToParent', m.object3D, parentInst.object3D);
+              Object3DUtil.attachToParent(m.object3D, parentInst.object3D, this.scene);
+            } else {
+              console.warn('No object3D for parent instance', parentInst);
+            }
+          }
+        }
       }
-      console.timeEnd('identifySupportHierarchy');
-      return attachments;
     };
 
     SceneState.prototype.__initHouseData = function() {

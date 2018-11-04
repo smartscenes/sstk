@@ -1,7 +1,7 @@
 'use strict';
 
 var GeometryUtil = require('geo/GeometryUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 // Patch THREE.Box2 with legacy function names
 if (!_.isFunction(THREE.Box2.prototype.intersects)) {
@@ -272,6 +272,19 @@ BBox.prototype.maxDimAxisName = function () {
   var dimsWithNames = [['x', dims.x], ['y', dims.y], ['z', dims.z]];
   var maxDim = _.maxBy(dimsWithNames, function (d) { return d[1]; });
   return maxDim[0];
+};
+
+BBox.prototype.minDim = function () {
+  var dims = this.dimensions();
+  var minDim = Math.min(dims.x, dims.y, dims.z);
+  return minDim;
+};
+
+BBox.prototype.minDimAxisName = function () {
+  var dims = this.dimensions();
+  var dimsWithNames = [['x', dims.x], ['y', dims.y], ['z', dims.z]];
+  var minDim = _.minBy(dimsWithNames, function (d) { return d[1]; });
+  return minDim[0];
 };
 
 BBox.prototype.includePoint = function (point, transform) {

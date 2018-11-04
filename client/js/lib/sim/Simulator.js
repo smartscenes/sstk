@@ -18,7 +18,7 @@ var SceneUtil = require('scene/SceneUtil');
 var SimOperations = require('sim/SimOperations');
 var SimState = require('sim/SimState');
 var SkyGround = require('geo/SkyGround');
-var _ = require('util');
+var _ = require('util/util');
 
 var __optsToIgnore = ['renderer', 'simpleRenderer', 'assetManager', 'net', 'wav', 'fs', 'bufferType', 'rendererType', 'rendererFactory'];
 

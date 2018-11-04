@@ -9,7 +9,7 @@ var SegmentLabeler = require('part-annotator/SegmentLabeler');
 var SegmentAnnotationStats = require('./SegmentAnnotationStats');
 var LabelViewer = require('controls/LabelViewer');
 var PLYExporter = require('exporters/PLYExporter');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Viewer for looking at segment annotations

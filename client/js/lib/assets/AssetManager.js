@@ -4,8 +4,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     'loaders/P5DTextureLoader', 'assets/LightsLoader',
     'assets/AssetGroups', 'assets/AssetsDb', "assets/AssetLoaders",
     'assets/CachedAssetLoader', 'assets/AssetCache', 'assets/AssetLoader',
-    'geo/Object3DUtil', 'materials/Materials', 'util/TaskQueue', 'PubSub', 'async', 'util',
-    'three-loaders', 'base'],
+    'geo/Object3DUtil', 'materials/Materials', 'util/TaskQueue', 'PubSub', 'async', 'util/util',
+    'three-loaders'],
   function (Constants, Sounds, Model, SceneState,
             P5DTextureLoader, LightsLoader,
             AssetGroups, AssetsDb, AssetLoaders,
@@ -62,7 +62,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
      * @param [params.defaultSceneFormat='wss'] {string}
      * @param [params.useBuffers=false] {boolean}
      * @param [params.useDynamic=false] {boolean}
-     * @param [params.useColladaScale=false] {boolean}
+     * @param [params.useColladaScale=null] {boolean} Whether to apply the unit found in Collada files.  If specified, will override `applyScale` in load model options
+     * @param [params.convertUpAxis=null] {boolean} Whether to convert up axis of Collada files.  If specifeid, will override `convertUpAxis` in load model options
      * @constructor
      * @memberOf assets
      */
@@ -110,7 +111,10 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       this.previewImageIndex = -1;
 
       // Use collada scale?
-      this.useColladaScale = false;
+      this.useColladaScale = undefined;
+
+      // Convert up axis
+      this.convertUpAxis = undefined;
 
       // Optional filter function takes modelinfo as input and returns whether to load model
       this.modelFilter = undefined;
@@ -150,6 +154,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         if (params.useDynamic !== undefined) this.useDynamic = params.useDynamic;
         if (params.previewImageIndex !== undefined) this.previewImageIndex = params.previewImageIndex;
         if (params.useColladaScale !== undefined) this.useColladaScale = params.useColladaScale;
+        if (params.convertUpAxis !== undefined) this.convertUpAxis = params.convertUpAxis;
         if (params.modelFilter !== undefined) this.modelFilter = params.modelFilter;
         if (params.defaultSceneFormat !== undefined) this.defaultSceneFormat = params.defaultSceneFormat;
         if (params.maxAnisotropy !== undefined) this.maxAnisotropy = params.maxAnisotropy;
@@ -320,6 +325,9 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       if (cached && loadinfo) {
         // TODO: consider if we dropped anything else from loadinfo
         var info = _.defaults(Object.create(null), cached, { format: loadinfo.formatName });
+        if (loadinfo.copyFields) {
+          _.merge(info, _.pick(loadinfo, loadinfo.copyFields));
+        }
         var merged = this.__getMergedModelLoadInfo(info);
         if (loadinfo.options) {
           merged.options = _.merge(merged.options || {}, loadinfo.options);
@@ -721,11 +729,12 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
     AssetManager.prototype.addMaterialBinding = function(modelId, options) {
       for (var i = 0; i < options.materials.length; i++) {
         var m = options.materials[i];
+        var side = (m.side != undefined)? m.side : Materials.DefaultMaterialSide;
         if (!m.material) {
           if (m.textureId) {
-            m.material = this.getTexturedMaterial(undefined, m.textureId, {side: THREE.DoubleSide});
+            m.material = this.getTexturedMaterial(undefined, m.textureId, {side: side});
           } else if (m.color != undefined) {
-            m.material = this.getColoredMaterial(m.name, m.color, {side: THREE.DoubleSide});
+            m.material = this.getColoredMaterial(m.name, m.color, {side: side});
           }
         }
       }
@@ -895,7 +904,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           console.warn('Unknown sidedness: ' + sidedness);
         }
       }
-      return THREE.DoubleSide;
+      return Materials.DefaultMaterialSide;
     };
 
     AssetManager.prototype.__getMaterial = function(modelInfo, materialKey, materialTypeKey, defaultMaterialType) {
@@ -1129,7 +1138,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
           }
           return true;
         });
-        if (scope.useColladaScale) {
+        // TODO: Improve control over whether the collada scale is used
+        if (scope.useColladaScale || (scope.useColladaScale == null && modelInfo.options && modelInfo.options.applyScale)) {
           // Assumes to be scaled with collada to meters
           modelInfo.formatOptions['applyScale'] = true;
           modelInfo.unit = 1.0;
@@ -1147,12 +1157,19 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       var file = modelInfo.file;
       modelInfo.formatOptions = {};
       this.__updateMaterialOptions(modelInfo, loader.options, Materials.DefaultMaterialType);
-      if (!modelInfo.source) {
-        loader.options.convertUpAxis = true;
-        modelInfo.formatOptions['applyUp'] = true;
+      // TODO: Beware some weird automatic setting of convertUpAxis
+      if (scope.convertUpAxis != null) {
+        loader.options.convertUpAxis = scope.convertUpAxis;
+      } else if (modelInfo.options && modelInfo.options.convertUpAxis != null) {
+        loader.options.convertUpAxis = modelInfo.options.convertUpAxis;
       } else {
-        loader.options.convertUpAxis = false;
+        if (!modelInfo.source) {
+          loader.options.convertUpAxis = true;
+        } else {
+          loader.options.convertUpAxis = false;
+        }
       }
+      modelInfo.formatOptions['applyUp'] = loader.options.convertUpAxis;
       var skipLines = _.get(modelInfo, ['options', 'skipLines']);
       if (skipLines != undefined) {
         loader.options.skipLines = skipLines;
@@ -1370,17 +1387,23 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       }
     };
 
-    AssetManager.prototype.__preloadAssets = function (assetinfo, callback) {
+    AssetManager.prototype.__preloadAssets = function(assetinfo, callback) {
+      return this.loadAssetDependencies(assetinfo,
+          { fields: assetinfo.preload }, callback);
+    };
+
+    AssetManager.prototype.loadAssetDependencies = function (assetinfo, options, callback) {
       var scope = this;
       var taskQueue = new TaskQueue({ concurrency: 4 });
 
       // Add preloads
-      var preloads = assetinfo.preload;
-      //console.log('preloads', preloads, assetinfo);
+      var preloads = options.fields;
+      // console.log('preloads', preloads, assetinfo);
       if (preloads) {
         _.each(preloads, function(preload) {
           var preloadInfo = assetinfo[preload];
           if (preloadInfo && preloadInfo.path) {
+            // TODO: Only update material options for the assets that need it
             scope.__updateMaterialOptions(preloadInfo, preloadInfo);
             var path = _.replaceVars(preloadInfo.path, assetinfo);
             var assetLoader;
@@ -1398,7 +1421,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
                   if (err) {
                     console.error('Error preloading ' + preload + ' for asset ' + assetinfo.fullId, path, err);
                   } else {
-                    preloadInfo.data = res; // TODO: Differentiate between data and parsed?
+                    // TODO: Differentiate between data and parsed/processed?
+                    preloadInfo.data = preloadInfo.processor? preloadInfo.processor(res) : res;
                     preloadInfo.isParsed = true;
                   }
                   cb(err, res);
@@ -1411,7 +1435,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
                   if (err) {
                     console.error('Error preloading ' + preload + ' for asset ' + assetinfo.fullId, path, err);
                   } else {
-                    preloadInfo.data = res;
+                    preloadInfo.data = preloadInfo.processor? preloadInfo.processor(res) : res;
                   }
                   cb(err, res);
                 });

@@ -1,7 +1,7 @@
 var RNG = require('math/RNG');
 var BoundedBinaryHeap = require('ds/BoundedBinaryHeap');
 var WeightedBinaryTree = require('ds/WeightedBinaryTree');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Sampler

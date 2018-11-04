@@ -180,6 +180,7 @@ function processFiles() {
           dir: basename + '/leaf_part_obj',
           name: outname,
           skipMtl: true,
+          getMeshName: 'default'
 //            rewriteTexturePathFn: rewriteTexturePath
         };
         STK.util.waitImagesLoaded(function () {
@@ -217,7 +218,7 @@ function processFiles() {
               "files": {
                 "segmentation": cmd.segmentation
               }
-            }
+            };
             modelInstance.model.info[segmentsType] = segmentsInfo;
           }
           segments.init(modelInstance);

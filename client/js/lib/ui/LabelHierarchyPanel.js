@@ -10,7 +10,7 @@ var UIUtil = require('ui/UIUtil');
 var TypeUtils = require('data/TypeUtils');
 var keymap = require('controls/keymap');
 var hilbert = require('hilbert');
-var _ = require('util');
+var _ = require('util/util');
 
 // The LabelHierarchyPanel visualizes the label hierarchy as is
 //   with each node in the tree mapping to a labelInfo

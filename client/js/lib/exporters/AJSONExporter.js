@@ -1,6 +1,6 @@
 var FileUtil = require('io/FileUtil');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Export a mesh in Assimp json format

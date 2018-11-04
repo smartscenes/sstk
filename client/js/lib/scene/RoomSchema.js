@@ -3,7 +3,7 @@
 var Constants = require('Constants');
 var DataSchema = require('data/DataSchema');
 var SearchController = require('search/SearchController');
-var _ = require('util');
+var _ = require('util/util');
 
 // Defines fields we care about for rooms
 var fields = [

@@ -1,6 +1,6 @@
 'use strict';
 
-define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util', 'jquery.contextMenu'],
+define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util/util', 'jquery.contextMenu'],
   function (Constants, AssetManager, Object3DUtil, _) {
     /**
      * Create a expandable panel that shows the current materials for a given object

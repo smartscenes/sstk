@@ -1,9 +1,10 @@
 var webpack = require('webpack');
 var argv = require('optimist').argv;
-var outpath = argv.out || 'build';
 var _ = require('lodash');
 var glob = require( 'glob' )
   , path = require( 'path' );
+
+var outpath = path.resolve(__dirname, argv.out || 'build');
 
 require('better-require')('json yaml');
 
@@ -44,8 +45,6 @@ function requireDir(dirname) {
 }
 
 var aliases = {
-  'base': 'base',
-
   // JQuery
   'jquery': 'vendor/jquery-ui/js/jquery-2.1.4.min',
   'jquery-ui': 'vendor/jquery-ui/js/jquery-ui-1.11.4.min',
@@ -138,46 +137,34 @@ var plugins = [
   }
 ];
 
-// run complete webpack optimization
-if (process.env.NODE_ENV === 'prod') {
-  plugins = plugins.concat([
-    new webpack.optimize.DedupePlugin(),
-    new webpack.optimize.OccurrenceOrderPlugin(),
-    new webpack.optimize.CommonsChunkPlugin({
-      name: 'STK',
-      minChunks: Infinity
-    }),
-    new webpack.optimize.UglifyJsPlugin({
-      exclude: [/lazy/, /min\.js/]
-    })
-  ]);
-}
-
-var loaders = [
+var rules = [
   {
-    test: /base\.js/,
-    loader: 'imports?this=>window'  // assign this to window for base.js globals
+    test: /\.js$/,
+    enforce: 'pre',
+    loader: 'transform-loader?envify'
   },
   {
     test: /bootbox/,
-    loader: 'imports?define=>false,require=>false,exports=>false'
+    loader: 'imports-loader?define=>false,require=>false,exports=>false'
   },
   {
     test: require.resolve('d3-tip'),
-    loader: 'imports?define=>false,require=>false,exports=>false'
+    loader: 'imports-loader?define=>false,require=>false,exports=>false'
   },
   {
     test: require.resolve('datatables'),
-    loader: 'imports?define=>false,require=>false,exports=>false'
+    loader: 'imports-loader?define=>false,require=>false,exports=>false'
   },
   {
     test: /system/,
-    loader: 'exports?System'
+    loader: 'exports-loader?System'
   }
 ];
 
 // Actual webpack options
 var webpackOptions = {
+  mode: process.env.NODE_ENV === 'prod'? 'production' : 'development',
+  context: __dirname,
   entry: {
     'STK': './js/lib/STK',
     'STK-core': ['./js/lib/STK-core'],
@@ -198,15 +185,13 @@ var webpackOptions = {
     libraryTarget: 'umd'
   },
   resolve: {
-    modulesDirectories: ['js', 'js/lib', 'js/vendor', 'node_modules', '../server/static/data'],
+    modules: ['js', 'js/lib', 'js/vendor', 'node_modules', '../server/static/data'],
     alias: aliases,
-    extensions: ['', '.js', '.json']
+    extensions: ['.js', '.json'],
+    enforceExtension: false
   },
   module: {
-    preLoaders: [
-      { test: /\.js$/, loader: 'transform?envify' }
-    ],
-    loaders: loaders,
+    rules: rules,
     noParse: [/lazy/, /min\.js/]
   },
   node: {
@@ -243,7 +228,7 @@ var webpackOptions = {
 // }
 
 if (process.env.NODE_ENV === 'dev') {
-  webpackOptions.debug = true;
+//  webpackOptions.debug = true;
   webpackOptions.devtool = '#eval-source-map';
   webpackOptions.output.pathinfo = true;
 }

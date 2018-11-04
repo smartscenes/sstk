@@ -1,7 +1,7 @@
 var Constants = require('Constants');
 var Sensor = require('sim/sensors/Sensor');
 var Camera = require('gfx/Camera');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Camera based sensor (used for color/depth/objects) view renderings.  Default is RGB color renderings.

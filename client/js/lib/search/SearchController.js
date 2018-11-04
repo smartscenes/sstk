@@ -3,7 +3,7 @@
 var Constants = require('Constants');
 var SearchPanel = require('ui/SearchPanel');
 var BasicSearchController = require('search/BasicSearchController');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * SearchController with search panel

@@ -5,7 +5,7 @@
 
 var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 function Camera(fov, aspect, near, far) {
   THREE.PerspectiveCamera.call(this, fov, aspect, near, far);
@@ -195,7 +195,7 @@ Camera.createArrayCamera = function(config) {
   var cameraArrayShape = config.cameraArrayShape;
   if (!cameraArrayShape) {
     if (config.stacking === 'vertical') {
-      cameraArrayShape = [nCameras, 1]
+      cameraArrayShape = [nCameras, 1];
     } else {
       cameraArrayShape = [1, nCameras];
     }
@@ -232,6 +232,6 @@ Camera.createArrayCamera = function(config) {
   arrayCamera.userData.imageShape = [cameraArrayShape[1]*config.width, cameraArrayShape[0]*config.height];
   //console.log('got arrayCamera', arrayCamera, cameras);
   return arrayCamera;
-}
+};
 
 module.exports = Camera;

@@ -1,6 +1,6 @@
 'use strict';
 
-define(['Constants', 'jpicker', 'base'], function (Constants) {
+define(['Constants', 'jpicker'], function (Constants) {
 
   function ColorsPanel(params) {
     // Number of colors to show per row

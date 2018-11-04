@@ -2,7 +2,7 @@ var Constants = require('Constants');
 var Agent = require('sim/Agent');
 var Object3DUtil = require('geo/Object3DUtil');
 var SimUtil = require('sim/SimUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Basic dialog handling for simulator

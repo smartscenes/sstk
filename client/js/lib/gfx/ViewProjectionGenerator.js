@@ -2,7 +2,7 @@ var Camera = require('gfx/Camera');
 var ClippingBox = require('gfx/ClippingBox');
 var Object3DUtil = require('geo/Object3DUtil');
 var ViewGenerator = require('gfx/ViewGenerator');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Render from a view point onto a image and stores it for lookup and processing

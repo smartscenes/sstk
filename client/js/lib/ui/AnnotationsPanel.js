@@ -2,7 +2,7 @@
 
 var Constants = require('Constants');
 var async = require('async');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Create a small panel for annotation fields

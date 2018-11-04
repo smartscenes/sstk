@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Bootbox form (meant to pop in as a modal and have people fill it out)

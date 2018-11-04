@@ -1,6 +1,6 @@
 'use strict';
 
-var _ = require('util');
+var _ = require('util/util');
 
 var AssetsDb = require('assets/AssetsDb');
 var AssetGroup = require('assets/AssetGroup');

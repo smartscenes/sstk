@@ -2,7 +2,7 @@ var Constants = require('Constants');
 var Colors = require('util/Colors');
 var MeshHelpers = require('geo/MeshHelpers');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Use to visualizes action trace files

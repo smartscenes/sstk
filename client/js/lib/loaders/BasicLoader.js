@@ -7,7 +7,8 @@
 function Loader(params) {
   this.fs = params.fs;
   this.debug = params.debug;
-  this.fileEncoding = params.fileEncoding || 'utf-8';
+  this.fileEncoding = params.fileEncoding || params.encoding || 'utf-8';
+  this.format = params.format;
 }
 
 /**
@@ -18,7 +19,7 @@ function Loader(params) {
 Loader.prototype.load = function(file, callback) {
   var filename = file.name || file;
   var scope = this;
-  this.fs.readAsync(file, 'utf-8', function(err, data) {
+  this.fs.readAsync(file, this.fileEncoding, function(err, data) {
     if (err) {
       callback(err);
     } else {
@@ -33,13 +34,17 @@ Loader.prototype.load = function(file, callback) {
 };
 
 /**
- * Load and parses house file
+ * Parses data
  * @param filename
  * @param data
  * @returns Object
  */
 Loader.prototype.parse = function(filename, data) {
-  throw 'Unimplemented parse for ' + this.constructor.name;
+  if (this.format === 'json') {
+    return JSON.parse(data);
+  } else {
+    return data;
+  }
 };
 
 module.exports = Loader;

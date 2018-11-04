@@ -11,7 +11,7 @@ var SceneUtil = require('scene/SceneUtil');
 var TypeUtils = require('data/TypeUtils');
 var keymap = require('controls/keymap');
 var hilbert = require('hilbert');
-var _ = require('util');
+var _ = require('util/util');
 
 // The SceneHierarchyPanel visualizes the scene graph as is
 //   with each node in the tree mapping to a object3D
@@ -178,6 +178,8 @@ SceneHierarchyPanel.prototype.init = function () {
 
     this.configPanel.append(this.treeSearchPanel);
     this.configPanel.append(this.buttonsPanel);
+    this.infoPanel = $('<div><div>');
+    this.container.append(this.infoPanel);
     this.container.append(this.configPanel);
     this.container.append(this.treePanel);
 
@@ -323,6 +325,8 @@ SceneHierarchyPanel.prototype.__setSceneState = function (sceneState, createTree
   // Convert scene to jstree data
   this.sceneState = sceneState;
   this.sceneState.debugNode.add(this.__bbNodes);
+  var id = sceneState.getFullID();
+  this.infoPanel.text(id != undefined? id : "");
   if (createTree) {
     var treeNodes = this.__convertToTreeNodes(sceneState);
     this.__updateSceneTree(treeNodes);
@@ -404,7 +408,7 @@ SceneHierarchyPanel.prototype.__createSummaryInfo = function(object3D) {
     nChildren: object3D.children.length };
   stats = _.pickBy(stats, function(x) { return x > 0; });
   var info = _.assign(stats,
-    _.pick(object3D.userData, ['id', 'roomId', 'roomType', 'origRoomType', 'holeIds']));
+    _.pick(object3D.userData, ['id', 'roomId', 'roomType', 'origRoomType', 'holeIds', 'level']));
   return info;
 };
 
@@ -425,7 +429,7 @@ SceneHierarchyPanel.prototype.__addModelInfoToTreeNode = function(treeNode, mode
     if (name) treeNode.text = name;
     else if (modelid) treeNode.text = modelid;
 
-    var info = _.pick(object.userData, ['id', 'roomIds', 'wallIds']);
+    var info = _.pick(object.userData, ['id', 'roomIds', 'wallIds', 'level']);
     if (this.tooltipIncludeFields && this.tooltipIncludeFields.length) {
       var m = _.pick(minfo, this.tooltipIncludeFields);
       if (_.size(m) > 0) {
@@ -940,7 +944,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
               "separator_after": false,
               "label": "Identify attachment",
               "action": function (obj) {
-                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { checkOpposite: true });
+                var attachment = scope.sceneState.identifyAttachment(modelInstance, null, { debug: true, checkOpposite: true });
                 console.log(attachment);
               }
             };
@@ -1244,11 +1248,33 @@ SceneHierarchyPanel.prototype.saveHierarchy = function () {
   FileUtil.saveJson(sh, id + '.hierarchy.json');
 };
 
+SceneHierarchyPanel.prototype.loadRelations = function(json) {
+  var sceneId = (json.sceneId != undefined)? json.sceneId : json.id;
+  if (sceneId != undefined) {
+    var lastDot = sceneId.lastIndexOf('.');
+    if (lastDot < 0 && this.sceneState.info) {
+      sceneId = this.sceneState.info.source + '.' + sceneId;
+    }
+    //console.log('check sceneId', sceneId, this.sceneState.getFullID());
+    if (sceneId !== this.sceneState.getFullID()) {
+      this.showAlert('Scene ID mismatch');
+      return;
+    }
+  }
+  var supportAttachments = SceneUtil.relationsToSupportAttachments(this.sceneState, json.relations.support);
+  this.sceneState.groupNodesByAttachment(supportAttachments, {groupBySupport: true, attachToParent: true});
+  this.setSceneState(this.sceneState);
+};
+
 SceneHierarchyPanel.prototype.loadHierarchy = function(json) {
   var version = json.version;
   var format = (typeof version === 'string')? version.split('@')[0] : undefined;
   if (format !== 'ssg') {
-    this.showAlert('Not a valid scene hierarchy file');
+    if (json.relations && json.relations.support) {
+      this.loadRelations(json);
+    } else {
+      this.showAlert('Not a valid scene hierarchy file');
+    }
     return;
   }
   if (json.sceneId !== this.sceneState.getFullID()) {
@@ -1364,6 +1390,7 @@ SceneHierarchyPanel.prototype.onActivate = function() {
 };
 
 SceneHierarchyPanel.prototype.showAlert = function(message, style) {
+  console.log(message);
   UIUtil.showAlert(this.container, message, style || 'alert-danger');
 };
 

@@ -20,7 +20,7 @@ var SolrQuerySuggester = require('search/SolrQuerySuggester');
 var ModelSchema = require('model/ModelSchema');
 var ModelInstance = require('model/ModelInstance');
 var keymap = require('controls/keymap');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Scene edit ui

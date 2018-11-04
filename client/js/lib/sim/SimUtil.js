@@ -1,5 +1,5 @@
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Utility functions for Simulator

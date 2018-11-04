@@ -1,5 +1,5 @@
 var csv = require('papaparse');
-var _ = require('util');
+var _ = require('util/util');
 
 var IOUtil = {};
 

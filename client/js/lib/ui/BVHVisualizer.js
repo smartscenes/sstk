@@ -5,7 +5,7 @@ var BVH = require('geo/BVH');
 var Object3DUtil = require('geo/Object3DUtil');
 var SceneUtil = require('scene/SceneUtil');
 var ConfigControls = require('ui/ConfigControls');
-var _ = require('util');
+var _ = require('util/util');
 
 function BVHVisualizer(params) {
   params.allowLoadSave = false; //  Load save not supported for BVH

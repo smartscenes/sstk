@@ -1,7 +1,7 @@
 // Loads NavMeshSet from https://github.com/recastnavigation/recastnavigation
 var FileLoader = require('io/FileLoader');
 var jBinary = require('jbinary');
-var _ = require('util');
+var _ = require('util/util');
 
 function Mask(nbits, shift) {
   this.nbits = nbits;

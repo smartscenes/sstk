@@ -2,7 +2,7 @@
 
 var Constants = require('Constants');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 //var bootbox = require('bootbox');
 
 // TODO: This duplicates the code in BasePartAnnotator (consolidate)
@@ -40,7 +40,7 @@ function AnnotatorHelper(app, params) {
         onCloseUrl = document.referrer;
       }
       if (onCloseUrl) {
-        gotoURL(onCloseUrl);
+        _.gotoURL(onCloseUrl);
       } else {
         bootbox.alert('Thank you for annotating!');
       }

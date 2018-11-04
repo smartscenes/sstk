@@ -15,7 +15,7 @@ var SearchController = require('search/SearchController');
 var Colors = require('util/Colors');
 var Timings = require('util/Timings');
 var UIUtil = require('ui/UIUtil');
-var _ = require('util');
+var _ = require('util/util');
 var keymap = require('controls/keymap');
 var Materials = require('materials/Materials');
 

@@ -4,7 +4,7 @@ var AssetManager = require('assets/AssetManager');
 var SearchController = require('search/SearchController');
 var VisualSchemaSearch = require('ui/VisualSchemaSearch');
 var SchemaHelp = require('ui/SchemaHelp');
-var _ = require('util');
+var _ = require('util/util');
 require('jquery-lazy');
 
 /**
@@ -36,6 +36,7 @@ require('jquery-lazy');
  * @param [options.showLoadFile=true] {boolean} Whether option to load file of ids is shown
  * @param [options.allowSave=true] {boolean} Whether option to save list of ids of shown
  * @param [options.initialQuery] {string} Initial query of assets to search for
+ * @param [options.initialSource] {string} Initial source of assets to search for
  * @param [options.idsFile] {string|File} File of ids (one per line) to display
  * @param [options.screenshots] {string[]} List of screenshots to show
  * @param [options.useScreenShotIndex] {boolean} Whether to use screenshot index (true) or label (false)
@@ -96,7 +97,11 @@ AssetQuerier.prototype.__initAssets = function (options) {
         scope.assetManager.registerCustomAssetGroups({
           assetFiles: options.assetFiles,
           callback: function(err, results) {
-            resolve(results);
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
           }
         });
       } else {
@@ -122,7 +127,10 @@ AssetQuerier.prototype.__initSearch = function (options) {
   this.visualSearch = new VisualSchemaSearch({
     container: $(options.filterPanel),
     filters: options.filters,
-    schema: this.schemas[this.selectedAssetType]
+    schema: this.schemas[this.selectedAssetType],
+    filtersUpdated: function(str) {
+      this.startSearch();
+    }.bind(this)
   });
   if (options.helpPanel) {
     if (typeof options.helpPanel === 'string') {
@@ -185,6 +193,10 @@ AssetQuerier.prototype.__initSearch = function (options) {
     //console.log('startSearch', this.selectedAssetType, this.visualSearch.getFilterString());
     this.searchController.setFilter(this.selectedAssetType, this.visualSearch.getFilterString());
   }.bind(this));
+  var initialSource = options.initialSource;
+  if (initialSource) {
+    this.searchController.source = initialSource;
+  }
   var idsFile = options.idsFile;
   var initialQuery = options.initialQuery;
   if (idsFile) {
@@ -201,6 +213,10 @@ AssetQuerier.prototype.__initSearch = function (options) {
 AssetQuerier.prototype.onWindowResize = function () {
   this.searchController.onResize();
 };
+
+AssetQuerier.prototype.startSearch = function() {
+  this.searchController.startSearch();
+}
 
 AssetQuerier.prototype.__updateHelp = function() {
   var scope = this;

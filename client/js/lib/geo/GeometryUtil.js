@@ -1,7 +1,7 @@
 'use strict';
 
 var Colors = require('util/Colors');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Utility functions for geometry processing
@@ -393,6 +393,21 @@ GeometryUtil.getSurfaceAreaFiltered = function (geometry, transform, filter) {
     }
   });
   return area;
+};
+
+GeometryUtil.getFaceMaterialIndex = function (geometry, iface) {
+  // Assumes faces are basically triangles
+  var faces = geometry.faces;
+  if (geometry.faces) {
+    return geometry.faces[iface].materialIndex;
+  } else if (geometry.groups) {
+    var group = _.find(geometry.groups, function (g) {
+      return (iface >= g.start) && (iface < g.start + g.count);
+    });
+    return group? group.materialIndex : 0;
+  } else {
+    return 0;
+  }
 };
 
 GeometryUtil.getFaceVertexIndices = function (geometry, iface) {

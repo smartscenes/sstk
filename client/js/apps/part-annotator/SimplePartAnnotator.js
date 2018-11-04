@@ -1,7 +1,7 @@
 'use strict';
 
 var PartAnnotator = require('./PartAnnotator');
-var _ = require('util');
+var _ = require('util/util');
 
 require('physijs');
 

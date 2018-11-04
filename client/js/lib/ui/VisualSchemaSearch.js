@@ -1,5 +1,5 @@
 var Backbone = require('backbone');
-var _ = require('util');
+var _ = require('util/util');
 require('visualsearch');
 
 /**
@@ -9,6 +9,7 @@ require('visualsearch');
  * @param params.schema {data.DataSchema} Schema to use for search
  * @param [params.filters] {data.FieldFilter[]} Initial set of filters for search
  * @param [params.debug=false] {boolean} Debug mode
+ * @param [params.filtersUpdated] {function(string)} Callback for when filters updated
  * @constructor
  * @memberOf ui
  */
@@ -16,6 +17,7 @@ function VisualSearch(params) {
   this.schema = params.schema;
   this.filters = params.filters;
   this.debug = params.debug;
+  this.filtersUpdated = params.filtersUpdated;
   this.init(params);
 }
 
@@ -129,6 +131,9 @@ VisualSearch.prototype.init = function(params) {
           // Update autocomplete choices when query has changed
           __updateFields();
           scope.filterString = scope.getFilterString();
+          if (scope.filtersUpdated) {
+            scope.filtersUpdated(scope.filterString);
+          }
           refreshed = true;
         }
         //console.log(searchCollection);

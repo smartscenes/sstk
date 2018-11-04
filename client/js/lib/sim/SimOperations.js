@@ -4,7 +4,7 @@ var SimUtil = require('sim/SimUtil');
 var ImageUtil = require('util/ImageUtil');
 var Picker = require('controls/Picker');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 var async = require('async');
 
 /**

@@ -4,7 +4,7 @@
 
 var Constants = require('Constants');
 var Colors = require('util/Colors');
-var _ = require('util');
+var _ = require('util/util');
 
 // Annotation labels (for tracking labels - without a panel)
 var Labels = function (params) {

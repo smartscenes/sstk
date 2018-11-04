@@ -98,7 +98,7 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/ED
           // ssao.params.saoScale = ssao.params.saoScaleFixed*camera.far;  // TODO(MS): set this parameter more intelligently
           console.log('set sao.params.soaScale to', ssao.params.saoScale, 'with camera far', camera.far );
         } else {
-          console.warn('Unsupported ambientOcclusion configuration', this.ambientOcclusionOptions)
+          console.warn('Unsupported ambientOcclusion configuration', this.ambientOcclusionOptions);
         }
         if (ssao) {
           if (!this.useOutlineShader) {
@@ -159,6 +159,11 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/ED
       this.domElement.addEventListener('mouseover', function () { this.domElement.focus(); }.bind(this),false);
       this.domElement.addEventListener('mouseout', function () { this.domElement.blur(); }.bind(this),false);
     }
+  };
+
+  Renderer.setMaxViewportDims = function(w,h) {
+    this.__maxViewportDims = [w,h];
+    this.setSize(this.width, this.height);
   };
 
   Renderer.prototype.createPixelBuffer = function() {

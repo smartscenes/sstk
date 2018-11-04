@@ -6,7 +6,7 @@
 
 var SceneState = require('scene/SceneState');
 var SceneLoader = require('scene/SceneLoader');
-var _ = require('util');
+var _ = require('util/util');
 
 function WssSceneLoader(params) {
   SceneLoader.call(this, params);

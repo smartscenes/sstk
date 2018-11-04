@@ -2,7 +2,7 @@
 
 var Field = require('data/Field');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 
 var solrToVizTypeMap = Object.freeze({
   // Predefined schema types

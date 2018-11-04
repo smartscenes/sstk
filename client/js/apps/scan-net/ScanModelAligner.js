@@ -11,7 +11,7 @@ var SceneViewer = require('scene-viewer/SceneViewer');
 var Segments = require('geo/Segments');
 var Timings = require('util/Timings');
 var UIUtil = require('ui/UIUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Task for aligning 3D models to a scanned scene mesh

@@ -1,5 +1,5 @@
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Mapping of one label set to several other label sets

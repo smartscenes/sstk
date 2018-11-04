@@ -1,7 +1,6 @@
 'use strict';
 
 define([
-    'base',
     'gl-matrix',
   ],
   function () {

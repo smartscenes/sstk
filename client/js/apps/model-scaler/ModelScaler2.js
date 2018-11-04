@@ -1,7 +1,7 @@
 'use strict';
 
 define(['lib/Constants','assets/AssetManager','assets/AssetGroups','search/SearchController', 'math/RNG',
-  'controls/CameraControls','geo/Object3DUtil', 'gfx/Lights', 'util'],
+  'controls/CameraControls','geo/Object3DUtil', 'gfx/Lights', 'util/util'],
 function (Constants, AssetManager, AssetGroups, SearchController, RNG, CameraControls, Object3DUtil, Lights, _) {
   function ModelScaler2(container) {
     Constants.worldUp = new THREE.Vector3(0,0,1);

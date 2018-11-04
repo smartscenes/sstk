@@ -9,7 +9,7 @@ var LabelsPanel = require('ui/LabelsPanel');
 var HighlightControls = require('controls/HighlightControls');
 var Constants = require('Constants');
 var FileUtil = require('io/FileUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 var DrawModes = Object.freeze({
   Select: 0,

@@ -3,7 +3,7 @@ var Index = require('ds/Index');
 var IndexedCounters = require('ds/IndexedCounters');
 var Object3DUtil = require('geo/Object3DUtil');
 var async = require('async');
-var _ = require('util');
+var _ = require('util/util');
 
 var supportSurfaces = ['vertical', 'vertical', 'down', 'up', 'vertical', 'vertical'];
 var attachmentTypes = ['left','right','bottom','top','front','back'];

@@ -4,7 +4,7 @@ var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
 var UIUtil = require('ui/UIUtil');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * A pretty panel of annotation labels.  Each annotation label is automatically assigned a color.

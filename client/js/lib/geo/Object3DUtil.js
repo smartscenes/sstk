@@ -1,13 +1,12 @@
 'use strict';
 
-var base = require('base');
 var BBox = require('geo/BBox');
 var Colors = require('util/Colors');
 var Constants = require('Constants');
 var GeometryUtil = require('geo/GeometryUtil');
 var Materials = require('materials/Materials');
 var RNG = require('math/RNG');
-var _ = require('util');
+var _ = require('util/util');
 
 var Object3DUtil = {};
 Object3DUtil.MaterialsAll = 1;
@@ -772,9 +771,11 @@ Object3DUtil.getObjectStats = function(object3D, includeChildModelInstance) {
   var nverts = 0;
   var nfaces = 0;
   var nmeshes = 0;
-  Object3DUtil.traverseMeshes(object3D, !includeChildModelInstance, function(mesh) {
+  Object3DUtil.traversePrimitives(object3D, !includeChildModelInstance, function(mesh) {
     nverts += GeometryUtil.getGeometryVertexCount(mesh.geometry);
-    nfaces += GeometryUtil.getGeometryFaceCount(mesh.geometry);
+    if (mesh instanceof THREE.Mesh) {
+      nfaces += GeometryUtil.getGeometryFaceCount(mesh.geometry);
+    }
     nmeshes += 1;
   });
   return { nverts: nverts, nfaces: nfaces, nmeshes: nmeshes };
@@ -1153,7 +1154,7 @@ Object3DUtil.rotateObject3DAboutAxis = function() {
       Object3DUtil.clearCache(obj);
       Object3DUtil.placeObject3D(obj, base, stationaryBbBoxPoint);
       //console.timeEnd('rotateObject3DAboutAxis');
-  }
+  };
 }();
 
 Object3DUtil.rotateObject3DWrtBBFace = function (obj, axis, delta, bbface) {
@@ -1181,7 +1182,7 @@ Object3DUtil.rotateObject3DAboutAxisSimple = function() {
       obj.updateMatrix();
       Object3DUtil.clearCache(obj);
       //console.timeEnd('rotateObject3DAboutAxisSimple');
-  }
+  };
 }();
 
 // Helper functions  for rotating objects
@@ -1964,6 +1965,26 @@ Object3DUtil.traverse = function (node, callback1, callback2) {
   if (callback2) {
     callback2(node);
   }
+};
+
+Object3DUtil.traversePrimitives = function (object3D, nonrecursive, callback) {
+  Object3DUtil.traverse(
+    object3D,
+    function (node) {
+      if (node instanceof THREE.Mesh || node instanceof THREE.Line || node instanceof THREE.Points) {
+        callback(node);
+        return true;
+      } else if (node instanceof THREE.Object3D) {
+        if (object3D === node) return true;
+        else if (nonrecursive) {
+          // Skip if has modelInstance
+          if ((node.metadata && node.metadata.modelInstance) || (node.userData && node.userData.hasOwnProperty('objectIndex'))) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
 };
 
 Object3DUtil.traverseMeshes = function (object3D, nonrecursive, callback) {

@@ -1,6 +1,6 @@
 var MaterialGenerator = require('materials/MaterialGenerator');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 function ShapeGenerator() {
   this.materialGenerator = new MaterialGenerator();

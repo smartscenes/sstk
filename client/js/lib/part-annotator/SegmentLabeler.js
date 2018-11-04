@@ -4,7 +4,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var Segments = require('geo/Segments');
 var BBox = require('geo/BBox');
 var OBB = require('geo/OBB');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Class responsible for showing segments to be labeled and handling segment

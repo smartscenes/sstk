@@ -2,7 +2,7 @@
 
 var AssetQuerier = require('query/AssetQuerier');
 var ScanSchema = require('model/ScanSchema'); // Require this to ensure that ScanSchema is associated with assetType scan
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Provides a query interfaces for scans

@@ -5,7 +5,7 @@ var d3TipFactory = require('d3-tip');
 
 var d3Tip = d3TipFactory(d3);
 var DataUtils = require('data/DataUtils');
-var _ = require('util');
+var _ = require('util/util');
 
 function Chart(params) {
   this.type = this.constructor.name || 'Chart';

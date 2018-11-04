@@ -8,10 +8,8 @@ var LabelsPanel = require('ui/LabelsPanel');
 var ModelViewer = require('model-viewer/ModelViewer');
 var Object3DUtil = require('geo/Object3DUtil');
 var RegionsPanel = require('ui/RegionsPanel');
-var UIUtil = require('ui/UIUtil');
-var Util = require('util/Util');
 var keymap = require('controls/keymap');
-var _ = require('util');
+var _ = require('util/util');
 
 Constants.defaultPalette = Colors.palettes.d3_category18;
 
@@ -39,7 +37,7 @@ var HouseViewer = function (params) {
   this.defaultPartSource = params.defaultPartSource;
   this.defaultPartType = params.defaultPartType;
   this.controlTypes = ['orbitRightClick', 'firstPerson'];
-  this.controlTypesMap = Util.toIndexMap(this.controlTypes);
+  this.controlTypesMap = _.invert(this.controlTypes);
   this.controlType = this.controlTypes[this._controlTypeIndex];
   var regionsPanelOptions = _.defaults(Object.create(null), { app: this}, params.regionsPanel);
   this.regionsPanel = new RegionsPanel(regionsPanelOptions);

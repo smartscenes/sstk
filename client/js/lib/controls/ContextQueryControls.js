@@ -7,7 +7,7 @@ var PubSub                    = require('PubSub');
 var ScenePriors               = require('scene/ScenePriors');
 var SearchController          = require('search/SearchController');
 var UILog                     = require('editor/UILog');
-var _                         = require('util');
+var _                         = require('util/util');
 require('jquery-ui');
 
 /**

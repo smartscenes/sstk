@@ -1,6 +1,6 @@
 var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * View based utility functions for analyzing geometry
@@ -41,8 +41,8 @@ function identifyVisibleTriangles(opts) {
     cameraPositionStrategy: 'positionToFit'
   });
   var views = viewGenerator.generateViews(sceneBBox, opts.width, opts.height);
-  views = views.concat(viewGenerator.generateRotatingViews(sceneBBox, Math.PI/6, { start: Math.PI/6, end: 2*Math.PI, step: Math.PI/4 }));
-  views = views.concat(viewGenerator.generateRotatingViews(sceneBBox, -Math.PI/6, { start: -Math.PI/6, end: 2*Math.PI, step: Math.PI/4 }));
+  views = views.concat(viewGenerator.generateRotatingViews(sceneBBox, Math.PI/6, { start: Math.PI/6, end: 2*Math.PI, step: Math.PI/8 }));
+  views = views.concat(viewGenerator.generateRotatingViews(sceneBBox, -Math.PI/6, { start: -Math.PI/6, end: 2*Math.PI, step: Math.PI/8 }));
   var visible = {};
   _.each(views, function(view) {
     //console.log('view', view);

@@ -113,5 +113,5 @@ module.exports = {
   ImageUtil: require('./util/ImageUtil'),
   Timings: require('./util/Timings'),
   PubSub: require('./PubSub'),
-  util: require('./util')
+  util: require('./util/util')
 };

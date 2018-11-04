@@ -3,7 +3,7 @@
 var Constants = require('lib/Constants');
 var AssetManager = require('assets/AssetManager');
 var SearchController = require('search/SearchController');
-var _ = require('util');
+var _ = require('util/util');
 require('jquery-lazy');
 
 /**

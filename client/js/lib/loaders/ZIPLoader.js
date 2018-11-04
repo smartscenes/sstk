@@ -1,7 +1,7 @@
 var JSZip = require('jszip');
 var ImageUtil = require('util/ImageUtil');
 var FileLoader = require('io/FileLoader');
-var _ = require('util');
+var _ = require('util/util');
 
 function loadFile(zip, basePath, relPath, cacheOpts) {
   var path = _.getPath(basePath, relPath);
@@ -44,6 +44,7 @@ function loadTexture(zip, basePath, relPath, images, cacheOpts) {
       var imageData = imgfile.asBinary(); // Note: this is string
       if (cacheOpts) {
         var cachePath = cacheOpts.dir + '/' + path;
+        console.log('Save texture ' + path + ' to ' + cachePath);
         cacheOpts.fs.fsWriteToFileEnsureDir(cachePath, imgfile._data);
       }
       // Let the file extension be the image type

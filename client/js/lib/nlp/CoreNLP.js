@@ -1,6 +1,6 @@
 'use strict';
 
-var _ = require('util');
+var _ = require('util/util');
 
 var defaultConfig = {
   url: "http://localhost:9000",

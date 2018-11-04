@@ -4,7 +4,7 @@ var ImageUtil = require('util/ImageUtil');
 var Index = require('ds/Index');
 var TaskQueue = require('util/TaskQueue');
 var async = require('async');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Export a mesh as OBJ and MTL
@@ -16,7 +16,7 @@ var _ = require('util');
 function OBJMTLExporter(options) {
   options = options || {};
   this.__fs = options.fs || FileUtil;
-  this.includeChildModelInstances = false;
+  //this.includeChildModelInstances = false;
 }
 
 var toVertexStr = function (vi, ti, ni) {
@@ -57,9 +57,11 @@ var getObjMtl = function (root, params, data) {
     return data;
   }
 
+  var uvAttrInfo = { name: 'uv', stride: 2, index: new Index(), mapping: {}, objType: 'vt' };
+  var normalAttrInfo = { name: 'normal', stride: 3, index: new Index(), mapping: {}, objType: 'vn' };
   var attrInfos = [];
-  attrInfos[0] = { name: 'uv', stride: 2, index: new Index(), mapping: {}, objType: 'vt' };
-  attrInfos[1] = { name: 'normal', stride: 3, index: new Index(), mapping: {}, objType: 'vn' };
+  attrInfos[0] = uvAttrInfo;
+  attrInfos[1] = normalAttrInfo;
   root.updateMatrixWorld();
   if (root instanceof THREE.Mesh) {
     var t = root.matrixWorld;
@@ -92,11 +94,17 @@ var getObjMtl = function (root, params, data) {
       }
       vi++;
     }, t, attrInfos);
+
     var geometry = root.geometry;
 
     var materials = root.material.materials || root.material;
     if (!Array.isArray(materials)) {
       materials = [materials];
+    }
+
+    if (params.handleMaterialSide && hasNormals) {
+      // TODO: Handle reversing of normals
+      console.warn('Normals are not negated for back/double sided materials');
     }
 
     var det = t.determinant();
@@ -116,6 +124,15 @@ var getObjMtl = function (root, params, data) {
       }
 
       // faces
+      var reverseFace = det < 0; // mirroring
+      var duplicateFace = false;
+      if (params.handleMaterialSide) {
+        if (material.side === THREE.DoubleSide) {
+          duplicateFace = true;
+        } else if (material.side === THREE.BackSide) {
+          reverseFace = !reverseFace;
+        }
+      }
       GeometryUtil.forFaceVertexIndices(geometry, function (iface, verts) {
         var group = _.find(geometry.groups, function (g) {
           return (iface >= g.start) && (iface < g.start + g.count);
@@ -129,11 +146,19 @@ var getObjMtl = function (root, params, data) {
             var ni = hasNormals ? (attrInfos[1].mapping[verts[i]] + normalOffset) : -1;
             faceStrings[i] = toVertexStr(vi, ti, ni);
           }
-          if (det < 0) {
-            faceStrings.reverse();  // reverse order if determinant < 0
+          if (duplicateFace) {
+            var fs1 = toObjStr('f', faceStrings);
+            data.f.push(fs1);
+            faceStrings.reverse();
+            var fs2 = toObjStr('f', faceStrings);
+            data.f.push(fs2);
+          } else {
+            if (reverseFace) {
+              faceStrings.reverse();  // reverse order if needed
+            }
+            var fs = toObjStr('f', faceStrings);
+            data.f.push(fs);
           }
-          var fs = toObjStr('f', faceStrings);
-          data.f.push(fs);
         }
       });
     }
@@ -158,11 +183,19 @@ var getObjMtl = function (root, params, data) {
  * @param [opts.includeNotVisible=false] {boolean} Whether to include meshes that are not visible
  * @param [opts.exportTextures=false] {boolean} Whether to export textures or not
  * @param [opts.transform] {THREE.Matrix4} Global transform to apply to the mesh when exporting
+ * @param [opts.handleMaterialSide=false] {boolean} Whether to duplicate faces for Material.DoubleSide and reverse faces for Material.BackSide
  * @param [opts.defaultUvScale] {THREE.Vector2} How much to scale the uv coordinates if `map.repeat` is not specified
  * @param [opts.getGroupName] {function(THREE.Object3D):string} Function to generate name to use for non-leaf nodes.
- *   If provided and name is returned, then the line `g <name>` is added to the output.  Otherwise, groups are not named.
- * @param [opts.getMeshName] {function(THREE.Mesh):string} Function to generate name to use for meshes (leaf objects).
- *   If provided, then the line `o <name>` is added to the output.  Otherwise, the `<name>` will the of the format `<mesh.name>#<mesh.userData.id>`
+ *   If provided and name is returned, then the groupname is appended to the group line `g <name> <groupname1> <groupname2>...`
+ *   for the descendant mesh.  Otherwise, names for non-leaf nodes are dropped.
+ * @param [opts.getMeshName] {string|function(THREE.Mesh):string} Function to generate name to use for meshes (leaf objects).
+ *   If provided, then the line `o <name>` is added to the output.
+ *   Otherwise, if 'default' is specified, the `<name>` will of the form `<mesh.name>#<mesh.userData.id>`
+ *   Use this function to generate object strings at mesh level
+ * @param [opts.getObjectName] {string|function(THREE.Object3D):string} Function to generate name to use for objects.
+ *   If provided, then the line `o <name>` is added to the output.
+ *   Otherwise, if 'default' is specified, the `<name>` will `<object.name>`
+ *   Use this function to generate object strings at top level
  * @param [opts.rewriteTexturePathFn] {function(string):string} Function to rewrite the texture path to be something more canonical
  */
 OBJMTLExporter.prototype.export = function (objects, opts) {
@@ -192,6 +225,34 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
       vertexOffset: 0, normalOffset: 0, uvOffset: 0, materialsOffset: 0,
       textures: {}, texturesIndex: new Index(), taskQueue: taskQueue }, opts);
 
+  // Define default getXXX functions
+  if (params.getObjectName && !_.isFunction(params.getObjectName)) {
+    if (params.getObjectName === 'default') {
+      params.getObjectName = function(object,index) {
+        return object.name;
+      };
+    } else {
+      throw 'Unsupported getMeshName ' + params.getObjectName;
+    }
+  }
+  if (params.getGroupName && !_.isFunction(params.getGroupName)) {
+    throw 'Unsupported getGroupName ' + params.getGroupName;
+  }
+  if (params.getMeshName && !_.isFunction(params.getMeshName)) {
+    if (params.getMeshName === 'default') {
+      params.getMeshName = function(mesh) {
+        var name = mesh.name;
+        if (mesh.userData.id != null && mesh.name.indexOf('#') < 0) {
+          name = name + '#' + mesh.userData.id;
+        }
+        return name;
+      };
+    } else {
+      throw 'Unsupported getMeshName ' + params.getMeshName;
+    }
+  }
+
+
   // Set up functions to append to obj/mtl files
   // Each should takes in a string (to append to the file) and a callback function to let the caller know its safe to proceed
   params.appendToObj = function(string, cb) {
@@ -212,13 +273,19 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
   // Export objects by looping over each one and exporting!
   var exportObjects = function () {
     var count = 0;
+    var allMaterials = {};
     async.whilst(
       function () {
         return count < objects.length;
       },
       function (cb) {
         count++;
-        scope.__exportObject(objects[count-1], params, cb);
+        scope.__exportObject(objects[count-1], count-1, params, function(err,result) {
+          if (result && result.materials) {
+            _.merge(allMaterials, result.materials);
+          }
+          cb(err,result);
+        });
       },
       function (err, results) {
         // everything done or disaster!
@@ -240,6 +307,9 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
                 remappedTextures.push(metadata);
               }
               exportResults['remappedTextures'] = remappedTextures;
+            }
+            if (_.size(allMaterials) > 0) {
+              exportResults['materialMappings'] = _.mapValues(allMaterials, function(x) { return x.name; });
             }
             callback(err, exportResults);
           }
@@ -300,17 +370,17 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
   var normIndexRemap = {};
   var uvIndexRemap = {};
 
-  var name = mesh.name;
   if (params.getMeshName) {
-    name = params.getMeshName(mesh);
-  } else {
-    if (mesh.userData.id != null && mesh.name.indexOf('#') < 0) {
-      name = name + '#' + mesh.userData.id;
+    var name = params.getMeshName(mesh);
+    if (name != undefined) {
+      obj += 'o ' + name + '\n';
     }
   }
-  if (name) {
-    obj += 'o ' + name + '\n';
+
+  if (mesh.userData.nestedGroupNames) {
+    obj += 'g ' + mesh.userData.nestedGroupNames.join(' ') + '\n';
   }
+
 
   if (geometry instanceof THREE.Geometry) {
     // positions
@@ -325,7 +395,7 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
     var faces = geometry.faces;
     // uvs
     var faceVertexUvs = geometry.faceVertexUvs[0];
-    var hasVertexUvs = faces.length === faceVertexUvs.length;
+    var hasVertexUvs = faces.length > 0;
     if (hasVertexUvs) {
       for (var iFace = 0; iFace < faceVertexUvs.length; iFace++) {
         var face = faces[iFace];
@@ -356,20 +426,61 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
     // normals
     var normalMatrixWorld = new THREE.Matrix3();
     normalMatrixWorld.getNormalMatrix(transform);
+    var vnOffset = 0;
+    var vnCounts = [];
+    if (faces.length) {
+      if (faces[0].normal.length() === 0) {
+        geometry.computeFaceNormals();
+      }
+    }
     for (var iFace = 0; iFace < faces.length; iFace++) {
       var f = faces[iFace];
-      var vertexNormals = f.vertexNormals;
-      for (var j = 0; j < 3; j++) {
-        var vn = vertexNormals.length === 3 ? vertexNormals[j] : f.normal;
-        normal.copy(vn);
-        normal.applyMatrix3(normalMatrixWorld);
-        normal.normalize();
-        var normstr = 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z;
-        if (normIndex.add(normstr)) {
-          obj += normstr +'\n';
-          nbNormals++;
+      var includeFrontNormals = true;
+      var includeBackNormals = false;
+      if (params.handleMaterialSide) {
+        var materialIndex = (materials.length > 1) ? f.materialIndex || 0 : 0;
+        var material = materials[materialIndex];
+        if (material.side === THREE.DoubleSide) {
+          includeBackNormals = true;
+        } else if (material.side === THREE.BackSide) {
+          includeFrontNormals = false;
+          includeBackNormals = true;
         }
-        normIndexRemap[iFace*3 + j] = normIndex.indexOf(normstr);
+      }
+      var vertexNormals = f.vertexNormals;
+      vnCounts[iFace] = 0;
+      if (includeFrontNormals) {
+        for (var j = 0; j < 3; j++) {
+          var vn = vertexNormals.length === 3 ? vertexNormals[j] : f.normal;
+          normal.copy(vn);
+          normal.applyMatrix3(normalMatrixWorld);
+          normal.normalize();
+          var normstr = 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z;
+          if (normIndex.add(normstr)) {
+            obj += normstr + '\n';
+            nbNormals++;
+          }
+          normIndexRemap[vnOffset + j] = normIndex.indexOf(normstr);
+        }
+        vnOffset += 3;
+        vnCounts[iFace] += 3;
+      }
+      if (includeBackNormals) {
+        for (var j = 0; j < 3; j++) {
+          var vn = vertexNormals.length === 3 ? vertexNormals[j] : f.normal;
+          normal.copy(vn);
+          normal.negate();
+          normal.applyMatrix3(normalMatrixWorld);
+          normal.normalize();
+          var normstr = 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z;
+          if (normIndex.add(normstr)) {
+            obj += normstr + '\n';
+            nbNormals++;
+          }
+          normIndexRemap[vnOffset + j] = normIndex.indexOf(normstr);
+        }
+        vnOffset += 3;
+        vnCounts[iFace] += 3;
       }
     }
 
@@ -389,32 +500,60 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
         }
       }
 
+      var reverseFace = det < 0; // mirroring
+      var duplicateFace = false;
+      if (params.handleMaterialSide) {
+        if (material.side === THREE.DoubleSide) {
+          duplicateFace = true;
+        } else if (material.side === THREE.BackSide) {
+          reverseFace = !reverseFace;
+        }
+      }
+      //console.log('duplicateFace',duplicateFace,'reverseFace',reverseFace);
+
       // faces
-      for (var iFace = 0, j = 0; iFace < faces.length; iFace++, j += 3) {
+      var vnOffset = 0;
+      for (var iFace = 0, j = 0; iFace < faces.length; j += 3, iFace++) {
         var face = faces[iFace];
         var materialIndex = (materials.length > 1)? face.materialIndex || 0 : 0;
         if (materialIndex !== iMat) {
+          vnOffset += vnCounts[iFace];
           continue; // Skip this face
         }
         var uvis = [uvIndexRemap[j]+1, uvIndexRemap[j+1]+1, uvIndexRemap[j+2]+1];
-        var nis = [normIndexRemap[j]+1, normIndexRemap[j+1]+1, normIndexRemap[j+2]+1];
+        var nis;
         var faceHasUvs = hasVertexUvs && faceVertexUvs[iFace];
-        obj += 'f ';
-        if (det >= 0) {
+        if (duplicateFace || !reverseFace) {
+          if (duplicateFace && reverseFace) {
+            nis = [normIndexRemap[vnOffset+3] + 1, normIndexRemap[vnOffset + 3 + 1] + 1, normIndexRemap[vnOffset + 3 + 2] + 1];
+          } else {
+            nis = [normIndexRemap[vnOffset] + 1, normIndexRemap[vnOffset + 1] + 1, normIndexRemap[vnOffset + 2] + 1];
+          }
+          obj += 'f ';
           obj += (result.indexVertex + face.a + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[0]) : '') + '/' + (result.indexNormals + nis[0]) + ' ';
           obj += (result.indexVertex + face.b + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[1]) : '') + '/' + (result.indexNormals + nis[1]) + ' ';
           obj += (result.indexVertex + face.c + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[2]) : '') + '/' + (result.indexNormals + nis[2]) + '\n';
-        } else {
+        }
+        if (duplicateFace || reverseFace) {
+          if (duplicateFace && !reverseFace) {
+            nis = [normIndexRemap[vnOffset+3] + 1, normIndexRemap[vnOffset + 3 + 1] + 1, normIndexRemap[vnOffset + 3 + 2] + 1];
+          } else {
+            nis = [normIndexRemap[vnOffset]+1, normIndexRemap[vnOffset+1]+1, normIndexRemap[vnOffset+2]+1];
+          }
           // Flip vertex order for faces
+          obj += 'f ';
           obj += (result.indexVertex + face.c + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[2]) : '') + '/' + (result.indexNormals + nis[2]) + ' ';
           obj += (result.indexVertex + face.b + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[1]) : '') + '/' + (result.indexNormals + nis[1]) + ' ';
           obj += (result.indexVertex + face.a + 1) + '/' + (faceHasUvs ? (result.indexVertexUvs + uvis[0]) : '') + '/' + (result.indexNormals + nis[0]) + '\n';
         }
+
+        vnOffset += vnCounts[iFace];
       }
     }
   } else {  // BufferGeometry
     var data = getObjMtl(mesh,
       { transform: params.transform,
+        handleMaterialSide: params.handleMaterialSide,
         vertexOffset: result.indexVertex,
         normalOffset: result.indexNormals,
         uvOffset: result.indexVertexUvs,
@@ -520,7 +659,7 @@ OBJMTLExporter.prototype.__getMaterialString = function(mat, matId, params) {
   return mtl;
 };
 
-OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
+OBJMTLExporter.prototype.__exportObject = function (object, index, params, callback) {
   var scope = this;
 
   if (!params.includeNotVisible && !object.visible) {
@@ -528,6 +667,19 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
     setTimeout(function () { callback(); }, 0);
     return;
   }
+
+  var objectName = params.getObjectName? params.getObjectName(object, index) : undefined;
+  if (objectName) {
+    params.appendToObj('o ' + objectName + '\n', function (err, res) {
+      scope.__exportObjectMeshes(object, params, callback);
+    });
+  } else {
+    scope.__exportObjectMeshes(object, params, callback);
+  }
+};
+
+OBJMTLExporter.prototype.__exportObjectMeshes = function (object, params, callback) {
+  var scope = this;
 
   var result = {
     materials: {},
@@ -538,12 +690,31 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
     indexMaterials: params.materialsOffset
   };
 
+  function updateGroupName(child) {
+    if (params.getGroupName) {
+      var name = params.getGroupName(child);
+      var parentGroupNames = (child.parent)? child.parent.userData.nestedGroupNames || undefined : undefined;
+      child.userData.nestedGroupNames = parentGroupNames? _.clone(parentGroupNames) : [];
+      if (name) {
+        child.userData.nestedGroupNames.unshift(name);
+      }
+    }
+  }
+
   // Get our nodes in depth-first traversal order
   var nodes = [];
   object.updateMatrixWorld();
-  object.traverse(function (child) {
-    nodes.push(child);
-  });
+  if (params.includeNotVisible) {
+    object.traverse(function (child) {
+      updateGroupName(child);
+      nodes.push(child);
+    });
+  } else {
+    object.traverseVisible(function(child) {
+      updateGroupName(child);
+      nodes.push(child);
+    });
+  }
 
   console.log('Processing ' + nodes.length + ' nodes for object ' + object.name);
 
@@ -551,6 +722,7 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
   async.forEachSeries(nodes, function (child, __cb) {
     // console.log('processing node', child.name);
     var cb = function(err, res) {
+      delete child.userData.nestedGroupNames;
       setTimeout(function () { __cb(); }, 0);
     };
     if (child instanceof THREE.Mesh) {
@@ -560,15 +732,12 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
       // TODO: Handle line
       console.warning("Skipping line " + child.id);
       // scope.__exportLine(child, result, params, cb);
-      return;
-    } else {
-      if (params.getGroupName) {
-        var name = params.getGroupName(child);
-        if (name) {
-          params.appendToObj('g ' + name + '\n', cb);
-          return;
-        }
-      }
+      // return;
+    } else if (child instanceof THREE.Points) {
+      // TODO: Handle points
+      console.warning("Skipping points " + child.id);
+      // scope.__exportPoints(child, result, params, cb);
+      // return;
     }
     // Make sure we call the loop callback cb
     cb();
@@ -589,7 +758,7 @@ OBJMTLExporter.prototype.__exportObject = function (object, params, callback) {
         params.uvOffset = result.indexVertexUvs;
         params.normalOffset = result.indexNormals;
         params.materialsOffset = result.indexMaterials + result.materialsIndex.size();
-        callback(err);
+        callback(err, result);
       });
     }
   });

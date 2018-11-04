@@ -29,6 +29,7 @@ cmd
   .option('--normalize_size_to <target>', 'What to normalize the size to', STK.util.cmd.parseFloat, 1.0)
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .option('--require_faces [flag]', 'Whether to skip geometry without faces when exporting', STK.util.cmd.parseBoolean, false)
+  .option('--handle_material_side [flag]', 'Whether to duplicate or reverse face vertices when exporting based on double-sided or back-sided materials', STK.util.cmd.parseBoolean, false)
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .option('--include_group [flag]', 'Whether to include group g commands in the output obj file', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
@@ -82,22 +83,25 @@ function rewriteTexturePath(src) {
 }
 
 function exportScene(exporter, exportOpts, sceneState, callback) {
-  var scene = sceneState.scene;
+  var scene = exportOpts.rootObject || sceneState.scene;
   var sceneId = sceneState.info.id;
   var filename = exportOpts.name || sceneId;
-  exporter.export(scene, _.defaults({ name: filename, callback: callback }, exportOpts));
+  exporter.export(scene, _.defaults({name: filename, callback: callback}, exportOpts));
 }
 
 //STK.Constants.setVirtualUnit(1);
-var meshNameFunc = function (node) {
-  if (node.userData.type && node.userData.id) {
+var nodeNameFunc = function (node) {
+  if (node.userData.type && node.userData.id != undefined) {
     return node.userData.type + '#' + node.userData.id;
+  } else if (node.name) {
+    return node.name;
+  } else if (node.userData.id != undefined) {
+    var type = node.type.toLowerCase();
+    return type + '_' + node.userData.id;
   } else {
-    return node.name || ('mesh_' + node.id);
+    var type = node.type.toLowerCase();
+    return type + '_' + node.id;
   }
-};
-var groupNameFunc = function (node) {
-  return node.name;
 };
 
 // TODO: Support different exporters
@@ -147,11 +151,11 @@ function processFiles() {
       timings.start('exportMesh');
       var metadata = {};
       if (cmd.input_type === 'id') {
-        info = { id: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
+        info = { fullId: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
         metadata.id = id;
       } else if (cmd.input_type === 'path') {
         info = { file: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
-        metadata.path = path;
+        metadata.path = file;
       }
       if (cmd.assetInfo) {
         info = _.defaults(info, cmd.assetInfo);
@@ -160,6 +164,8 @@ function processFiles() {
       var exportTexturesFlag = false;
       if (cmd.export_textures === 'none') {
       } else if (cmd.export_textures === 'copy') {
+        // TODO: This currently works just for ZipLoader
+        // Make sure that this works for textures directly obtained from the internet
         info.options = {
           textureCacheOpts: {
             dir: basename, //+ '/' + texturePath,
@@ -176,6 +182,7 @@ function processFiles() {
       assetManager.loadAsset(info, function (err, asset) {
         timings.stop('load');
         var sceneState;
+        var rootObject;
         if (asset instanceof STK.scene.SceneState) {
           sceneState = asset;
         } else if (asset instanceof STK.model.ModelInstance) {
@@ -187,7 +194,9 @@ function processFiles() {
             m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
           });
           timings.stop('toGeometry');
-          sceneState.addObject(modelInstance);
+          sceneState.addObject(modelInstance, cmd.auto_align);
+          // Hack to discard some nested layers of names for a model instance
+          rootObject = modelInstance.getObject3D('Model').children[0];
         } else if (err) {
           console.error("Error loading asset", info, err);
           return;
@@ -250,14 +259,23 @@ function processFiles() {
         var exportOpts = {
           dir: basename,
           name: scenename,
+          rootObject: rootObject,
           skipMtl: false,
           exportTextures: exportTexturesFlag,
+          handleMaterialSide: cmd.handle_material_side,
           texturePath: texturePath,
           rewriteTexturePathFn: rewriteTexturePath,
           transform: sceneTransformMatrixInverse,
           //defaultUvScale: new THREE.Vector2(0.01, 0.01),
-          getMeshName: meshNameFunc,
-          getGroupName: cmd.include_group? groupNameFunc : null
+          getMeshName: nodeNameFunc,
+          getGroupName: cmd.include_group? function(node) {
+            // Hack to discard some nested layers of names for a model instance
+            if (node === rootObject) {
+              return null;
+            } else {
+              return nodeNameFunc(node)
+            }
+          } : null
         };
         function waitImages() {
           STK.util.waitImagesLoaded(function () {

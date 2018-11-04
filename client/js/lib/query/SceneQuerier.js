@@ -4,7 +4,7 @@ var AssetQuerier = require('query/AssetQuerier');
 var AssetManager = require('assets/AssetManager');
 var SceneSchema = require('scene/SceneSchema');
 var RoomSchema = require('scene/RoomSchema');
-var _ = require('util');
+var _ = require('util/util');
 
 function SceneQuerier(options) {
   // Set reasonable defaults

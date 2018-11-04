@@ -26,6 +26,8 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('navmesh', 'navmesh', require('loaders/NavMeshLoader'));
   assetManager.registerAssetLoader('house', 'house', require('loaders/HouseLoader'));
   assetManager.registerAssetLoader('labelMapping', '*', require('util/LabelMapping').Loader);
+  assetManager.registerAssetLoader('parts', 'obj', require('loaders/OBJPartLoader'));
+  assetManager.registerAssetLoader('custom', '*', require('loaders/BasicLoader'));
 };
 
 module.exports = AssetLoaders;

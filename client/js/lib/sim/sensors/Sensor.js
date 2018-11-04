@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 
 function Sensor(config) {
   this.config = config;     // Sensor config

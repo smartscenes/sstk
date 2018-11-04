@@ -10,7 +10,7 @@ var PathFinder = require('nav/PathFinder');
 var PubSub = require('PubSub');
 var RNG = require('math/RNG');
 var Timings = require('util/Timings');
-var _ = require('util');
+var _ = require('util/util');
 
 Graph.createFromJson = function(json, opts) {
   opts = _.clone(opts);

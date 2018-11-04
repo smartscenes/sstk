@@ -5,7 +5,7 @@ var Constants = require('Constants');
 var ModelPartViewer = require('part-annotator/ModelPartViewer');
 var BasePartAnnotator = require('part-annotator/BasePartAnnotator')(ModelPartViewer);
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 require('physijs');
 

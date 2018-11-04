@@ -14,7 +14,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
     'controls/CameraControlsPanel', 'scene/SceneUtil', 'io/FileUtil',
     'geo/MeshHelpers', 'exporters/OBJMTLExporter',
     'geo/BVH', 'ui/BVHVisualizer',
-    'util/Auth', 'controls/keymap', 'util',
+    'util/Auth', 'controls/keymap', 'util/util',
     'physijs', 'jquery-console', 'jquery-lazy'],
   function (Constants, SceneGenerator, SceneHierarchyPanel,
             SceneOperations, SceneEditControls, Picker, SceneAnnotate,
@@ -3033,7 +3033,7 @@ define(['Constants', 'scene/SceneGenerator', 'scene/SceneHierarchyPanel',
       this.saveScene();
       if (this.onCloseUrl) {
         window.onbeforeunload = null;
-        gotoURL(this.onCloseUrl);
+        _.gotoURL(this.onCloseUrl);
       }
     };
 

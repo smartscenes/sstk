@@ -1,7 +1,7 @@
 // AudioSimulator
 var Constants = require('Constants');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 var async = require('async');
 
 var __optsToIgnore = ['net', 'wav', 'fs', 'bufferType'];

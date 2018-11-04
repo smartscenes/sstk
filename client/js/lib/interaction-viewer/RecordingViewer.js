@@ -2,7 +2,7 @@ var CharacterCreator = require('anim/CharacterCreator');
 var InteractionViewer = require('interaction-viewer/InteractionViewer');
 var KinectRecording = require('anim/KinectRecording');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 function RecordingViewer(params) {
   var defaults = {

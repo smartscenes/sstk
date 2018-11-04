@@ -1,6 +1,6 @@
 'use strict';
 
-define(['../../lib/ui/CanvasUtil', 'Constants','base'],
+define(['../../lib/ui/CanvasUtil', 'Constants'],
     function (CanvasUtil, Constants) {
       function ImageAnnotator(container) {
         this.container = null;

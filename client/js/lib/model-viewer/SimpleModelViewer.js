@@ -1,6 +1,6 @@
 'use strict';
 
-define(['model-viewer/SingleModelCanvas', 'assets/AssetManager', 'search/SearchController', 'util', 'jquery-lazy'],
+define(['model-viewer/SingleModelCanvas', 'assets/AssetManager', 'search/SearchController', 'util/util', 'jquery-lazy'],
 function (SingleModelCanvas, AssetManager, SearchController, _) {
 
   function SimpleModelViewer(params) {

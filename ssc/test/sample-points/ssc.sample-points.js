@@ -29,16 +29,25 @@ var shapeNetTestIds = [
   '77daa3ded63dc634d83e8d4109d37961', // glass table (white redundant surface)
   'eeabc27816119ff429ae5ea47a8f21e0', // ping pong table (white redundant surface)
   '5ef9520bbefc05c9e8b292c1c2152aed', // weird transparent coffee table box
-  '537c7bd16e8a00adbbc9440457e303e',   // Chair with texture
-  '764abaffc5872775f0dff71ec76b46f7',  // Transparent png
-  '4b71f633ddb55c6e309160eb001312fe',  // Chair with inner red surface, other white surface
-  'dac4af24e2facd7d3000ca4b04fcd6ac',  // Chair with patterned green and white
-  '7aabc57856fc6659597976c675750537',  // Chair with fine texture
+  '537c7bd16e8a00adbbc9440457e303e',  // Chair with texture
+  '764abaffc5872775f0dff71ec76b46f7', // Transparent png
+  '4b71f633ddb55c6e309160eb001312fe', // Chair with inner red surface, other white surface
+  'dac4af24e2facd7d3000ca4b04fcd6ac', // Chair with patterned green and white (some are double sided)
+  '7aabc57856fc6659597976c675750537', // Chair with fine texture
+  '1cc9f441f6633b932d9da001bf4482cc', // Piano with inner surface (all front surfaces)
+  '225905a8841620d7f6fe1e625c287cfa', // Refrigerator with internal structure
+  '1175801334a9e410df3a1b0d597ce76e', // Refrigerator with internal structure
+  '6bf1559769018cbb354b166143712fb3', // headphone
+  '118083b82350b53cb23e7e4bd2944793', // monitor
+  '14c9e39b05dd2cf2a07f2e5419bb2c4', // flat screen monitor
+  'a87214036fbca69e84a172a28c2dc', // monitor with image and extra internal surfaces
+  '12a73c63681d65587a0f32fa630f6a0e', // transparent table
 ];
 function getShapeNetFileEntry(id) {
   return {
     'source': '3dw',
     'input': `/Users/angelx/work/sample-points/${id}/${id}.kmz`,
+//    'input': `/Users/angelx/work/kmzv2/${id}/${id}.kmz`,
     input_type: "path",
     samples: 1000000
   };
@@ -48,7 +57,7 @@ function getShapeNetIdEntry(id) {
     source: "3dw",
     id: `${id}`,
     input_type: "id",
-    samples: 100000
+    samples: 1000000
   }
 }
 var testEntries = [];
@@ -77,12 +86,16 @@ describe('STK SSC sample-points', function () {
     }
     it('sample points for ' + name, function (done) {
       var opts = _.map(entry, function(v,k) { return `--${k} ${v}`}).join(' ');
-      var sample_cmd = `${sscdir}/sample-points.js --limit_to_visible --output_dir ${outputDir} ${opts}`;
+      var sample_cmd = `${sscdir}/sample-points.js --ignore_redundant --restrict_redundant_white_materials --check_reverse_faces --output_dir ${outputDir} ${opts}`;
+//      var sample_cmd = `${sscdir}/sample-points.js --output_dir ${outputDir} ${opts}`;
+//      var sample_cmd = `${sscdir}/sample-points.js --limit_to_visible --output_dir ${outputDir} ${opts}`;
+//      var sample_cmd = `${sscdir}/sample-points.js --ignore_redundant --check_reverse_faces --output_dir ${outputDir} ${opts}`;
       console.log("Running " + sample_cmd);
       shell.exec(sample_cmd);
       var sampledPointsFilename = `${outputDir}/${name}.ply`;
       expect(fs.existsSync(sampledPointsFilename), 'Has sampled output file ' + sampledPointsFilename).to.be.ok;
-      var render_cmd = `${sscdir}/render-file.js --width 500 --height 500 --compress_png --input ${sampledPointsFilename} --output_dir ${outputDir}`;
+      var render_cmd = `${sscdir}/render-file.js --config_file ${sscdir}/config/render_shapenet_kmz.json --assetType model --width 500 --height 500 --compress_png --input ${sampledPointsFilename} --output_dir ${outputDir}`;
+//      var render_cmd = `${sscdir}/render-file.js --width 500 --height 500 --compress_png --input ${sampledPointsFilename} --output_dir ${outputDir}`;
       testutil.run_and_compare(render_cmd, referenceDir, outputDir, name + '.png', 0.01);
       done();
     }).timeout(120000);  // wait up to two minutes

@@ -661,7 +661,7 @@ ModelLiner.prototype.keyHandler = function (event) {
     case 89: // y
       // Export selected model to obj
       if (this.targetModelInstance) {
-        this.objExporter.export(this.targetModelInstance.object3D);
+        this.objExporter.export(this.targetModelInstance.object3D, { getObjectName: 'default' });
       }
       break;
     case 90: // z
@@ -670,7 +670,7 @@ ModelLiner.prototype.keyHandler = function (event) {
       for (var i = 0; i < models.length; i++) {
         object3Ds.push(models[i].object3D);
       }
-      this.objExporter.export(object3Ds);
+      this.objExporter.export(object3Ds, { getObjectName: 'default' });
       break;
     default:
       break;

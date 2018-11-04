@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 var Object3DUtil = require('geo/Object3DUtil');
 
 /**

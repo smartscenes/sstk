@@ -2,7 +2,7 @@
 
 define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceVoxels',
   'geo/Object3DUtil', 'util/LabelRemap', 'ui/LabelsPanel', 'ui/MeshHierarchyPanel',
-  'ui/DatConfigControls', 'io/IOUtil', 'util', 'base'],
+  'ui/DatConfigControls', 'io/IOUtil', 'util/util'],
   function (Constants, AssetLoader, Segments, Voxels, Object3DUtil, LabelRemap, LabelsPanel, MeshHierarchyPanel, DatConfigControls, IOUtil, _) {
 
     function PartsPanel(params) {
@@ -81,14 +81,14 @@ define(['Constants', 'assets/AssetLoader', 'geo/Segments', 'model/ModelInstanceV
 
     PartsPanel.prototype.__initDefaultLabelRemaps = function() {
       var labelMappingCategory = 'category';
-      var labelMappingsRaw = require("raw!labels/label-mappings.tsv");
+      var labelMappingsRaw = require("raw-loader!labels/label-mappings.tsv");
       var labelMappings = IOUtil.parseDelimited(labelMappingsRaw, {keyBy: labelMappingCategory}).data;
       this.initLabelRemaps(labelMappings, labelMappingCategory);
     };
 
     PartsPanel.prototype.initLabelRemaps = function(labelMappings, labelMappingCategory) {
-      var mpr40ColorsRaw = require("raw!labels/mpr40.tsv");
-      var nyu40ColorsRaw = require("raw!labels/nyu40colors.csv");
+      var mpr40ColorsRaw = require("raw-loader!labels/mpr40.tsv");
+      var nyu40ColorsRaw = require("raw-loader!labels/nyu40colors.csv");
       var mpr40Colors = IOUtil.parseDelimited(mpr40ColorsRaw).data;
       var nyu40Colors = IOUtil.parseDelimited(nyu40ColorsRaw).data;
 

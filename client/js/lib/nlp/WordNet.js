@@ -1,6 +1,6 @@
 var Constants = require('Constants');
 var SolrQuerier = require('search/SolrQuerier');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * WordNet interface that uses Solr to query for WordNet items.

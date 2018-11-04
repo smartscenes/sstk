@@ -5,7 +5,7 @@ var AssetGroups = require('assets/AssetGroups');
 var AssetManager = require('assets/AssetManager');
 var UIUtil = require('ui/UIUtil');
 var async = require('async');
-var _ = require('util');
+var _ = require('util/util');
 require('jquery-lazy');
 
 /**

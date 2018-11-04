@@ -67,11 +67,11 @@ Annotation tools:
 
     1. Transfer vertex label to vertex color
 
-       ./transfer-property-ply.js --input scene0166_00_vh_clean_2.labels.ply --property label --incr_by 1 --from vertex --use_pretty_colors
+       `./transfer-property-ply.js --input scene0166_00_vh_clean_2.labels.ply --property label --incr_by 1 --from vertex --use_pretty_colors`
 
     2. Transfer face segment_id to vertex color
 
-       ./transfer-property-ply.js --input scene0166_00_vh_clean_2.segment_id.ply --property segment_id --incr_by 1 --from face --use_pretty_colors
+       `./transfer-property-ply.js --input scene0166_00_vh_clean_2.segment_id.ply --property segment_id --incr_by 1 --from face --use_pretty_colors`
 
 1. `./clean-segment-annotations` - Cleans aggregated segment annotations
 
@@ -81,23 +81,24 @@ Annotation tools:
     
     1. Project annotations from one mesh to another (the two meshes should represent the same environment)
 
-       ./project-annotations.js --source <id> --target <id> --output_dir <dir>  --sourceSegmentType segment-annotations-latest --targetSegmentType surfaces --max_dist 0.01       
+       `./project-annotations.js --source <id> --target <id> --output_dir <dir>  --sourceSegmentType segment-annotations-latest --targetSegmentType surfaces --max_dist 0.01`       
 
 
 1. `./export-scan-model-alignments` - Export scan to model alignment provided by turkers
 
 1. `./export-annotated-parts` - Export part annotations
 
-1. './export-part-meshes' - Export part meshes as OBJ/MTL
+1. `./export-part-meshes` - Export part meshes as OBJ/MTL
 
    1. Export part meshes (each leaf part is a separate OBJ/MTL with json file specifying the hierarchy) to output directory and aligned
-      ./export-part-meshes --output_dir out/meshes --input 3dw.25524f6bfa80e05b713decb1a0563b12 --use_ids --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller
 
-1. './export-mesh' - Export mesh
+      `./export-part-meshes --output_dir out/meshes --input 3dw.25524f6bfa80e05b713decb1a0563b12 --use_ids --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller`
 
-1. './create-pts-bvh' - Create BVH given a directory of object point clouds
+1. `./export-mesh` - Export mesh
 
-1. './sample-points' - Samples points from a mesh (sampled points are output as a PLY file)
+1. `./create-pts-bvh` - Create BVH given a directory of object point clouds
+
+1. `./sample-points` - Samples points from a mesh (sampled points are output as a PLY file)
 
 See `scripts` directory for examples of how to batch run these scripts.
 

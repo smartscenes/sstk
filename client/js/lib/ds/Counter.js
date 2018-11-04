@@ -1,6 +1,6 @@
 // A structure that accumulates counts
 var RNG = require('math/RNG');
-var _ = require('util');
+var _ = require('util/util');
 
 function Counter(opts) {
   opts = opts || {};

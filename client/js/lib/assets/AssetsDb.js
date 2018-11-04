@@ -8,7 +8,7 @@ var AssetLoader = require('assets/AssetLoader');
 var DataUtils = require('data/DataUtils');
 var IOUtil = require('io/IOUtil');
 var SolrQueryParser = require('search/SolrQueryParser');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Simple in memory database of assets

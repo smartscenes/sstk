@@ -2,7 +2,7 @@
 
 var ContextQueryControls = require('controls/ContextQueryControls');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Controls for making a model query given a fixed OBB

@@ -1,7 +1,7 @@
 var Constants = require('Constants');
 var Colors = require('util/Colors');
 var ImageUtil = require('util/ImageUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Utilities for dealing with materials (operates only on materials/textures)
@@ -9,6 +9,7 @@ var _ = require('util');
  */
 var Materials = {};
 Materials.DefaultMaterialType = THREE.MeshPhysicalMaterial;
+Materials.DefaultMaterialSide = THREE.FrontSide;
 
 /**
  * Helper to load image for a texture

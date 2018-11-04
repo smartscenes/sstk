@@ -1,6 +1,6 @@
 'use strict';
 
-define(['base'], function () {
+define([], function () {
 
   function ImagesPanel(params) {
     // Number of images to show per row

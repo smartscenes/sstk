@@ -127,11 +127,21 @@ cmd.Command.prototype.getIds = function(ids, assetGroup) {
   } else {
     if (ids.length === 1 && ids[0].endsWith('.txt')) {
       // Read files form input file
-      var data = STK.util.readSync(ids[0]);
-      ids = data.split('\n').map(function(x) { return STK.util.trim(x); }).filter(function(x) { return x.length > 0; });
+      ids = STK.fs.readLines(ids[0]);
     }
   }
   return ids;
+};
+
+cmd.Command.prototype.getInputs = function(input) {
+  if (input.endsWith('.txt')) {
+    // Read files from input file
+    return STK.fs.readLines(input);
+  } else if (input.endsWith('.csv') || input.endsWith('.tsv')) {
+    return STK.fs.loadDelimited(filename);
+  } else {
+    return input.split(',');
+  }
 };
 
 cmd.Command.prototype.checkImageSize = function(options, limits) {

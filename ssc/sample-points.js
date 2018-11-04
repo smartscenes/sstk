@@ -5,7 +5,7 @@ var async = require('async');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var path = require('path');
-var cmd = require('commander');
+var cmd = require('./ssc-parseargs');
 cmd
   .version('0.0.1')
   .description('Sample points from a mesh')
@@ -18,9 +18,16 @@ cmd
   .option('--resolution <number>', 'Resolution for view rendering [default: 256]', STK.util.cmd.parseInt, 256)
   .option('--limit_to_visible [flag]', 'Limit to visible', STK.util.cmd.parseBoolean, false)
   .option('--ignore_redundant [flag]', 'Limit to non-redundant materials', STK.util.cmd.parseBoolean, false)
+  .option('--check_reverse_faces [flag]', 'Whether to do explicit check of reversed faces', STK.util.cmd.parseBoolean, false)
+  .option('--ignore_redundant_samples <number>', 'Numbers of sample points per mesh to check for non-redundant materials', STK.util.cmd.parseInt, 0)
+  .option('--restrict_redundant_white_materials [flag]', 'Whether only white materials are considered for redundant materials', STK.util.cmd.parseBoolean, false)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--skip_existing', 'Whether to skip output of existing files', STK.util.cmd.parseBoolean, false)
   .option('--ply_format <format>', 'Ply format to use (binary_little_endian or ascii)')
+  .option('--alignments <filename>', 'CSV of alignments')
+  .option('--id_field <fieldname>', 'id field', 'id')
+  .option('--world_up <vector3>', STK.util.cmd.parseVector, STK.Constants.worldUp)
+  .option('--world_front <vector3>', STK.util.cmd.parseVector, STK.Constants.worldFront)
   .parse(process.argv);
 
 var argv = cmd;
@@ -28,6 +35,7 @@ var argv = cmd;
 var useSearchController = STK.Constants.baseUrl.startsWith('http://') || STK.Constants.baseUrl.startsWith('https://');
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
+  useColladaScale: false, convertUpAxis: false,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
 
@@ -44,20 +52,14 @@ if (cmd.id && cmd.input_type !== 'id') {
   process.exit(-1);
 }
 
+cmd.world_up = STK.geo.Object3DUtil.toVector3(cmd.world_up);
+cmd.world_front = STK.geo.Object3DUtil.toVector3(cmd.world_front);
+
 var inputs = [];
 if (cmd.input) {
-  var files = [cmd.input];
-  if (cmd.input.endsWith('.txt')) {
-    // Read files form input file
-    var data = STK.util.readSync(cmd.input);
-    files = data.split('\n').map(function(x) { return STK.util.trim(x); }).filter(function(x) { return x.length > 0; });
-    inputs = files;
-  } else {
-    inputs = cmd.input.split(',')
-  }
+  inputs = cmd.getInputs(cmd.input);
 } else {
-  var ids = argv.id ? argv.id : ['26d98eed64a7f76318a93a45bf780820'];
-  inputs = ids;
+  inputs = argv.id ? argv.id : ['26d98eed64a7f76318a93a45bf780820'];
 }
 
 STK.assets.AssetGroups.registerDefaults();
@@ -72,11 +74,49 @@ var VertexAttrs = STK.exporters.PLYExporter.VertexAttributes;
 var exporter = new STK.exporters.PLYExporter({ fs: STK.fs, format: argv.ply_format,
   vertexAttributes: [ VertexAttrs.normal, VertexAttrs.rgbColor, VertexAttrs.opacity ] });
 
+function readAlignmentCsv(filename, idField) {
+  var data = STK.fs.loadDelimited(filename).data;
+  var defaultUp = STK.geo.Object3DUtil.toVector3([0,0,1]);
+  var defaultFront = STK.geo.Object3DUtil.toVector3([0,-1,0]);
+  _.each(data, function(r) {
+    if (r.up) {
+      r.up = STK.geo.Object3DUtil.toVector3(r.up);
+    } else {
+      r.up = defaultUp;
+    }
+    if (r.front) {
+      r.front = STK.geo.Object3DUtil.toVector3(r.front);
+    } else {
+      r.front = defaultFront;
+    }
+  });
+  return _.keyBy(data, idField);
+}
+
+function getRotationMatrix(alignments, id) {
+  var alignment = alignments? alignments[id] : null;
+  var rotationMatrix;
+  if (alignment) {
+    rotationMatrix = STK.geo.Object3DUtil.getAlignmentMatrix(alignment.up, alignment.front, cmd.world_up, cmd.world_front);
+  } else {
+    console.log('Cannot find alignment for', id);
+    rotationMatrix = new THREE.Matrix4();
+  }
+  console.log('Got alignment', id, alignment, cmd.world_front, cmd.world_up, rotationMatrix);
+  return rotationMatrix;
+}
+
 function samplePoints(modelObject3D, numSamples, opts) {
   opts = opts || {};
   var rng = opts.rng;
   console.log('Sampling ' + numSamples + ' for coloring');
+  var epsilon = 0.0001;
+  var bbox = STK.geo.Object3DUtil.getBoundingBox(modelObject3D);
+  var minDim = bbox.minDim();
+  var adjustedEpsilon = epsilon*minDim;
+  // TODO: Make the below more readable
   var samples = STK.geo.MeshSampling.sampleObject(modelObject3D, numSamples, {
+      handleMaterialSide: true,
       weightFn: {
 //      name: opts.limitToVisible? 'visibleWithArea' : 'area',
           name: opts.weightFn ||
@@ -84,7 +124,11 @@ function samplePoints(modelObject3D, numSamples, opts) {
             (opts.limitToVisible? (opts.skipInnerMaterial? 'areaWithVisibleMaterial' : 'visibility') : 'area'),
           args: { scene: modelObject3D, visibleTriangles: opts.visibleTriangles,
               ignoreMaterialWithMinScore: opts.skipInnerMaterial, minMaterialScoreRange: opts.minMaterialScoreRange,
-              nsamples: 0 }
+              // parameters for "areaWithoutInnerRedundantMaterials"
+              restrictRedundantToWhiteMaterial: cmd.restrict_redundant_white_materials,
+              checkReverseFaces: cmd.check_reverse_faces,
+              nsamples: cmd.ignore_redundant_samples, epsilon: adjustedEpsilon,
+              minMaterialScore: opts.minMaterialScoreRange? opts.minMaterialScoreRange[1] : undefined }
       },
       scoreFn: {
           name: opts.scoreFn || (opts.limitToVisible? 'smoothedVisibility' : 'area'),
@@ -109,6 +153,7 @@ function samplePoints(modelObject3D, numSamples, opts) {
 }
 
 function processInputs(assetsDb) {
+  var alignments = cmd.alignments? readAlignmentCsv(cmd.alignments, cmd.id_field) : null;
   async.forEachSeries(inputs, function (name, callback) {
     STK.util.clearCache();
 
@@ -132,7 +177,7 @@ function processInputs(assetsDb) {
       info = {file: file, format: cmd.format, assetType: 'model', defaultMaterialType: THREE.MeshPhongMaterial};
     }
     console.log('Output to ' + basename);
-    shell.mkdir('-p', basename);
+    shell.mkdir('-p', outputDir);
 
     console.log('try load model ', info);
     assetManager.loadModel(info, function (err, mInst) {
@@ -145,6 +190,10 @@ function processInputs(assetsDb) {
         function onDrained() {
           console.log('Sampling points');
           var object3D = mInst.getObject3D("ModelInstance");
+          if (alignments) {
+            var rotationMatrix = getRotationMatrix(alignments, outname);
+            STK.geo.Object3DUtil.setMatrix(object3D, rotationMatrix);
+          }
           var opts = { };
           if (cmd.limit_to_visible || cmd.ignore_redundant) {
             var d =  Math.max(cmd.resolution*2, 256); // Make sure resolution is at least somewhat okay
@@ -152,7 +201,7 @@ function processInputs(assetsDb) {
             opts = {
               visibleTriangles: visible,
               ignoreRedundant: cmd.ignore_redundant,
-              limitToVisible: cmd.limit_to_visible, skipInnerMaterial: false, minMaterialScoreRange: [0, 0.3]};
+              limitToVisible: cmd.limit_to_visible, skipInnerMaterial: false, minMaterialScoreRange: [0, 0.5]};
           }
           var samples = samplePoints(object3D, argv.samples, opts);
           exporter.exportSampledPoints(samples, { name: basename });

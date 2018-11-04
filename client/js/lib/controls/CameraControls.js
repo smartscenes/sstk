@@ -456,27 +456,39 @@ define(['geo/BBox', 'geo/Object3DUtil', 'gfx/ViewGenerator', 'Constants', 'three
   };
 
   CameraControls.prototype.panLeft = function (delta) {
-    this.orbitControls.panLeft(delta);
+    if (this.orbitControls) {
+      this.orbitControls.panLeft(delta);
+    }
   };
 
   CameraControls.prototype.panUp = function (delta) {
-    this.orbitControls.panUp(delta);
+    if (this.orbitControls) {
+      this.orbitControls.panUp(delta);
+    }
   };
 
   CameraControls.prototype.rotateLeft = function (delta) {
-    this.orbitControls.rotateLeft(delta);
+    if (this.orbitControls) {
+      this.orbitControls.rotateLeft(delta);
+    }
   };
 
   CameraControls.prototype.rotateUp = function (delta) {
-    this.orbitControls.rotateUp(delta);
+    if (this.orbitControls) {
+      this.orbitControls.rotateUp(delta);
+    }
   };
 
   CameraControls.prototype.dollyIn = function (dollyScale) {
-    this.orbitControls.dollyIn(dollyScale);
+    if (this.orbitControls) {
+      this.orbitControls.dollyIn(dollyScale);
+    }
   };
 
   CameraControls.prototype.dollyOut = function (dollyScale) {
-    this.orbitControls.dollyOut(dollyScale);
+    if (this.orbitControls) {
+      this.orbitControls.dollyOut(dollyScale);
+    }
   };
   //    CameraControls.prototype.toCameraCoords = function(position) {
   //        return this.camera.matrixWorldInverse.multiplyVector3(position.clone());

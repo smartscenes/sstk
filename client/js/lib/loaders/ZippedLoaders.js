@@ -1,5 +1,5 @@
 var ZIPLoader = require('loaders/ZIPLoader');
-var _ = require('util');
+var _ = require('util/util');
 
 THREE.ZIPloader = ZIPLoader;
 

@@ -138,7 +138,7 @@ THREE.ImageLoaderQueue = async.queue(function (task, callback) {
     if (url.startsWith('file://')) { url = url.substr(7); }
     key = url;
     loadOpts = { url: url };
-  } else if (url.type === 'bufferView') {
+  } else if (url && url.type === 'bufferView') {
     key = url.key;
     url.buffer = Buffer.from(url.buffer);
     loadOpts = { url: url.buffer, mimeType: url.mimeType };

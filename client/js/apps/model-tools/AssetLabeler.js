@@ -7,7 +7,7 @@ var AssetLoader = require('assets/AssetLoader');
 var AssetManager = require('assets/AssetManager');
 var SearchController = require('search/SearchController');
 var SearchModule = require('search/SearchModule');
-var _ = require('util');
+var _ = require('util/util');
 require('dragscrollable');
 require('jquery-lazy');
 

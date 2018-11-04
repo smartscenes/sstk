@@ -2,7 +2,7 @@
 
 var AssetQuerier = require('query/AssetQuerier');
 var ModelSchema = require('model/ModelSchema');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Provides a query interfaces for models

@@ -1,6 +1,6 @@
 'use strict';
 
-define(['geo/BBox', 'geo/Object3DUtil','Constants', 'util'], function (BBox, Object3DUtil, Constants, _) {
+define(['geo/BBox', 'geo/Object3DUtil','Constants', 'util/util'], function (BBox, Object3DUtil, Constants, _) {
 
   /**
    * ModelInstance represents an object (an instantiation of a 3D model)

@@ -1,7 +1,7 @@
 var Object3DUtil = require('geo/Object3DUtil');
 var BBox = require('geo/BBox');
 var Constants = require('Constants');
-var _ = require('util');
+var _ = require('util/util');
 
 
 /**
@@ -9,7 +9,7 @@ var _ = require('util');
  * @constructor
  * @param params Configuration parameters
  * @param [params.cameraPositionStrategy=`positionToFit`] {string} General camera position strategy to use
- *    (values are `positionToFit`, `positionByDistance`, `positionByCentroid`, `positionToFixedResolution`)
+ *    (values are `positionToFit`, `positionByDistance`, `positionByCentroid`, `positionToFixedResolution`, `positionByBBoxOffset`)
  *    Used for computing view points for bounding boxes.
  * @param params.camera {THREE.Camera} Reference camera from which fov and aspect ratio is currently taken (used for computing views for 'positionToFit')
  * @memberOf gfx
@@ -22,21 +22,32 @@ function ViewGenerator(params) {
 }
 
 ViewGenerator.prototype.getDefaultView = function (bbox) {
-  // Find a good view point based on the scene bounds
+  // default view position from +y, -z (looks at front from slightly top-down view)
+  return this.getBBoxViewFromOffsetPosition('default', bbox, [ 0, 1, -1 ], [ 0, 1, -0.25 ]);
+};
+
+/**
+ * Generate a view targeting the centroid of a bbox and positioned from a particular offset (given by multiples of bbox dimensions)
+ * @param name {string} view name
+ * @param bbox {geo.BBox} target bounding box
+ * @param offsetByDim {Array} offset factor (add to centroid dimension of bounding box scaled by this factor)
+ * @param padByMaxDim {Array} pad factor (add to centroid max dimension of bounding box scaled by this factor)
+ * @returns {{name, position, target, up}}
+ */
+ViewGenerator.prototype.getBBoxViewFromOffsetPosition = function (name, bbox, offsetByDim, padByMaxDim) {
   var centroid = bbox.centroid().toArray();
   var dims = bbox.dimensions().toArray();
-  var bbMin = bbox.min.toArray();
-  var bbMax = bbox.max.toArray();
   var maxDim = Math.max(dims[0], dims[1], dims[2]);
-
-  var eye = [centroid[0], bbMax[1] + maxDim, bbMin[2] - dims[2] * 0.25];
-  var lookAt = centroid;
-  var up = [0, 1, 0];
+  var eye = [
+    centroid[0] + (offsetByDim[0] * dims[0] / 2) + (padByMaxDim[0] * maxDim),
+    centroid[1] + (offsetByDim[1] * dims[1] / 2) + (padByMaxDim[1] * maxDim),
+    centroid[2] + (offsetByDim[2] * dims[2] / 2) + (padByMaxDim[2] * maxDim)
+  ];
   return {
-    name: 'default',
+    name: name || ('bboxOffsetPosition-' + JSON.stringify(offsetByDim) + '-' + JSON.stringify(padByMaxDim)),
     position: eye,
-    target: lookAt,
-    up: up
+    target: centroid,
+    up: [ 0, 1, 0 ]
   };
 };
 
@@ -129,6 +140,8 @@ ViewGenerator.prototype.__getDistsFromBBoxFaces = function(bbox, dists, cameraPo
  * @param [opts.imageHeight] {number} maximum image height in meters (for 'positionToFixedResolution'))
  * @param [opts.pixelWidth] {number}  width of single pixel in image plane in meters (for 'positionToFixedResolution'))
  * @param [opts.useSquareImage] {boolean} Whether image should be square (for 'positionToFixedResolution')
+ * @param [opts.offsetByDim] {Array} offset camera by this multiple of bounding box dimensions (for 'positionByBBoxOffset')
+ * @param [opts.padByMaxDim] {Array} offset camera by this multiple of maximum bounding box dimensions (for 'positionByBBoxOffset')
  * @returns {{name, position, target, up, fov, near, far}}
  */
 ViewGenerator.prototype.getViewForBBox = function (opts) {
@@ -137,6 +150,8 @@ ViewGenerator.prototype.getViewForBBox = function (opts) {
   var cameraPositionStrategy = opts.cameraPositionStrategy || this.cameraPositionStrategy;
   if (cameraPositionStrategy === 'positionToFixedResolution') {
     return this.getFixedResolutionViewForBBox(opts.name, bbox, opts.objectDepth, opts.imageHeight, opts.pixelWidth, opts.theta, opts.phi, opts.useSquareImage);
+  } else if (cameraPositionStrategy === 'positionByBBoxOffset') {
+    return this.getBBoxViewFromOffsetPosition(opts.name, bbox, opts.offsetByDim, opts.padByMaxDim);
   } else {
     var dists = this.__getDistsFromBBoxCenter(bbox, opts.dists, cameraPositionStrategy);
     return this.getViewForPoint(opts.name, bbox.centroid(), opts.theta, opts.phi, dists);

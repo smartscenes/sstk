@@ -1,5 +1,5 @@
 var Constants = require('Constants');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Collision processor base class. Returns no collisions.

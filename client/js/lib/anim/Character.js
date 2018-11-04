@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 
 function Character(json) {
   _.merge(this, json);

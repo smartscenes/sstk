@@ -1,7 +1,7 @@
 'use strict';
 
 var Chart = require('viz/Chart');
-var Util = require('util/Util');
+var _ = require('util/util');
 
 function BarChart(params) {
   Chart.call(this, params);
@@ -12,7 +12,7 @@ BarChart.prototype.constructor = BarChart;
 
 BarChart.prototype.__create = function (params) {
   var mappedParams = {};
-  Util.copy(params, mappedParams);
+  _.merge(mappedParams, params);
   if (Array.isArray(params.data)) {
 
   } else if (params.data instanceof Object) {

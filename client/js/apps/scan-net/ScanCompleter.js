@@ -13,7 +13,7 @@ var SceneViewer = require('scene-viewer/SceneViewer');
 var SceneUtil = require('scene/SceneUtil');
 var ShapeEditor = require('editor/ShapeEditor');
 var UIUtil = require('ui/UIUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Interface for someone to complete a scan by marking objects and walls

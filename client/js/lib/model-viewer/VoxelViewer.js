@@ -7,7 +7,7 @@ var Renderer = require('gfx/Renderer');
 var UIUtil = require('ui/UIUtil');
 var Viewer3D = require('Viewer3D');
 var Voxels = require('geo/Voxels');
-var _ = require('util');
+var _ = require('util/util');
 
 function VoxelViewer(params) {
   var defaults = {

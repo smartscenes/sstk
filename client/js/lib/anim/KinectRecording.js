@@ -1,6 +1,6 @@
 var Object3DUtil = require('geo/Object3DUtil');
 var PosedSkeleton = require('anim/PosedSkeleton');
-var _ = require('util');
+var _ = require('util/util');
 
 var __kTimestampToSecs = 1.0e-7;
 var __kSecsToTimestamp = 1.0e+7;

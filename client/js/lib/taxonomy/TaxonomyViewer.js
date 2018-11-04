@@ -1,7 +1,7 @@
 'use strict';
 
 define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleModelCanvas',
-        'util/IndexSelector', 'Constants', 'util', 'jquery-lazy'],
+        'util/IndexSelector', 'Constants', 'util/util', 'jquery-lazy'],
   function (AssetManager, SearchController, SingleModelCanvas, IndexSelector, Constants, _) {
     function TaxonomyViewer(params) {
       // Container in which the taxonomy tree is displayed

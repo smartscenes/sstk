@@ -1,7 +1,7 @@
 'use strict';
 
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 
 function SceneLoader(params) {
   PubSub.call(this);

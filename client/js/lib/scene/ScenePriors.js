@@ -2,7 +2,7 @@
 
 var Constants = require('Constants');
 var WebService = require('io/WebService');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Scene and object priors

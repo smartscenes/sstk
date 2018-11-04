@@ -7,7 +7,7 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
     'controls/CameraControls','geo/Object3DUtil','gfx/Renderer',
     'geo/BBox','exporters/PLYExporter', 'Viewer3D', 'geo/MeshSampling', 'model/ModelInstanceVoxels',
     'gfx/ViewOptimizer',
-    'util','three-shaders','jquery-lazy'],
+    'util/util','three-shaders','jquery-lazy'],
   function (Constants, Picker, AssetManager, AssetGroups,
             SolrQuerySuggester, ModelSchema,
             SearchController, ModelMaterialsPanel, ImagesPanel,

@@ -157,6 +157,9 @@ _.each(assetGroupsAll, function(assetGroup) {
   if (assetGroup.ids) {
     assetGroup.ids = _.replacePath(assetGroup.ids, local_web_vars);
   }
+  if (assetGroup.queryIds) {
+    assetGroup.queryIds = _.replacePath(assetGroup.queryIds, local_web_vars);
+  }
 });
 
 var assetGroupsByName = _.keyBy(assetGroupsAll, 'name');
@@ -330,7 +333,7 @@ module.exports = {
         if (idsFile) {
           if (_.isString(idsFile)) {
             // res.redirect(idsFile);
-            req.pipe(request(assetGroup.ids)).pipe(res);
+            req.pipe(request(idsFile)).pipe(res);
           } else {
             res.json(idsFile);
           }

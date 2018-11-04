@@ -12,7 +12,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var VPTreeFactory = require('ds/VPTree');
 var RNG = require('math/RNG');
 var SceneStatistics = require('ssg/SceneStatistics');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Utility functions for working with scenes
@@ -1397,6 +1397,31 @@ SceneUtil.getTextureIndex = function(sceneState, opts) {
       { includeMaterialId: true, prefix: 't', attributes: ['texture']}));
 };
 
+/**
+ * PortalRelation information
+ * @typedef PortalRelation
+ * @type {object}
+ * @property {string} portalType What kind of portal is it (door, windown, unknown)?
+ * @property {string} portal Object instance id of the portal
+ * @property {string} wall Object instance id of the wall
+ * @property {string} room Object instance id of the room
+ */
+
+/**
+ * SupportRelation information
+ * @typedef SupportRelation
+ * @type {object}
+ * @property {string} child Object instance id of the support child
+ * @property {string} parent Object instance id of the support parent
+ * @property {{distance: number, faceIndex: int, normSim: number, normal: number[], point: number[], uv: number[], meshId: string}} parentAttachment
+ * @property {{type: string, frame: string, bbfaceIndex: int, local: object, world: object, index: 2}} parentAttachment
+ */
+
+/**
+ * Identifies and returns portal relations
+ * @param sceneState {scene.SceneState}
+ * @returns {PortalRelation[]}
+ */
 SceneUtil.identifyPortalRelations = function(sceneState) {
   // Start with door/window to wall association
   var portalRelations = [];
@@ -1426,7 +1451,7 @@ SceneUtil.identifyPortalRelations = function(sceneState) {
  * @param sceneState {scene.SceneState}
  * @param opts
  * @param callback
- * @returns {{portals, support: Array}}
+ * @returns {{portals: PortalRelation[], support: SupportRelation[]}}
  */
 SceneUtil.identifyRelations = function(sceneState, opts, callback) {
   var portalRelations = SceneUtil.identifyPortalRelations(sceneState);
@@ -1444,6 +1469,12 @@ SceneUtil.identifyRelations = function(sceneState, opts, callback) {
   return relations;
 };
 
+/**
+ * Converts support attachments to support relations for export
+ * @param supportAttachments {Attachment[]}
+ * @param [supportRelations] {SupportRelation[]}
+ * @returns {SupportRelation[]}
+ */
 SceneUtil.supportAttachmentsToRelations = function(supportAttachments, supportRelations) {
   supportRelations = supportRelations || [];
   if (supportAttachments) {
@@ -1465,6 +1496,47 @@ SceneUtil.supportAttachmentsToRelations = function(supportAttachments, supportRe
   return supportRelations;
 };
 
+/**
+ * Converts support relations to support attachments
+ * @param sceneState {scene.SceneState}
+ * @param supportRelations {SupportRelation[]}
+ * @param [supportAttachments] {Attachment[]}
+ * @returns {Attachment[]}
+ */
+SceneUtil.relationsToSupportAttachments = function(sceneState, supportRelations, supportAttachments) {
+  supportAttachments = supportAttachments || [];
+  if (supportRelations) {
+    for (var i = 0; i < supportRelations.length; i++) {
+      var relation = supportRelations[i];
+      if (relation) {
+        //console.log('do relation', relation);
+        var child = sceneState.findNodeById(relation.child);
+        //console.log('got child', child);
+        var parent = sceneState.findNodeById(relation.parent);
+        //console.log('got parent', parent);
+        supportAttachments.push({
+          child: child,
+          childInst: Object3DUtil.getModelInstance(child, false),
+          parent: parent,
+          parentInst: Object3DUtil.getModelInstance(parent, false),
+          parentSurfaceNorm: null, // TODO: populate
+          childWorldBBFaceIndex: null, // TODO: populate
+          parentAttachment: null, // TODO populate
+          childAttachment: null // TODO populate
+        });
+      }
+    }
+  }
+  return supportAttachments;
+};
+
+/**
+ * Use BVH to identify subgroups based on the support relations
+ * @param sceneState {scene.SceneState}
+ * @param supportRelations {scene.SupportRelation[]}
+ * @param opts Options for creating a BVH
+ * @returns {Map} Mapping of parent to BVH
+ */
 SceneUtil.identifyGroupings = function(sceneState, supportRelations, opts) {
   console.time('identifyGroupings');
   opts = opts || {};
@@ -1485,6 +1557,12 @@ SceneUtil.identifyGroupings = function(sceneState, supportRelations, opts) {
   return grouped;
 };
 
+/**
+ * Tries to identify outlier objects that are shouldn't be part of the scene
+ * @param sceneState
+ * @param opts
+ * @returns {{outliers: Array, root: *}}
+ */
 SceneUtil.detectOutlierObjects = function(sceneState, opts) {
   console.time('detectOutlierObjects');
   opts = opts || {};

@@ -1,6 +1,6 @@
 'use strict';
 
-define(['math/RNG', 'base'], function (RNG) {
+define(['math/RNG'], function (RNG) {
 
   // TODO: Have a concept of a dataset?
   function DataModel(searchUrl, constraints, fields, callback, random, start, rows, schema) {

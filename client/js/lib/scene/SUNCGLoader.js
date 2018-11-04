@@ -11,7 +11,7 @@ var SceneLoader = require('scene/SceneLoader');
 var Object3DUtil = require('geo/Object3DUtil');
 var P5DTextureLoader = require('loaders/P5DTextureLoader');
 var d3queue = require('d3-queue');
-var _ = require('util');
+var _ = require('util/util');
 
 function getHasCategoryInFilter(targetCategories) {
   return function(modelInfo) {
@@ -245,6 +245,16 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
     }
 
     __addChildren(scene, results);
+
+    _.each(results, function(level, levelIndex) {
+      if (level.object3D) {
+        level.object3D.traverse(function (child) {
+          if (child.userData.id != undefined) {
+            child.userData.level = levelIndex;
+          }
+        });
+      }
+    });
 
     // Finalize our scene
     scope.__onSceneCompleted(null, sceneResult);
@@ -587,7 +597,6 @@ SUNCGLoader.prototype.__parseBox = function (json, context, callback) {
   var scope = this;
   var parsed = { json: json, parent: context.parent, floor: context.floor, id: context.id, index: context.index };
 
-  // See SUNCG house.json for 93cdd63ea3523de8fb5d56ac5dc1b7e4
   var dims = json.dimensions;
   var box = new THREE.BoxGeometry(dims[0], dims[1], dims[2], 1, 1, 1);
   for (var i = 0; i < box.faceVertexUvs.length; i++) {

@@ -1,4 +1,4 @@
-var _ = require('util');
+var _ = require('util/util');
 /**
  * Fancy survey that shows questions.
  * This survey uses a special version of [bootbox]{@link https://github.com/angelxuanchang/bootbox}

@@ -5,7 +5,7 @@ var Constants = require('Constants');
 var PubSub = require('PubSub');
 var SearchModule = require('search/SearchModule');
 var SolrQuerier = require('search/SolrQuerier');
-var _ = require('util');
+var _ = require('util/util');
 
 var RNG = require('math/RNG');
 

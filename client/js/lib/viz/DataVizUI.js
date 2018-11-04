@@ -8,7 +8,7 @@ var AssetManager = require('assets/AssetManager');
 var AssetsDb = require('assets/AssetsDb');
 var keymap = require('controls/keymap');
 var UIUtil = require('ui/UIUtil');
-var Util = require('util/Util');
+var _ = require('util/util');
 
 function DataVizUI(params) {
 }
@@ -246,7 +246,7 @@ DataVizUI.prototype.visualize = function () {
               var d = data[i];
               var assetInfo = scope.assetsDb.getAssetInfo(d.fullId);
               if (assetInfo) {
-                Util.copy(assetInfo, d);
+                _.merge(d, assetInfo);
               }
             }
             return scope.callback(data);

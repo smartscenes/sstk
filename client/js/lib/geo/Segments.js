@@ -6,7 +6,7 @@ var MeshHelpers = require('geo/MeshHelpers');
 var OBBFitter = require('geo/OBBFitter');
 var Object3DUtil = require('geo/Object3DUtil');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Class that handles loading and display of custom segmentation and potentially multiple segmentations.

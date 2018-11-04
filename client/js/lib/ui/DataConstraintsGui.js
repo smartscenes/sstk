@@ -1,6 +1,7 @@
 'use strict';
 
 var Slider = require('bootstrap-slider');
+var UIUtil = require('ui/UIUtil');
 
 function createGlyphIconButton(name) {
   return $('<button></button>')
@@ -255,7 +256,7 @@ DataConstraintsGui.prototype.getQueryString = function () {
   if (constraints.length > 0) {
     queryString = constraints.map( function(x) { return x.queryString; }).join(' AND ');
   } else {
-    showAlert('No query specified.  Please specify a query', 'alert-warning');
+    UIUtil.showAlert(null, 'No query specified.  Please specify a query', 'alert-warning');
     // TODO: Search all
     //queryString = "*:*";
   }

@@ -2,7 +2,7 @@ var CollisionProcessorNavGrid = require('sim/CollisionProcessorNavGrid');
 var CollisionProcessorNull = require('sim/CollisionProcessorNull');
 var CollisionProcessorRaycast = require('sim/CollisionProcessorRaycast');
 var CollisionProcessorSampledPoints = require('sim/CollisionProcessorSampledPoints');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Collision processor factory class

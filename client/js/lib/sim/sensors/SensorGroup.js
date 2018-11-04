@@ -1,5 +1,5 @@
 var Sensor = require('sim/sensors/Sensor');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Sensor group that is captures several types of modalities from by rendering at the same location/resolution

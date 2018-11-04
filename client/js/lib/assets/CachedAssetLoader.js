@@ -1,5 +1,5 @@
 var AssetCache = require('assets/AssetCache');
-var _ = require('util');
+var _ = require('util/util');
 
 function LoadingAsset(id) {
   // Asset is in progress

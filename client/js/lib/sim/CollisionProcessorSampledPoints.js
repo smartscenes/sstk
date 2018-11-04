@@ -2,7 +2,7 @@ var CollisionProcessorNull = require('sim/CollisionProcessorNull');
 var Constants = require('Constants');
 var MeshSampling = require('geo/MeshSampling');
 var VPTreeFactory = require('ds/VPTree');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Collision processor using point samples to determine collisions

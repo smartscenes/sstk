@@ -1,7 +1,7 @@
 var async = require('async');
 var Counter = require('ds/Counter');
 var RNG = require('math/RNG');
-var _ = require('util');
+var _ = require('util/util');
 
 function IndexedCounters(opts) {
   this.name = opts.name;

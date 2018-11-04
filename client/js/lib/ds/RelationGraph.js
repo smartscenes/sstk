@@ -2,7 +2,7 @@
 
 'use strict';
 
-var _ = require('util');
+var _ = require('util/util');
 
 function RelationGraph(opts) {
   var nodes = opts.nodes || [];  // All nodes

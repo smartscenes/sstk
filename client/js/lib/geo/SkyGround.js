@@ -2,7 +2,7 @@ var Constants = require('Constants');
 var Colors = require('util/Colors');
 var Object3DUtil = require('geo/Object3DUtil');
 var Skydome = require('geo/Skydome');
-var _ = require('util');
+var _ = require('util/util');
 
 function SkyGround(opts) {
   this.opts = _.defaultsDeep(Object.create(null), opts || {}, {

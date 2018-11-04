@@ -1,7 +1,7 @@
 // Adapted from search.js at http://www.redblobgames.com/pathfinding/
 // Copyright 2014 Red Blob Games
 // License: Apache v2
-var _ = require('util');
+var _ = require('util/util');
 
 function SearchState(steps, current, frontier, neighbors) {
   this.steps = steps;

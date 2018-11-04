@@ -1,7 +1,7 @@
 // Utility functions for working with the file system
 
 var FileSaver = require('file-saver');
-var _ = require('util');
+var _ = require('util/util');
 
 var self = {};
 

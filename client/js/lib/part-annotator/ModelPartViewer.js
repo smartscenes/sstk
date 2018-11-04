@@ -4,7 +4,7 @@ var Constants = require('lib/Constants');
 var BasePartViewer = require('part-annotator/BasePartViewer');
 var BBox = require('geo/BBox');
 var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Part viewer for a single model.

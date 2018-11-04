@@ -3,7 +3,7 @@
 // License: Apache v2
 var PubSub = require('PubSub');
 var TypeUtils = require('data/TypeUtils');
-var _ = require('util');
+var _ = require('util/util');
 
 function CellAttribute(name, type, opts) {
   opts = opts || {};

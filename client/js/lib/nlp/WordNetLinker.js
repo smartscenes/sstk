@@ -3,7 +3,7 @@ var Form = require('ui/Form');
 var UIUtil = require('ui/UIUtil');
 var WordNet = require('nlp/WordNet');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Handles linking to wordnet

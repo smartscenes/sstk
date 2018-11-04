@@ -1,7 +1,7 @@
 var Object3DUtil = require('geo/Object3DUtil');
 var GeometryUtil = require('geo/GeometryUtil');
 var FileUtil = require('io/FileUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Export a mesh as PLY
@@ -109,6 +109,14 @@ PLYExporter.VertexAttributes = {
     stride: 1,
     properties: [{
       name: 'labelId',
+      type: 'uint16'
+    }]
+  },
+  nodeIndex: {
+    name: 'nodeIndex',
+    stride: 1,
+    properties: [{
+      name: 'nodeIndex',
       type: 'uint16'
     }]
   }
@@ -355,6 +363,10 @@ PLYExporter.prototype.__appendSampledPoints = function (sampledPoints, params, d
           attr = [point.opacity];
         } else if (vattr.name === 'normal') {
           attr = [n.x, n.y, n.z];
+        } else if (point[vattr.name] != undefined) {
+          attr = _.isArray(point[vattr.name])? point[vattr.name] : [point[vattr.name]];
+        } else {
+          console.warn('Unknown attr ' + vattr.name);
         }
         if (attr.length) {
           var props = vattr.properties;

@@ -1,5 +1,5 @@
 var Renderer = require('gfx/Renderer');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Factor for creating more renderers

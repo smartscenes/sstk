@@ -6,7 +6,7 @@ var MeshSampling = require('geo/MeshSampling');
 var Object3DUtil = require('geo/Object3DUtil');
 var RNG = require('math/RNG');
 var Voxels = require('geo/Voxels');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Represents a set of voxels for a model (can be used by model instances)

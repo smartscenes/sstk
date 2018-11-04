@@ -1,6 +1,6 @@
 var zlib = require('pako');
 var FileUtil = require('io/FileUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Export a voxel grid in nrdd format

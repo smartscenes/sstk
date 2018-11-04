@@ -1,5 +1,5 @@
 // A structure that maps from objects to integers
-var _ = require('util');
+var _ = require('util/util');
 
 function Index(opts) {
   opts = opts || {};

@@ -2,7 +2,7 @@ var Object3DUtil = require('geo/Object3DUtil');
 var Sampler = require('math/Sampler');
 var SceneUtil = require('scene/SceneUtil');
 var RendererFactory = require('gfx/RendererFactory');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Interface for classes that scores viewpoints

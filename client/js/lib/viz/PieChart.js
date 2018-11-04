@@ -1,7 +1,7 @@
 'use strict';
 
 var Chart = require('viz/Chart');
-var Util = require('util/Util');
+var _ = require('util/util');
 
 // Creates a pie chart from parameters
 // Required parameters
@@ -39,7 +39,7 @@ PieChart.prototype.__createFromKeyValueMap = function (params) {
   var categories = Object.keys(params.data);
 
   var mappedParams = {};
-  Util.copy(params, mappedParams);
+  _.merge(mappedParams, params);
   mappedParams.data = categories;
   mappedParams.datamap = params.data;
   this.__createFromData(mappedParams);

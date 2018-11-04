@@ -15,7 +15,7 @@ var LabeledGridEditor = require('editor/LabeledGridEditor');
 var Voxels = require('model/ModelInstanceVoxels');
 var RegionsPanel = require('ui/RegionsPanel');
 var UIUtil = require('ui/UIUtil');
-var _ = require('util');
+var _ = require('util/util');
 
 Constants.defaultPalette = Colors.palettes.d3_category18;
 /**

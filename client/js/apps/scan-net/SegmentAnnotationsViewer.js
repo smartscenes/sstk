@@ -478,61 +478,66 @@ SegmentAnnotationsViewer.prototype.createSegmentsTable = function(params) {
     annotations = null;
   }
 
-  $(loadingMessageSelector).css('visibility', 'visible');
+    $(loadingMessageSelector).css('visibility', 'visible');
   var resultTable = $(resultTableSelector);
   var lazyImgLoadCallback = $.fn.dataTable.getLazyImgLoadCallback();
+  var buttons = ['csv', 'colvis', 'orderNeutral', 'selectAll', 'selectNone'];
 // Setup our editor
   var notes = getValues(annotations, 'notes', ['dup', 'replaced', 'bad', 'old'])
     .filter(function (x) {
       return x && x.length <= 20;
     });
-  var editor = new $.fn.dataTable.Editor( {
-    ajax: {
-      url: this.editUrl,
-      data: function(d) { return JSON.stringify(d); },
-      contentType: "application/json; charset=utf-8"
-    },
-    table: resultTableSelector,
-    idSrc:  'id',
-    fields:
-      [ {
-        label: "Status",
-        name: "status",
-        type: "selectize",
-        options: [{label: 'rejected', value: 'rejected'},
-          {label: 'flagged', value: 'flagged'},
-          {label: 'ignore', value: 'ignore'},
-          {label: 'none', value: ''}]
+    // Setup our editor
+  if ($.fn.dataTable.Editor) {
+    var editor = new $.fn.dataTable.Editor( {
+      ajax: {
+        url: this.editUrl,
+        data: function(d) { return JSON.stringify(d); },
+        contentType: "application/json; charset=utf-8"
       },
-        // {
-        //   label: "Condition",
-        //   name: "condition"
-        // },
-        {
-          label: "Notes",
-          name: "notes",
-          type: "autoComplete",
-          opts: {
-            'minLength': 0,
-            'source': notes
+      table: resultTableSelector,
+      idSrc:  'id',
+      fields:
+        [ {
+          label: "Status",
+          name: "status",
+          type: "selectize",
+          options: [{label: 'rejected', value: 'rejected'},
+            {label: 'flagged', value: 'flagged'},
+            {label: 'ignore', value: 'ignore'},
+            {label: 'none', value: ''}]
+        },
+          // {
+          //   label: "Condition",
+          //   name: "condition"
+          // },
+          {
+            label: "Notes",
+            name: "notes",
+            type: "autoComplete",
+            opts: {
+              'minLength': 0,
+              'source': notes
+            }
           }
-        }
-      ]
-  });
-
-// Activate an inline edit on click of a table cell
-  resultTable.on( 'click', 'tbody td.bubble', function (e) {
-    editor.bubble( this );
-  } );
-  resultTable.on( 'click', 'tbody td.inline', function (e) {
-    editor.inline( this );
-  } );
-  resultTable.on( 'click', 'tbody td.inline-selectize', function (e) {
-    editor.inline( this, {
-      onReturn: 'none',
-      buttons: { label: '&gt;', fn: function () { this.submit(); } }
+        ]
     });
-  });
+
+  // Activate an inline edit on click of a table cell
+    resultTable.on( 'click', 'tbody td.bubble', function (e) {
+      editor.bubble( this );
+    } );
+    resultTable.on( 'click', 'tbody td.inline', function (e) {
+      editor.inline( this );
+    } );
+    resultTable.on( 'click', 'tbody td.inline-selectize', function (e) {
+      editor.inline( this, {
+        onReturn: 'none',
+        buttons: { label: '&gt;', fn: function () { this.submit(); } }
+      });
+    });
+    buttons.push({ extend: "edit",   editor: editor });
+  }
 
   function getViewUrl(ann) {
     var url = scope.viewUrl + '?annotationId=' + ann.id + '&modelId=' + ann.itemId;
@@ -684,10 +689,7 @@ SegmentAnnotationsViewer.prototype.createSegmentsTable = function(params) {
     "data": annotations,
     "ajax": ajaxOptions,
     "dom": 'BlfripFtip',
-    "buttons": [
-      'csv', 'colvis', 'orderNeutral', 'selectAll', 'selectNone',
-      { extend: "edit",   editor: editor }
-    ],
+    "buttons": buttons,
     "select": true,
     "columns": columns,
     "rowCallback": function( row, aData, iDisplayIndex ) {

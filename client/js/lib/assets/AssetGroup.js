@@ -1,7 +1,7 @@
 'use strict';
 
 var Constants = require('Constants');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * A AssetGroup represent a group of 3D assets
@@ -270,7 +270,11 @@ AssetGroup.prototype.getLoadInfo = function (id, dataName, metadata) {
     // Merge default options into loadInfo
     var dataTypeInfo = loadDataInfo.dataTypes[loadInfo.dataType];
     loadInfo = _.clone(loadInfo);
-    loadInfo.options = _.defaults(loadInfo.options || {}, dataTypeInfo.defaultOptions || {});
+    var loadOptions = loadInfo.options || {};
+    if (metadata && metadata.options) {
+      _.merge(loadOptions, metadata.options);
+    }
+    loadInfo.options = _.defaults(loadOptions, dataTypeInfo.defaultOptions || {});
     // Makes sure basic fields are populated
     var source = this.source || this.name;
     loadInfo.id = id;

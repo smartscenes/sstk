@@ -1,6 +1,6 @@
 var CollisionProcessorNull = require('sim/CollisionProcessorNull');
 var Constants = require('Constants');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Collision processor using navgrid to determine collisions

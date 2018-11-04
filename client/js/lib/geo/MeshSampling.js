@@ -1,6 +1,7 @@
 'use strict';
 
 var Colors = require('util/Colors');
+var ConnectivityGraph = require('geo/ConnectivityGraph2');
 var Distances = require('geo/Distances');
 var GeometryUtil = require('geo/GeometryUtil');
 var TriangleAccessor = require('geo/TriangleAccessor');
@@ -8,7 +9,7 @@ var MaterialHelper = require('gfx/MaterialHelper');
 var Object3DUtil = require('geo/Object3DUtil');
 var ViewUtils = require('gfx/ViewUtils');
 var RNG = require('math/RNG');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Utility functions for sampling meshes
@@ -24,17 +25,21 @@ function findMatchingMesh(meshes, mesh, face) {
     } else if (candidateMesh.mesh && candidateMesh.faceIndices) {
       return mesh.uuid === candidateMesh.mesh.uuid && _.indexOf(candidateMesh.faceIndices, face.index) >= 0;
     }
-  })
+  });
 }
 
 function identifyInnerRedundantSurfaces(object3D, visible, opts) {
   opts = opts || {};
-  _.defaults(opts, { ignoreAllLowScoringMaterials: false, minMaterialScore: 0.1, nsamples: 0 });
+  _.defaults(opts, { ignoreAllLowScoringMaterials: false, minMaterialScore: 0.1, nsamples: 0,
+    restrictRedundantToWhiteMaterial: false, checkReverseFaces: false });
+  console.log('got opts for identifyInnerRedundantSurfaces', opts);
   Object3DUtil.getBoundingBox(object3D);
   // Identify white surfaces that are inner and not too useful (appears in models from trimble 3d warehouse)
   // Consider white material with no transparency or textures
   var checkHausdorffDistance = !opts.ignoreAllLowScoringMaterials;
   var threshold = opts.minMaterialScore;
+  var epsilon = opts.epsilon || 0;
+  var checkReverseFaces = opts.checkReverseFaces;
   console.time('identifyInnerRedundantSurfaces');
   function isWhiteMat(material) {
     var isOpaque = !material.transparent || material.opacity === 1;
@@ -43,12 +48,42 @@ function identifyInnerRedundantSurfaces(object3D, visible, opts) {
     return isOpaque && !hasTexture && isWhite;
   }
   var materials = Object3DUtil.getMaterials(object3D);
+  if (checkReverseFaces) {
+    var connectivityGraphs = {};
+    _.each(materials, function (material, k) {
+      if (material.type === 'material') {
+        if (material.meshes) {
+          _.each(material.meshes, function (m, i) {
+            if (m.mesh && m.faceIndices) {
+              var mesh = m.mesh;
+              if (!connectivityGraphs[mesh.geometry.id]) {
+                connectivityGraphs[mesh.geometry.id] = new ConnectivityGraph(mesh.geometry, true);
+              }
+              var faceReversals = connectivityGraphs[mesh.geometry.id].getReverseFaceMappings();
+              var facesByReversalMaterial = _.groupBy(m.faceIndices, function (fi) {
+                if (faceReversals[fi] && faceReversals[fi].length) {
+                  var materialIndices = _.uniq(_.map(faceReversals[fi], function (fi2) {
+                    return GeometryUtil.getFaceMaterialIndex(mesh.geometry, fi2);
+                  }));
+                  return materialIndices[0];
+                } else {
+                  return -1;
+                }
+              });
+              m.facesIndicesByReversalMaterial = facesByReversalMaterial;
+            }
+          });
+        }
+      }
+    });
+  }
   var materialScores = computeMaterialScores(object3D, visible);
   _.each(materialScores, function(v,k) {
     var material = materials[k];
     if (material) {
       material.score = v;
       material.isWhite = isWhiteMat(material.material);
+      //console.log('material', material.material.id, material.material.name, material.score, material.isWhite);
     } else {
       console.log('Cannot find material', k);
     }
@@ -57,13 +92,14 @@ function identifyInnerRedundantSurfaces(object3D, visible, opts) {
   var keepMeshes = [];
   _.each(materials, function(material,k) {
     if (material.type === 'material') {
-      if (material.isWhite && material.score < threshold) {
+      if ((!opts.restrictRedundantToWhiteMaterial || material.isWhite) && material.score < threshold) {
         possibleRedundantMaterials.push(material);
       } else if (material.meshes) {
         Array.prototype.push.apply(keepMeshes, material.meshes);
       }
     }
   });
+  possibleRedundantMaterials = _.sortBy(possibleRedundantMaterials, function(m) { return [m.isWhite? 1 : 0, -m.score]; });
   var redundantMaterials = [];
   var notReallyRedundantMaterials = [];
   var redundantMeshes = [];
@@ -85,25 +121,58 @@ function identifyInnerRedundantSurfaces(object3D, visible, opts) {
   };
   for (var i = 0; i < possibleRedundantMaterials.length; i++) {
     var material = possibleRedundantMaterials[i];
+    console.log('Testing material', material.material.name, material.isWhite, material.score);
     if (material.meshes && material.meshes.length) {
         // compute directed hausdorff distance from meshes with this material to meshes with other materials
       var okayMatMeshes = [];
       var redundantMatMeshes = [];
+      var meshesToConsider = [];
       for (var j = 0; j < material.meshes.length; j++) {
         var mesh = material.meshes[j];
-        var opts = { all: true, shortCircuit: { maxDistSq: 0 }, sampler: sampler, nsamples: opts.nsamples };
+        if (mesh.facesIndicesByReversalMaterial) {
+          _.each(mesh.facesIndicesByReversalMaterial, function(faceIndices, mid) {
+            var split = {
+              mesh: mesh.mesh,
+              faceIndices: faceIndices,
+              materialIndex: mesh.mesh.materialIndex
+            };
+            console.log('considering split', material.material.name, mesh.mesh.userData.id, faceIndices.length, mid);
+            if (mid >= 0) {
+              var isReverseOfKeepMesh = _.find(keepMeshes, function(km) {
+                if (km.mesh && km.faceIndices) {
+                  return km.mesh.id === mesh.mesh.id && mid == km.materialIndex;
+                }
+              });
+              if (isReverseOfKeepMesh) {
+                redundantMatMeshes.push(split);
+                redundantMeshes.push(split);
+                console.log('redundant split', material.material.name, mesh.mesh.userData.id, faceIndices.length, mid);
+              } else {
+                meshesToConsider.push(split);
+              }
+            } else {
+              meshesToConsider.push(split);
+            }
+          });
+        } else {
+          meshesToConsider.push(mesh);
+        }
+      }
+      for (var j = 0; j < meshesToConsider.length; j++) {
+        var mesh = meshesToConsider[j];
+        var opts = { all: true, shortCircuit: { maxDistSq: epsilon*2 }, sampler: sampler, nsamples: opts.nsamples };
         var distSq = checkHausdorffDistance? Distances.MeshesMeshesHausdorffDirectedDistanceSquared([mesh],
           keepMeshes, opts) : null;
         if (distSq && opts.all) {
           distSq.meshIndex0 = j;
         }
         //console.log('got distSq', distSq);
-        if (!distSq || distSq.distanceSq === 0) {
+        if (!distSq || distSq.distanceSq < epsilon) {
           redundantMeshes.push(mesh);
           redundantMatMeshes.push(mesh);
         } else {
           // TODO: consider more intelligent updating of keepMeshes
-          // console.log('got distSq', distSq, distSq.point0.distanceToSquared(distSq.point1));
+          // console.log('got distSq', distSq, distSq.point0.distanceToSquared(distSq.point1), epsilon);
           keepMeshes.push(mesh);
           okayMatMeshes.push(mesh);
         }
@@ -141,7 +210,7 @@ function identifyInnerRedundantSurfaces(object3D, visible, opts) {
     isKeep: function(mesh, face) {
       return findMatchingMesh(keepMeshes , mesh, face);
     }
-  }
+  };
 }
 
 function computeMaterialScores(object3D, visible) {
@@ -177,7 +246,7 @@ function computeMaterialScores(object3D, visible) {
 }
 
 function getMaterialScore(materialScores, mesh, face) {
-  var meshMaterials = (m.material instanceof THREE.MultiMaterial)?  m.material.materials : (Array.isArray(m.material)? m.material : [m.material]);
+  var meshMaterials = (mesh.material instanceof THREE.MultiMaterial)?  mesh.material.materials : (Array.isArray(mesh.material)? mesh.material : [mesh.material]);
   var matIndex = face.materialIndex || 0;
   var material = meshMaterials[matIndex];
   return materialScores[material.id];
@@ -205,15 +274,19 @@ MeshSampling.WeightFns = [
      * @param [opts.width] {int} Width of image to render (required if `opts.visibleTriangles` is not specified)
      * @param [opts.height] {int} Height of image to render (required if `opts.visibleTriangles` is not specified)
      * @param [opts.scene] {THREE.Object3D} Scene to render (required if `opts.visibleTriangles` is not specified)
+     * @param [opts.checkReverseFaces] {boolean} Whether to explicitly check and align reversed faces
+     * @param [opts.restrictRedundantToWhiteMaterial] {boolean} Whether to restrict redundant materials to just white materials
      * @param [opts.ignoreAllLowScoringMaterials] {boolean} Whether material with low scores should be ignored
      * @param [opts.minMaterialScore] {number} Threshold for low visibility material
      * @param [opts.nsamples] {int} If not `ignoreAllLowScoringMaterials`, sample this many points for hausdorff distance computation.
+     * @param [opts.epsilon] {number} Epsilon distance threshold for considering a mesh to be redundant
      * @returns {function(THREE.Mesh, MeshSampling.Face): number}
      */
     create: function (opts) {
       var visible = opts.visibleTriangles || ViewUtils.identifyVisibleTriangles(opts);
       var redundantInfo = identifyInnerRedundantSurfaces(opts.scene, visible,
-        _.pick(opts, ['ignoreAllLowScoringMaterials', 'minMaterialScore', 'nsamples', 'rng']));
+        _.pick(opts, ['restrictRedundantToWhiteMaterial', 'ignoreAllLowScoringMaterials', 'checkReverseFaces',
+          'minMaterialScore', 'nsamples', 'rng', 'epsilon']));
       return function (mesh, face) {
         var faceArea = GeometryUtil.triangleAreaWithTransform(face.va, face.vb, face.vc, mesh.matrixWorld);
         var isRedundant = redundantInfo.isRedundant(mesh, face);
@@ -385,6 +458,7 @@ MeshSampling.WeightFnsByName = _.keyBy(MeshSampling.WeightFns, 'name');
  * @param [opts.rng] {math.RNG} Random number generator
  * @param [opts.skipUVColors] {boolean} Whether to skip color sampling
  * @param [opts.handleMaterialSide] {boolean} Whether to negate normal based on material side
+ * @param [opts.userDataFields] {string[]} Array of mesh user data fields to include
  * @returns {Array.<MeshSampling.PointSample>|*}
  */
 MeshSampling.sampleObject = function(object3D, nsamples, opts) {
@@ -517,7 +591,7 @@ MeshSampling.getMeshesSurfaceSamples = getMeshesSurfaceSamples;
  * Samples a single mesh
  * @param mesh {THREE.Mesh|geo.PartialMesh} Mesh to sample from
  * @param numSamples {int} Number of samples to draw
- * @param [opts] {{rng: math.RNG, skipUVColors: boolean, handleMaterialSide: boolean}}
+ * @param [opts] {{rng: math.RNG, skipUVColors: boolean, handleMaterialSide: boolean, userDataFields: string[]}}
  * @returns {Array<MeshSampling.PointSample>}
  * @static
  */
@@ -577,11 +651,11 @@ function getMeshSurfaceSamples(mesh, numSamples, opts) {
     if (opts.handleMaterialSide) {
       var material = getMaterial(mesh, face.materialIndex);
       if (material.side === THREE.DoubleSide) {
-        n.negate();
-      } else if (material.side === THREE.BackSide) {
         if (rng.random() > 0.5) {
           n.negate();
         }
+      } else if (material.side === THREE.BackSide) {
+        n.negate();
       }
     }
     var sample = { /*mesh: mesh, */face: face,
@@ -589,6 +663,9 @@ function getMeshSurfaceSamples(mesh, numSamples, opts) {
       normal: n, worldNormal: n? n.clone().applyMatrix3(normalMatrix).normalize() : null,
       uv: uv, vertexColor: c
     };
+    if (opts.userDataFields) {
+      _.merge(sample, _.pick(mesh.userData, opts.userDataFields));
+    }
     if (opts.convertSample) {
       result[i] = opts.convertSample(sample);
     } else {

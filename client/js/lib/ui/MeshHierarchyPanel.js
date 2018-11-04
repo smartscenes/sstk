@@ -2,7 +2,7 @@ var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
 var GeometryUtil = require('geo/GeometryUtil');
 var PubSub = require('PubSub');
-var _ = require('util');
+var _ = require('util/util');
 
 function MeshHierarchyPanel(params) {
   PubSub.call(this);

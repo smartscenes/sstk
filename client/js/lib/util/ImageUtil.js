@@ -5,7 +5,7 @@
 var ImageUtil = {};
 var Constants = require('Constants');
 var Colors = require('util/Colors');
-var _ = require('util');
+var _ = require('util/util');
 
 /**
  * Extract image data from element
