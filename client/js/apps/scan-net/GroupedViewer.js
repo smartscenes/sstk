@@ -42,6 +42,8 @@ function GroupedViewer(params) {
   this.showId = (params.showId != undefined)? params.showId : true;
   this.assetManager = new AssetManager();
   this.imageSize = { width: 100, height: 100 };
+  this.extraViewerUrls = params.extraViewerUrls;
+  this.extraParentViewerUrls = params.extraParentViewerUrls;
 }
 
 GroupedViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) {
@@ -133,7 +135,53 @@ GroupedViewer.prototype.init = function() {
   });
 };
 
+GroupedViewer.prototype.getSimpleLink = function(label, url, desc) {
+  var button = $('<a></a>')
+    .attr('role', 'button')
+    .attr('href', url)
+    .attr('title', desc);
+  button.append(label);
+  return button;
+};
+
+GroupedViewer.prototype.getExtraLinks = function(id, urlOptions, assetInfo) {
+  if (urlOptions.length > 1) {
+    var div = $('<div></div>').attr('class', "dropdown");
+    div.append($('<span class="dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"></span>')
+      .attr('id', id)
+      .text('Actions').append('<span class="caret"></span>'));
+    var list = $('<ul class="dropdown-menu"></ul>').attr('aria-labelledby', id);
+    _.each(urlOptions, function(urlOption) {
+      list.append($('<li></li>')
+        .append($('<a></a>')
+          .attr('href', urlOption.template(assetInfo))
+          .attr('target', '_blank')
+          .attr('title', urlOption.description)
+          .text(urlOption.name)
+        ));
+    });
+    div.append(list);
+    return div;
+  } else {
+    var urlOption = urlOptions[0];
+    var url = urlOption.template(assetInfo);
+    return this.getSimpleLink(urlOption.name, url, urlOption.description).attr('id', id).attr('target', '_blank');
+  }
+};
+
 GroupedViewer.prototype.__init = function() {
+  // See if we have extra urls
+  if (this.extraViewerUrls) {
+    _.each(this.extraViewerUrls, function(urlOption) {
+      urlOption.template = _.template(urlOption.url);
+    });
+  }
+  if (this.extraParentViewerUrls) {
+    _.each(this.extraParentViewerUrls, function(urlOption) {
+      urlOption.template = _.template(urlOption.url);
+    });
+  }
+
   // Construct a table
   var scope = this;
   var summary = $('<div></div>');
@@ -226,8 +274,12 @@ GroupedViewer.prototype.__init = function() {
       .append(this.parentAssetGroup?
           this.getAssetImageLink(this.parentAssetGroup, parentAssetInfo, this.parentViewerUrl)
             .attr('title', JSON.stringify(parentDetails, null, 2))
-          : $('<div></div>').text(parentAssetInfo.id).css('width', this.imageSize.width).css('height', this.imageSize.height) )
-          .attr('target', '_blank');
+            .attr('target', '_blank')
+          : $('<div></div>').text(parentAssetInfo.id).css('width', this.imageSize.width).css('height', this.imageSize.height));
+    parentCell.data(parentAssetInfo.fullId);
+    if (this.extraParentViewerUrls) {
+      parentCell.append(this.getExtraLinks('links_' + parentAssetInfo.id, this.extraParentViewerUrls, parentAssetInfo));
+    }
     row.append(parentCell);
     // Show child assets
     var childCell = $('<td></td>');
@@ -263,6 +315,10 @@ GroupedViewer.prototype.__init = function() {
           .attr('title', JSON.stringify(assetDetails, null, 2))
           .attr('target', '_blank')
         );
+        div.data('assetId', assetInfo.fullId);
+        if (this.extraViewerUrls) {
+          div.append(this.getExtraLinks('links_' + assetInfo.id, this.extraViewerUrls, assetInfo));
+        }
         div.append('<br/>');
         r2.append(div);
       }

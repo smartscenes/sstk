@@ -607,6 +607,17 @@ MultiLevelGrid.prototype.getCellIdsWithUserData = function(key, valuefilter) {
   }
   return cellIds;
 };
+MultiLevelGrid.prototype.checkCellsTraversable = function(cellIds, filter) {
+  var scope = this;
+  var cellIdsByLevelGrid = _.groupBy(cellIds, function(id) {
+    return scope.idToLevelGrid(id).level;
+  });
+  return _.all(cellIdsByLevelGrid, function(cids, level) {
+    var levelGrid = scope.levelGrids[level];
+    return levelGrid.checkCellsTraversable(cids, filter);
+  });
+};
+
 /**
  * Navigation structure for a scene - includes support for visualization, graph for path planning, and precomputed paths
  * @param opts Configuration

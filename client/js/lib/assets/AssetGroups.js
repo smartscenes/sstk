@@ -328,8 +328,8 @@ function createAssetDbForAssetGroup(ag, config) {
   var groupDataFn = null;
   var convertDataFn = null;
   var lazyConvertDataFn = null;
-  var idField = ag.assetIdField || config.metadata.assetIdField || config.assetIdField || 'id';
-  var groupBy = ag.groupBy || config.metadata.groupBy;
+  var idField = ag.assetIdField || _.get(config, 'metadata.assetIdField') || config.assetIdField || 'id';
+  var groupBy = ag.groupBy || _.get(config, 'metadata.groupBy');
   if (groupBy) {
     groupDataFn = function(assetInfos) {
       var infoFields = [groupBy.fieldName].concat(groupBy.infoFields || []);

@@ -1785,6 +1785,11 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         assetFiles = _.filter(assetFiles, function(x) { return x.type === options.filterByType; });
       }
       if (assetFiles.length > 0) {
+        _.each(assetFiles, function(x,i) {
+          if (x.name == null) {
+            x.name = 'asset_' + i;
+          }
+        });
         var assetGroupNames = _.map(assetFiles, 'name');
         var assetsMap = _.keyBy(options.assetFiles, 'name');
         var assetsToRegister = AssetGroups.getAssetsToRegister(assetsMap, assetGroupNames);
