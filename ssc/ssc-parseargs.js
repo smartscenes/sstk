@@ -50,7 +50,8 @@ cmd.Command.prototype.optionGroups = function(opts) {
       .option('--write_index [flag]', 'Output index to file', STK.util.cmd.parseBoolean, false)
       .option('--index <filename>', 'Input index to use for consistent encoding')
       .option('--object_index <filename>', 'Input index to use for object ids')
-      .option('--restrict_to_color_index [flag]', 'Restrict coloring to index', STK.util.cmd.parseBoolean, false);
+      .option('--restrict_to_color_index [flag]', 'Restrict coloring to index', STK.util.cmd.parseBoolean, false)
+      .option('--output_image_encoding <encoding>', 'What encoding to use for output image');
   }
   // Options for scene
   if (opts.scene) {

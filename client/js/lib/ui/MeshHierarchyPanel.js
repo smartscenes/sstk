@@ -1,4 +1,5 @@
 var Constants = require('Constants');
+var Materials = require('materials/Materials');
 var Object3DUtil = require('geo/Object3DUtil');
 var GeometryUtil = require('geo/GeometryUtil');
 var PubSub = require('PubSub');
@@ -294,13 +295,14 @@ MeshHierarchyPanel.prototype.__setPartHierarchy = function (root) {
       treeNodes[index]['li_attr']['title'] = JSON.stringify(titleJson, null, 2);
       if (showMultiMaterial && nmats > 1) {
         var origMat = node.cachedData? node.cachedData.origMaterial : null;
+        var origMaterials = Materials.toMaterialArray(origMat);
         for (var i = 0; i < nmats; i++) {
           var mi = treeNodes.length;
           var pId = 'ph-' + node.uuid;
           treeNodes[mi] = {
             id: 'ph-' + node.uuid + '-' + i,
             parent: pId,
-            text: origMat? origMat.materials[i].name : 'material' + i,
+            text: origMaterials.length? origMaterials[i].name : 'material' + i,
             metadata: { index: mi }
           };
           partNodes[mi] = { node: node, materialIndex: i };

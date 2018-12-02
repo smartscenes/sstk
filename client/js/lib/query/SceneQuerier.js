@@ -26,6 +26,10 @@ function SceneQuerier(options) {
 SceneQuerier.prototype = Object.create(AssetQuerier.prototype);
 SceneQuerier.prototype.constructor = SceneQuerier;
 
+Object.defineProperty(SceneQuerier.prototype, 'showRoomWithEntireScene', {
+  get: function () { return this.__showRoomWithEntireSceneElem != null && this.__showRoomWithEntireSceneElem.prop('checked'); }
+});
+
 SceneQuerier.prototype.customizeResult = function (source, id, result, elem) {
     var fullId = AssetManager.toFullId(source, id);
     elem.data('fullId', fullId);
@@ -55,6 +59,21 @@ SceneQuerier.prototype.customizeResult = function (source, id, result, elem) {
   }
 };
 
+SceneQuerier.prototype.__onSourceChanged = function(source) {
+  if (this.selectedAssetType === 'room') {
+    if (!this.__showRoomWithEntireSceneElem) {
+      this.__showRoomWithEntireSceneElem = $('<input/>').attr('type', 'checkbox');
+      var label = $('<label></label>').append(this.__showRoomWithEntireSceneElem).append('Show room with entire scene');
+      label.insertAfter(this.searchController.searchPanel.sourceElem);
+    }
+    this.__showRoomWithEntireSceneElem.show();
+  } else {
+    if (this.__showRoomWithEntireSceneElem) {
+      this.__showRoomWithEntireSceneElem.hide();
+    }
+  }
+};
+
 SceneQuerier.prototype.getViewResultUrl = function(fullId, result) {
   return this.viewerUrl + '?allowEdit=false&sceneId=' + fullId;
 };
@@ -63,7 +82,7 @@ SceneQuerier.prototype.showResult = function (source, id, result) {
   if (this.selectedAssetType === 'room') {
     var sceneSource = (source === 'p5dRoom')? 'p5dScene' : source;
     var fullId = AssetManager.toFullId(sceneSource, result.sceneId);
-    this.showRoom(fullId, result.floor, result.roomIndex);
+    this.showRoom(fullId, result.floor, result.roomIndex, this.showRoomWithEntireScene);
   } else {
     // Assume scene
     this.showScene(source, id);
@@ -76,13 +95,14 @@ SceneQuerier.prototype.showScene = function (source, id) {
   this.openViewer(url, 'Scene Viewer');
 };
 
-SceneQuerier.prototype.showLevel = function (fullId, floor) {
-  var url = this.viewerUrl + '?allowEdit=false&sceneId=' + fullId + '&floor=' + floor;
+SceneQuerier.prototype.showLevel = function (fullId, level) {
+  var url = this.viewerUrl + '?allowEdit=false&sceneId=' + fullId + '&floor=' + level;
   this.openViewer(url, 'Scene Viewer');
 };
 
-SceneQuerier.prototype.showRoom = function (fullId, floor, room) {
-  var url = this.viewerUrl + '?allowEdit=false&loadAll=true&sceneId=' + fullId + '&floor=' + floor + '&room=' + room;
+SceneQuerier.prototype.showRoom = function (fullId, level, room, loadAll) {
+  loadAll = !!loadAll;
+  var url = this.viewerUrl + '?allowEdit=false&loadAll=' + loadAll + '&sceneId=' + fullId + '&floor=' + level + '&room=' + room;
   this.openViewer(url, 'Room Viewer');
 };
 

@@ -161,10 +161,12 @@ AssetQuerier.prototype.__initSearch = function (options) {
     allowSave: options.allowSave,
     showAnimatedOnHover: options.showAnimatedOnHover,
     sourceChangedCallback: function(source) {
+      //console.log('sourceChanged', source);
       var schema = this.schemasBySource[source];
       this.selectedAssetType = schema.assetType;
       this.visualSearch.setSchema(schema);
       this.__updateHelp();
+      this.__onSourceChanged(source);
     }.bind(this),
     searchButton: this.searchButton,
     searchTextElem: this.searchTextElem,
@@ -216,7 +218,7 @@ AssetQuerier.prototype.onWindowResize = function () {
 
 AssetQuerier.prototype.startSearch = function() {
   this.searchController.startSearch();
-}
+};
 
 AssetQuerier.prototype.__updateHelp = function() {
   var scope = this;
@@ -241,6 +243,9 @@ AssetQuerier.prototype.__updateHelp = function() {
   var helpDiv = schema.help.getHelp();
   this.helpPanel.empty();
   this.helpPanel.append(helpDiv);
+};
+
+AssetQuerier.prototype.__onSourceChanged = function(source) {
 };
 
 AssetQuerier.prototype.getViewResultUrl = function(fullId, result) {

@@ -5,6 +5,7 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('scene', 'sceneState', require('scene/SceneStateLoader'));
   assetManager.registerAssetLoader('scene', 'wss', require('scene/WssSceneLoader'));
   assetManager.registerAssetLoader('scene', 'ssj', require('scene/WssSceneLoader'));
+  assetManager.registerAssetLoader('scene', '*', require('scene/SceneLoader'));
 
   // TODO: Move some of this out of the main STK
   assetManager.registerAssetLoader('scene', 'suncg', require('scene/SUNCGLoader'));

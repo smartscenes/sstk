@@ -322,6 +322,20 @@ Materials.cloneMaterial = function(m) {
   }
 };
 
+Materials.toMaterialArray = function(material) {
+  if (material != null) {
+    if (material instanceof THREE.MultiMaterial) {
+      return material.materials;
+    } else if (Array.isArray(material)) {
+      return material;
+    } else {
+      return [material];
+    }
+  } else {
+    return [];
+  }
+};
+
 module.exports = Materials;
 
 

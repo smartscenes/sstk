@@ -524,6 +524,16 @@ define(['geo/BBox', 'geo/Object3DUtil','Constants', 'util/util'], function (BBox
     }
   };
 
+  ModelInstance.prototype.setScaleVector = function (sx, sy, sz) {
+    if (sx instanceof THREE.Vector3) {
+      this.object3D.scale.copy(sx);
+    } else {
+      this.object3D.scale.set(sx, sy, sz);
+    }
+    this.object3D.updateMatrix();
+    Object3DUtil.clearCache(this.object3D);
+  };
+
   ModelInstance.prototype.rotate = function (delta, order, bbBoxPoint) {
     Object3DUtil.rotateObject3DEuler(this.object3D, delta, order, bbBoxPoint);
   };
@@ -549,6 +559,16 @@ define(['geo/BBox', 'geo/Object3DUtil','Constants', 'util/util'], function (BBox
     // Just setting the rotation doesn't quite work (object moved)
     //this.object3D.rotation.set(x, y, z);
     //this.object3D.updateMatrix();
+  };
+
+  ModelInstance.prototype.setQuaternion = function (x, y, z, w) {
+    if (x instanceof THREE.Quaternion) {
+      this.object3D.quaternion.copy(x);
+    } else {
+      this.object3D.quaternion.set(x, y, z, w);
+    }
+    this.object3D.updateMatrix();
+    Object3DUtil.clearCache(this.object3D);
   };
 
   ModelInstance.prototype.clearRotation = function (undoModelRotation) {

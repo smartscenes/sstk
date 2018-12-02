@@ -90,7 +90,7 @@ OBBHelper.prototype._updateFromJson = function (obb) {
 
 OBBHelper.prototype.toWireFrame = function(linewidth, showNormal, materialOrColor) {
   materialOrColor = materialOrColor || this.material;
-  var boxwf = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), materialOrColor));
+  var boxwf = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), Object3DUtil.getBasicMaterial(materialOrColor)));
   boxwf.position.copy(this.position);
   boxwf.scale.copy(this.scale);
   boxwf.quaternion.copy(this.quaternion);
@@ -230,10 +230,9 @@ FatLinesHelper.prototype.update = function (input) {
     if (!this.lines) {
       console.error('Unsupported input');
     }
-    if (input.matrix) {
-      this.matrix.copy(input.matrix);
-      this.matrixAutoUpdate = input.matrixAutoUpdate;
-    }
+    //if (input.matrix) {
+    // Object3DUtil.setMatrix(this, input.matrix);
+    //}
   }
 
   // Add lines

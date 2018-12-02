@@ -1,3 +1,4 @@
+var Constants = require('Constants');
 var GeometryUtil = require('geo/GeometryUtil');
 var FileUtil = require('io/FileUtil');
 var ImageUtil = require('util/ImageUtil');
@@ -35,15 +36,36 @@ var toVertexStr = function (vi, ti, ni) {
 var toObjStr = function (prefix, v) {
   var p = prefix;
   if (v instanceof THREE.Vector3) {
-    return p + ' ' + v.x + ' ' + v.y + ' ' + v.z;
+    return p + ' ' + toStr(v.x) + ' ' + toStr(v.y) + ' ' + toStr(v.z);
   } else if (v instanceof Array || (v && v.join)) {
-    return p + ' ' + v.join(' ');
+    if (v.map) {
+      return p + ' ' + v.map(toStr).join(' ');
+    } else {
+      return p + ' ' + v.join(' ');
+    }
   } else {
     console.log('unknown type ' + typeof v);
     console.log(v);
     return null;
   }
 };
+
+var epsilon = 10e-10;
+var toStr = function (v) {
+  if (v == null || _.isNaN(v)) {
+    return "nan";
+  } else if (Math.abs(v-Math.round(v)) < epsilon) {
+    return Math.round(v).toString();
+  } else {
+    return v.toString()
+  }
+};
+
+function getUniqueObjectName(name, counts) {
+  var oi = counts[name] || 0;
+  counts[name] = oi + 1;
+  return name + '_i' + oi;
+}
 
 var getObjMtl = function (root, params, data) {
   params = params || {};
@@ -108,12 +130,18 @@ var getObjMtl = function (root, params, data) {
     }
 
     var det = t.determinant();
+    var groupName = params.groupName;
     for (var iMat = 0; iMat < materials.length; iMat++) {
       // material
       var material = materials[iMat];
+      if (groupName != null) {
+        var matIndex = params.materialsIndex.indexOf(material.uuid, true) + materialOffset;
+        data.f.push('g ' + 'material_' + matIndex + ' ' + groupName);
+      }
+
       // console.log(material);
       if (!params.skipMtl) {
-        if (material.uuid) {
+        if (material.uuid != null) {
           var matIndex = params.materialsIndex.indexOf(material.uuid, true) + materialOffset;
           var mtlId = 'material_' + matIndex + '_' + material.side;
           data.f.push('usemtl ' + mtlId);
@@ -196,7 +224,9 @@ var getObjMtl = function (root, params, data) {
  *   If provided, then the line `o <name>` is added to the output.
  *   Otherwise, if 'default' is specified, the `<name>` will `<object.name>`
  *   Use this function to generate object strings at top level
+ * @param [opts.ensureUniqueObjectName=false] {boolean} Whether to append _i# to object names to ensure that they are unique
  * @param [opts.rewriteTexturePathFn] {function(string):string} Function to rewrite the texture path to be something more canonical
+ * @param [opts.texturePath='images'] {string} Relative path wrt to obj where images are placed
  */
 OBJMTLExporter.prototype.export = function (objects, opts) {
   var fileutil = this.__fs;
@@ -232,8 +262,11 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
         return object.name;
       };
     } else {
-      throw 'Unsupported getMeshName ' + params.getObjectName;
+      throw 'Unsupported getObjectName ' + params.getObjectName;
     }
+  }
+  if (opts.ensureUniqueObjectName) {
+    params.objectNameCounts = {};
   }
   if (params.getGroupName && !_.isFunction(params.getGroupName)) {
     throw 'Unsupported getGroupName ' + params.getGroupName;
@@ -319,7 +352,11 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
   };
 
   // Start export by writing mtl header to objfile
-  var header = mtlfile ? ('mtllib ' + mtllib + '\n'):'';
+  var header = "# " + Constants.pkgname + "\n";
+  if (opts.name) {
+    header += "# " + opts.name  + "\n";
+  }
+  header += (mtlfile ? ('mtllib ' + mtllib + '\n'):'');
   fileutil.fsWriteToFile(objfile, header, function(err, res) {
     if (err) {
       console.warn('Error writing header to ' + objfilename + ', aborting export!', err);
@@ -373,14 +410,17 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
   if (params.getMeshName) {
     var name = params.getMeshName(mesh);
     if (name != undefined) {
+      if (params.objectNameCounts) {
+        name = getUniqueObjectName(name, params.objectNameCounts);
+      }
       obj += 'o ' + name + '\n';
     }
   }
 
+  var groupName;
   if (mesh.userData.nestedGroupNames) {
-    obj += 'g ' + mesh.userData.nestedGroupNames.join(' ') + '\n';
+    groupName = mesh.userData.nestedGroupNames.join(' ') + '\n';
   }
-
 
   if (geometry instanceof THREE.Geometry) {
     // positions
@@ -388,7 +428,7 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
     for (var i = 0; i < verts.length; i++) {
       v.copy(verts[i]);
       v.applyMatrix4(transform);
-      obj += 'v ' + v.x + ' ' + v.y + ' ' + v.z + '\n';
+      obj += 'v ' + toStr(v.x) + ' ' + toStr(v.y) + ' ' + toStr(v.z) + '\n';
       nbVertex++;
     }
 
@@ -455,7 +495,7 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
           normal.copy(vn);
           normal.applyMatrix3(normalMatrixWorld);
           normal.normalize();
-          var normstr = 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z;
+          var normstr = 'vn ' + toStr(normal.x) + ' ' + toStr(normal.y) + ' ' + toStr(normal.z);
           if (normIndex.add(normstr)) {
             obj += normstr + '\n';
             nbNormals++;
@@ -472,7 +512,7 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
           normal.negate();
           normal.applyMatrix3(normalMatrixWorld);
           normal.normalize();
-          var normstr = 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z;
+          var normstr = 'vn ' + toStr(normal.x) + ' ' + toStr(normal.y) + ' ' + toStr(normal.z);
           if (normIndex.add(normstr)) {
             obj += normstr + '\n';
             nbNormals++;
@@ -488,9 +528,14 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
     for (var iMat = 0; iMat < materials.length; iMat++) {
       // material
       var material = materials[iMat];
+      if (groupName != null) {
+        var matIndex = result.materialsIndex.indexOf(material.uuid, true) + result.indexMaterials;
+        obj += 'g ' + 'material_' + matIndex + ' ' + groupName;
+      }
+
       // console.log(material);
       if (!params.skipMtl) {
-        if (material.uuid) {
+        if (material.uuid != null) {
           var matIndex = result.materialsIndex.indexOf(material.uuid, true) + result.indexMaterials;
           var mtlId = 'material_' + matIndex + '_' + material.side;
           obj += 'usemtl ' + mtlId + '\n';
@@ -559,7 +604,8 @@ OBJMTLExporter.prototype.__exportMesh = function (mesh, result, params, callback
         uvOffset: result.indexVertexUvs,
         materialOffset: result.indexMaterials,
         materials: result.materials,
-        materialsIndex: result.materialsIndex });
+        materialsIndex: result.materialsIndex,
+        groupName: groupName });
     obj += data.v.join('\n') + '\n'
         + ((data.vn.length > 0)? (data.vn.join('\n') + '\n') : '')
         + ((data.vt.length > 0)? (data.vt.join('\n') + '\n') : '')
@@ -669,7 +715,10 @@ OBJMTLExporter.prototype.__exportObject = function (object, index, params, callb
   }
 
   var objectName = params.getObjectName? params.getObjectName(object, index) : undefined;
-  if (objectName) {
+  if (objectName != null) {
+    if (params.objectNameCounts) {
+      objectName = getUniqueObjectName(objectName, params.objectNameCounts);
+    }
     params.appendToObj('o ' + objectName + '\n', function (err, res) {
       scope.__exportObjectMeshes(object, params, callback);
     });

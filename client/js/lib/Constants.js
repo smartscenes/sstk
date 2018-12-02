@@ -9,6 +9,8 @@ function () {
   Constants.BUILD = BUILD;
   Constants.assets = ASSETS;
   Constants.config = CONFIG;
+  Constants.pkgname = "SSTK version " + Constants.VERSION;
+  Constants.buildname = Constants.pkgname + " (build "  +  Constants.BUILD + ")";
 
   // Where global vars are stored
   Constants.isBrowser = typeof window !== 'undefined';

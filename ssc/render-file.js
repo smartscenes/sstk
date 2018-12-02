@@ -168,7 +168,11 @@ function render(scene, renderer, renderOpts, cmdOpts) {
 
     if (!errmsg) {
       logdata.cameraConfig = cameraControls.lastViewConfig;
-      renderer.renderToPng(scene, camera, outbasename, { logdata: logdata });
+      var opts = { logdata: logdata };
+      if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
+        opts.postprocess = 'unpackRGBAdepth';
+      }
+      renderer.renderToPng(scene, camera, outbasename, opts);
     }
     setTimeout( function() { cb(errmsg); }, 0);
   }

@@ -325,12 +325,12 @@ function SearchPanel(params) {
       this.sourceElem.change(function () {
         scope.sourceElem.find('option:selected').each(function () {
           scope.source = $(this).val();
-          scope.search(scope.searchTextElem.val());
-          //                    console.log("Source now " + scope.source);
+          //console.log("Source now " + scope.source);
         });
         if (scope.sourceChangedCallback) {
           scope.sourceChangedCallback(scope.source);
         }
+        scope.search(scope.searchTextElem.val());
       });
       this.sourceElem.val(this.source);
       this.source = this.sourceElem.val();
@@ -1055,6 +1055,9 @@ SearchPanel.prototype.search = function (query, callback, searchDisplayOptions) 
 SearchPanel.prototype.selectSource = function (source) {
   this.source = source;
   if (this.sourceElem) { this.sourceElem.val(this.source); }
+  if (this.sourceChangedCallback) {
+    this.sourceChangedCallback(this.source);
+  }
 };
 
 SearchPanel.prototype.hasSource = function (source) {
@@ -1064,9 +1067,9 @@ SearchPanel.prototype.hasSource = function (source) {
 SearchPanel.prototype.registerSource = function(source) {
   if (this.sources.indexOf(source) < 0) {
     this.sources.push(source);
-    if (this.sourceElem) {
-      this.sourceElem.append('<option value="' + source + '">' + source + '</option>');
-    }
+  }
+  if (this.sourceElem && this.sourceElem.find('option[value="' + source + '"]').size() < 1) {
+    this.sourceElem.append('<option value="' + source + '">' + source + '</option>');
   }
 };
 

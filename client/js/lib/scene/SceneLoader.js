@@ -1,5 +1,7 @@
 'use strict';
 
+var SceneState = require('scene/SceneState');
+var Object3DUtil = require('geo/Object3DUtil');
 var PubSub = require('PubSub');
 var _ = require('util/util');
 
@@ -78,7 +80,17 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
       } else {
         // No transform - try to apply the stuff we know about
         if (metadata.scale) {
-          modelInst.setScale(metadata.scale);
+          if (typeof metadata.scale === 'number') {
+            modelInst.setScale(metadata.scale);
+          } else if (metadata.scale instanceof THREE.Vector3) {
+            modelInst.setScaleVector(metadata.scale);
+          }
+        }
+        if (metadata.quaternion) {
+          modelInst.setQuaternion(metadata.quaternion);
+        }
+        if (metadata.position) {
+          modelInst.setTranslation(metadata.position);
         }
         transforms.push(modelInst.object3D.matrix);
       }
@@ -164,17 +176,41 @@ SceneLoader.prototype.__onModelInstanceLoadError = function (sceneResult, modelI
 };
 
 SceneLoader.prototype.__loadModel = function (sceneResult, modelIndex, modelId, callback) {
+  var modelFormat = this.defaultModelFormat;
+  if (sceneResult.modelInstancesMeta && sceneResult.modelInstancesMeta[modelIndex]) {
+    if (sceneResult.modelInstancesMeta[modelIndex].format != null) {
+      modelFormat = sceneResult.modelInstancesMeta[modelIndex].format;
+    }
+  }
   this.assetManager.getModelInstance(this.defaultSource, modelId,
     this.__onModelInstanceLoaded.bind(this, sceneResult, modelIndex,
       this.__onSceneCompleted.bind(this, callback)),
     this.__onModelInstanceLoadError.bind(this, sceneResult, modelIndex,
       this.__onSceneCompleted.bind(this, callback)),
-    { defaultFormat: this.defaultModelFormat }
+    { defaultFormat: modelFormat }
   );
 };
 
 SceneLoader.prototype.parse = function (json, callbackFinished, url) {
-  throw 'Please implement parse method!!!';
+  if (json.format === 'objects' && json.objects) {
+    var sceneResult = new SceneState(null, null);
+    var objects = json.objects.map(function(record) {
+      record.position = Object3DUtil.toVector3(record.position);
+      record.scale = Object3DUtil.toVector3(record.scale);
+      record.quaternion = Object3DUtil.toQuaternion(record.quaternion);
+      return record;
+    });
+    if (json.scan) {
+      objects.unshift(json.scan);
+    }
+    sceneResult.modelInstancesMeta = objects;
+    console.log('objects', objects);
+    for (var i = 0; i < objects.length; i++) {
+      this.__loadModel(sceneResult, i, objects[i].fullId, callbackFinished);
+    }
+  } else {
+    throw 'Please implement parse method!!!';
+  }
 };
 
 // Exports

@@ -254,7 +254,7 @@ AssetGroup.prototype.getLoadInfo = function (id, dataName, metadata) {
   }
   var loadInfo = this.__getBasicLoadInfo(id, dataName, metadata);
   //console.log('supportFormats', this.supportedFormats);
-  if (loadInfo.isSupported === false) {
+  if (loadInfo && loadInfo.isSupported === false) {
     var mainSupportedFormat = this.supportedFormats[0];
     if (this.supportedFormats.indexOf(dataName) < 0) {
       console.warn(dataName + ' not supported for ' + id + ', using ' + mainSupportedFormat + ' instead');

@@ -203,7 +203,7 @@ BVHNode.prototype.traverse = function (cbPre, cbPost, checkPre) {
  * @param [params.maxDepth] {int} Max depth of BVH tree
  * @param [params.maxObjects=1] {int} Max number of objects per BVH node
  * @param [params.obstacles] {THREE.Object3D[]} Set of obstacles (used for `splitStrategy` of `HAC`) to penalize combining nodes with obstacles together.
- * @param [params.getBoundingBox] {function(object|object[]): BBox} Function returning the bounding of objects in a node
+ * @param [params.getBoundingBox] {function(THREE.Object3D[]): BBox} Function returning the bounding of objects in a node
  * @constructor
  * @memberOf geo
  */

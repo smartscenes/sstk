@@ -37,6 +37,8 @@ function SUNCGLoader(params) {
   SceneLoader.call(this, params);
   this.defaultSource = 'p5d';
   this.includeCeiling = (params.includeCeiling != undefined)? params.includeCeiling : true;
+  this.includeWalls = (params.includeWalls != undefined)? params.includeWalls : true;
+  this.includeFloor = (params.includeFloor != undefined)? params.includeFloor : true;
   this.attachWallsToRooms = params.attachWallsToRooms;
   this.archOnly = params.archOnly;  // Only load architecture elements (no objects)
   this.useVariants = params.useVariants;
@@ -124,7 +126,13 @@ SUNCGLoader.prototype.__createArch = function(archData, json, context) {
     filterElements: function (element) {
       var include = true;
       if (!scope.includeCeiling) {
-        include = (element.type !== 'Ceiling');
+        include = include && (element.type !== 'Ceiling');
+      }
+      if (!scope.includeFloor) {
+        include = include && (element.type !== 'Floor');
+      }
+      if (!scope.includeWalls) {
+        include = include && (element.type !== 'Wall');
       }
       if (!include) {
         return false;
@@ -536,13 +544,13 @@ SUNCGLoader.prototype.__parseRoomCached = function (json, context, callback) {
 
 SUNCGLoader.prototype.__parseRoomLoad = function (json, context, callback) {
   var parts = ['f','c','w'];
-  if (json.hideFloor) {
+  if (!this.includeFloor || json.hideFloor) {
     _.pull(parts, 'f');
   }
   if (!this.includeCeiling || json.hideCeiling) {
     _.pull(parts, 'c');
   }
-  if (json.hideWalls) {
+  if (!this.includeWalls || json.hideWalls) {
     _.pull(parts, 'w');
   }
   //console.log(parts);

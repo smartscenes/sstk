@@ -44,6 +44,7 @@ function CameraSensor(config, opts) {
     cam.position.copy(camPos);
   }
   cam.name = config.name;  // Store sensor name as camera name
+  cam.isEquirectangular = config.isEquirectangular;
   this.camera = cam;
   this.renderer = opts.getRenderer(rendererConfig, opts);
 

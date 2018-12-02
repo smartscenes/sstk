@@ -233,7 +233,11 @@ function render(scene, renderer, renderOpts, cmdOpts) {
 
     if (!errmsg) {
       logdata.cameraConfig = cameraControls.lastViewConfig;
-      renderer.renderToPng(scene, camera, outbasename, { logdata: logdata });
+      var opts = { logdata: logdata };
+      if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
+        opts.postprocess = 'unpackRGBAdepth';
+      }
+      renderer.renderToPng(scene, camera, outbasename, opts);
     }
     setTimeout( function() { cb(errmsg); }, 0);
   }
@@ -292,7 +296,11 @@ function processIds(assetsDb) {
           basename += '_' + room;
         }
       }
-      var sceneOpts = _.defaults({fullId: fullId, floor: floor, room: room}, sceneDefaults);
+      var sceneOpts = {fullId: fullId, floor: floor, room: room};
+      if (cmd.assetInfo && (cmd.assetInfo.source == null || cmd.assetInfo.source === cmd.source)) {
+        sceneOpts = _.defaults(sceneOpts, cmd.assetInfo);
+      }
+      sceneOpts = _.defaults(sceneOpts, sceneDefaults);
       assetManager.loadScene(sceneOpts, function (err, sceneState) {
         //console.log(sceneState);
         sceneState.compactify();  // Make sure that there are no missing models

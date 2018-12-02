@@ -1,6 +1,7 @@
 'use strict';
 
-define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/EDLPass'], function (Constants, ImageUtil, Object3DUtil) {
+define(['Constants','util/ImageUtil','geo/Object3DUtil','gfx/CubemapToEquirectangular', 'three-shaders', 'gfx/EDLPass'],
+  function (Constants, ImageUtil, Object3DUtil, CubemapToEquirectangular) {
 
   /**
    * Main rendering class (wrapper around THREE.Renderer)
@@ -247,6 +248,17 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/ED
     }
   }
 
+  Renderer.prototype.__getCubemapToEquirectangularConverter = function() {
+    if (!this.__cubemapToEquirectangular) {
+      this.__cubemapToEquirectangular = new CubemapToEquirectangular(this.renderer, this.width, this.height);
+    } else {
+      if (this.width !== this.__cubemapToEquirectangular.width || this.height !== this.__cubemapToEquirectangular.height) {
+        this.__cubemapToEquirectangular.setSize(this.width, this.height);
+      }
+    }
+    return this.__cubemapToEquirectangular;
+  };
+
   Renderer.prototype.__render = function(scene, camera, fullWidth, fullHeight, renderTarget, forceClear) {
     if (camera.isArrayCamera) {
       var oldAutoClear = this.renderer.autoClear;
@@ -259,12 +271,17 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','three-shaders', 'gfx/ED
         var width = bounds.z * fullWidth;
         var height = bounds.w * fullHeight;
 
-        this.renderer.autoClear = (i === 0)? oldAutoClear : false;
-        this.renderer.setViewport( x, y, width, height );
+        this.renderer.autoClear = (i === 0) ? oldAutoClear : false;
+        this.renderer.setViewport(x, y, width, height);
         this.renderer.render(scene, cam, renderTarget, forceClear);
       }
       this.renderer.autoClear = oldAutoClear;
-      this.renderer.setViewport( 0, 0, fullWidth, fullHeight );
+      this.renderer.setViewport(0, 0, fullWidth, fullHeight);
+    } else if (camera.isEquirectangular) {
+      var converter = this.__getCubemapToEquirectangularConverter();
+      // TODO: Figure out why we need to do this twice (otherwise, goal frame in simulator same as initial frame)
+      converter.render(scene, camera, renderTarget);
+      converter.render(scene, camera, renderTarget);
     } else {
       this.renderer.render(scene, camera, renderTarget, forceClear);
     }

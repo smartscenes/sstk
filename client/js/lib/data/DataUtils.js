@@ -181,6 +181,18 @@ DataUtils.getMaxCount = function (counts) {
   }));
 };
 
+/**
+ * Given data, extract list of fields and information about each field
+ * @param data {objects[]}
+ * @param [options]
+ * @param [options.fields] {Map<fieldname,fieldinfo>}
+ * @param [options.ignore] {string[]} List of fieldnames to igore
+ * @param [options.keepAllValues] {boolean} Whether to keep array of all values for the field
+ * @param [options.keepValues] {boolean} Whether to keep a set of distinct values for the field
+ * @param [options.keepCounts] {boolean} Whether to keep count of number of times a fieldvalue has occured
+ * @param [options.keepStats] {boolean} Whether to keep statistics about the field (min, max, sum)
+ * @return {Map<fieldname,fieldinfo>}
+ */
 DataUtils.extractFieldsFromData = function(data, options) {
   // Figure out fields from data
   options = options || {};

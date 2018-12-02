@@ -24,7 +24,7 @@ app.use(log.expressLogger);
 app.set('views', path.join(__dirname, '../views'));
 app.set('view engine', 'pug');
 app.use(compression());
-app.use(bodyParser.urlencoded({ extended: true }));  // extended can probably be false?
+app.use(bodyParser.urlencoded({ extended: true, parameterLimit: 2000 }));  // extended can probably be false?
 app.use(bodyParser.json({
   limit: '10mb'  // Limit on size of submissions (10mb is huge!!!)
 }));

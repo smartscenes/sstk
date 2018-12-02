@@ -61,6 +61,25 @@ function toSharpImage(image) {
   }
 }
 
+function toMimeType(image, options, callback) {
+  var sharpImage = toSharpImage(image);
+  try {
+    if (sharpImage) {
+      if (options.mimeType.endsWith("jpeg")) {
+        return sharpImage.jpeg(options).toBuffer(callback);
+      } else if (options.mimeType.endsWith("png")) {
+        return sharpImage.png(options).toBuffer(callback);
+      } else {
+        callback("Unsupported mimeType: " + options.mimeType);
+      }
+    }
+  } catch (e) {
+    callback(e);
+  }
+}
+
+ImageUtil.toMimeType = toMimeType;
+
 function saveImage(image, path, callback) {
   var sharpImage = toSharpImage(image);
   try {

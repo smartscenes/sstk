@@ -53,6 +53,17 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
         sceneViewer.loadInitialScene();
       }
     });
+  } else if (sceneViewer.urlParams.scans) {
+    sceneViewer.skipLoadInitialScene = true;
+    sceneViewer.launch();
+    sceneViewer.assetManager.registerCustomAssetGroups({
+      assetFiles: Constants.scanAssetsFile,
+      filterByType: "scene",
+      searchController: sceneViewer.sceneSearchController,
+      callback: function (err, res) {
+        sceneViewer.loadInitialScene();
+      }
+    });
   } else {
     sceneViewer.launch();
   }

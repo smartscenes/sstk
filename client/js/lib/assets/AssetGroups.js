@@ -312,6 +312,48 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
 
 var _defaultAssets = Constants.assets;
 
+function expandLists(object, sourceList, expandFn) {
+  return _.cloneDeepWith(object, function(v) {
+    if (_.isPlainObject(v)) {
+      if (v['$list']) {
+        var element = v['$list'];
+        return _.map(sourceList, function(x) { return expandFn(element, x); });
+      }
+    }
+  });
+}
+
+function createAssetDbForAssetGroup(ag, config) {
+  config = config || {};
+  var groupDataFn = null;
+  var convertDataFn = null;
+  var lazyConvertDataFn = null;
+  var idField = ag.assetIdField || config.metadata.assetIdField || config.assetIdField || 'id';
+  var groupBy = ag.groupBy || config.metadata.groupBy;
+  if (groupBy) {
+    groupDataFn = function(assetInfos) {
+      var infoFields = [groupBy.fieldName].concat(groupBy.infoFields || []);
+      return _.values(_.groupBy(assetInfos, groupBy.fieldName)).map(function(records) {
+        var info = _.pick(records[0], infoFields);
+        info.id = info[idField];
+        info.records = records;
+        return info;
+      });
+    };
+    lazyConvertDataFn = function(info) {
+      if (groupBy.data && !info.data) {
+        info.data = expandLists(ag.__getInterpolatedAssetInfo(groupBy.data, info[idField], info), info.records,
+          function(rec,vars) { return ag.__getInterpolatedAssetInfo(rec, info[idField], vars) });
+      }
+      return info;
+    }
+  }
+  return new AssetsDb({ assetIdField: idField, groupDataFn: groupDataFn,
+    convertDataFn: convertDataFn, lazyConvertDataFn: lazyConvertDataFn });
+}
+AssetGroups.createAssetDbForAssetGroup = createAssetDbForAssetGroup;
+
+
 function _registerDefaultAssetGroups() {
 
   for (var i = 0; i < _defaultAssets.length; i++) {
@@ -320,18 +362,19 @@ function _registerDefaultAssetGroups() {
       // TODO: pull metadata
       // console.log('skipping asset: ' + asset.name);
     } else {
-      // console.log('register asset: ' + asset.name);
       var ag = AssetGroups.createCustomAssetGroup(asset.metadata);
+      //console.log('register asset: ' + asset.name, ag, asset.metadata);
       if (ag.lightSpecsFile) {
         ag.loadLightSpecs(function (err, res) {
           console.log('Loaded LightSpecs for ' + _.keys(res).length + ' models');
         });
       }
       AssetGroups.registerAssetGroup(ag, { isDefault: true });
-      if (ag.idsFile) {
-        var assetsDb = new AssetsDb();
+      var idsFile = ag.idsFile || asset.metadata.idsFile || asset.idsFile;
+      if (idsFile) {
+        var assetsDb = createAssetDbForAssetGroup(ag, asset);
         ag.setAssetDb(assetsDb);
-        assetsDb.loadAssetInfo(ag, ag.idsFile, function(err, assets) {
+        assetsDb.loadAssetInfo(ag, idsFile, function(err, assets) {
           if (err) {
             console.error('Error loading ids for ' + ag.name, err);
           }
@@ -350,5 +393,33 @@ function _registerDefaultAssetGroups() {
 }
 
 AssetGroups.registerDefaults = _registerDefaultAssetGroups;
+
+function getAssetsToRegister(assetsMap, assetGroupNames) {
+  var assetsToRegister = [];
+  for (var i = 0; i < assetGroupNames.length; i++) {
+    var name = assetGroupNames[i];
+    var info = assetsMap[name];
+    if (info) {
+      var requires = info.requires;
+      if (requires) {
+        //assetsToRegister = assetsToRegister.concat(requires);
+        for (var j = 0; j < requires.length; j++) {
+          if (assetGroupNames.indexOf(requires[j]) < 0) {
+            assetGroupNames.push(requires[j]);
+          }
+        }
+      }
+      if (info.metadata) {
+        assetsToRegister.push(name);
+      }
+    } else {
+      console.warn('Cannot register unknown asset ' + name);
+    }
+  }
+  assetsToRegister = _.uniq(assetsToRegister);
+  return assetsToRegister;
+}
+AssetGroups.getAssetsToRegister = getAssetsToRegister;
+
 
 module.exports = AssetGroups;

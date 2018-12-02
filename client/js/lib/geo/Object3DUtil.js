@@ -1762,6 +1762,7 @@ Object3DUtil.toVector2 = function (v) {
     } else if (v.x != undefined && v.y != undefined) {
       return new THREE.Vector2(v.x, v.y);
     } else if (v.count || v.length) {
+      v = v.map(function(x) { return typeof x === 'string'? parseFloat(x) : x; });
       return new THREE.Vector2(v[0], v[1]);
     } else {
       console.error('Cannot convert object to Vector2', v);
@@ -1793,6 +1794,7 @@ Object3DUtil.toVector3 = function (v) {
     } else if (v.x != undefined && v.y != undefined && v.z != undefined) {
       return new THREE.Vector3(v.x, v.y, v.z);
     } else if (v.count || v.length) {
+      v = v.map(function(x) { return typeof x === 'string'? parseFloat(x) : x; });
       return new THREE.Vector3(v[0], v[1], v[2]);
     } else {
       console.error('Cannot convert object to Vector3', v);
@@ -1824,6 +1826,7 @@ Object3DUtil.toQuaternion = function (v) {
     } else if (v.x != undefined && v.y != undefined && v.z != undefined && v.w != undefined) {
       return new THREE.Quaternion(v.x, v.y, v.z, v.w);
     } else if (v.count || v.length) {
+      v = v.map(function(x) { return typeof x === 'string'? parseFloat(x) : x; });
       return new THREE.Quaternion(v[0], v[1], v[2], v[3]);
     } else {
       console.error('Cannot convert object to Quaternion', v);

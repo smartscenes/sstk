@@ -32,6 +32,7 @@ cmd
   .option('--handle_material_side [flag]', 'Whether to duplicate or reverse face vertices when exporting based on double-sided or back-sided materials', STK.util.cmd.parseBoolean, false)
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .option('--include_group [flag]', 'Whether to include group g commands in the output obj file', STK.util.cmd.parseBoolean, false)
+  .option('--ensure_unique_object_name [flag]', 'Whether to ensure object names in the output obj file are unique', STK.util.cmd.parseBoolean, true)
   .parse(process.argv);
 
 // Parse arguments and initialize globals
@@ -63,6 +64,7 @@ var output_basename = cmd.output;
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 100,
+  useColladaScale: false, convertUpAxis: false,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
 
@@ -261,6 +263,8 @@ function processFiles() {
           name: scenename,
           rootObject: rootObject,
           skipMtl: false,
+          binary: true,  // for gltf
+          embedImages: true, // for gltf
           exportTextures: exportTexturesFlag,
           handleMaterialSide: cmd.handle_material_side,
           texturePath: texturePath,
@@ -268,6 +272,7 @@ function processFiles() {
           transform: sceneTransformMatrixInverse,
           //defaultUvScale: new THREE.Vector2(0.01, 0.01),
           getMeshName: nodeNameFunc,
+          ensureUniqueObjectName: cmd.ensure_unique_object_name,
           getGroupName: cmd.include_group? function(node) {
             // Hack to discard some nested layers of names for a model instance
             if (node === rootObject) {

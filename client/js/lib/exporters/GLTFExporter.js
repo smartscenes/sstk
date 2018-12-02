@@ -4,6 +4,9 @@
  * @author Takahiro / https://github.com/takahirox
  */
 
+var Constants = require('Constants');
+var ImageUtil = require('util/ImageUtil');
+
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
@@ -66,7 +69,7 @@ THREE.GLTFExporter.prototype = {
 	 * @param {Object} options options
 	 */
 	export: function(input, options) {
-		this.parse(input, null, options);
+		this.parse(input, function(result) { if (options.callback) { options.callback(null, result); }}, options);
 	},
 
 	/**
@@ -491,7 +494,7 @@ THREE.GLTFExporter.prototype = {
 		 * @param {Blob} blob
 		 * @return {Promise<Integer>}
 		 */
-		function processBufferViewImage( blob ) {
+		function blobToBufferViewImage( blob ) {
 
 			if ( ! outputJSON.bufferViews ) {
 
@@ -524,6 +527,34 @@ THREE.GLTFExporter.prototype = {
 			} );
 
 		}
+
+    /**
+     * Process and generate a BufferView from an image Blob.
+     * @param {Buffer} src
+     * @return {Integer}
+     */
+    function bufferToBufferViewImage( src ) {
+
+      if ( ! outputJSON.bufferViews ) {
+
+        outputJSON.bufferViews = [];
+
+      }
+
+			var buffer = getPaddedArrayBuffer( src );
+
+			var bufferView = {
+				buffer: processBuffer( buffer ),
+				byteOffset: byteOffset,
+				byteLength: buffer.byteLength
+			};
+
+			byteOffset += buffer.byteLength;
+
+			outputJSON.bufferViews.push( bufferView );
+
+			return outputJSON.bufferViews.length - 1;
+    }
 
 		/**
 		 * Process attribute to generate an accessor
@@ -633,6 +664,25 @@ THREE.GLTFExporter.prototype = {
 
 		}
 
+		function toBuffer(buffer) {
+      return (Constants.sys.Buffer.isBuffer(buffer)) ? buffer : new Constants.sys.Buffer(buffer);
+		}
+
+		function toBase64(buffer) {
+      return  toBuffer(buffer).toString("base64");
+		}
+
+		function toDataURI( buffer, mediatype ) {
+			var dataBase64;
+			if (Array.isArray(buffer)) {
+				dataBase64 = buffer.map(function(x) { return toBase64(x); }).join("");
+			} else {
+        dataBase64 = toBase64(buffer);
+			}
+      var datauri = "data:" + mediatype + ";base64," + dataBase64;
+      return datauri;
+		}
+
 		/**
 		 * Process image
 		 * @param  {Image} image to process
@@ -683,39 +733,60 @@ THREE.GLTFExporter.prototype = {
 				}
 
 				var ctx = canvas.getContext( '2d' );
+				if (ctx) {
 
-				if ( flipY === true) {
+					if ( flipY === true) {
 
-					ctx.translate( 0, canvas.height );
-					ctx.scale( 1, - 1 );
+						ctx.translate( 0, canvas.height );
+						ctx.scale( 1, - 1 );
 
-				}
+					}
 
-				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+					ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
 
-				if ( options.binary === true ) {
+					if ( options.binary === true ) {
 
-					pending.push( new Promise( function ( resolve ) {
+						pending.push( new Promise( function ( resolve ) {
 
-						canvas.toBlob( function ( blob ) {
+							canvas.toBlob( function ( blob ) {
 
-							processBufferViewImage( blob ).then( function ( bufferViewIndex ) {
+								blobToBufferViewImage( blob ).then( function ( bufferViewIndex ) {
 
-								gltfImage.bufferView = bufferViewIndex;
+									gltfImage.bufferView = bufferViewIndex;
 
-								resolve();
+									resolve();
 
-							} );
+								} );
 
-						}, mimeType );
+							}, mimeType );
 
-					} ) );
+						} ) );
+					} else {
 
-				} else {
+						gltfImage.uri = canvas.toDataURL( mimeType );
 
-					gltfImage.uri = canvas.toDataURL( mimeType );
-
-				}
+					}
+        } else if (image.data) {
+          pending.push(new Promise( function ( resolve, reject ) {
+            ImageUtil.toMimeType(image, { mimeType: mimeType }, function(err, data, info) {
+            	if (err) {
+            		reject(err);
+							} else {
+            		var buffer = data;
+                if (options.binary === true) {
+                  gltfImage.bufferView = bufferToBufferViewImage(buffer);
+                } else {
+                  var datauri = toDataURI(buffer, mimeType);
+                  //console.log('got datauri', buffer, datauri);
+                  gltfImage.uri = datauri;
+                }
+                resolve();
+              }
+            });
+          }));
+        } else {
+          console.error("Cannot embed image");
+        }
 
 			} else {
 
@@ -1412,6 +1483,16 @@ THREE.GLTFExporter.prototype = {
 
 				if ( trackProperty === PATH_PROPERTIES.morphTargetInfluences ) {
 
+          if ( trackNode.morphTargetInfluences.length !== 1 &&
+            trackBinding.propertyIndex !== undefined ) {
+
+            console.warn( 'THREE.GLTFExporter: Skipping animation track "%s". ' +
+              'Morph target keyframe tracks must target all available morph targets ' +
+              'for the given mesh.', track.name );
+            continue;
+
+          }
+
 					outputItemSize /= trackNode.morphTargetInfluences.length;
 
 				}
@@ -1764,115 +1845,138 @@ THREE.GLTFExporter.prototype = {
 
 		processInput( input );
 
-		function outputBlob() {  // AXC: separate blob from fs path
+		function convertBuffers(buffers, binary, callback) {
+			if (typeof Blob !== 'undefined') {
+				var blob = new Blob( buffers, { type: 'application/octet-stream' } );
+				var reader = new window.FileReader();
+				reader.onloadend = function () {
+          callback(null, { size: blob.size, data: reader.result } );
+        };
+				if (binary) {
+          reader.readAsArrayBuffer(blob);
+        } else {
+					reader.readAsDataURL(blob);
+				}
+      } else {
+				// Assume nodejs
+				var size = 0;
+				for (var i = 0; i < buffers.length; i++) {
+					size += buffers[i].byteLength;
+				}
+				if (binary) {
+					var buffer = Constants.sys.Buffer.concat(buffers.map(toBuffer));
+					callback(null, { size: size, data: buffer });
+				} else {
+          var datauri = toDataURI(buffers, 'application/octet-stream');
+          callback(null, { size: size, data: datauri } );
+        }
+			}
+		}
+
+		function getGlbBuffers(data) {
+      // https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#glb-file-format-specification
+
+      var GLB_HEADER_BYTES = 12;
+      var GLB_HEADER_MAGIC = 0x46546C67;
+      var GLB_VERSION = 2;
+
+      var GLB_CHUNK_PREFIX_BYTES = 8;
+      var GLB_CHUNK_TYPE_JSON = 0x4E4F534A;
+      var GLB_CHUNK_TYPE_BIN = 0x004E4942;
+
+      // Binary chunk.
+      var binaryChunk = getPaddedArrayBuffer( data );
+      var binaryChunkPrefix = new DataView( new ArrayBuffer( GLB_CHUNK_PREFIX_BYTES ) );
+      binaryChunkPrefix.setUint32( 0, binaryChunk.byteLength, true );
+      binaryChunkPrefix.setUint32( 4, GLB_CHUNK_TYPE_BIN, true );
+
+      // JSON chunk.
+      var jsonChunk = getPaddedArrayBuffer( stringToArrayBuffer( JSON.stringify( outputJSON ) ), 0x20 );
+      var jsonChunkPrefix = new DataView( new ArrayBuffer( GLB_CHUNK_PREFIX_BYTES ) );
+      jsonChunkPrefix.setUint32( 0, jsonChunk.byteLength, true );
+      jsonChunkPrefix.setUint32( 4, GLB_CHUNK_TYPE_JSON, true );
+
+      // GLB header.
+      var header = new ArrayBuffer( GLB_HEADER_BYTES );
+      var headerView = new DataView( header );
+      headerView.setUint32( 0, GLB_HEADER_MAGIC, true );
+      headerView.setUint32( 4, GLB_VERSION, true );
+      var totalByteLength = GLB_HEADER_BYTES
+        + jsonChunkPrefix.byteLength + jsonChunk.byteLength
+        + binaryChunkPrefix.byteLength + binaryChunk.byteLength;
+      headerView.setUint32( 8, totalByteLength, true );
+
+      return [
+        header,
+        jsonChunkPrefix.buffer,
+        jsonChunk,
+        binaryChunkPrefix.buffer,
+        binaryChunk
+      ];
+		}
+
+		function finalizeJson(onDoneCallback) {  // AXC: separate blob from fs path
 			// Merge buffers.
-			var blob = new Blob( buffers, { type: 'application/octet-stream' } );
 
 			// Declare extensions.
 			var extensionsUsedList = Object.keys( extensionsUsed );
 			if ( extensionsUsedList.length > 0 ) outputJSON.extensionsUsed = extensionsUsedList;
 
 			if ( outputJSON.buffers && outputJSON.buffers.length > 0 ) {
+				var isBinary = options.binary === true;
+			  convertBuffers(buffers, isBinary, function(err, result) {
+			  	if (result) {
+            // Update bytelength of the single buffer.
+            outputJSON.buffers[0].byteLength = result.size;
 
-				// Update bytelength of the single buffer.
-				outputJSON.buffers[ 0 ].byteLength = blob.size;
-
-				var reader = new window.FileReader();
-
-				if ( options.binary === true ) {
-
-					// https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#glb-file-format-specification
-
-					var GLB_HEADER_BYTES = 12;
-					var GLB_HEADER_MAGIC = 0x46546C67;
-					var GLB_VERSION = 2;
-
-					var GLB_CHUNK_PREFIX_BYTES = 8;
-					var GLB_CHUNK_TYPE_JSON = 0x4E4F534A;
-					var GLB_CHUNK_TYPE_BIN = 0x004E4942;
-
-					reader.readAsArrayBuffer( blob );
-					reader.onloadend = function () {
-
-						// Binary chunk.
-						var binaryChunk = getPaddedArrayBuffer( reader.result );
-						var binaryChunkPrefix = new DataView( new ArrayBuffer( GLB_CHUNK_PREFIX_BYTES ) );
-						binaryChunkPrefix.setUint32( 0, binaryChunk.byteLength, true );
-						binaryChunkPrefix.setUint32( 4, GLB_CHUNK_TYPE_BIN, true );
-
-						// JSON chunk.
-						var jsonChunk = getPaddedArrayBuffer( stringToArrayBuffer( JSON.stringify( outputJSON ) ), 0x20 );
-						var jsonChunkPrefix = new DataView( new ArrayBuffer( GLB_CHUNK_PREFIX_BYTES ) );
-						jsonChunkPrefix.setUint32( 0, jsonChunk.byteLength, true );
-						jsonChunkPrefix.setUint32( 4, GLB_CHUNK_TYPE_JSON, true );
-
-						// GLB header.
-						var header = new ArrayBuffer( GLB_HEADER_BYTES );
-						var headerView = new DataView( header );
-						headerView.setUint32( 0, GLB_HEADER_MAGIC, true );
-						headerView.setUint32( 4, GLB_VERSION, true );
-						var totalByteLength = GLB_HEADER_BYTES
-							+ jsonChunkPrefix.byteLength + jsonChunk.byteLength
-							+ binaryChunkPrefix.byteLength + binaryChunk.byteLength;
-						headerView.setUint32( 8, totalByteLength, true );
-
-						var glbBlob = new Blob( [
-							header,
-							jsonChunkPrefix,
-							jsonChunk,
-							binaryChunkPrefix,
-							binaryChunk
-						], { type: 'application/octet-stream' } );
-
-						var glbReader = new window.FileReader();
-						glbReader.readAsArrayBuffer( glbBlob );
-						glbReader.onloadend = function () {
-
-							onDone( glbReader.result );
-
-						};
-
-					};
-
-				} else {
-
-					reader.readAsDataURL( blob );
-					reader.onloadend = function () {
-
-						var base64data = reader.result;
-						outputJSON.buffers[ 0 ].uri = base64data;
-						onDone( outputJSON );
-
-					};
-
-				}
-
+            if (isBinary) {
+							var glbBuffers = getGlbBuffers(result.data);
+							convertBuffers(glbBuffers, true, function(err, res) {
+								onDoneCallback(res.data);
+							});
+            } else {
+              var base64data = result.data;
+              outputJSON.buffers[ 0 ].uri = base64data;
+              onDoneCallback( outputJSON );
+						}
+          } else {
+			  		console.error('Error converting buffers', err);
+					}
+				});
 			} else {
-
-				onDone( outputJSON );
-
+        onDoneCallback( outputJSON );
 			}
 
 		}
 
-    function outputFile(fs) {
+    function outputFile(fs, result, onDoneCallback) {
       if (fs) {
         var name = (options.name != undefined)? options.name : 'scene';
         var dir = (options.dir != undefined)? options.dir + '/' : '';
-        var filename = dir + name + '.gltf';
-        fs.writeToFile(filename, JSON.stringify(outputJSON), function(err, res) {
-          onDone(outputJSON);
-        });
+        if (options.binary === true) {
+          var filename = dir + name + '.glb';
+          fs.writeToFile(filename, result, function (err, res) {
+            onDoneCallback(result);
+          });
+				} else {
+          var filename = dir + name + '.gltf';
+          fs.writeToFile(filename, JSON.stringify(result), function (err, res) {
+            onDoneCallback(result);
+          });
+        }
       } else {
-        onDone(outputJSON);
+        onDoneCallback(result);
       }
     }
 
+    var scope = this;
 		Promise.all( pending ).then( function () {
-			if (this.__fs) {
-				outputFile(this.__fs);
+			if (scope.__fs) {
+				finalizeJson(function (result) {
+					outputFile(scope.__fs, result, onDone);
+        });
 			} else {
-				outputBlob();
+				finalizeJson(onDone);
 			}
 		});
 

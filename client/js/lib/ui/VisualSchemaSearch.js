@@ -49,18 +49,22 @@ VisualSearch.prototype.init = function(params) {
       return true;
     }
   }
-  function __updateFieldsForQuery(filterString) {
+  function __ensureFieldsForQuery(filterString) {
     if (!scope.__cachedFields[filterString]) {
       // Make a copy of our fields (this will be used for updating the autocomplete information based on current filters)
       scope.__cachedFields[filterString] = {};
       scope.__cachedFields[filterString].fieldsByName = _.cloneDeep(scope.schema.fieldsByName);
     }
+  }
+  function __updateFieldsForQuery(filterString) {
+    __ensureFieldsForQuery(filterString);
     if (!scope.__cachedFields[filterString]['QueryFieldStats'] || !scope.__cachedFields[filterString]['QueryFieldValues']) {
       scope.schema.getFieldMetadata({
         filter: filterString,
         filterValuesFn: filterValuesFn,
         fieldsByName: scope.__cachedFields[filterString].fieldsByName,
         callback: function (q, v) {
+          __ensureFieldsForQuery(filterString);
           scope.__cachedFields[filterString][q] = v;
         }
       });

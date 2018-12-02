@@ -139,6 +139,7 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       // Max anisotropy for textures
       this.maxAnisotropy = undefined;
 
+      // Whether lights are automatically created and loaded
       this.autoLoadLights = true;
 
       if (params) {
@@ -163,7 +164,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
       // Fields we want to preserve and send to the scene loaders
       this.__sceneLoadInfoFields = ['preload', 'freezeObjects', 'floor', 'room',
-        'includeCeiling', 'attachWallsToRooms', 'useVariants',
+        'includeCeiling', 'includeWalls', 'includeFloor',
+        'attachWallsToRooms', 'useVariants',
         'createArch', 'useArchModelId', 'ignoreOriginalArchHoles',
         'keepInvalid', 'keepHidden', 'keepParse', 'precomputeAttachments',
         'hideCategories', 'replaceModels', 'loadModelsFilter', 'skipElements',
@@ -831,6 +833,9 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         }
       };
       var onerror = function(err) {
+        if (err) {
+          console.error('Error loading model', modelinfo, err);
+        }
         callback(err, null);
       };
 
@@ -1204,6 +1209,16 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
 
     AssetManager.prototype.__loadGLTFModel = function (modelInfo, callback, onerror) {
       var loader = new THREE.GLTFLoader();
+      if (Constants.isBrowser) {
+        loader.getFileLoader = function(responseType) {
+          var ldr = new AssetLoader({ manager: loader.manager });
+          return {
+            load: function(url, onLoad, onProgress, onError) {
+              return ldr.load(url, responseType, onLoad, onProgress, onError);
+            }
+          }
+        }
+      }
       if (!_.isString(modelInfo.file)) {
         loader.setPath('');
       }
@@ -1361,8 +1376,8 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         return this.__loadSceneFromJsonFile(sceneinfo, callback);
       } else if (sceneinfo['data']) {
         return this.__loadSceneFromData(sceneinfo, callback);
-      } else if (sceneinfo['format'] != undefined) {
-        return this.__loadSceneWithFormat(sceneinfo, callback);
+      //} else if (sceneinfo['format'] != undefined) {
+      //  return this.__loadSceneWithFormat(sceneinfo, callback);
       } else if (sceneinfo['fullId'] != undefined) {
         // TODO: Refactor....
         // Try to load from DB or Solr
@@ -1727,9 +1742,9 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       }
       function _assetListLoaded(assetGroup, filename, data) {
         if (showWarning && searchController && searchController.hasSource(assetGroup.name)) {
-          showWarning('Replacing models for source ' + assetGroup.name);
+          showWarning('Replacing assets for source ' + assetGroup.name);
         }
-        var assetsDb = new AssetsDb({ assetIdField: options.assetIdField });
+        var assetsDb = AssetGroups.createAssetDbForAssetGroup(assetGroup, options);
         assetsDb.loadAssetInfoFromData(assetGroup, data, filename, { format: options.assetIdsFileFormat });
         assetGroup.setAssetDb(assetsDb);
         _registerAssetGroup(assetGroup);
@@ -1766,9 +1781,15 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
         assetFiles = _.filter(assetFiles, function(x) { return x.name === sid.source; });
       } else if (options.filterBySource) {
         assetFiles = _.filter(assetFiles, function(x) { return x.name === options.filterBySource; });
+      } else if (options.filterByType) {
+        assetFiles = _.filter(assetFiles, function(x) { return x.type === options.filterByType; });
       }
       if (assetFiles.length > 0) {
-        async.map(assetFiles, function (f, cb) {
+        var assetGroupNames = _.map(assetFiles, 'name');
+        var assetsMap = _.keyBy(options.assetFiles, 'name');
+        var assetsToRegister = AssetGroups.getAssetsToRegister(assetsMap, assetGroupNames);
+        var finalAssetFiles = _.map(assetsToRegister, function(x) { return assetsMap[x]; });
+        async.map(finalAssetFiles, function (f, cb) {
             if (typeof f === 'string') {
               f = {metadata: f};
             }

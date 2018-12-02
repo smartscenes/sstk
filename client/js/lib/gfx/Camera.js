@@ -116,6 +116,9 @@ Camera.fromJson = function(json, width, height) {
       camera = new THREE.PerspectiveCamera(json.fov, aspect, json.near, json.far);
       break;
   }
+  if (json.type === 'equirectangular' || json.type === "equirectangularCamera" || json.isEquirectangular) {
+    camera.isEquirectangular = true;
+  }
   var updateProjectMatrixNeeded = false;
   if (json.position) {
     camera.position.copy(Object3DUtil.toVector3(json.position));

@@ -13,6 +13,12 @@ var _ = require('util/util');
 /**
  * Simple in memory database of assets
  * @param params
+ * @param [params.assetIdField='id'] {string} What field to use for asset id
+ * @param [params.fieldOptions] {object}
+ * @param [params.convertDataFn] {function(object): object} Convert asset info
+ * @param [params.lazyConvertDataFn] {function(object): object} Lazy convert asset info
+ * @param [params.groupDataFn] {function(object[]): object[]} Reshape asset info array
+ * @param [params.defaults] {object}
  * @constructor
  * @memberOf assets
  */
@@ -22,7 +28,9 @@ var AssetsDb = function (params) {
   this.fieldOptions = params.fieldOptions;
   this.assetInfos = [];
   this.assetIdToInfo = {};
+  this.lazyConvertDataFn = params.lazyConvertDataFn;
   this.convertDataFn = params.convertDataFn;
+  this.groupDataFn = params.groupDataFn;
   this.defaults = params.defaults;
   this.fields = [];
 };
@@ -126,11 +134,19 @@ AssetsDb.prototype.getMatching = function (filter, start, limit, sort) {
     }
     nMatched = infos.length;
   }
+  if (this.lazyConvertDataFn) {
+    matched = _.map(matched, this.lazyConvertDataFn);
+  }
   return { docs: matched, start: start, numFound: nMatched };
 };
 
 AssetsDb.prototype.getAssetInfo = function (assetId) {
-  return this.assetIdToInfo[assetId];
+  var assetInfo = this.assetIdToInfo[assetId];
+  if (this.lazyConvertDataFn) {
+    return assetInfo? this.lazyConvertDataFn(assetInfo) : null;
+  } else {
+    return assetInfo;
+  }
 };
 
 AssetsDb.prototype.getAssetIds = function() {
@@ -183,6 +199,9 @@ AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
     splitFields = _.get(Constants.assetTypes, [assetGroup.type, 'arrayFields']);
   }
   var assetInfos = parsed.data;
+  if (this.groupDataFn) {
+    assetInfos = this.groupDataFn(assetInfos);
+  }
   for (var i = 0; i < assetInfos.length; i++) {
     if (this.convertDataFn) {
       assetInfos[i] = this.convertDataFn(assetInfos[i]);

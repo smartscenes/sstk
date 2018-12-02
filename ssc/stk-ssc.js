@@ -259,33 +259,12 @@ var registerCustomAssetGroupSync = function (metadataFile, assetIdsFile, assetId
 var registerCustomAssetGroupsSync = function(assetsMap, assetGroupNames, refPath) {
   refPath = refPath || __dirname;
   assetGroupNames = assetGroupNames || _.keys(assetsMap);
-  var assetsToRegister = [];
-  for (var i = 0; i < assetGroupNames.length; i++) {
-    var name = assetGroupNames[i];
-    var info = assetsMap[name];
-    if (info) {
-      var requires = info.requires;
-      if (requires) {
-        //assetsToRegister = assetsToRegister.concat(requires);
-        for (var j = 0; j < requires.length; j++) {
-          if (assetGroupNames.indexOf(requires[j]) < 0) {
-            assetGroupNames.push(requires[j]);
-          }
-        }
-      }
-      if (info.metadata) {
-        assetsToRegister.push(name);
-      }
-    } else {
-      console.warn('Cannot register unknown asset ' + name);
-    }
-  }
-  assetsToRegister = _.uniq(assetsToRegister);
+  var assetsToRegister = AssetGroups.getAssetsToRegister(assetsMap, assetGroupNames);
   for (var j = 0; j < assetsToRegister.length; j++) {
     var g = assetsMap[assetsToRegister[j]];
     console.log('register ' + g.metadata);
     var metadataPath = resolvePath(refPath, g.metadata);
-    var idsPath = resolvePath(refPath, g.ids)
+    var idsPath = resolvePath(refPath, g.ids);
     registerCustomAssetGroupSync(metadataPath, idsPath, g.assetIdField);
   }
 };

@@ -170,7 +170,7 @@ assetManager.loadAsset(info, function (err, asset) {
       } else {
         filename = basename + '-' + i + suffix
       }
-      var opts = cmd.color_by === 'depth' ? { postprocess: 'unpackRGBAdepth' } : null;
+      var opts = cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba' ? { postprocess: 'unpackRGBAdepth' } : null;
       renderer.renderToPng(scene, cam, filename, opts);
     }
 
