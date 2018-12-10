@@ -55,6 +55,7 @@ Materials.loadTextureImage = loadTextureImage;
  * @param [opts.onError]
  * @param [opts.manager] {THREE.LoadingManager}
  * @param [opts.mapping]
+ * @param [opts.isDataTexture]
  * @returns {THREE.Texture}
  */
 function loadTexture(opts) {
@@ -74,6 +75,12 @@ function loadTexture(opts) {
     loadTextureImage(texture, opts);
   }
 
+  if (opts.isDataTexture) {
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    //    texture.unpackAlignment = 1;
+  }
   if ( mapping !== undefined ) {
     texture.mapping = mapping;
   }
