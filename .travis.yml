@@ -12,10 +12,9 @@ node_js:
   - "10"
   - "11"
 
-dist:
-  - "trusty"
-  - "xenial"
-  
+dist: xenial
+#dist: trusty
+
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install build-essential libxi-dev libglu1-mesa-dev libglew-dev; fi
 install:
