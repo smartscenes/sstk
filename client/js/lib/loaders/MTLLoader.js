@@ -454,14 +454,15 @@ THREE.MTLLoader.MaterialCreator.prototype = {
 
 
 	loadTexture: function ( url, mapping, onLoad, onProgress, onError ) {
-		// console.log('loadTexture',this.options);
+		//console.log('loadTexture',this.options);
 		// AXC: custom loadTexture
 		if (this.options.loadTexture) {
 			return this.options.loadTexture(url,mapping,onLoad,onProgress,onError);
 		}
 		return Materials.loadTexture({ url: url, mapping: mapping,
 			onLoad: onLoad, onProgress: onProgress, onError: onError,
-			manager: this.manager, crossOrigin: this.crossOrigin });
+			manager: this.manager, crossOrigin: this.crossOrigin,
+			isDataTexture: this.options.isDataTexture });
 	}
 
 };
