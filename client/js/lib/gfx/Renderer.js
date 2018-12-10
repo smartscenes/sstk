@@ -199,14 +199,15 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','gfx/CubemapToEquirectan
     }
   };
 
-  function copyPixels(source, target, flipY) {
+  function copyPixels(source, target, flipY, bytesPerPixel) {
+    bytesPerPixel = bytesPerPixel || 4;
     // TODO: make more efficent
     //console.log('copyPixels', _.omit(source, ['buffer']), _.omit(target, ['buffer']), flipY);
-    var sourceNumElementPerRow = 4 * source.fullWidth;
-    var targetNumElementPerRow = 4 * target.fullWidth;
-    var sourceColOffset = 4 * source.x;
-    var targetColOffset = 4 * target.x;
-    var bytesToCopyPerRow = 4 * source.width;
+    var sourceNumElementPerRow = bytesPerPixel * source.fullWidth;
+    var targetNumElementPerRow = bytesPerPixel * target.fullWidth;
+    var sourceColOffset = bytesPerPixel * source.x;
+    var targetColOffset = bytesPerPixel * target.x;
+    var bytesToCopyPerRow = bytesPerPixel * source.width;
     //console.log('bytesToCopyPerRow is ', bytesToCopyPerRow);
     for (var row = 0; row < source.height; row++) {
       var sourceRow = flipY? (source.fullHeight - source.height + source.y + row) : (source.y + row);
@@ -358,9 +359,6 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','gfx/CubemapToEquirectan
         //console.log('render with tile', tile.x, tile.y, tile.width, tile.height);
         camera.setViewOffset(fullWidth, fullHeight, tile.x, tile.y, this.__tileWidth, this.__tileHeight);
         var tilePixels = this.__renderScene(scene, camera, _.defaults({pixelBuffer: tileBuffer, width: this.__tileWidth, height: this.__tileHeight}, opts));
-        if (opts.postprocess) {
-          tilePixels = this.postprocessPixels(tilePixels, opts.postprocess, camera);
-        }
         if (this.isOffscreen) {
           // copy from tilePixels into our pixels
           copyPixels(
@@ -380,16 +378,17 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','gfx/CubemapToEquirectan
       if (this.__needFlipY) {
         this.__flipY(pixels);
       }
-      if (opts.postprocess) {
-        pixels = this.postprocessPixels(pixels, opts.postprocess, camera);
-      }
       return pixels;
     }
   };
 
   Renderer.prototype.render = function (scene, camera, opts) {
     opts = opts || {};
-    return this.__renderTiles(scene, camera, opts);
+    var pixels = this.__renderTiles(scene, camera, opts);
+    if (opts.postprocess) {
+      pixels = this.postprocessPixels(pixels, opts.postprocess, camera);
+    }
+    return pixels;
   };
 
   Renderer.prototype.setSize = function (width, height) {
