@@ -216,6 +216,7 @@ Camera.createArrayCamera = function(config) {
       var subcamera = new Camera(config.fov, aspectRatio, config.near, config.far );
       subcamera.bounds = new THREE.Vector4( x / nCamsX, y / nCamsY, sizeX, sizeY );
       subcamera.position.copy(config.position[i]);
+      subcamera.isEquirectangular = config.isEquirectangular;
 
       // TODO: figure out orientation
       if (config.orientation) {
