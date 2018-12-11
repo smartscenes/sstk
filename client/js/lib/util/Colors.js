@@ -160,7 +160,7 @@ self.createPalette = createPalette;
 
 function getHSL(color) {
   var hsl = { h: 0, s: 0, l: 0 };
-  color.getHSL(color);
+  color.getHSL(hsl);
   return hsl;
 }
 self.getHSL = getHSL;
