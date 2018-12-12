@@ -449,9 +449,12 @@ define(['Constants','util/ImageUtil','geo/Object3DUtil','gfx/CubemapToEquirectan
     return this.renderer.capabilities.getMaxAnisotropy();
   };
 
-  Renderer.prototype.postprocessPixels = function(pixels, operation, camera) {
-    if (operation === 'unpackRGBAdepth') {
-      pixels = ImageUtil.unpackRGBAdepth(pixels, camera);
+  Renderer.prototype.postprocessPixels = function(pixels, options, camera) {
+    if (_.isString(options)) {
+      options = { operation: options };
+    }
+    if (options.operation === 'unpackRGBAdepth') {
+      pixels = ImageUtil.unpackRGBAdepth(pixels, camera, options.dataType, options.metersToUnit);
     }
     return pixels;
   };

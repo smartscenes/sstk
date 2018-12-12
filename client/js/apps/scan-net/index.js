@@ -6,6 +6,7 @@ module.exports = webapp.util.merge(webapp, {
   GroupedAnnotationsViewer: require('./GroupedAnnotationsViewer'),
   GroupedViewer: require('./GroupedViewer'),
   HouseViewer: require('./HouseViewer'),
+  LevelViewer: require('./LevelViewer'),
   InstanceAnnotator: require('./InstanceAnnotator'),
   ScanAnnotator: require('./ScanAnnotator'),
   ScanCompleter: require('./ScanCompleter'),

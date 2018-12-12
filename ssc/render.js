@@ -235,7 +235,7 @@ function render(scene, renderer, renderOpts, cmdOpts) {
       logdata.cameraConfig = cameraControls.lastViewConfig;
       var opts = { logdata: logdata };
       if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
-        opts.postprocess = 'unpackRGBAdepth';
+        opts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
       }
       renderer.renderToPng(scene, camera, outbasename, opts);
     }

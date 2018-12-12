@@ -30,6 +30,9 @@ var __typedArrayToType = {
 };
 
 function nameToTypedArray(name) {
+  if (types[name]) {
+    return types[name].array;
+  }
   var t = __typedArrayToType[name];
   return t? types[t].array : undefined;
 }

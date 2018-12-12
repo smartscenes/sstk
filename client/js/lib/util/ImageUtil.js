@@ -5,6 +5,7 @@
 var ImageUtil = {};
 var Constants = require('Constants');
 var Colors = require('util/Colors');
+var TypeUtils = require('data/TypeUtils');
 var _ = require('util/util');
 
 /**
@@ -305,15 +306,13 @@ function recolorIndexed(array, palette, targetData) {
 ImageUtil.recolorIndexed = recolorIndexed;
 
 
+function orthographicDepthToViewZ(near, far, d) {
+  return d * ( near - far ) - near;
+}
+
 function perspectiveDepthToViewZ(near, far, d) {
   return ( near * far ) / ( ( far - near ) * d - far );
 }
-
-var typeToArray = {
-  'float32': Float32Array,
-  'uint16': Uint16Array,
-  'uint32': Uint32Array
-};
 
 var unpack_factors = [1.0/(256*256*256*256), 1.0/(256*256*256), 1.0/(256*256), 1.0/256];
 
@@ -323,11 +322,13 @@ function unpackRGBAdepth(pixels, camera, datatype, metersToUnit, useBasicPacking
 
   var scaleFactor = metersToUnit * Constants.virtualUnitToMeters;
   var npixels = pixels.length / 4;
-  var arrayType = typeToArray[datatype];
+  var arrayType = TypeUtils.nameToTypedArray(datatype);
   var d = new arrayType(npixels);
   var sum = 0;
   var sum_opaque = 0;
   var nopaque = 0;
+  // var min = Infinity;
+  // var max = -Infinity;
   for (var i = 0; i < npixels; i++) {
     var b = i << 2;  // 4 * i
     var transparent = 0;
@@ -343,8 +344,15 @@ function unpackRGBAdepth(pixels, camera, datatype, metersToUnit, useBasicPacking
 
     var v = 0;
     if (pd != 0) {  // Convert from packed depth buffer value pd to real depth v
-      v = - perspectiveDepthToViewZ(camera.near, camera.far, pd);
+      if (camera.isOrthographicCamera || camera.inOrthographicMode)  {
+        v = -orthographicDepthToViewZ(camera.near, camera.far, pd);
+      } else {
+        // Assume other cases are perspective
+        v = -perspectiveDepthToViewZ(camera.near, camera.far, pd);
+      }
       v = scaleFactor * v;
+      // min = Math.min(v, min);
+      // max = Math.max(v, max);
     }
 
     d[i] = v;  // NOTE: coerces v into datatype
@@ -354,6 +362,7 @@ function unpackRGBAdepth(pixels, camera, datatype, metersToUnit, useBasicPacking
       sum_opaque++;
     }
   }
+  // console.log('min=' + min + ', max=' + max);
   // console.log('min=' + _.min(d), 'max=' + _.max(d), 'ave=' + (sum/npixels), 'opaque_ave=' + (sum_opaque/nopaque), 'opaque=' + (nopaque/npixels));
   return d;
 }

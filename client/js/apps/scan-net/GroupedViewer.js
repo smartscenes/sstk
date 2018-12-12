@@ -63,7 +63,6 @@ GroupedViewer.prototype.getAssetImageLink = function(assetGroup, assetInfo, view
   //var imageUrl = this.assetManager.getImagePreviewUrl(assetInfo.source, assetInfo.id, -1, assetInfo);
   var imageUrl = assetGroup.getImagePreviewUrl(assetInfo.id, -1, assetInfo);
   var assetUrl = this.getAssetUrl(assetInfo, viewerUrl);
-  // TODO: Lazy loading of images
   var link = $('<a></a>').attr('href', assetUrl).append($('<img/>')
     .attr('data-src', imageUrl).attr('width', this.imageSize.width).attr('height', this.imageSize.height).addClass('lazy'));
   if (desc) {
