@@ -60,6 +60,9 @@ Graph.prototype.createCellAttributes = function(key, cellAttr, force) {
     this._tileAttributes[key] = new type(this.numNodes);
   }
 };
+Graph.prototype.hasCellAttribute = function(key) {
+  return this._tileAttributes[key] != null;
+};
 Graph.prototype.setCellAttribute = function(id, key, value) {
   this._tileAttributes[key][id] = value;
 };
@@ -329,7 +332,26 @@ Graph.prototype.getCellIdsWithUserData = function(key, valuefilter) {
     }
   });
   return ids;
-}
+};
+
+Graph.prototype.getCellIdsWithCellAttribute = function(key, valuefilter) {
+  var ids = [];
+  var filter;
+  if (valuefilter == undefined) {
+    filter = function(v, k) { return _.isFinite(v); };
+  } else if (_.isFunction(valuefilter)) {
+    filter = valuefilter;
+  } else {
+    filter = function(v, k) { return v === valuefilter; };
+  }
+  _.each(this._tileAttributes[key], function (v, id) {
+    if (filter(v, key)) {
+      ids.push(id);
+    }
+  });
+  return ids;
+};
+
 
 /**
  * A grid of squares, to be used as a graph.

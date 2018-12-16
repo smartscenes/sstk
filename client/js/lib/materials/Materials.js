@@ -131,7 +131,7 @@ Materials.getBasicMaterial = function (color, alpha) {
   if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
     return color;
   }
-  var mat = new THREE.MeshBasicMaterial({side: THREE.DoubleSide, color: color});
+  var mat = new THREE.MeshBasicMaterial({side: Materials.DefaultMaterialSide, color: color});
   if (alpha != undefined) {
     Materials.setMaterialOpacity(mat, alpha);
   }
@@ -183,7 +183,7 @@ Materials.getStandardMaterial = function (color, alpha, materialType) {
     //ambient: a,
     specular: s,
     shininess: 64,
-    side: THREE.DoubleSide
+    side: Materials.DefaultMaterialSide
   }));
   if (alpha != undefined) {
     Materials.setMaterialOpacity(mat, alpha);

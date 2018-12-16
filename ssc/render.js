@@ -337,7 +337,7 @@ function processIds(assetsDb) {
                 console.warn('No wall for scene ' + fullId);
               }
             } else if (extraInfo.assetType === 'navmap') {
-              var collisionProcessor = STK.sim.CollisionProcessorFactory.createCollisionProcessor();
+              var collisionProcessor = STK.sim.CollisionProcessorFactory.createCollisionProcessor({mode: 'navgrid'});
               if (extraInfo.data) {
                 var navscene = new STK.nav.NavScene({
                   sceneState: sceneState,
@@ -347,6 +347,7 @@ function processIds(assetsDb) {
                     return collisionProcessor.isPositionInsideScene(sceneState, position);
                   }
                 });
+                sceneState.navscene = navscene;
                 //navscene.visualizeTileWeight();
                 navscene.visualizeTraversable(new THREE.Color('orange'));
               } else {

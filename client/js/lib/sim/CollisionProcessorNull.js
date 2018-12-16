@@ -6,7 +6,7 @@ var _ = require('util/util');
  * @constructor
  * @memberOf sim
  * @param opts Configuration parameters for collision processing
- * @param [opts.traversableHeight=0.25] {number} Ignore obstacles lower than this height
+ * @param [opts.traversableFloorHeight=0.25] {number} Ignore obstacles lower than this height
  **/
 function CollisionProcessorNull(opts) {
   opts = _.defaultsDeep(Object.create(null), opts, {

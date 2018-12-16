@@ -34,15 +34,17 @@ var __optsToIgnore = ['renderer', 'simpleRenderer', 'assetManager', 'net', 'wav'
  * @param [opts.assetManager] {AssetManager} For loading assets (will be created if not specified).
  * @param [opts.assetCacheSize=100] {int} Size of asset cache
  * @param [opts.outputDir] {string} Output directory for debug output (e.g. screenshots and audio output)
- * @param [opts.agent] {Object} Agent configuration
+ * @param [opts.agent] {Object} Agent configuration.  See {@link sim.Agent} for options.
  * @param [opts.sensors] {Object} Sensor configuration
  * @param [opts.scene] {Object} Options for loading a scene
- * @param [opts.start] {Object|string} Start specification (use `random` for random start)
- * @param [opts.goal] {Object|string} Goal specification (use `random` for random goal)
- * @param [opts.audio] {Object} Options for audio simulator
- * @param [opts.navmap] {Object} Options for navigation map (use `{ recompute=true }` for force recomputation of navigation maps
+ * @param [opts.start] {Object|string} Start specification (use `random` for random start, and `{ position: number[], angle: number}` to specify a position)
+ * @param [opts.goal] {sim.GoalSpec|string} Goal specification (use `random` for random goal)
+ * @param [opts.audio] {Object} Options for audio simulator.  See {@link sim.AudioSimulator} for options.
+ * @param [opts.navmap] {Object} Options for navigation map (use `{ recompute=true }` for force recomputation of navigation maps).  See {@link nav.NavScene} for more options.
  * @param [opts.collisionDetection] {Object} Parameters for collision detection
+ * @param [opts.modifications] {sim.ModificationCmd[]} Modifications to scene
  * @param [opts.seed] {int} Seed to use for random number generator
+ * @param [opts.rng] {math.RNG} Random number generator to use
  * @param [opts.useSky=true] {boolean} Whether to use grass and sky for outside environment.
  * @param [opts.actionTraceLog] {string|boolean} True to use log action traces to file.  If string, used to specify filename of action trace.
  *        By default, action trace is saved to `outputDir/action_trace.csv`.
@@ -66,6 +68,13 @@ function Simulator(opts) {
       useSky: true
     });
   opts = _.mapKeysDeep(opts, function(v,k) { return _.camelCase(k); });
+  if (opts.scene) {
+    if (opts.scene.level != null) {
+      if (_.isString(opts.scene.level)) {
+        opts.scene.level = parseInt(opts.scene.level);
+      }
+    }
+  }
   console.log('Creating Simulator with options', _.omit(opts, __optsToIgnore));
   this.__init(opts);
 }
@@ -703,7 +712,7 @@ Simulator.prototype.prepareTopDownMapProjection = function() {
 /**
  * Set the simulator to this the specified scene state.  If there
  * @param sceneState {scene.SceneState} Scene state for the simulator
- * @param modifications {Array[]} Array of modifications to apply to the scene state
+ * @param modifications {sim.ModificationCmd[]} Array of modifications to apply to the scene state
  * @param callback {callback} Error first callback returning modifications to the scene if scene loaded successfully
  * @private
  */

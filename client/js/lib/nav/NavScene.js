@@ -102,7 +102,7 @@ SceneGrid2D.prototype.idToCell = function(id) {
 };
 SceneGrid2D.prototype.idToPosition = function(id) {
   var ij = this.fromId(id);
-  var cellHeight = this.getCellAttribute('floorHeight', id);
+  var cellHeight = this.getCellAttribute(id, 'floorHeight');
   if (cellHeight == undefined || !isFinite(cellHeight)) {
     cellHeight = this.min[1];
   }
@@ -455,6 +455,15 @@ MultiLevelGrid.prototype.createCellAttributes = function(key, cellAttr, force) {
     levelGrid.createCellAttributes(key, cellAttr, force);
   }
 };
+MultiLevelGrid.prototype.hasCellAttribute = function(key) {
+  for (var i = 0; i < this.levelGrids.length; i++) {
+    var levelGrid = this.levelGrids[i];
+    if (levelGrid.hasCellAttribute(key)) {
+      return true;
+    }
+  }
+  return false;
+};
 MultiLevelGrid.prototype.setCellAttribute = function(id, key, value) {
   var levelGrid = this.idToLevelGrid(id);
   if (levelGrid) {
@@ -607,6 +616,18 @@ MultiLevelGrid.prototype.getCellIdsWithUserData = function(key, valuefilter) {
   }
   return cellIds;
 };
+MultiLevelGrid.prototype.getCellIdsWithCellAttribute = function(key, valuefilter) {
+  var cellIds = [];
+  for (var i = 0; i < this.levelGrids.length; i++) {
+    var levelGrid = this.levelGrids[i];
+    var ids = levelGrid.getCellIdsWithCellAttribute(key, valuefilter);
+    for (var j = 0; j < ids.length; j++) {
+      var id = ids[j];
+      cellIds.push(levelGrid.nodeIdOffset + id);
+    }
+  }
+  return cellIds;
+};
 MultiLevelGrid.prototype.checkCellsTraversable = function(cellIds, filter) {
   var scope = this;
   var cellIdsByLevelGrid = _.groupBy(cellIds, function(id) {
@@ -639,6 +660,7 @@ MultiLevelGrid.prototype.checkCellsTraversable = function(cellIds, filter) {
  * @param [opts.autoUpdate=true] {boolean} Whether to automatically update the position of the agent and the shortest path
  * @param [opts.refineGrid] {{radius: number}} Options for how to refine loaded grid
  * @param [opts.mapName=navmap] {string} Default name of navigation map to use
+ * @param [opts.metadata] {Object} Additional metadata to be stored away
  * @constructor
  * @memberOf nav
  */
@@ -1051,6 +1073,10 @@ NavScene.prototype.getCellAttribute = function(pos, key) {
   return value;
 };
 
+NavScene.prototype.hasCellAttribute = function(key) {
+  return this.cellAttributes[key] != null;
+};
+
 NavScene.prototype.getRoom = function(pos) {
   var roomIndex = this.getCellAttribute(pos, 'roomIndex');
   return this.sceneState.getRoomByIndex1(roomIndex);
@@ -1197,6 +1223,14 @@ NavScene.prototype.getGoalCells = function(goals, opts) {
       if (objectCellIds.length) {
         scope.getCellId(goal, opts.saveCell);
         return objectCellIds;
+      }
+    } else if (goal.type === 'room') {
+      // var roomIndex = _.map(goal.room, function(x) { return scope.sceneState.getRoomIndex().indexOf(x); });
+      var roomIndex = scope.sceneState.getRoomIndex().indexOf(goal.room[0]);
+      var roomCellIds = scope.grid.getCellIdsWithCellAttribute('roomIndex', roomIndex);
+      if (roomCellIds.length) {
+        scope.getCellId(goal, opts.saveCell);
+        return roomCellIds;
       }
     }
     return [scope.getCellId(goal, opts.saveCell)];
@@ -1402,6 +1436,7 @@ NavScene.prototype.visualizeTileWeight = function() {
 NavScene.prototype.visualizeTraversable = function(color) {
   //console.log('visualizing navigation tiles');
   this.__visualizeTiles({
+    type: 'nav',
     getColor: function(w) {
       if (w === Infinity) {
         return NavScene.defaultTileColors.obstacle;
@@ -1415,7 +1450,7 @@ NavScene.prototype.visualizeTraversable = function(color) {
 NavScene.prototype.visualizePathCost = function(opts) {
   opts = opts || {};
   var showPathOnly = opts.showPathOnly;
-  //console.log('visualizing navigation map');
+  // console.log('visualizing navigation map', showPathOnly);
   var colorFn = Colors.getColorFunction({
     type: 'interpolate',
     space: 'hsl',

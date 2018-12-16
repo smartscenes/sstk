@@ -316,8 +316,14 @@ SceneUtil.__remapSceneModelMaterials = function (sceneState, opts) {
   };
   for (var i = 0; i < sceneState.modelInstances.length; i++) {
     var modelInstance = sceneState.modelInstances[i];
-    var getMeshMaterial = function (m) { return getMeshMaterialForModel(modelInstance.model.info, m); };
-    colorObj(modelInstance.object3D, getMeshMaterial, opts);
+    var modelInfo = modelInstance.model.info;
+    if (modelInfo[remapMaterialsKey].data != null) {
+      var getMeshMaterial = function (m) { return getMeshMaterialForModel(modelInfo, m); };
+      colorObj(modelInstance.object3D, getMeshMaterial, opts);
+    } else {
+      console.error('Cannot find remapMaterial ' + remapMaterialsKey + ' for model ' + modelInfo.fullId);
+      colorObj(modelInstance.object3D, Object3DUtil.BlackMat, opts);
+    }
   }
 };
 

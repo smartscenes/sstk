@@ -315,7 +315,12 @@ SimState.prototype.getSerializableGoals = function() {
   return this.__serializableGoals;
 };
 
-// Convert a model instance to a goal
+/**
+ * Convert a model instance to a goal
+ * @param mi {model.ModelInstance}
+ * @returns {sim.ObjectGoal}
+ * @private
+ */
 SimState.prototype.__getGoalForModelInstance = function (mi) {
   const bbox = mi.getBBox();
   const objectCentroid = bbox.centroid();
@@ -346,7 +351,12 @@ SimState.prototype.__getGoalForModelInstance = function (mi) {
   };
 };
 
-// Convert a room object to a goal
+/**
+ * Convert a room object to a goal
+ * @param room {THREE.Object3D}
+ * @returns {sim.RoomGoal}
+ * @private
+ */
 SimState.prototype.__getGoalInRoom = function (room) {
   const bbox = Object3DUtil.getBoundingBox(room);
   const sample = this.__sampleFloor(room, this.opts.sampleFloor);
@@ -365,7 +375,12 @@ SimState.prototype.__getGoalInRoom = function (room) {
   };
 };
 
-// Convert a position in the scene to a goal
+/**
+ * Convert a position in the scene to a goal
+ * @param position {THREE.Vector3}
+ * @returns {sim.PositionGoal}
+ * @private
+ */
 SimState.prototype.__getGoalForPosition = function (position) {
   const room = this.sceneState.getIntersectedRoomAt(position);
   const roomInfo = this.sceneState.getRoomInfo(room.object);
@@ -380,7 +395,7 @@ SimState.prototype.__getGoalForPosition = function (position) {
 
 /**
  * Computes actual goals from goal specification
- * @returns {Array<{position: THREE.Vector3, room: ?string, angle: ?number, bbox: ?geo.BBox, objectId: ?string, modelInstance: ?model.ModelInstance, initialOffsetFromAgent: ?THREE.Vector3, audioFile: ?string}>}
+ * @returns {Array<sim.Goal>}
  */
 SimState.prototype.computeGoals = function () {
   let goalsSpec = this.opts.goal;

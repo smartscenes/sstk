@@ -9,7 +9,7 @@ input_format=kmz
 output_format=obj
 n=4
 
-opts="--input_type {input_type} --input_format ${input_format} --output_format ${output_format} --assetType model --export_textures copy --texture_path images --require_faces --use_search_controller --include_group --normalize_size diagonal --center --handle_material_side"
+opts="--input_type ${input_type} --input_format ${input_format} --output_format ${output_format} --assetType model --export_textures copy --texture_path images --require_faces --use_search_controller --include_group --normalize_size diagonal --center --handle_material_side"
 
 mkdir -p $output_dir
 mkdir -p $output_dir/meshes

@@ -77,6 +77,7 @@ module.exports = {
   /** @namespace gfx */
   gfx: {
     Camera: require('./gfx/Camera'),
+    ClippingBox: require('./gfx/ClippingBox'),
     EDLPass: require('./gfx/EDLPass'),
     Lights: require('./gfx/Lights'),
     Renderer: require('./gfx/Renderer'),
@@ -94,7 +95,7 @@ module.exports = {
   /** @namespace search */
   search: {
     BasicSearchController: require('./search/BasicSearchController'),
-    SolrQuerier: require("./search/SolrQuerier")
+    SolrQuerier: require('./search/SolrQuerier')
   },
   /** @namespace sim */
   sim: {

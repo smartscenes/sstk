@@ -49,9 +49,17 @@ CollisionProcessorNavGrid.prototype.computeSensorForces = function (sceneState, 
 
 CollisionProcessorNavGrid.prototype.isPositionInsideScene = function(sceneState, pFeet) {
   var navscene = this.__ensureNavScene(sceneState);
-  //TODO implement more precise check
   var sceneBBox = sceneState.getBBox();
-  return sceneBBox.contains(pFeet);
+  if (sceneBBox.contains(pFeet)) {
+    // TODO: decide if this is the correct check to use
+    if (navscene.hasCellAttribute('floorHeight')) {
+      return _.isFinite(navscene.getCellAttribute(pFeet, 'floorHeight'));
+    } else {
+      return true;
+    }
+  } else {
+    return false;
+  }
 };
 
 CollisionProcessorNavGrid.prototype.isPositionAgentCanStandAt = function (sceneState, agent, pFeet, opts) {
