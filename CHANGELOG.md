@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2018-12-16
+### Changes
+- Support equirectangular panorama rendering
+- Add render configurations for fixed physical pixel size
+- Fix bug in HSL color interpolation
+- Fix depth rendering for large resolutions and orthographic cameras
+- Make materials front-sided by default instead of double-sided
+- Fix floor height bug in navigation grids
+- Improved support for shortest path computation with room goals
+- Fix bug with multi-level grid cell traversibility computation
+
 ## [0.7.1] - 2018-11-03
 ### Changes
 - Update webpack to v4.19.0
