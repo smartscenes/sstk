@@ -1,0 +1,12 @@
+{
+	"view": {
+		"cameraPositionStrategy": "positionToFixedResolution",
+		"viewIndex": 4,
+		"pixelWidth": 0.01,
+		"useSquareImage": false
+	},
+	"camera": {
+		"type": "perspective"
+	},
+	"save_view_log": true
+}

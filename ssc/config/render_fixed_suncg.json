@@ -1,0 +1,24 @@
+{
+	"view": {
+		"cameraPositionStrategy": "positionToFixedResolution",
+		"viewIndex": 4,
+		"pixelWidth": 0.01,
+		"useSquareImage": false
+	},
+	"camera": {
+		"type": "perspective"
+	},
+	"assetGroups": ["p5d"],
+	"assetInfo": {
+		"source": "p5dScene",
+		"format": "suncg",
+		"assetType": "scene",
+		"includeCeiling": false,
+		"useArchModelId": true,
+		"ignoreOriginalArchHoles": false,
+		"attachWallsToRoom": false,
+		"createArch": true
+	},
+	"material_type": "phong",
+        "save_view_log": true
+}
