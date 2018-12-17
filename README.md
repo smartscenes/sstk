@@ -16,7 +16,7 @@ The (S)STK provides:
 ```
 curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.1/install.sh | bash
 source ~/.bashrc
-nvm install node
+nvm install v10.13.0
 ```
 If you use zsh instead of bash, replace all instances of bash with zsh.
 Confirm above works using `node -v` at the terminal.
