@@ -1,6 +1,6 @@
 {
   "name": "sstk-core",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "build/STK-core.bundle.js",
   "dependencies": {
