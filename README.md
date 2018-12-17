@@ -1,3 +1,5 @@
+## The dev branch is no longer maintained.  Please use the 0.6.x branch if you were using the dev branch before or upgrade to 0.7.x or newer
+
 SSTK: SmartScenes ToolKit
 ============
 
