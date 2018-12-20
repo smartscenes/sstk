@@ -8,6 +8,7 @@ var _ = require('util/util');
  * @param config Sensor configuration
  * @param config.name {string} sensor name
  * @param config.position {THREE.Vector3} sensor position
+ * @param config.orientation {THREE.Vector3} sensor orientation
  * @param config.width {int} width of camera sensor resolution
  * @param config.height {int} height of camera sensor resolution
  * @param config.encoding {string} output encoding of sensor
@@ -29,22 +30,34 @@ function CameraSensor(config, opts) {
   cameraConfig.far = cameraConfig.far*Constants.metersToVirtualUnit;
   cameraConfig.width = cameraConfig.resolution[0];
   cameraConfig.height = cameraConfig.resolution[1];
-  //console.log('cameraConfig', cameraConfig);
   var rendererConfig = config;
   var cam;
   if (cameraConfig.position.length > 1) {
     cam = Camera.createArrayCamera(cameraConfig);
     rendererConfig = _.clone(config);
+    rendererConfig.cameraArrayShape = cam.userData.shape;
     rendererConfig.resolution = cam.userData.imageShape;
+    // HACK to remove not use main renderer for array cameras since initial size may not be correct
+    // and resizing of ssc OffscreenRenderer doesn't not work
+    if (!Constants.isBrowser && rendererConfig.renderer === 'main') {
+      delete rendererConfig.renderer;
+    }
   } else {
     cam = new Camera(cameraConfig.fov, cameraConfig.width/cameraConfig.height,
       cameraConfig.near, cameraConfig.far
     );
-    var camPos = config.position[0];
+    var camPos = cameraConfig.position[0];
     cam.position.copy(camPos);
+    if (cameraConfig.orientation) {
+      var target = cam.position.clone();
+      target.add(cameraConfig.orientation[0]);
+      cam.lookAt(target);
+    }
+    cam.updateMatrix();
+    cam.updateProjectionMatrix();
   }
   cam.name = config.name;  // Store sensor name as camera name
-  cam.isEquirectangular = config.isEquirectangular;
+  cam.isEquirectangular = cameraConfig.isEquirectangular;
   this.camera = cam;
   this.renderer = opts.getRenderer(rendererConfig, opts);
 

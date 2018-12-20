@@ -34,6 +34,13 @@ function OffscreenRendererFactory (baseRendererClass) {
   OffscreenRenderer.prototype.super = baseRendererClass.prototype;
   OffscreenRenderer.prototype.constructor = OffscreenRenderer;
 
+  OffscreenRenderer.prototype.setSize = function(width, height) {
+    if (width !== this.width || height !== this.height) {
+      console.warn('Set size is not properly supported in offscreen mode');
+    }
+    baseRendererClass.prototype.setSize.call(this, width, height);
+  };
+
   // Renders scene from given camera into pngFile and returns raw RGBA pixels
   OffscreenRenderer.prototype.renderToPng = function (scene, camera, basename, opts) {
     var pngfile = _.endsWith(basename, '.png') ? basename : basename + '.png';

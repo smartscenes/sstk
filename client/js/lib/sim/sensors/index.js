@@ -13,9 +13,12 @@ var sensors = {
 /**
  * Get renderer to use for camera sensors
  * @param sensorConfig
+ * @param sensorConfig.name {string}
+ * @param sensorConfig.renderer {string}
+ * @param sensorConfig.resize {boolean} Whether the size of the sensor should be resized to match some specified height/width
  * @param sensorConfig.type {string}
- * @param sensorConfig.width {int}
- * @param sensorConfig.height {int}
+ * @param sensorConfig.resolution {int[]} sensor resolution (width, height)
+ * @param [sensorConfig.cameraArrayShape] {int[]}
  * @param opts
  * @param opts.rendererFactory {gfx.RendererFactory} Factory for creating sensors!
  * @returns {gfx.Renderer}
@@ -24,7 +27,7 @@ var sensors = {
 function getRenderer(sensorConfig, opts) {
   var rendererName = sensorConfig.renderer || sensorConfig.name;
   var configSetName = (sensorConfig.type === 'color') ? 'color' : 'simple';
-  var rendererOpts = { configSet: configSetName };
+  var rendererOpts = { configSet: configSetName, cameraArrayShape: sensorConfig.cameraArrayShape };
   if (!sensorConfig.resize && sensorConfig.resolution) {
     // Stick with the resolution that was specified for us
     rendererOpts['width'] = sensorConfig.resolution[0];
@@ -37,7 +40,11 @@ function getRenderer(sensorConfig, opts) {
 /**
  * Create the specified sensor
  * @param sensorConfig
+ * @param sensorConfig.type {string} Sensor type (`color`, `depth`, `normal`, `semantic`, `semantic_texture`, `group`)
+ * @param sensorConfig.encoding {string} Type of encoding to use
+ * @param sensorConfig.position {THREE.Vector3[]}
  * @param opts
+ * @param opts.colorEncoding {string} Encoding to use for color sensor
  * @returns {*}
  */
 sensors.getSensor = function(sensorConfig, opts) {

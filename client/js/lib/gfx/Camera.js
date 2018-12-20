@@ -193,6 +193,21 @@ THREE.ArrayCamera.prototype.resizeCameras = function(totalWidth, totalHeight) {
   }
 };
 
+/**
+ * Create a camera array
+ * @param config
+ * @param config.width [int]
+ * @param config.height [int]
+ * @param config.fov [number]
+ * @param config.near [number]
+ * @param config.far [number]
+ * @param config.position {THREE.Vector3[]}
+ * @param config.orientation {THREE.Vector3[]}
+ * @param [config.isEquirectangular] {boolean}
+ * @param [config.cameraArrayShape] {int[]} How many camera to have in each row (0) /column (1)
+ * @param [config.stacking] {string} Stack camera `vertical` or `horizontal` (default)
+ * @returns {ArrayCamera}
+ */
 Camera.createArrayCamera = function(config) {
   var nCameras = config.position.length;
   var cameraArrayShape = config.cameraArrayShape;
@@ -224,6 +239,8 @@ Camera.createArrayCamera = function(config) {
         target.add(config.orientation[i]);
         subcamera.lookAt(target);
       }
+      subcamera.updateMatrix();
+      subcamera.updateProjectionMatrix();
       subcamera.updateMatrixWorld();
       cameras.push( subcamera );
     }

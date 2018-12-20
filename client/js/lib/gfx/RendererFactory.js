@@ -26,6 +26,10 @@ RendererFactory.prototype.getRenderer = function(name, opts) {
     var rendererOpts = opts;
     if (opts.configSet && this.__rendererConfigs[opts.configSet]) {
       rendererOpts = _.defaults(Object.create(null), opts || {}, this.__rendererConfigs[opts.configSet]);
+      if (rendererOpts.cameraArrayShape && !opts.width && !opts.height) {
+        rendererOpts.width = rendererOpts.cameraArrayShape[1]*rendererOpts.width;
+        rendererOpts.height = rendererOpts.cameraArrayShape[0]*rendererOpts.height;
+      }
     }
     console.log('Creating new renderer ' + name, rendererOpts);
     this.__cachedRenderers[name] = new this.__rendererType(rendererOpts);
