@@ -1654,7 +1654,7 @@ SceneUtil.getAggregatedSceneStatistics = function(cache, cb, opts) {
     cache.aggregatedSceneStatistics = new SceneStatistics();
     cache.aggregatedSceneStatistics.importCsvs({
       fs: opts.fs || Constants.sys.fs,
-      basename: p5dSceneAssetGroup.rootPath + '/stats/v4/suncg',
+      basename: p5dSceneAssetGroup.rootPath + '/stats/suncg',
       stats: opts.stats || ['materials', 'relations'],
       callback: function(err, data) {
         if (err) {

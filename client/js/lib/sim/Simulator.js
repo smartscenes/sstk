@@ -230,7 +230,7 @@ Simulator.prototype.__preloadData = function(opts) {
     this.__aggregatedSceneStatistics = new SceneStatistics();
     this.__aggregatedSceneStatistics.importCsvs({
       fs: this.opts.fs,
-      basename: assetGroup.rootPath + '/stats/v4/suncg',
+      basename: assetGroup.rootPath + '/stats/suncg',
       stats: opts.stats || ['materials', 'relations'],
       callback: function(err, data) {
         if (err) {
