@@ -35,7 +35,7 @@ There are some prerequisites for the build process in Ubuntu, they can be instal
 
 ## Assets
 To use the STK, you will need to get yourself some assets.  There are several open-source datasets that
-you can use with the STK.  Many of these datasets require agreeing to a licenese and terms of use, 
+you can use with the STK.  Many of these datasets require agreeing to a license and terms of use, 
 so please go to their respective websites to download them.
 
 1. 3D Models
