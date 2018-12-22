@@ -533,7 +533,8 @@ Simulator.prototype.getObservationMetadata = function() {
   _.each(sensors, function(sg,st) {
     _.each(sg, function(s) {
       if (st === 'camera') {
-        if (scope.opts.observations[s.config.type]) {
+        // TODO: Decide if we turn on by name or type
+        if (scope.opts.observations[s.config.type] || scope.opts.observations[s.config.name]) {
           sensorMetadata[s.name] = s.getMetadata();
         }
       } else if (st === 'force') {

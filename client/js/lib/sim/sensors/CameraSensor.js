@@ -28,6 +28,7 @@ function CameraSensor(config, opts) {
   });
   cameraConfig.near = cameraConfig.near*Constants.metersToVirtualUnit;
   cameraConfig.far = cameraConfig.far*Constants.metersToVirtualUnit;
+  // NOTE: This may not be the actual width/height due to some sensors having "resize=true" or being the "main" renderer
   cameraConfig.width = cameraConfig.resolution[0];
   cameraConfig.height = cameraConfig.resolution[1];
   var rendererConfig = config;
@@ -38,7 +39,7 @@ function CameraSensor(config, opts) {
     rendererConfig.cameraArrayShape = cam.userData.shape;
     rendererConfig.resolution = cam.userData.imageShape;
     // HACK to remove not use main renderer for array cameras since initial size may not be correct
-    // and resizing of ssc OffscreenRenderer doesn't not work
+    // and resizing of ssc OffscreenRenderer doesn't work
     if (!Constants.isBrowser && rendererConfig.renderer === 'main') {
       delete rendererConfig.renderer;
     }
@@ -60,6 +61,10 @@ function CameraSensor(config, opts) {
   cam.isEquirectangular = cameraConfig.isEquirectangular;
   this.camera = cam;
   this.renderer = opts.getRenderer(rendererConfig, opts);
+  // Weird resizing (if the sensor was resized)
+  if (this.renderer.width !== rendererConfig.width || this.renderer.height !== rendererConfig.height) {
+    this.setSize(this.renderer.width, this.renderer.height);
+  }
 
   this.numFramesRendered = 0;
 }
@@ -159,7 +164,9 @@ CameraSensor.prototype.setSize = function(width, height) {
   if (this.camera.isArrayCamera) {
     this.camera.resizeCameras(width, height);
   }
-  this.renderer.setSize(width, height);
+  if (this.renderer.width !== width || this.renderer.height !== height) {
+    this.renderer.setSize(width, height);
+  }
 };
 
 CameraSensor.prototype.createPixelBuffer = function() {
