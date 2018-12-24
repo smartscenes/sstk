@@ -16,7 +16,7 @@ The (S)STK provides:
 ```
 curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.1/install.sh | bash
 source ~/.bashrc
-nvm install node
+nvm install v10.13.0
 ```
 If you use zsh instead of bash, replace all instances of bash with zsh.
 Confirm above works using `node -v` at the terminal.
@@ -35,7 +35,7 @@ There are some prerequisites for the build process in Ubuntu, they can be instal
 
 ## Assets
 To use the STK, you will need to get yourself some assets.  There are several open-source datasets that
-you can use with the STK.  Many of these datasets require agreeing to a licenese and terms of use, 
+you can use with the STK.  Many of these datasets require agreeing to a license and terms of use, 
 so please go to their respective websites to download them.
 
 1. 3D Models
