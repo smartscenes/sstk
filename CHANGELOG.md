@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2019-01-??
+### Changes
+- Added support for embedded architecture elements to SUNCGLoader
+- Improvements to SUNCGExporter and added SceneStateExporter (saves list of models and their transforms in json)
+- Better support fo custom assets.json
+
 ## [0.7.2] - 2018-12-16
 ### Changes
 - Support equirectangular panorama rendering
