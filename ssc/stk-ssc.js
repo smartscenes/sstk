@@ -277,7 +277,7 @@ var registerCustomAssetGroupsSync = function(assetsMap, assetGroupNames, refPath
  * @param [opts.assetSources] {string[]} List of asset sources to register
  * @param [opts.assetFiles] {string[]} List of asset files to include
  * @param [opts.skipDefaults] {boolean} Whether to skip defaults or not
- * @param [opts.includeAllAssetFilesSources] {boolean} Whether to automaticlaly include as sources listed in assetFiles
+ * @param [opts.includeAllAssetFilesSources] {boolean} Whether to automatically include as sources listed in assetFiles
  */
 var registerAssetGroupsSync = function(opts) {
   opts = opts || {};
