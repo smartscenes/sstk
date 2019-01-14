@@ -40,6 +40,7 @@ cmd.Command.prototype.optionGroups = function(opts) {
   // Options for specifying view point
   if (opts.view) {
     this.option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt);
+    this.option('--view_target_ids <object_ids>', 'Which objects to look at', STK.util.cmd.parseList);
     this.option('--use_scene_camera <camera_name>', 'Use camera from scene');
   }
   // Options for special color by
@@ -139,7 +140,7 @@ cmd.Command.prototype.getInputs = function(input) {
     // Read files from input file
     return STK.fs.readLines(input);
   } else if (input.endsWith('.csv') || input.endsWith('.tsv')) {
-    return STK.fs.loadDelimited(filename);
+    return STK.fs.loadDelimited(input);
   } else {
     return input.split(',');
   }

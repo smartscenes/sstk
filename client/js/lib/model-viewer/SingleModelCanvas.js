@@ -51,7 +51,7 @@ define(['Constants','assets/AssetManager','gfx/Lights', 'geo/Object3DUtil','cont
       this.scene = new THREE.Scene();
       this.scene.add(this.camera);
 
-      this.scene.add(Lights.getDefaultHemisphereLight());
+      this.scene.add(Lights.getDefaultHemisphereLight(true));
       this.renderer = new Renderer({
         container: this.container,
         camera: this.camera,

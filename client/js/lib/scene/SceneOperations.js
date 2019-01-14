@@ -99,7 +99,7 @@ SceneOperations.prototype.createObject = function(opts) {
  * @param [opts.object3D] {THREE.Object3D}
  * @param [opts.modelInstance] {ModelInstance}
  * @param opts.axis {THREE.Vector3} Axis to rotate around
- * @parma opts.delta {number} Number of radians to rotate
+ * @param opts.delta {number} Number of radians to rotate
  * @param [opts.bbfaceIndex] Bounding box face to rotate around
  */
 SceneOperations.prototype.rotateObject = function(opts) {
@@ -119,6 +119,8 @@ SceneOperations.prototype.rotateObject = function(opts) {
  * @param [opts.positionAt] {THREE.Vector3} World coordinate to position object at
  * @param [opts.anchorFrame='objectOrigin'] {string} What frame to use for selecting anchor point of object to position ('objectOrigin' or 'objectBBox')
  * @param [opts.anchorPosition] {THREE.Vector3} What anchor point to use for positioning object (interpreted wrt anchorFrame)
+ * @param [opts.axis=Constants.worldUp] {THREE.Vector3} Axis of rotation
+ * @param [opts.rotation] {number} Number of radians to rotate
  */
 SceneOperations.prototype.placeObject = function(opts) {
   //console.log('placeObject', opts);

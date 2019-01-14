@@ -44,6 +44,7 @@ function SUNCGLoader(params) {
   this.useVariants = params.useVariants;
   this.keepInvalid = params.keepInvalid; // Retain invalid objects
   this.keepParse = params.keepParse; // Retain intermediate parse
+  this.keepMaterialInfo = params.keepMaterialInfo;
   this.useArchModelId = params.useArchModelId; // Use model id for room and ground instead of json id
   this.ignoreOriginalArchHoles = params.ignoreOriginalArchHoles; // Whether to ignore precomputed architectural holes
 
@@ -73,21 +74,60 @@ function SUNCGLoader(params) {
       defaults: {
         'Wall': {
           depth: 0.1,
-          extraHeight: 0.035
+          height: 2.7,
+          extraHeight: 0.035,
+          materials: [
+            {
+              "name": "inside",                          // Name of material ("inside" for inside wall)
+              "texture": "wallp_1_1",                    // Texture
+              "diffuse": "#ffffff"                       // Diffuse color in hex
+            },
+            {
+              "name": "outside",                         // Name of material ("outside" for outside wall)
+              "texture": "bricks_1",                     // Texture
+              "diffuse": "#ffffff"                       // Diffuse color in hex
+            }
+          ]
         },
         'Ceiling': {
-          depth: 0.05
+          depth: 0.05,
+          offset: 0.04,    // Bit offset above wall extraHeight
+          materials: [
+            {
+              "name": "surface",
+              "texture": 'laminate_1_2',
+              "diffuse": '#ffffff'
+
+            }
+          ]
         },
         'Floor': {
-          depth: 0.05
+          depth: 0.05,
+          materials: [
+            {
+              "name": "surface",
+              "texture": 'linen_1_4',
+              "diffuse": '#ffffff'
+
+            }
+          ]
         },
         'Ground': {
-          depth: 0.08
+          depth: 0.08,
+          materials: [
+            {
+              "name": "surface",
+              "texture": 'ground_1',
+              "diffuse": '#ffffff'
+
+            }
+          ]
         }
       }
     });
   }
 }
+
 SUNCGLoader.prototype = Object.create(SceneLoader.prototype);
 SUNCGLoader.prototype.constructor = SUNCGLoader;
 
@@ -148,9 +188,7 @@ SUNCGLoader.prototype.__createArch = function(archData, json, context) {
       }
     },
     getMaterials: function (w) {
-      return _.map(w.materials, function (m) {
-        return scope.__getMaterial(m.diffuse, m.texture);
-      });
+      return scope.__getMaterials(w);
     },
     groupWalls: false
   });
@@ -229,14 +267,19 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
     this.__parseCamera(json.camera, sceneResult);
   }
 
-  if (this.archCreator && loadOpts.arch && loadOpts.arch.data) {
-    context.hasArch = true;
-    if (this.ignoreOriginalArchHoles) {
-      // Skip room for now so that we can create rooms with custom cut out holes
-      this.__createDummyRoom = true;
-      this.keepParse = true;
+  if (this.archCreator) {
+    if (loadOpts.arch && loadOpts.arch.data) {
+      context.hasArch = true;
+      if (this.ignoreOriginalArchHoles) {
+        // Skip room for now so that we can create rooms with custom cut out holes
+        this.__createDummyRoom = true;
+        this.keepParse = true;
+      } else {
+        this.__createArch(loadOpts.arch.data, json, context);
+      }
     } else {
-      this.__createArch(loadOpts.arch.data, json, context);
+      this.keepParse = true;
+      console.warn('No architecture data found for ' + json.id);
     }
   }
 
@@ -248,6 +291,13 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
       scope.__createDummyRoom = false;
       // TODO: handle ground
       var archData = _.cloneDeep(loadOpts.arch.data);
+      var objects = _.flatMap(results, function(x) { return x.children; });
+      scope.__attachRoomArchWithNewHoles(archData, objects, json, context);
+    } else if (scope.__hasEmbeddedArchElements) {
+      scope.__hasEmbeddedArchElements = false;
+      var roomJsons = _.flatMap(results, function(x) { return x.json.nodes.filter(function(y) { return y.type === 'Room'; } ); });
+      var allElements = _.flatMap(roomJsons, function(x) { return x.elements || []; });
+      var archData = { elements: allElements };
       var objects = _.flatMap(results, function(x) { return x.children; });
       scope.__attachRoomArchWithNewHoles(archData, objects, json, context);
     }
@@ -265,6 +315,10 @@ SUNCGLoader.prototype.parse = function (json, callback, url, loadOpts) {
     });
 
     // Finalize our scene
+    if (scope.keepParse) {
+      parsed.loader = 'SUNCGLoader';
+      sceneResult.parsedData = parsed;
+    }
     scope.__onSceneCompleted(null, sceneResult);
     // our callback expect the sceneResult and then error
     callback(sceneResult, err);
@@ -358,7 +412,13 @@ SUNCGLoader.prototype.__parseItemDeferred = function (json, items, context, allo
       for (var i = 0; i < results.length; i++) {
         var result = results[i];
         if (result && result.object3D) {
-          result.object3D.userData.id = result.id;
+//          result.object3D.userData.id = result.id;
+          result.object3D.userData.id = result.json.id;
+          if (scope.keepMaterialInfo) {
+            if (result.json.materials) {
+              result.object3D.userData.materials = result.json.materials;
+            }
+          }
         }
       }
     }
@@ -488,9 +548,53 @@ SUNCGLoader.prototype.__parseGround = function (json, context, callback) {
   });
 };
 
+function __getWallHeight(elements, defaults) {
+  var walls = _.filter(elements, function(x) { return x.type === 'Wall'; });
+  var defaultWallHeight = _.get(defaults, "Wall.height");
+  return _.max(_.map(walls, function(w) {
+    return w.height || defaultWallHeight;
+  }));
+}
 
 SUNCGLoader.prototype.__parseRoom = function (json, context, callback) {
-  if (this.__createDummyRoom) {
+  if (this.__createDummyRoom || (!context.arch && json.elements)) {
+    if (!context.arch && json.elements) {
+      var scope = this;
+      this.__hasEmbeddedArchElements = true;
+      _.each(json.elements, function(x) {
+        x.roomId = json.id;
+      });
+      var addFloor = this.includeFloor && !_.some(json.elements, function(e) { return e.type === 'Floor'; });
+      var addCeiling = this.includeCeiling && !_.some(json.elements, function(e) { return e.type === 'Ceiling'; });
+      if (addFloor || addCeiling) {
+        var s = scope.archCreator.getWallPoints(json.elements, true);
+        var wallPoints = s.wallPoints;
+        json.elements = _.flatten(s.groupedWalls); // reordered walls
+        if (addFloor) {
+          // Let's create a floor
+          json.elements.push({
+            'id': json.id + "f",
+            "type": "Floor",
+            "roomId": json.id,
+            "points": wallPoints
+          });
+        }
+        if (addCeiling) {
+          // Let's create a ceiling
+          var up = Object3DUtil.toVector3(scope.archCreator.up).clone();
+          var wallHeight = __getWallHeight(json.elements, scope.archCreator.defaults);
+          var ceilingOffset = _.get(scope.archCreator.defaults, "Ceiling.offset") || 0;
+          // Let's create a floor
+          json.elements.push({
+            'id': json.id + "c",
+            "type": "Ceiling",
+            "roomId": json.id,
+            "offset": up.multiplyScalar(wallHeight + ceilingOffset).toArray(),
+            "points": wallPoints
+          });
+        }
+      }
+    }
     // console.log('dummy room creation');
     this.__parseItemSimple(json, context, function (err, parsed) {
       var group = new THREE.Group();
@@ -699,6 +803,9 @@ SUNCGLoader.prototype.__parseItemLoad = function (json, context, callback) {
         // Okay
         object.modelInstance = modelInstance;
         object.object3D = modelInstance.getObject3D();
+        if (json.state != null) {
+          object.object3D.userData.state = json.state;
+        }
 
         scope.__applyTransform(object.object3D, json);
         // Apply materials after transform (apply transform may change underlying model...)
@@ -808,6 +915,15 @@ SUNCGLoader.prototype.__getMaterial = function (color, texture, options) {
   } else {
     return Object3DUtil.getMaterial(color);
   }
+};
+
+SUNCGLoader.prototype.__getMaterials = function(w) {
+  var scope = this;
+  var materials = w.materials? w.materials : _.get(this.archCreator.defaults, w.type + '.materials');
+  //console.log("materials", materials);
+  return _.map(materials, function (m) {
+    return scope.__getMaterial(m.diffuse, m.texture);
+  });
 };
 
 SUNCGLoader.prototype.__applyMaterials = function (object3D, json) {

@@ -1104,6 +1104,11 @@ define(['Constants','controls/Picker','assets/AssetManager','assets/AssetGroups'
               this.modelMaterialsPanel.selectMesh(mesh, intersects[0].faceIndex);
             }
             console.log(intersects[0]);
+            var modelObject3D = target.getObject3D('Model');
+            if (modelObject3D) {
+              var p = modelObject3D.worldToLocal(intersects[0].point.clone());
+              console.log("modelCoordinates", p);
+            }
           }
           return intersects[0];
         }

@@ -44,10 +44,14 @@ OffscreenPicker.prototype.__getOffscreenRenderer = function(opts) {
 };
 
 OffscreenPicker.prototype.getOffscreenCoordinates = function (container, screenPosition) {
-  var rect = container.getBoundingClientRect();
-  var x = screenPosition.clientX - rect.left;
-  var y = screenPosition.clientY - rect.top;
-  return new THREE.Vector2(x,y);
+  if (container) {
+    var rect = container.getBoundingClientRect();
+    var x = screenPosition.clientX - rect.left;
+    var y = screenPosition.clientY - rect.top;
+    return new THREE.Vector2(x, y);
+  } else {
+    return new THREE.Vector2(screenPosition.x, screenPosition.y);
+  }
 };
 
 OffscreenPicker.prototype.__updateScene = function(scene) {
@@ -63,6 +67,18 @@ OffscreenPicker.prototype.__updateScene = function(scene) {
   }
 };
 
+/**
+ * Returns object picked
+ * @param options
+ * @param [options.container] container
+ * @param [options.scene] {THREE.Scene} scene to pick against
+ * @param options.position Screen position (contains `clientX, clientY` if `container` provided or `x,y,width,height` if no container)
+ * @param options.camera {THREE.Camera}
+ * @param options.objects {THREE.Object3D[]} Array of objects to intersect against
+ * @param options.ignore {THREE.Object3D[]} Array of objects to ignore
+ * @param options.targetType {string} What type of target (`mesh|object`)
+ * @returns {Intersect}
+ */
 OffscreenPicker.prototype.pick = function (options) {
   var raycastMouse = this.getCoordinates(options.container, options.position);
   var offscreenMouse = this.getOffscreenCoordinates(options.container, options.position);

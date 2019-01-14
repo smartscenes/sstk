@@ -350,7 +350,8 @@ module.exports = {
       var id = req.params['id'];
       var datatype = req.params['datatype'];
       var format = req.params['format'];
-      getAssetDownloadInfo(name, id, datatype, format, web_vars, function(err, info) {
+      var vars = _.defaults(Object.create(null), web_vars, req.query);
+      getAssetDownloadInfo(name, id, datatype, format, vars, function(err, info) {
         if (info) {
           res.json(info);
         } else {
@@ -365,7 +366,8 @@ module.exports = {
       var id = req.params['id'];
       var datatype = req.params['datatype'];
       var format = req.params['format'];
-      getAssetDownloadInfo(name, id, datatype, format, local_web_vars, function(err, info) {
+      var vars = _.defaults(Object.create(null), local_web_vars, req.query);
+      getAssetDownloadInfo(name, id, datatype, format, vars, function(err, info) {
         if (info) {
           if (info.path) {
             //res.redirect(info.path);
@@ -386,7 +388,8 @@ module.exports = {
       var id = req.params['id'];
       var datatype = req.params['datatype'];
       var format = req.params['format'];
-      getAssetDownloadInfo(name, id, datatype, format, local_web_vars, function(err, info) {
+      var vars = _.defaults(Object.create(null), local_web_vars, req.query);
+      getAssetDownloadInfo(name, id, datatype, format, vars, function(err, info) {
         if (info) {
           if (info.path) {
             //res.redirect(info.path);

@@ -399,6 +399,161 @@ SUNCGExporter.prototype.__getTransformInfo = function (sceneState, opts) {
 };
 
 SUNCGExporter.prototype.convert = function (sceneState, opts) {
+  if (sceneState.parsedData && !sceneState.parsedData.loader) {
+    return this.__convertParsed(sceneState, opts);
+  } else {
+    return this.__extractJson(sceneState, opts);
+  }
+};
+
+SUNCGExporter.prototype.__extractJson = function(sceneState, opts) {
+  // Extract json
+  // Prepare json data
+
+  var transformInfo = this.__getTransformInfo(sceneState, opts);
+  var transform = transformInfo.transform;
+  var sceneBBox = new BBox();
+
+  var json = {};
+  json.version = SUNCG_VERSION_STRING;
+  json.id = sceneState.info.id;
+  json.up = sceneState.info.defaultUp;
+  json.front = sceneState.info.defaultFront;
+  json.scaleToMeters = opts.unit;
+  var levels = sceneState.getLevels();
+  var keepTypes = ['ModelInstance', 'Room', 'Box', 'Ground'];
+  var wallTypes = ['Wall'];
+  var ceilingTypes = ['Ceiling'];
+  var floorTypes = ['Floor'];
+  if (sceneState.parsedData) {
+    console.log(sceneState.parsedData);
+  }
+  json.levels = _.map(levels, function(level, index) {
+    var objects = sceneState.findNodes(function(x) {
+      return x.userData.level == level.userData.id && keepTypes.indexOf(x.userData.type) >= 0;
+    }, true);
+    var levelJson  = {};
+    levelJson.id = index;
+    var nodes = _.map(objects, function(obj) {
+      var bbox = Object3DUtil.computeBoundingBox(obj, transform);
+      if (bbox.valid()) {
+        bbox = bbox.toJSON();
+      } else {
+        bbox = undefined;
+      }
+      if (obj.userData.type === 'Room') {
+        var hasWall = Object3DUtil.findNodes(obj,function(x) { return wallTypes.indexOf(x.userData.type) >= 0; }, true).length > 0;
+        var hasCeiling = Object3DUtil.findNodes(obj,function(x) { return ceilingTypes.indexOf(x.userData.type) >= 0; }, true).length > 0;
+        var hasFloor = Object3DUtil.findNodes(obj,function(x) { return floorTypes.indexOf(x.userData.type) >= 0; }, true).length > 0;
+        var nodeIndices = [];
+        for (var i = 0; i < objects.length; i++) {
+          var x = objects[i];
+          if (x.userData.roomIds && x.userData.roomIds.indexOf(obj.userData.id) >= 0) {
+            nodeIndices.push(i);
+          }
+        }
+        var idParts = obj.userData.id.split('_');
+        return {
+          id: obj.userData.id,
+          type: "Room",
+          valid: 1,
+          modelId: 'fr_' + idParts[0] + 'rm_' + idParts[1],
+          hideWall: hasWall? 0 : 1,
+          hideCeiling: hasCeiling? 0 : 1,
+          hideFloor: hasFloor? 0 : 1,
+          roomTypes: obj.userData.roomType,
+          nodeIndices: nodeIndices,
+          bbox: bbox,
+          materials: obj.userData.materials
+        };
+      } else if (obj.userData.type === 'ModelInstance') {
+        var mInst = Object3DUtil.getModelInstance(obj);
+        var object3D = mInst.getObject3D('Model');
+        object3D.updateMatrixWorld();
+        var t = object3D.matrixWorld;
+        if (transform) {
+          t = transform.clone();
+          t.multiply(object3D.matrixWorld);
+        }
+        var isMirrored = t.determinant() < 0;
+        return {
+          id: obj.userData.id,
+          type: "Object",
+          valid: 1,
+          modelId: obj.userData.modelId,
+          state: obj.userData.state,
+          transform: t.toArray(),
+          isMirrored: isMirrored,
+          bbox: bbox,
+          materials: obj.userData.materials
+        };
+      } else if (obj.userData.type === 'Box') {
+        var params = obj.geometry.parameters;
+        var t = obj.matrixWorld;
+        if (transform) {
+          t = transform.clone();
+          t.multiply(obj.matrixWorld);
+        }
+        var isMirrored = t.determinant() < 0;
+        return {
+          id: obj.userData.id,
+          type: "Box",
+          valid: 1,
+          dimensions: [params.width, params.height, params.depth],
+          transform: t.toArray(),
+          isMirrored: isMirrored,
+          bbox: bbox,
+          materials: obj.userData.materials
+        };
+      } else if (obj.userData.type === 'Ground') {
+        var idParts = obj.userData.id.split('_');
+        return {
+          id: obj.userData.id,
+          type: "Ground",
+          valid: 1,
+          modelId: 'fr_' + idParts[0] + 'gd_' + idParts[1],
+          bbox: bbox,
+          materials: obj.userData.materials
+        };
+      }
+    });
+    levelJson.nodes = nodes;
+
+    // For rooms need to make sure all doors/windows are included in bbox (including ones associated with two rooms)
+    var rooms = nodes.filter(function(x) { return x.type === 'Room'; });
+    for (var j = 0; j < rooms.length; j++) {
+      var room = rooms[j];
+      var indices = room.nodeIndices;
+      var roomBBox = room.bbox? Object3DUtil.toBBox(room.bbox) : new BBox();
+      for (var k = 0; k < indices.length; k++) {
+        var idx = indices[k];
+        var node = nodes[idx];
+        if (node && node.bbox) {
+          var bbox = Object3DUtil.toBBox(node.bbox);
+          if (bbox.valid()) {
+            roomBBox.includeBBox(bbox);
+          }
+        }
+      }
+      if (roomBBox.valid()) {
+        room.bbox = roomBBox.toJSON();
+      }
+    }
+
+    var levelBBox = Object3DUtil.computeBoundingBox(level, transform);
+    if (levelBBox.valid()) {
+      sceneBBox.includeBBox(levelBBox);
+      levelJson.bbox = levelBBox.toJSON();
+    }
+    return levelJson;
+  });
+  if (sceneBBox.valid()) {
+    json.bbox = sceneBBox.toJSON();
+  }
+  return json;
+};
+
+SUNCGExporter.prototype.__convertParsed = function (sceneState, opts) {
   // console.log(sceneState);
   // Setup transform (default to some reasonable thing)
   var omitBBox = opts.omitBBox;
@@ -581,6 +736,7 @@ SUNCGExporter.prototype.convert = function (sceneState, opts) {
       return node;
     });
     if (!omitBBox && nodes) {
+      // For rooms need to make sure all doors/windows are included in bbox (including ones associated with two rooms)
       var rooms = nodes.filter(function(x) { return x.type === 'Room'; });
       for (var j = 0; j < rooms.length; j++) {
         var room = rooms[j];

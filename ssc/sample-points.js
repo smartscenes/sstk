@@ -28,11 +28,12 @@ cmd
   .option('--id_field <fieldname>', 'id field', 'id')
   .option('--world_up <vector3>', STK.util.cmd.parseVector, STK.Constants.worldUp)
   .option('--world_front <vector3>', STK.util.cmd.parseVector, STK.Constants.worldFront)
+  .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 var argv = cmd;
 
-var useSearchController = STK.Constants.baseUrl.startsWith('http://') || STK.Constants.baseUrl.startsWith('https://');
+var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
   useColladaScale: false, convertUpAxis: false,

@@ -139,6 +139,11 @@ define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util/util', 'jq
 
       // Get entry from material
       var entry = this.materials[material.id];
+      if (!entry) {
+        console.warn('No entry for material ' + material.id);
+        return;
+      }
+
       var meshIndex;
       if (entry.meshes.length > 1) {
         // Get mesh index from entry
@@ -165,6 +170,7 @@ define(['Constants', 'assets/AssetManager', 'geo/Object3DUtil', 'util/util', 'jq
 
     ModelMaterialsPanel.prototype.selectMesh = function (mesh, faceIndex) {
       var elems = this.getMeshElem(mesh, faceIndex);
+      if (!elems) { return; }
       var elem = elems.elem;
       var expandDiv = elems.expand;
       // Show materials

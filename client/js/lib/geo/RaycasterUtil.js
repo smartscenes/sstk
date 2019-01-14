@@ -36,6 +36,12 @@ self.getIntersectedForRay = function (raycaster, objects, ignore, n, renderer) {
   return self.selectIntersectedObjects(intersected, objects, ignore, n);
 };
 
+/**
+ * Filters intersected by renderer clippingPlanes
+ * @param intersected {Intersect[]}
+ * @param renderer {THREE.Renderer}
+ * @returns {*}
+ */
 self.filterClipped = function(intersected, renderer) {
   if (renderer && renderer.clippingPlanes.length > 0) {
     intersected = intersected.filter(function(elem) {
@@ -73,9 +79,18 @@ self.sortIntersectionsByNormal = function(ray, intersections) {
   });
 };
 
+/**
+ * From list of intersected, pick out the ones that are actually in the list of objects
+ * If the object is intersected multiple times, it will be picked multiple times
+ * Original intersected mesh/points is moved to `descendant` field and matched object is now called `object`
+ * @param intersected {Intersect[]} Array of intersected objects
+ * @param objects {THREE.Object3D[]} Array of ancestor objects that we are actually interested in
+ * @param [ignore] {THREE.Object3D[]} Array of objects to ignore
+ * @param [n] {int} Max number of entries to return
+ * @param [allowAllModelInstances] {boolean} Whether any model instance is allowed as intersected object
+ * @returns {Intersect[]}
+ */
 self.selectIntersectedObjects = function (intersected, objects, ignore, n, allowAllModelInstances) {
-  // From list of intersected, pick out the ones that are actually in the list of objects
-  // If the object is intersected multiple times, it will be picked multiple times
   var intersectedObjects = [];
   for (var i = 0; i < intersected.length; i++) {
     var c = intersected[i].object;

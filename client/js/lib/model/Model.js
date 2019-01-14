@@ -93,7 +93,21 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
       Model.prototype.getAlignmentMatrix = function () {
         var up = this.getUp();
         var front = this.getFront();
-        return Object3DUtil.getAlignmentMatrix(up, front, Constants.worldUp, Constants.worldFront);
+        var matrix =  Object3DUtil.getAlignmentMatrix(up, front, Constants.worldUp, Constants.worldFront);
+        if (this.info.alignments) {
+          //console.log('Got alignments', this.info.alignments);
+          if (this.info.alignments.data) {
+            var alns = this.info.alignments.data;
+            if (alns.length) {
+              var aln = alns[0].matrix;
+              // Premultiply (right multiply) matrix with aln
+              var transform = new THREE.Matrix4();
+              transform.multiplyMatrices(matrix, aln);
+              matrix = transform;
+            }
+          }
+        }
+        return matrix;
       };
 
       Model.prototype.applyMaterials = function () {
@@ -149,6 +163,10 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
 
       Model.prototype.getFullID = function () {
         return this.info.fullId;
+      };
+
+      Model.prototype.getAssetSource = function() {
+        return this.info.source;
       };
 
       Model.prototype.getBBox = function () {
@@ -221,10 +239,10 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
 
       Model.prototype.hasCategory = function (cat, ignoreCase) {
         if (ignoreCase) {
-          var cats = this.getCategories().map( function(x) { return x.toLowerCase(); });
+          var cats = this.getAllCategoryTags().map( function(x) { return x.toLowerCase(); });
           return cats.indexOf(cat.toLowerCase()) >= 0;
         } else {
-          var cats = this.getCategories();
+          var cats = this.getAllCategoryTags();
           return cats.indexOf(cat) >= 0;
         }
       };
@@ -260,7 +278,8 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
       };
 
       Model.prototype.getMatchingCategory = function (validCategories) {
-        var cats = this.getCategories();
+        //var cats = this.getCategories();
+        var cats = this.getAllCategoryTags();
         if (cats.length > 0) {
           for (var i = 0; i < cats.length; i++) {
             var cat = cats[i];
@@ -281,7 +300,11 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
 
       Model.prototype.getCategories = function () {
         if (this.info && this.info.category) {
-          var cats = this.info.category.filter( function(x) { return !x.startsWith('_'); });
+          var categories = this.info.category;
+          if (!Array.isArray(categories)) {
+            categories = [categories];
+          }
+          var cats = categories.filter( function(x) { return !x.startsWith('_'); });
           if (this.info.categoryOrdering === 'coarse-to-fine') {
             cats = _.reverse(cats);
           }
@@ -291,8 +314,27 @@ define(['model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil','assets/Asse
         }
       };
 
+      Model.prototype.getInternalCategoryTags = function() {
+        // Return internal categories
+        return this.getAllCategoryTags().filter(function (x) {
+            return x.startsWith('_');
+        });
+      };
+
+      Model.prototype.getAllCategoryTags = function() {
+        if (this.info && this.info.category) {
+          var categories = this.info.category;
+          if (!Array.isArray(categories)) {
+            categories = [categories];
+          }
+          return categories;
+        } else {
+          return [];
+        }
+      };
+
       Model.prototype.getDatasets = function () {
-        if (this.info && this.info.datatsets) {
+        if (this.info && this.info.datasets) {
           return this.info.datasets;
         } else {
           return [];

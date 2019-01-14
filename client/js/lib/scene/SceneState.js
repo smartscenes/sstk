@@ -740,13 +740,13 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       return this.findNode(function(x) { return x.userData.id === id; });
     };
 
-    SceneState.prototype.findNode = function(filter) {
-      var nodes = Object3DUtil.findNodes(this.scene, filter);
+    SceneState.prototype.findNode = function(filter, visibleOnly) {
+      var nodes = Object3DUtil.findNodes(this.scene, filter, visibleOnly);
       if (nodes.length > 0) { return nodes[0]; }
     };
 
-    SceneState.prototype.findNodes = function(filter) {
-      return Object3DUtil.findNodes(this.scene, filter);
+    SceneState.prototype.findNodes = function(filter, visibleOnly) {
+      return Object3DUtil.findNodes(this.scene, filter, visibleOnly);
     };
 
     SceneState.prototype.getFullID = function () {
@@ -1481,6 +1481,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
       var sceneObjects = [];
       var sceneTransformMatrixInverse = new THREE.Matrix4();
       sceneTransformMatrixInverse.getInverse(this.scene.matrixWorld);
+      var assetSources = [];
       for (var i = 0; i < this.modelInstances.length; i++) {
         var modelInstance = this.modelInstances[i];
         var modelObject = modelInstance.getObject3D('Model');
@@ -1499,6 +1500,10 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
           transform: transform
           //          objectDescIndex: -1
         };
+        var modelSource = modelInstance.model.getAssetSource();
+        if (modelSource != null && assetSources.indexOf(modelSource) < 0) {
+          assetSources.push(modelSource);
+        }
         if (includeUserData) {
           sceneObject.userData = modelInstance.object3D.userData;
         }
@@ -1509,6 +1514,7 @@ define(['Constants','model/ModelInstance','geo/Object3DUtil','geo/GeometryUtil',
         up: this.getUp(),
         front: this.getFront(),
         unit: this.getUnit(),
+        assetSource: assetSources,
         object: sceneObjects
       };
 

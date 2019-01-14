@@ -866,7 +866,8 @@ SceneUtil.__precomputeSemanticEncoding = function(sceneState, encodingType, labe
  * @param sceneState {scene.SceneState|THREE.Object3D}
  * @param opts Options on how to render/index the scene
  * @param opts.renderer {gfx.Renderer} Renderer to use (NOTE: for indexed render to happen well, renderer should not have any special effects such as ambientOcclusion,e tc)
- * @param opts.camera {THREE.Camera} Camera to use when renderering
+ * @param opts.camera {THREE.Camera} Camera to use when rendering
+ * @param [opts.index] {ds.Index} Index of labels to integers
  * @param [opts.getIndex] {function(THREE.Object3D): int} Function that returns the index to use
  * @param [opts.getId] {function(THREE.Object3D): string} Function that returns the id to index
  * @param [opts.palette]
@@ -905,7 +906,9 @@ SceneUtil.renderIndexed = function(sceneState, opts) {
     return {
       pixels: pixels,
       nPixels: pixels.length / 4,
-      index: colorByIndex
+      index: colorByIndex,
+      width: opts.renderer.width,
+      height: opts.renderer.height
     };
   } else {
     // TODO: Use callback for rendering parts....
@@ -921,7 +924,9 @@ SceneUtil.renderIndexed = function(sceneState, opts) {
     return {
       pixels: pixels,
       nPixels: pixels.length / 4,
-      index: colorByIndex
+      index: colorByIndex,
+      width: opts.renderer.width,
+      height: opts.renderer.height
     };
   }
 };

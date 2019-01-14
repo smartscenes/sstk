@@ -30,11 +30,12 @@ cmd
   .option('--world_front <vector3>', STK.util.cmd.parseVector, STK.Constants.worldFront)
   .option('--parts <dirname>', 'Path to directory with part hierarchy and objs')  // For now assume it's organized by id
   .option('--split_by_material [flag]', STK.util.cmd.parseBoolean, false)
+  .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 var argv = cmd;
 
-var useSearchController = STK.Constants.baseUrl.startsWith('http://') || STK.Constants.baseUrl.startsWith('https://');
+var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
   useColladaScale: false, convertUpAxis: false,

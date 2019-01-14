@@ -75,49 +75,66 @@ function andFilter() {
   };
 }
 
+function termMatchFilterSingle(v, term) {
+  if (term === '*') {
+    if (v == undefined) {
+      return false;
+    }
+  } else if (term.indexOf('*') >= 0) {
+    var regex = new RegExp(term.replace('*', '.*'));
+    return v.search(regex) >=0;
+  } else if (term.startsWith('/') && term.endsWith('/')) {
+    var regex = new RegExp(term.substring(0, term.length-1));
+    return v.search(regex) >=0;
+  } else if (v !== term) {
+    return false;
+  } else {
+    return true;
+  }
+}
+
+function inclusiveRangeFilterSingle(v, min, max) {
+  return ((v != undefined) &&
+    (min === '*' || v >= min) &&
+    (max === '*' || v <= max));
+}
+
+function exclusiveRangeFilterSingle(v, min, max) {
+  return ((v != undefined) &&
+    (min === '*' || v > min) &&
+    (max === '*' || v < max));
+}
+
 function termMatchFilter(field, term) {
   return function(d) {
     var v = d[field];
-    if (term === '*') {
-      if (v == undefined) {
-        return false;
-      }
-    } else if (term.indexOf('*') >= 0) {
-      var regex = new RegExp(term.replace('*', '.*'));
-      return v.search(regex) >=0;
-    } else if (term.startsWith('/') && term.endsWith('/')) {
-      var regex = new RegExp(term.substring(0, term.length-1));
-      return v.search(regex) >=0;
-    } else if (v !== term) {
-      return false;
+    if (Array.isArray(v)) {
+      return _.any(v, function(x) { return termMatchFilterSingle(x, term); });
+    } else {
+      return termMatchFilterSingle(v, term);
     }
-    return true;
-  };
-}
-
-function inclusiveRangeFilter(field, min, max) {
-  return function(d) {
-    var v = d[field];
-    return ((v != undefined) &&
-    (min === '*' || v >= min) &&
-    (max === '*' || v <= max));
-  };
-}
-
-function exclusiveRangeFilter(field, min, max) {
-  return function(d) {
-    var v = d[field];
-    return ((v != undefined) &&
-    (min === '*' || v > min) &&
-    (max === '*' || v < max));
   };
 }
 
 function rangeFilter(field, min, max, isInclusive) {
   if (isInclusive) {
-    return inclusiveRangeFilter(field, min, max);
+    return function(d) {
+      var v = d[field];
+      if (Array.isArray(v)) {
+        return _.any(v, function(x) { return inclusiveRangeFilterSingle(x, min, max); });
+      } else {
+        return inclusiveRangeFilterSingle(v, min, max);
+      }
+    };
   } else {
-    return exclusiveRangeFilter(field, min, max);
+    return function(d) {
+      var v = d[field];
+      if (Array.isArray(v)) {
+        return _.any(v, function(x) { return exclusiveRangeFilterSingle(x, min, max); });
+      } else {
+        return exclusiveRangeFilterSingle(v, min, max);
+      }
+    };
   }
 }
 

@@ -127,11 +127,14 @@ Materials.createMultiMaterial = function(materials) {
   return materials;
 };
 
-Materials.getBasicMaterial = function (color, alpha) {
+Materials.getBasicMaterial = function (color, alpha, materialSide) {
   if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
     return color;
   }
-  var mat = new THREE.MeshBasicMaterial({side: Materials.DefaultMaterialSide, color: color});
+  if (materialSide == null) {
+    materialSide = Materials.DefaultMaterialSide;
+  }
+  var mat = new THREE.MeshBasicMaterial({side: materialSide, color: color});
   if (alpha != undefined) {
     Materials.setMaterialOpacity(mat, alpha);
   }
@@ -167,11 +170,14 @@ Materials.updateMaterialParams = function(materialType, p) {
   }
 };
 
-Materials.getStandardMaterial = function (color, alpha, materialType) {
+Materials.getMaterial = function (color, alpha, materialType, materialSide) {
   if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
     return color;
   }
   materialType = materialType || Materials.DefaultMaterialType;
+  if (materialSide == null) {
+    materialSide = Materials.DefaultMaterialSide;
+  }
   var c = color;
   var a = new THREE.Color();
   //a.setRGB(0.02, 0.02, 0.05);
@@ -183,12 +189,16 @@ Materials.getStandardMaterial = function (color, alpha, materialType) {
     //ambient: a,
     specular: s,
     shininess: 64,
-    side: Materials.DefaultMaterialSide
+    side: materialSide
   }));
   if (alpha != undefined) {
     Materials.setMaterialOpacity(mat, alpha);
   }
   return mat;
+};
+
+Materials.getStandardMaterial = function (color, alpha, materialSide) {
+  return Materials.getMaterial(color, alpha, Materials.DefaultMaterialType, materialSide);
 };
 
 Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
@@ -199,7 +209,7 @@ Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
     c = Colors.toColor(c);
   }
 
-  var mat = Materials.getStandardMaterial(c, undefined, THREE.MeshPhongMaterial);
+  var mat = Materials.getMaterial(c, 1, THREE.MeshPhongMaterial);
   mat.name = 'color' + id;
   return mat;
 };
@@ -216,7 +226,7 @@ Materials.setMaterialOpacity = function (material, opacity) {
     }
   } else {
     material.opacity = opacity;
-    material.transparent = true;
+    material.transparent = opacity < 1;
   }
 };
 

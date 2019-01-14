@@ -44,6 +44,9 @@ PartHierarchy.prototype.createObjectGroup = function(node, objs) {
   for (var j = 0; j < objs.length; j++) {
     g.add(objs[j]);
   }
+  if (node.transform) {
+    ObjectUtils.setMatrix(g, node.transform);
+  }
   _.merge(g.userData, _.omit(node, ["children"]));
   return g;
 };
@@ -61,6 +64,47 @@ function OBJPartLoader(params) {
 
 OBJPartLoader.prototype.constructor = OBJPartLoader;
 
+OBJPartLoader.prototype.parse = function(data) {
+  var json = JSON.parse(data);
+  if (json.nodes) {
+    // Convert from nodes
+    var converted = _.map(json.nodes, function() {
+      return {
+        "id": node.id,
+        "text": node.name,
+        "name": node.name,
+        // "transformation": node.transformation,
+      }
+    });
+    var convertedById = _.groupBy(converted, 'id');
+    for (var i = 0; i < converted.length; i++) {
+      var node = json.nodes[i];
+      var c = converted[i];
+      if (node.children) {
+        c['children'] = _.map(node.children, function(id) {
+          return convertedById[id];
+        });
+      }
+      if (node.meshes) {
+        c['objs'] = _.map(node.meshes, function(id) { return id; });
+      }
+    }
+
+  } else {
+    // Assume this format:
+    // {
+    //   "text": "xyz",
+    //   "children": {
+    //     "text": "abc",
+    //     "name": "abc",
+    //     "id": 11
+    //     "objs": ["new-45"]
+    //   }
+    // }
+  }
+  return json;
+};
+
 /**
  * Load and parses house file
  * @param file
@@ -74,7 +118,7 @@ OBJPartLoader.prototype.load = function(file, callback) {
       callback(err);
     } else {
       try {
-        var partHierarchy = new PartHierarchy(JSON.parse(data));
+        var partHierarchy = new PartHierarchy(scope.parse(data));
         var objNodes = partHierarchy.getObjNodes();
         var dirname = _.getPath(_.getDirname(filename), 'objs/');
         async.map(objNodes, function(objNode, cb) {

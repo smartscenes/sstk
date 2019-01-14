@@ -163,12 +163,12 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       }
 
       // Fields we want to preserve and send to the scene loaders
-      this.__sceneLoadInfoFields = ['preload', 'freezeObjects', 'floor', 'room',
+      this.__sceneLoadInfoFields = ['preload', 'freezeObjects', 'floor', 'level', 'room',
         'includeCeiling', 'includeWalls', 'includeFloor',
         'attachWallsToRooms', 'useVariants',
         'createArch', 'useArchModelId', 'ignoreOriginalArchHoles',
-        'keepInvalid', 'keepHidden', 'keepParse', 'precomputeAttachments',
-        'hideCategories', 'replaceModels', 'loadModelsFilter', 'skipElements',
+        'keepInvalid', 'keepHidden', 'keepParse', 'keepMaterialInfo', 'precomputeAttachments',
+        'hideCategories', 'hideModelIds', 'replaceModels', 'loadModelsFilter', 'skipElements',
         'emptyRoom', 'archOnly', 'defaultModelFormat'];
 
       this.__lightsLoader = new LightsLoader(params);
@@ -1381,6 +1381,10 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
       } else if (sceneinfo['fullId'] != undefined) {
         // TODO: Refactor....
         // Try to load from DB or Solr
+        var assetInfo = this.getAssetInfo(sceneinfo.fullId);
+        if (assetInfo) {
+          _.defaults(sceneinfo, assetInfo);
+        }
         var sid = AssetManager.toSourceId(sceneinfo.source, sceneinfo.fullId);
         if (sid.source === 'db' || sid.source === 'mturk') {
           return this.__loadSceneFromDb(sceneinfo, callback);
@@ -1508,6 +1512,20 @@ define(['Constants', 'audio/Sounds', 'model/Model', 'scene/SceneState',
               function (node) {
                 var modelInstance = Object3DUtil.getModelInstance(node);
                 return modelInstance && modelInstance.model.hasCategoryIn(cats);
+              },
+              true /* recursive */
+            );
+          }
+          if (sceneinfo.hideModelIds) {
+            var modelIds = sceneinfo.hideModelIds;
+            if (!_.isArray(modelIds)) {
+              modelIds = [modelIds];
+            }
+            sceneState.setVisible(
+              false, /* visibility */
+              function (node) {
+                var modelInstance = Object3DUtil.getModelInstance(node);
+                return modelInstance && modelIds.indexOf(modelInstance.model.getFullID()) >= 0;
               },
               true /* recursive */
             );

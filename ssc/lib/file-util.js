@@ -18,8 +18,13 @@ function ensureDirExists(dir) {
   shell.mkdir('-p', dir);
 }
 
-// https://github.com/jhiesey/to-arraybuffer/blob/master/index.js
+/**
+ * Converts a buffer of some sort to a ArrayBuffer
+ * @param buf
+ * @returns {any}
+ */
 function toArrayBuffer(buf) {
+  // See https://github.com/jhiesey/to-arraybuffer/blob/master/index.js
   // If the buffer is backed by a Uint8Array, a faster version will work
   if (buf instanceof Uint8Array) {
     // If the buffer isn't a subarray, return the underlying ArrayBuffer
@@ -45,7 +50,14 @@ function toArrayBuffer(buf) {
 }
 
 
-// Asynchronously get from url
+/**
+ * Asynchronously get from url
+ * @param url {string}
+ * @param opts {string|Object} Either string specifying encoding or additional options for download
+ * @param opts.encoding {string} encoding (`arraybuffer|utf-8`)
+ * @param opts.saveFile {string} Where to save the file to
+ * @param cb
+ */
 function download(url, opts, cb) {
   // Reinterpret encoding to handle binary arraybuffer (see https://github.com/request/request)
   var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
@@ -70,7 +82,14 @@ function download(url, opts, cb) {
     });
 }
 
+/**
+ * Download file and save in cache
+ * @param url
+ * @param opts
+ * @param cb
+ */
 function downloadWithCache(url, opts, cb) {
+  opts = opts || {};
   var cacheOptions = __globalOptions.cache;
   if (!opts.saveFile && cacheOptions && cacheOptions.enabled && cacheOptions.dir) {
     var urlpath = url.replace(/.+?:/, '');
@@ -99,12 +118,17 @@ function fsReadFile(filename, successCallback, errorCallback) {
 }
 
 
-// read URL/file from uri synchronously
+/**
+ * read URL/file from uri synchronously
+ * @param uri {string} Url to file or http
+ * @param opts
+ * @returns {*} Contents of file
+ */
 function readSync(uri, opts) {
   opts = opts || 'utf8';
   //console.log('readSync ' + uri, opts);
   if (uri.startsWith('http')) {
-    return deasync(downloadWithCache);
+    return deasync(downloadWithCache)(uri, opts);
   } else {
     if (uri.startsWith('file://')) { uri = uri.substr(7); }
     if (!fs.existsSync(uri)) {
@@ -123,7 +147,12 @@ function readSync(uri, opts) {
 }
 
 
-// read URL/file from uri asynchronously
+/**
+ * read URL/file from uri asynchronously
+ * @param uri
+ * @param opts
+ * @param cb
+ */
 function readAsync(uri, opts, cb) {
   //console.log('readAsync ' + uri, opts);
   if (uri.startsWith('http')) {
@@ -241,7 +270,20 @@ function execSync(cmd, opts) {
   return cout;
 }
 
-// Thin wrapper about papaparse (see http://papaparse.com/docs)
+/**
+ * Parses delimited text data such as csv or tsv
+ * This is a thin wrapper about papaparse (see http://papaparse.com/docs)
+ * @param data {string}
+ * @param opts
+ * @param [opts.delimiter=','] {string}
+ * @param [opts.quoteChar] {string}
+ * @param [opts.header=true] {boolean} Includes header row
+ * @param [opts.skipEmptyLines=true] {boolean} Ignore empty lines
+ * @param [opts.dynamicTyping=true] {boolean} Automatically guess and convert type
+ * @param [opts.keyBy] {string} If specified, data is converted to a map with the specified key.  Otherwise, array is returned.
+ * @param [opts.filename] {string} If filename ends with '.tsv' then delimiter and quoteChar is set for tab delimited files.
+ * @returns {data: {array|map}, errors: array, meta: object}
+ */
 function parseDelimited(data, opts) {
   // By default, we assume there is a header, don't want empty lines, and will do dynamicTyping
   opts = _.defaults(Object.create(null), opts || {}, { header: true, skipEmptyLines: true, dynamicTyping: true });
@@ -259,6 +301,20 @@ function parseDelimited(data, opts) {
   return parsed;
 }
 
+/**
+ * Load delimited file
+ * @param filename {string}
+ * @param [opts] Additional options
+ * @param [opts.delimiter=','] {string}
+ * @param [opts.quoteChar] {string}
+ * @param [opts.header=true] {boolean} Includes header row
+ * @param [opts.skipEmptyLines=true] {boolean} Ignore empty lines
+ * @param [opts.dynamicTyping=true] {boolean} Automatically guess and convert type
+ * @param [opts.keyBy] {string} If specified, data is converted to a map with the specified key.  Otherwise, array is returned.
+ * @param [opts.filename] {string} If filename ends with '.tsv' then delimiter and quoteChar is set for tab delimited files.
+ * @param [callback] {function(err, {data: {array|map}, errors: array, meta: object})}
+ * @returns {*}
+ */
 function loadDelimited(filename, opts, callback) {
   // By default, we assume there is a header, don't want empty lines, and will do dynamicTyping
   opts = _.defaults(Object.create(null), opts || { filename: filename });

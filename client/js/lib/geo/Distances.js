@@ -1062,6 +1062,24 @@ function MeshesPointDistanceSquared(meshes, point, opts) {
   return result;
 }
 
+function MeshesMeshesDistanceSquared(meshes1, meshes2, opts) {
+  var result;
+  for (var i = 0; i < meshes1.length; i++) {
+    var mesh1 = meshes1[i];
+    for (var j = 0; j < meshes2.length; j++) {
+      var mesh2 = meshes2[i];
+      var r = MeshMeshDistanceSquared(mesh1, mesh2, opts);
+      if (!result || r.distanceSq < result.distanceSq) {
+        result = r;
+        if (opts.all) {
+          result.meshIndex1 = i;
+          result.meshIndex2 = j;
+        }
+      }
+    }
+  }
+}
+
 /**
  * Computes the directed hausdorff distance
  * @param meshes1 {Array<THREE.Mesh|geo.PartialMesh>}
@@ -1218,11 +1236,21 @@ var distanceFnMapping = {
   'mesh-triangle': null,
   'mesh-mesh': MeshMeshDistanceSquared,
   'point-meshes': PointMeshesDistanceSquared,
-  'meshes-point': MeshesPointDistanceSquared
+  'meshes-point': MeshesPointDistanceSquared,
+  'meshes-meshes': MeshesMeshesDistanceSquared
 };
 
 function computeDistance(object1, object2, opts) {
   function getType(obj) {
+    if (Array.isArray(obj)) {
+      var t = getType(obj[0]);
+      if (t.endsWith('sh') || t.endsWith('ch') || t.endsWith('s') || t.endsWith('x')) {
+        t = t + 'es';
+      } else {
+        t = t + 's';
+      }
+      return t;
+    }
     if (obj.type) { return obj.type; }
     if (obj instanceof THREE.Triangle) { return 'triangle'; }
     if (obj instanceof THREE.Mesh) { return 'mesh'; }

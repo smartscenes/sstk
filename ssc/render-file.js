@@ -89,6 +89,14 @@ var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
   far: 400*STK.Constants.metersToVirtualUnit
 });
 
+var simpleRenderer;
+function getSimpleRenderer() {
+  if (!simpleRenderer) {
+    simpleRenderer = STK.gfx.RendererFactory.createOffscreenRenderer({ width: renderer.width, height: renderer.height });
+  }
+  return simpleRenderer;
+}
+
 /**
  * Render scene
  * @param scene {THREE.Object3D}
@@ -218,7 +226,9 @@ function processFiles() {
         var defaultViewOpts = {};
         if (asset instanceof STK.scene.SceneState) {
           sceneState = asset;
-          defaultViewOpts = { view_index: 0 };
+          if (cmd.view == undefined && cmd.view_index == undefined && cmd.view_target_ids == undefined) {
+            defaultViewOpts = { view_index: 0 };
+          }
         } else if (asset instanceof STK.model.ModelInstance) {
           var modelInstance = asset;
           sceneState = new STK.scene.SceneState(null, modelInstance.model.info);
@@ -239,7 +249,7 @@ function processFiles() {
 
         // Create THREE scene
         var scene = new THREE.Scene();
-        var light = STK.gfx.Lights.getDefaultHemisphereLight(false);
+        var light = STK.gfx.Lights.getDefaultHemisphereLight(false, false);
         var camera;
         //console.log('use_scene_camera', cmd.use_scene_camera);
         var use_scene_camera = false;
@@ -306,11 +316,37 @@ function processFiles() {
         };
 
         var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
+          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index', 'view_target_ids',
             'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), defaultViewOpts);
         if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
           cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
+        } else if (cmdOpts.view_target_ids) {
+          var targetIds = cmdOpts.view_target_ids;
+          if (_.isString(targetIds)) {
+            targetIds = targetIds.split(',');
+          }
+          console.log('Target ids: ' + JSON.stringify(targetIds));
+          var targetObjects = sceneState.findNodes(function (x) {
+            console.log(x.userData.id);
+            return targetIds.indexOf(x.userData.id) >= 0;
+          });
+          if (targetObjects && targetObjects.length > 0) {
+            console.log('Target objects: ' + targetObjects.length);
+            var viewOptimizer = new STK.gfx.ViewOptimizer({
+              cameraControls: cameraControls,
+              //scorer: 'simple',
+              renderer: getSimpleRenderer(),
+              maxWidth: 300, maxHeight: 300,
+              width: renderer.width,
+              height: renderer.height
+            });
+            var viewOpts = viewOptimizer.lookAt(sceneState, targetObjects);
+            cmdOpts.view = viewOpts;
+          } else {
+            console.warn('Target objects not found');
+          }
         }
+
         cmdOpts.use_scene_camera = use_scene_camera;
         if (cmdOpts.save_view_log) {
           renderer.viewlogFilename = outbasename + '.views.jsonl';

@@ -2280,7 +2280,7 @@ Object3DUtil.findFirstAncestor = function(object3D, filter, n) {
 };
 
 // Find nodes that returns true for the given filter
-Object3DUtil.findNodes = function(object3D, filter) {
+Object3DUtil.findNodes = function(object3D, filter, visibleOnly) {
   var nodes = [];
   Object3DUtil.traverse(
     object3D,
@@ -2288,7 +2288,12 @@ Object3DUtil.findNodes = function(object3D, filter) {
       if (filter(node)) {
         nodes.push(node);
       }
-      return true;
+
+      if (visibleOnly) {
+        return node.visible;
+      } else {
+        return true;
+      }
   });
   return nodes;
 };

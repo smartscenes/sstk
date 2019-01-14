@@ -202,6 +202,59 @@ function getIndexCounts(pixels, remapIndexFn) {
 
 ImageUtil.getIndexCounts = getIndexCounts;
 
+// get counts for a rectangular region
+function getIndexCountsRect(pixelBuffer, rect, remapIndexFn) {
+  // pixels should be UInt8Array where each pixel is RGBA
+  var counts = {};
+  var pixels = pixelBuffer.data;
+  var numElementsPerRow = 4 * pixelBuffer.width;
+  for (var x = rect.min.x; x < rect.max.x; x++) {
+    for (var y = rect.min.y; y < rect.max.y; y++) {
+      var i = numElementsPerRow*y + 4*x;
+      // Convert to ARGB
+      var index = ((255-pixels[i+3]) << 24) ^ (pixels[i] << 16) ^ (pixels[i+1] << 8) ^ (pixels[i+2]) ;
+      if (remapIndexFn) {
+        index = remapIndexFn(index);
+      }
+      if (counts[index]) {
+        counts[index]++;
+      } else {
+        counts[index] = 1;
+      }
+    }
+  }
+  return counts;
+}
+
+ImageUtil.getIndexCountsRect = getIndexCountsRect;
+
+function drawRect(pixelBuffer, rect, color, width) {
+  var pixels = pixelBuffer.data;
+  var numElementsPerRow = 4 * pixelBuffer.width;
+  var x1 = Math.max(rect.min.x, 0);
+  var x2 = Math.min(rect.max.x+1, pixelBuffer.width);
+  var y1 = Math.max(rect.min.y, 0);
+  var y2 = Math.min(rect.max.y+1, pixelBuffer.height);
+  for (var x = x1; x < x2; x++) {
+    for (var y = y1; y < y2; y++) {
+      var fill = false;
+      if (width > 0) {
+        fill = ((x - x1) < width || (x2 - x) <= width || (y - y1) < width || (y2 - y) <= width);
+      } else {
+        fill = true;
+      }
+      if (fill) {
+        var i = numElementsPerRow*y + 4*x;
+        pixels[i] = color.r*255;
+        pixels[i+1] = color.g*255;
+        pixels[i+2] = color.b*255;
+        pixels[i+3] = 255;
+      }
+    }
+  }
+}
+ImageUtil.drawRect = drawRect;
+
 ImageUtil.getPixel = function(pixelBuffer, x, y, fn) {
   var d = pixelBuffer.data;
   var numElementsPerRow = 4 * pixelBuffer.width;

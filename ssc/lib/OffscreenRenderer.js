@@ -52,16 +52,23 @@ function OffscreenRendererFactory (baseRendererClass) {
     this.writePNG(pngfile, this.width, this.height, pixels);
     var viewlogFilename = (opts? opts.viewlogFilename : null) || this.viewlogFilename;
     if (viewlogFilename) {
-      var logdata = { filename: pngfile, width: this.width, height: this.height, worldCamera: camera.toJSON() };
-      if (opts && opts.logdata) {
-        _.defaults(logdata, opts.logdata);
-      }
-      this.__fs.writeToFile(viewlogFilename, JSON.stringify(logdata) + '\n', { append: true });
+      this.logCameraInfo(viewlogFilename, camera, { filename: pngfile, logdata: opts? opts.logdata : null });
     }
     if (this.compress) {
       this.__fs.execSync('pngquant -f --ext .png ' + pngfile, { encoding: 'utf8' });
     }
     return pixels;
+  };
+
+  OffscreenRenderer.prototype.logCameraInfo = function (viewlogFilename, camera, opts) {
+    var logdata = { width: this.width, height: this.height, worldCamera: camera.toJSON() };
+    if (opts && opts.filename) {
+      logdata.filename = opts.filename;
+    }
+    if (opts && opts.logdata) {
+      _.defaults(logdata, opts.logdata);
+    }
+    this.__fs.writeToFile(viewlogFilename, JSON.stringify(logdata) + '\n', { append: true });
   };
 
   // Renders scene from given camera into raw RGBA pixels

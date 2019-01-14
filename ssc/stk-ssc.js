@@ -263,10 +263,52 @@ var registerCustomAssetGroupsSync = function(assetsMap, assetGroupNames, refPath
   for (var j = 0; j < assetsToRegister.length; j++) {
     var g = assetsMap[assetsToRegister[j]];
     console.log('register ' + g.metadata);
-    var metadataPath = resolvePath(refPath, g.metadata);
-    var idsPath = resolvePath(refPath, g.ids);
+    var metadataRefPath = (g.refpath != null)? g.refpath : refPath;
+    var metadataPath = resolvePath(metadataRefPath, g.metadata);
+    var idsPath = resolvePath(metadataRefPath, g.ids);
+    //console.log(metadataPath, idsPath);
     registerCustomAssetGroupSync(metadataPath, idsPath, g.assetIdField);
   }
+};
+
+/**
+ * Register asset groups
+ * @param [opts]
+ * @param [opts.assetSources] {string[]} List of asset sources to register
+ * @param [opts.assetFiles] {string[]} List of asset files to include
+ * @param [opts.skipDefaults] {boolean} Whether to skip defaults or not
+ * @param [opts.includeAllAssetFilesSources] {boolean} Whether to automaticlaly include as sources listed in assetFiles
+ */
+var registerAssetGroupsSync = function(opts) {
+  opts = opts || {};
+  if (!opts.skipDefaults) {
+    AssetGroups.registerDefaults();
+  }
+  var assets = (opts.skipDefaults)? [] : require('./data/assets.json');
+  var assetsMap = _.keyBy(assets, 'name');
+
+  var assetSources = opts.assetSources || [];
+  var assetFiles = opts.assetFiles || [];
+  for (var i = 0; i < assetFiles.length; i++) {
+    // Load additional custom assets
+    var customAssetsPath = assetFiles[i];
+    if (!fs.existsSync(customAssetsPath)) {
+      console.error('Cannot register custom assets: ' + customAssetsPath + ' not found');
+    }
+    var customAssets = JSON.parse(STK.fs.readSync(customAssetsPath));
+    _.each(customAssets, function(a) {
+      if (a.refpath == null) {
+        a.refpath =  path.dirname(customAssetsPath);
+      }
+    });
+
+    var customAssetsMap = _.keyBy(customAssets, 'name');
+    _.merge(assetsMap, customAssetsMap); // Override with custom assets if duplicate name
+    if (opts.includeAllAssetFilesSources) {
+      assetSources = _.uniq(assetSources.concat(_.keys(customAssetsMap)));
+    }
+  }
+  registerCustomAssetGroupsSync(assetsMap, assetSources);
 };
 
 function checkMemory(prefix, opts) {
@@ -343,6 +385,7 @@ STK.gfx.RendererFactory.createRenderer = function(opts) {
 STK.gfx.readGapsLights = readGapsLights;
 STK.assets.registerCustomAssetGroupSync = registerCustomAssetGroupSync;
 STK.assets.registerCustomAssetGroupsSync = registerCustomAssetGroupsSync;
+STK.assets.registerAssetGroupsSync = registerAssetGroupsSync;
 STK.util.waitImagesLoaded = waitImagesLoaded;
 STK.util.disableImagesLoading = disableImagesLoading;
 STK.util.clearCache = clearCache;

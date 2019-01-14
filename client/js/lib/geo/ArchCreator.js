@@ -128,7 +128,7 @@ ArchCreator.prototype.createArch = function(arch, opts) {
 ArchCreator.prototype.createArchElements = function(arch, opts) {
   var oldDefaults = this.defaults;
   if (arch.defaults) {
-    this.defaults = arch.defaults;
+    this.defaults = _.defaultsDeep({}, arch.defaults, oldDefaults);
   }
   function __to2D(groupedPoints) {
     return _.map(groupedPoints, function(g) {
@@ -275,9 +275,10 @@ ArchCreator.prototype.createWalls = function(walls, getWallPoints, getMaterials)
     var baseEnd = new THREE.Vector3(wallPoints[1][0], wallPoints[1][1], wallPoints[1][2]);
     var roomId = (wall.roomId != undefined)? wall.roomId : wall.parent.id;
     var materials = getMaterials(wall);
-    //console.log('wall:', wall);
+    var wallHeight = (wall.height != null)? wall.height : _.get(this.defaults, 'Wall.height');
+    var wallDepth = (wall.depth != null)? wall.depth : _.get(this.defaults, 'Wall.depth');
     var mesh = Object3DUtil.makeWallWithHoles(baseStart, baseEnd,
-      up, wall.height, wallExtraHeight, wall.depth, wall.mergedHoleBoxes, materials);
+      up, wallHeight, wallExtraHeight, wallDepth, wall.mergedHoleBoxes, materials);
     Object3DUtil.traverseMeshes(mesh, false, function(w) {
       w.userData.type = w.name;
       w.userData.id = wall.id; // Same id as actual wall (not cool)
@@ -369,6 +370,67 @@ ArchCreator.prototype.associateWallsWithHoles = function(walls, holes, getHoleBB
   }
 
   return walls;
+};
+
+ArchCreator.prototype.getWallPoints = function(elements, swapWallPoints) {
+  var walls = _.filter(elements, function(x) { return x.type === 'Wall' && x.points.length; });
+  var allWallPoints = [];
+  var groupedWalls = [];
+  if (walls.length) {
+    var wallsGroupedByPoints = _.groupByMulti(walls, function (w) {
+      return w.points;
+    });
+    var iter = 0;
+    while (_.size(wallsGroupedByPoints) > 0 && iter < walls.length) {
+      // Get points
+      var wallPoints = [];
+      var selectedWalls = [];
+      var wall = _.find(wallsGroupedByPoints, function(x) { return true; })[0];
+      var lastPt = null;
+      while (wall != null && iter < walls.length) {
+        // Add wall points
+        iter++;
+        selectedWalls.push(wall);
+        var pts = wall.points;
+        if (lastPt === null) {
+          // Append all wallpoints
+          wallPoints.push.apply(wallPoints, pts);
+        } else {
+          var index = _.findIndex(pts, function(x) { return x.toString() == lastPt; });
+          var newWallPoints = [pts[index]];
+          for (var i = index+1; i < pts.length; i++) {
+            wallPoints.push(pts[i]);
+            if (swapWallPoints) {
+              newWallPoints.push(pts[i]);
+            }
+          }
+          for (var i = 0; i < index; i++) {
+            wallPoints.push(pts[i]);
+            if (swapWallPoints) {
+              newWallPoints.push(pts[i]);
+            }
+          }
+          if (swapWallPoints) {
+            wall.points = newWallPoints;
+          }
+        }
+        lastPt = wallPoints[wallPoints.length - 1];
+
+        _.each(pts, function (p) {
+          var g = wallsGroupedByPoints[p];
+          _.pull(g, wall);
+          if (g.length === 0) {
+            delete wallsGroupedByPoints[p];
+          }
+        });
+        var g2 = wallsGroupedByPoints[lastPt];
+        wall = g2? g2[0] : null;
+      }
+      allWallPoints.push(wallPoints);
+      groupedWalls.push(selectedWalls);
+    }
+  }
+  return { wallPoints: allWallPoints, groupedWalls: groupedWalls };
 };
 
 

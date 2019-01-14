@@ -13,12 +13,30 @@ var keymap = require('controls/keymap');
 var hilbert = require('hilbert');
 var _ = require('util/util');
 
-// The SceneHierarchyPanel visualizes the scene graph as is
-//   with each node in the tree mapping to a object3D
-// Note: Some object3D instances in the scene graph
-//   may not be represented as a tree node
-// (to keep the tree relatively clean, semantic objects are shown, and
-//   raw meshes are typically not displayed)
+/**
+ * The SceneHierarchyPanel visualizes the scene graph as is
+ *   with each node in the tree mapping to a object3D
+ * Note: Some object3D instances in the scene graph
+ *    may not be represented as a tree node
+ * (to keep the tree relatively clean, semantic objects are shown, and
+ *   raw meshes are typically not displayed)
+ * @param params
+ * @param [params.container]
+ * @param params.assetManager {assets.AssetManager}
+ * @param [params.tooltipIncludeFields] {string[]} List of fields to include for tooltip shown on hover
+ * @param [params.onhoverCallback] {function(node, objects)} Callback for hovering over a tree node
+ * @param [params.allowEditScene=false] {boolean} Whether editing of the scene is allowed
+ * @param [params.allowEditHierarchy=false] {boolean} Whether editing of the hierarchy is allowed
+ * @param [params.allowLoadSave=true] {boolean} Whether loading/saving of the hierarchy is supported
+ * @param [params.autoCreateTree=true] {boolean}
+ * @param [params.supportAttachment=true] {boolean} Whether to show support attachment options
+ * @param [params.useIcons=false] {boolean} Whether to use screenshot icons in the tree nodes
+ * @param [params.useSort=false] {boolean} Whether the tree nodes should be sorted
+ * @param [params.defaultSortOrder='hilbert'] {string} What sort ordering the tree nodes should follow (`hilbert|name`) if `useSort` is true
+ * @param [params.modelViewerUrl='model-viewer'] {string} Url for opening up the model viewer
+ * @param [params.app] {SceneViewer} Parent application for scene hierarchy panel
+ * @constructor
+ */
 function SceneHierarchyPanel(params) {
   // Container in which the scene hierarchy is displayed
   this.container = params.container;
@@ -191,7 +209,7 @@ SceneHierarchyPanel.prototype.init = function () {
       }
     });
 
-    keymap({ on: 'esc', do: 'Group selected models', filter: function(evt) {
+    keymap({ on: 'esc', do: 'Deselect all', filter: function(evt) {
       return $.contains(scope.treePanel[0], evt.target);
     } }, function () {
       if (scope.allowEditHierarchy) {

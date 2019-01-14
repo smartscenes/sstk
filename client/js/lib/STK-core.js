@@ -15,7 +15,8 @@ module.exports = {
   },
   /** @namespace controls */
   controls: {
-    CameraControls: require('./controls/CameraControls')
+    CameraControls: require('./controls/CameraControls'),
+    OffscreenPicker: require('./controls/OffscreenPicker')
   },
   /** @namespace ds */
   ds: {
@@ -31,6 +32,7 @@ module.exports = {
     JSONExporter: require('./exporters/JSONExporter'),
     OBJMTLExporter: require('./exporters/OBJMTLExporter'),
     PLYExporter: require('./exporters/PLYExporter'),
+    SceneStateExporter: require('./exporters/SceneStateExporter'),
     SUNCGExporter: require('./exporters/SUNCGExporter')
   },
   /** @namespace geo */
@@ -88,6 +90,7 @@ module.exports = {
   /** @namespace scene */
   scene: {
     SceneLoader: require('./scene/SceneLoader'),
+    SceneOperations: require('./scene/SceneOperations'),
     SceneState: require('./scene/SceneState'),
     SceneUtil: require('./scene/SceneUtil'),
     WssSceneLoader: require('./scene/WssSceneLoader')
