@@ -4,10 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [0.7.3] - 2018-12-??
+## [0.7.3] - 2010-01-14
 ### Changes
 - Improve handling of array cameras and resizeable sensors
 - Change stats/v4/suncg paths to just stats/suncg
+- Added support for embedded architecture elements to SUNCGLoader
+- Improvements to SUNCGExporter and added SceneStateExporter (saves list of models and their transforms in json)
+- Better support for custom assets.json
+- Fixed bug ssc readSync
+- Have ssc support offscreen picking
 
 ## [0.7.2] - 2018-12-16
 ### Changes

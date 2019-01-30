@@ -84,7 +84,8 @@ function SUNCGLoader(params) {
             },
             {
               "name": "outside",                         // Name of material ("outside" for outside wall)
-              "texture": "bricks_1",                     // Texture
+//              "texture": "bricks_1",                     // Texture
+              "texture": "wallp_1_1",                    // Texture
               "diffuse": "#ffffff"                       // Diffuse color in hex
             }
           ]
