@@ -760,6 +760,8 @@ Simulator.prototype.configure = function (opts) {
   if (opts.modifications) {
     this.__modifications = opts.modifications; // Modifications to be made to the scene
   }
+  // Update opts
+  this.opts = res;
   return _.omit(res, __optsToIgnore);
 };
 
@@ -848,7 +850,7 @@ Simulator.prototype.__loadScene = function (opts, callback) {
     // TODO: enforce recompute false = no recomputation, only use precomputed
     //               recompute undefined = use precomputed, recompute as needed
   }
-  if (this.opts.scene && this.opts.scene.fullId.startsWith("mp3d")) {
+  if (opts.scene && opts.scene.fullId && opts.scene.fullId.startsWith("mp3d")) {
     preloads.push('objectInstanceMaterials');
   }
   //console.log('got preloads', preloads);
