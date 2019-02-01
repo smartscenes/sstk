@@ -1,6 +1,6 @@
 {
   "name": "sstk-server",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "SmartScenes ToolKit server: tools and interfaces for viewing, editing and annotating 3D models and scenes",
   "scripts": {
     "cover": "istanbul cover mocha",
