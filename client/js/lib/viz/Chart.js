@@ -54,9 +54,23 @@ Chart.prototype.__createWindow = function (dom, graphWidth, graphHeight, margin)
   return { svg: svg, width: width, height: height, margin: margin, selection: gWindow };
 };
 
+Chart.prototype.tipDataIdSame =  function (oldTipData, newTipData) {
+  return (oldTipData.id === newTipData.id);
+};
+
+Chart.prototype.getPinnedTooltipById = function(id) {
+  return _.find(this.__pinnedTips, function(x) { return x.data.id === id; });
+};
+
 // Pin the current tooltip to graph
-Chart.prototype.pinTooltip = function (d) {
+Chart.prototype.pinTooltip = function (d, checkTipExists) {
   if (this.__tip) {
+    if (checkTipExists) {
+      var tip = _.find(this.__pinnedTips, function (x) {
+        return checkTipExists(x.data, d);
+      });
+      if (tip) { return tip; }
+    }
     var oldtip = this.__tip;
     // Pin current tip
     this.__pinnedTips.push(oldtip);
@@ -73,7 +87,7 @@ Chart.prototype.pinTooltip = function (d) {
     var scope = this;
     closeButton.click(function() {
       var index = scope.__pinnedTips.indexOf(oldtip);
-      if (index > 0) {
+      if (index >= 0) {
         scope.__pinnedTips.splice(index, 1);
       }
       oldtip.hide();
@@ -163,27 +177,27 @@ Chart.prototype.getLabel = function (field) {
 
 //add labels to chart
 Chart.prototype.addLabels = function (xLabel, yLabel) {
-  var window = this.__window;
+  var vizWindow = this.__window;
   if (xLabel) {
     if (this.__xLabelPosition === 'top') {
-      var xText = window.svg.append('text')
-        .attr('x', window.width / 2)
+      var xText = vizWindow.svg.append('text')
+        .attr('x', vizWindow.width / 2)
         .attr('y', 0)
         .attr('text-anchor', 'middle')
         .text(xLabel);
     } else {
-      var xText = window.svg.append('text')
-        .attr('x', window.width / 2)
-        .attr('y', window.height)
+      var xText = vizWindow.svg.append('text')
+        .attr('x', vizWindow.width / 2)
+        .attr('y', vizWindow.height)
         .attr('text-anchor', 'middle')
         .text(xLabel);
       var bb = xText.node().getBBox();
-      xText.attr('y', window.height + bb.height + 2); // align it to top
+      xText.attr('y', vizWindow.height + bb.height + 2); // align it to top
     }
   }
 
   if (yLabel) {
-    var text = window.svg.append('text').attr('text-anchor', 'start').text(yLabel).attr('transform', 'rotate(-90)');
+    var text = vizWindow.svg.append('text').attr('text-anchor', 'start').text(yLabel).attr('transform', 'rotate(-90)');
     text.attr('x', 5).attr('y', 15);
   }
 };
@@ -191,9 +205,9 @@ Chart.prototype.addLabels = function (xLabel, yLabel) {
 Chart.prototype.selectDateFormat = function(start, end) {
   var delta = Math.abs(start - end);
   if (delta > DataUtils.DAY_DURATION) {
-    return d3.time.format("%Y-%m-%d");
+    return d3.time.format('%Y-%m-%d');
   } else {
-    return d3.time.format("%H:%M:%S");
+    return d3.time.format('%H:%M:%S');
   }
 };
 

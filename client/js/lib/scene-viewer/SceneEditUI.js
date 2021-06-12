@@ -31,6 +31,7 @@ function SceneEditUI(params) {
   var defaults = {
     allowEdit: false,
     selectMode: false,
+    materialMode: false,
     supportSurfaceChange: Constants.EditStrategy.SupportSurfaceChange.SWITCH_ATTACHMENT,
     contextQueryType: SceneEditUI.DefaultContextQueryType,
     highlightMode: SceneEditUI.HighlightSelectedFalseBkOrig
@@ -67,6 +68,7 @@ function SceneEditUI(params) {
   this.supportSurfaceChange = params.supportSurfaceChange;
 
   this.allowSelectMode = (params.allowSelectMode !== undefined) ? params.allowSelectMode : false;
+  this.allowMaterialMode = true;
   this.allowBBoxQuery = (params.allowBBoxQuery !== undefined) ? params.allowBBoxQuery : false;
   this.allowHighlightMode = (params.allowHighlightMode !== undefined) ? params.allowHighlightMode : false;
   this.allowCopyPaste = (params.allowCopyPaste !== undefined) ? params.allowCopyPaste : true;
@@ -374,6 +376,8 @@ SceneEditUI.prototype.__setupEventListeners = function (domElement) {
   domElement.addEventListener('dblclick', function(event) {
     if (event.shiftKey) {
       scope.actOnClicked(event);
+    } else if (event.ctrlKey || event.metaKey) {
+      scope.articulateClicked(event);
     } else {
       // Hack to keep stuff selected
       if (scope.selectMode) {
@@ -438,6 +442,18 @@ SceneEditUI.prototype.toggleObjectSelectMode = function () {
 SceneEditUI.prototype.isObjectSelectMode = function () {
   return this.objectSelectMode;
 };
+
+SceneEditUI.prototype.toggleMaterialMode = function () {
+  this.materialMode = !this.materialMode;
+  if (this.allowEdit) {
+    this.toolbar.updateButtonState('Material');
+  }
+};
+
+SceneEditUI.prototype.isMaterialMode = function () {
+  return this.materialMode;
+};
+
 
 SceneEditUI.prototype.__contextQueryControlsOnClickResult = function (source, id, result, elem, index) {
   this.uilog.log(UILog.EVENT.CONTEXT_QUERY_SELECT, null,
@@ -639,7 +655,7 @@ SceneEditUI.prototype.onModelLoad = function (loadOptions, modelInstance) {
     this.onSceneUpdated();
 
     this.uilog.log(UILog.EVENT.CONTEXT_QUERY_INSERT, null, objInfo);
-    this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.INSERT);
+    this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.INSERT, { object: obj });
 
     if (this.editControlsStateBeforeContextQuery) {
       this.editControls.enabled = this.editControlsStateBeforeContextQuery.editControlsEnabled;
@@ -648,7 +664,7 @@ SceneEditUI.prototype.onModelLoad = function (loadOptions, modelInstance) {
       this.editControls.attach(modelInstance, this.contextQueryControls.placementInfo.attachmentIndex);
     }
   } else {
-    if (this.sceneState.getNumberOfObjects() === 0) {
+    if (this.sceneState.isEmpty()) {
       this.initSceneWithOneModel(modelInstance);
       this.undoStack.clear();
       this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
@@ -714,6 +730,32 @@ SceneEditUI.prototype.selectClicked = function (event) {
   if (clicked) {
     clicked.userData.isSelected = !clicked.userData.isSelected;
     this.__updateObjectSelection(clicked);
+  }
+};
+
+SceneEditUI.prototype.articulateClicked = function (event) {
+  var selectedModelInstance = this.getClickedModelInstance(event);
+  if (selectedModelInstance) {
+    var capabilities = selectedModelInstance.queryCapabilities(this.assetManager);
+    if (capabilities.articulation) {
+      var cap = capabilities.articulation;
+      var clickedMesh = this.editControls.selectMesh(event);
+      //console.log('clicked', clickedMesh.userData);
+      if (clickedMesh) {
+        let pid = clickedMesh.userData.articulatablePartId;
+        if (pid === cap.getActivePartId()) {
+          cap.toggle();
+        } else {
+          if (cap.selectPart(pid) >= 0) {
+            cap.turnOn();
+          } else {
+            cap.toggle();
+          }
+        }
+      } else {
+        cap.toggle();
+      }
+    }
   }
 };
 

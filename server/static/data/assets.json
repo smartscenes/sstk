@@ -10,30 +10,5 @@
   {
     "name": "yobi3d",
     "metadata": "${assetsDir}/data/shapenet/shapenet.yobi3d.metadata.json"
-  },
-  {
-    "name": "p5dTexture",
-    "metadata": "${assetsDir}/data/suncg/suncg.planner5d.textures.json",
-    "assetIdField": "name",
-    "ids": "${assetsDir}/data/suncg/suncg.planner5d.textures.csv"
-  },
-  {
-    "name": "p5d",
-    "metadata": "${assetsDir}/data/suncg/suncg.planner5d.models.json",
-    "requires": ["p5dTexture"]
-  },
-  {
-    "name": "p5dScene",
-    "metadata": "${assetsDir}/data/suncg/suncg.planner5d.scenes.json",
-    "requires": ["p5d"]
-  },
-  {
-    "name": "p5dRoom",
-    "metadata": "${assetsDir}/data/suncg/suncg.planner5d.rooms.json",
-    "requires": ["p5d"]
-  },
-  {
-    "name": "suncgPoses",
-    "metadata": "${assetsDir}/data/suncg/suncg.poses.models.json"
   }
 ]

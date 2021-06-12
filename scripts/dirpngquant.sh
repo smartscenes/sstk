@@ -7,8 +7,8 @@ die () {
   exit 1
 }
 
-[ "$#" -eq 1 ] || die "Usage: dirpngquant dirWithPNGs "
+[ "$#" -eq 1 ] || die "Usage: $0 dirWithPNGs "
 
 dir=$1
 
-find "$dir" -name '*.png' | parallel --eta pngquant -f --ext .png {}
+find "$dir" -name '*.png' | grep -v '_thumb.png' | parallel --eta pngquant -f --ext .png {}

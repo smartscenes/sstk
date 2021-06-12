@@ -256,7 +256,7 @@ DataConstraintsGui.prototype.getQueryString = function () {
   if (constraints.length > 0) {
     queryString = constraints.map( function(x) { return x.queryString; }).join(' AND ');
   } else {
-    UIUtil.showAlert(null, 'No query specified.  Please specify a query', 'alert-warning');
+    UIUtil.showAlert('No query specified.  Please specify a query', 'alert-warning');
     // TODO: Search all
     //queryString = "*:*";
   }

@@ -3,6 +3,7 @@
 // MIT License
 
 var Constants = require('Constants');
+var _ = require('util/util');
 
 var vertexShader = [
   "attribute vec3 position;",
@@ -49,14 +50,21 @@ var fragmentShader = [
   "}"
 ].join("\n");
 
-function CubemapToEquirectangular( renderer, width, height ) {
+function CubemapToEquirectangular( renderer, width, height, options ) {
   width = width || 4096;
   height = height || 2048;
+
+  options = _.defaults(Object.create(null), options || {}, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter
+  });
 
   this.width = 1;
   this.height = 1;
 
   this.renderer = renderer;
+  this.minFilter = options.minFilter;
+  this.magFilter = options.magFilter;
 
   this.material = new THREE.RawShaderMaterial( {
     uniforms: {
@@ -83,7 +91,7 @@ function CubemapToEquirectangular( renderer, width, height ) {
   var gl = this.renderer.getContext();
   this.maxCubeMapSize = gl.getParameter( gl.MAX_CUBE_MAP_TEXTURE_SIZE );
 
-  this.setupCubeCamera( 2048 )
+  this.setupCubeCamera( 2048 );
 }
 
 CubemapToEquirectangular.prototype.setSize = function( width, height ) {
@@ -102,8 +110,8 @@ CubemapToEquirectangular.prototype.setSize = function( width, height ) {
 
   if (this.output == null) {
     this.output = new THREE.WebGLRenderTarget( this.width, this.height, {
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
+      minFilter: this.minFilter,
+      magFilter: this.magFilter,
       wrapS: THREE.ClampToEdgeWrapping,
       wrapT: THREE.ClampToEdgeWrapping,
       format: THREE.RGBAFormat,
@@ -119,8 +127,8 @@ CubemapToEquirectangular.prototype.setupCubeCamera = function( size ) {
   var cubeMapSize = Math.min( this.maxCubeMapSize, size );
   this.cubeCamera = new THREE.CubeCamera( .1*Constants.metersToVirtualUnit, 1000*Constants.metersToVirtualUnit, cubeMapSize );
 
-  var options = { format: THREE.RGBAFormat, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter };
-  this.cubeCamera.renderTarget = new THREE.WebGLRenderTargetCube( cubeMapSize, cubeMapSize, options );
+  var options = { format: THREE.RGBAFormat, magFilter: this.magFilter, minFilter: this.minFilter };
+  this.cubeCamera.renderTarget = new THREE.WebGLCubeRenderTarget( cubeMapSize, options );
 
   return this.cubeCamera;
 
@@ -148,7 +156,9 @@ CubemapToEquirectangular.prototype.render = function( scene, camera, renderTarge
   this.renderer.autoClear = oldAutoClear;
 
   this.quad.material.uniforms.map.value = this.cubeCamera.renderTarget.texture;
-  this.renderer.render( this.scene, this.camera, renderTarget, true );
+  this.renderer.setRenderTarget(renderTarget? renderTarget : null);
+  this.renderer.clear();
+  this.renderer.render( this.scene, this.camera );
 };
 
 CubemapToEquirectangular.prototype.update = function( scene, camera ) {

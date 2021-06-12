@@ -15,4 +15,4 @@ imFirst=6
 imLast=13
 
 #find "$dir" -type d -print0 | parallel --eta -0 convert -resize 50% -delay 40 $(seq -f {.}/{/.}-%g.png $imFirst $imLast) -coalesce -layers OptimizePlus -loop 0 {.}/{/.}.gif
-find "$dir" -name "*-${imLast}.png" -print | sed -e 's/-13.png//g' | parallel --plus --eta convert -resize 50% -delay 40 $(seq -f {.}-%g.png $imFirst $imLast) -coalesce -layers OptimizePlus -loop 0 {.}.gif
+find "$dir" -name "*-${imLast}.png" -print | sed -e 's/-13.png//g' | parallel --plus --eta convert -resize 50%  -dispose previous -delay 40 $(seq -f {.}-%g.png $imFirst $imLast) -coalesce -layers OptimizePlus  -loop 0 {.}.gif

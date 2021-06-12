@@ -172,7 +172,7 @@ GroupedAnnotationsViewer.prototype.init = function() {
     function(cb) {
       scope.__queryAnnotations(function(err, annotations) {
         if (err) {
-          UIUtil.showAlert(null, 'Error fetching existing annotations');
+          UIUtil.showAlert('Error fetching existing annotations');
           scope.__annotatedByItemId = {};
           cb();
         } else {
@@ -205,7 +205,7 @@ GroupedAnnotationsViewer.prototype.init = function() {
   ], function(err, results) {
     if (err) {
       console.log('Error initializing', err);
-      UIUtil.showAlert(null, 'Error showing annotations');
+      UIUtil.showAlert('Error showing annotations');
     } else {
       scope.__init();
     }

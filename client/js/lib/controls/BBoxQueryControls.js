@@ -2,7 +2,6 @@
 
 var BBoxCreator               = require('controls/BBoxCreator');
 var ContextQueryControls      = require('controls/ContextQueryControls');
-var Object3DUtil              = require('geo/Object3DUtil');
 var UILog                     = require('editor/UILog');
 
 /**

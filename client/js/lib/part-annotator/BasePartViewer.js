@@ -31,6 +31,7 @@ Materials.DefaultMaterialType = THREE.MeshPhongMaterial;
  * @param [params.labelsPanel] {Object} Configuration for {@link LabelsPanel}
  * @param [params.hierarchyPanel] {Object} Configuration for {@link LabelHierarchyPanel}
  * @param [params.linkWordNet] Whether we should display links to WordNet synsets
+ * @param [params.submitStatusUrl] Url for submitting status
  * @constructor
  * @extends Viewer3D
  */
@@ -113,6 +114,7 @@ function BasePartViewer(params) {
   params = _.defaultsDeep(Object.create(null), _.pick(this.urlParams, ['useDatGui']), params, defaults);
   Viewer3D.call(this, params);
 
+  // TODO: rename to taskMode?
   this.mode = Constants.getGlobal('mode');
   if (!this.mode) {
     this.mode = this.urlParams['mode'] || params.mode;
@@ -142,7 +144,6 @@ function BasePartViewer(params) {
   this.debugNode.name = 'debugNode';
   this.useAmbientOcclusion = this.urlParams.useAmbientOcclusion;
   this.useEDLShader = this.urlParams.useEDLShader;
-  this.__isWireframe = false;
 
   this.labelsPanel = null;
   this.excludeFromPicking = [];
@@ -166,8 +167,7 @@ BasePartViewer.prototype.start = function () {
 BasePartViewer.prototype.init = function (container) {
   this.setupLoadingIcon();
   this.assetManager = new AssetManager({
-    autoAlignModels: true,
-    useDynamic: true // set dynamic to be true so our picking will work
+    autoAlignModels: true
   });
   this.searchController = new SearchController();
   this.assetManager.setSearchController(this.searchController);
@@ -183,7 +183,7 @@ BasePartViewer.prototype.init = function (container) {
   this.renderer = new Renderer({
     container: this.container,
     camera: this.camera,
-    useLights: false,
+    usePhysicalLights: false,
     useAmbientOcclusion: this.useAmbientOcclusion,
     useEDLShader: this.useEDLShader,
     antialias: true
@@ -270,8 +270,12 @@ BasePartViewer.prototype.createPanel = function () {
   this.labeler.updateLabels(this.labelsPanel.labelInfos);
   this.labelInfos = this.labelsPanel.labelInfos;  // TODO: Do we need this?
 
+  // UIs for different modes
   this.__uis = {
-    'label': { panels: [this.labelsPanel] }
+    'label': {
+      panels: [this.labelsPanel],
+      controls: [this.painter].filter(function(x) { return x; })
+    }
   };
   if (this.hierarchyPanelConfig) {
     if (!this.hierarchyPanel) {
@@ -288,20 +292,20 @@ BasePartViewer.prototype.__showUIs = function(mode) {
   var all = this.__uis['all'];
   _.each(all.panels, function(x) { x.hide(); });
   var ui = this.__uis[mode];
-  if (ui.panels) {
+  if (ui && ui.panels) {
     _.each(ui.panels, function(x) { x.show(); });
   }
 };
 
 BasePartViewer.prototype.showAlert = function(message, style) {
-  UIUtil.showAlert(null, message, style);
+  UIUtil.showAlert(message, style);
 };
 
 BasePartViewer.prototype.submitStatusUpdates = function(updates) {
   var panel = this.labelsPanel.panel;
   if (this.submitStatusUrl) {
     if (!updates || _.size(updates) === 0) {
-      UIUtil.showAlert(panel, 'Nothing to update', 'alert-warning');
+      UIUtil.showAlertWithPanel(panel, 'Nothing to update', 'alert-warning');
       this.labelsPanel.onSubmitFinished();
       return;
     }
@@ -319,7 +323,7 @@ BasePartViewer.prototype.submitStatusUpdates = function(updates) {
       success: function (res) {
         console.log(res);
         if (res.code === 200) {
-          UIUtil.showAlert(panel, 'Status updates successfully submitted.', 'alert-success');
+          UIUtil.showAlertWithPanel(panel, 'Status updates successfully submitted.', 'alert-success');
           var dataById = _.keyBy(res.data, 'id');
           var labelInfos = this.labelsPanel.labelInfos;
           for (var i = 0; i < labelInfos.length; i++) {
@@ -331,17 +335,17 @@ BasePartViewer.prototype.submitStatusUpdates = function(updates) {
           }
           this.labelsPanel.onSubmitFinished();
         } else {
-          UIUtil.showAlert(panel, 'Error submitting status updates: ' + res.status);
+          UIUtil.showAlertWithPanel(panel, 'Error submitting status updates: ' + res.status);
           this.labelsPanel.onSubmitFinished();
         }
       }.bind(this),
       error: function () {
-        UIUtil.showAlert(panel, 'Error submitting status updates');
+        UIUtil.showAlertWithPanel(panel, 'Error submitting status updates');
         this.labelsPanel.onSubmitFinished();
       }.bind(this)
     });
   } else {
-    UIUtil.showAlert(panel, 'No submit status URL');
+    UIUtil.showAlertWithPanel(panel, 'No submit status URL');
     this.labelsPanel.onSubmitFinished();
   }
 };
@@ -462,10 +466,12 @@ BasePartViewer.prototype.getInitialPartLabels = function () {
 };
 
 BasePartViewer.prototype.onSelectLabel = function (labelInfo) {
-  if (labelInfo) {
-    this.setTransparency(true);
+  if (this.annotationMode == null || this.annotationMode === 'label') {
+    if (labelInfo) {
+      this.setTransparency(true);
+    }
+    this.labeler.currentLabelInfo = labelInfo;
   }
-  this.labeler.currentLabelInfo = labelInfo;
 };
 
 BasePartViewer.prototype.onRenameLabel = function (labelInfo) {

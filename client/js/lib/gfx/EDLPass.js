@@ -1,5 +1,4 @@
 'use strict';
-require('three-shaders');
 
 require('three-shaders');
 
@@ -75,7 +74,7 @@ THREE.EDLShader = {
     "  if ( onlyAO ) {",
     "    gl_FragColor = vec4( vec3(edl_shade), clamp(edl_alpha, 0.0, 1.0) );",
     "  } else {",
-    "    gl_FragColor = vec4( color.rgb * edl_shade, clamp(color.a + edl_alpha, 0.0, 1.0) );",
+    "    gl_FragColor = vec4( color.rgb * edl_shade, clamp(color.a, 0.0, 1.0) );",
     "  }",
     "}"
   ].join( "\n" )
@@ -89,7 +88,7 @@ THREE.EDLShader = {
  *  - radius
  *  - strength
  * To output to screen set renderToScreens true
- * @class EDLPass
+ * @class THREE.EDLPass
  */
 THREE.EDLPass = function ( scene, camera, width, height ) {
   THREE.ShaderPass.call( this, THREE.EDLShader );
@@ -119,6 +118,7 @@ THREE.EDLPass = function ( scene, camera, width, height ) {
 
   this.uniforms[ 'radius' ].value = 1;
   this.uniforms[ 'strength' ].value = 1;
+  this.uniforms[ 'onlyAO' ].value = false;
 
   //Setters and getters for uniforms
   var self = this;
@@ -143,7 +143,7 @@ THREE.EDLPass.prototype = Object.create( THREE.ShaderPass.prototype );
 /**
  * Render using this pass.
  *
- * @method render
+ * @method THREE.EDLPass.render
  * @param {WebGLRenderer} renderer
  * @param {WebGLRenderTarget} writeBuffer Buffer to write output.
  * @param {WebGLRenderTarget} readBuffer Input buffer.
@@ -154,7 +154,9 @@ THREE.EDLPass.prototype.render = function( renderer, writeBuffer, readBuffer, de
   // AXC: Save oldOverrideMaterial so it can be restored
   var oldOverrideMaterial = this.scene2.overrideMaterial;
   this.scene2.overrideMaterial = this.depthMaterial;
-  renderer.render( this.scene2, this.camera2, this.depthRenderTarget, true );
+  renderer.setRenderTarget( this.depthRenderTarget );
+  renderer.clear();
+  renderer.render( this.scene2, this.camera2 );
   this.scene2.overrideMaterial = oldOverrideMaterial;
   THREE.ShaderPass.prototype.render.call( this, renderer, writeBuffer, readBuffer, delta, maskActive );
 };
@@ -162,7 +164,7 @@ THREE.EDLPass.prototype.render = function( renderer, writeBuffer, readBuffer, de
 /**
  * Change scene to be renderer by this render pass.
  *
- * @method setScene
+ * @method THREE.EDLPass.setScene
  * @param {Scene} scene
  */
 THREE.EDLPass.prototype.setScene = function(scene) {
@@ -172,7 +174,7 @@ THREE.EDLPass.prototype.setScene = function(scene) {
 /**
  * Set camera used by this render pass.
  *
- * @method setCamera
+ * @method THREE.EDLPass.setCamera
  * @param {Camera} camera
  */
 THREE.EDLPass.prototype.setCamera = function( camera ) {
@@ -184,7 +186,7 @@ THREE.EDLPass.prototype.setCamera = function( camera ) {
 /**
  * Set resolution of this render pass.
  *
- * @method setSize
+ * @method THREE.EDLPass.setSize
  * @param {Number} width
  * @param {Number} height
  */

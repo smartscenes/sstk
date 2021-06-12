@@ -77,7 +77,7 @@ PubSub.prototype.Unsubscribe = function (eventname, contextObj, optCallback) {
   var subs = this.subscribers;
   var esubs = subs[eventname];
   if (!esubs) {
-    return;
+    return 0;
   }
 
   // Make list of subscribers we are keeping
@@ -90,6 +90,7 @@ PubSub.prototype.Unsubscribe = function (eventname, contextObj, optCallback) {
     }
   }
   subs[eventname] = newsubs;
+  return esubs.length - newsubs.length;
 };
 
 /**
@@ -100,12 +101,13 @@ PubSub.prototype.Unsubscribe = function (eventname, contextObj, optCallback) {
 PubSub.prototype.Publish = function (eventname) {
   var esubs = this.subscribers[eventname];
   var optargs = Array.prototype.slice.call(arguments, 1);
+  var toNotify = [];
   if (esubs) {
     // Notify all subscribers - remove limited subscribers if they are done
     var removeIndices = [];
     esubs.forEach(function (entry,i) {
       entry.count++;
-      entry.func.apply(entry.ctx, optargs);
+      toNotify.push(entry);
       // Check if subscriber are done!
       if (entry.limit && entry.count >= entry.limit) {
         removeIndices.push(i);
@@ -122,6 +124,11 @@ PubSub.prototype.Publish = function (eventname) {
         }
       }
       this.subscribers[eventname] = newsubs;
+    }
+    // Notify subscribers
+    for (var i = 0; i < toNotify.length; i++) {
+      var entry = toNotify[i];
+      entry.func.apply(entry.ctx, optargs);
     }
   }
   if (eventname !== PubSub.ALL && this.subscribers[PubSub.ALL]) {

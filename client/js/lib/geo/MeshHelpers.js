@@ -50,17 +50,21 @@ OBBHelper.prototype.update = function (obb) {
   } else if (obb.centroid && obb.axesLengths && obb.normalizedAxes) {
     this._updateFromJson(obb);
   } else {
-    console.error("Invalid OBB: " + obb);
+    console.error('Invalid OBB: ' + obb);
+  }
+  if (obb.orientation) {
+    this.orientation = obb.orientation;
   }
 };
 
 OBBHelper.prototype._updateFromOBB = function (obb) {
   this.obb = obb;
-  this.dominantNormal = obb.dominantNormal();
+  this.dominantNormal = obb.dominantNormal;
   this.position.copy(obb.position);
   this.scale.copy(obb.halfSizes).multiplyScalar(2);
   this.quaternion.setFromRotationMatrix(obb.basis);
   this.updateMatrix();
+  this.updateMatrixWorld();
 };
 
 OBBHelper.prototype._updateFromJson = function (obb) {
@@ -86,9 +90,72 @@ OBBHelper.prototype._updateFromJson = function (obb) {
   }
   this.quaternion.setFromRotationMatrix(matrix);
   this.updateMatrix();
+  this.updateMatrixWorld();
 };
 
-OBBHelper.prototype.toWireFrame = function(linewidth, showNormal, materialOrColor) {
+OBBHelper.prototype.__createOrientationArrows = function(linewidth) {
+  var colors = AxesColors;
+  var axesLength = 0.50;
+  var minLength = this.scale.clone().multiplyScalar(0.1).length();
+  var worldToLocalRot = new THREE.Quaternion();
+  worldToLocalRot.copy(this.quaternion);
+  worldToLocalRot.inverse();
+  if (this.orientation && this.orientation.length) {
+    var arrowGroup = new THREE.Group();
+    for (var i=0; i < this.orientation.length; i++) {
+      var v = this.orientation[i];
+      if (v) {
+        var nv = v.clone().normalize();
+        var lv = nv.clone().applyQuaternion(worldToLocalRot);
+        var length = Math.max(Math.abs(this.scale.dot(lv)) * axesLength * 2, minLength);
+        var arrow = this.__createArrow(nv, length, linewidth, colors[i]);
+        arrow.traverse(function(node) {
+          node.userData.isOrientationArrow = true;
+          if (node.material) {
+            node.axisMaterial = node.material;
+          }
+        });
+        arrowGroup.add(arrow);
+      } else {
+        console.warn('Missing orientation ' + i, this.orientation);
+      }
+    }
+    return arrowGroup;
+  }
+};
+
+OBBHelper.prototype.__createArrow = function(direction, length, linewidth, materialOrColor) {
+  if (direction) {
+    if (linewidth > 0) {
+      return new FatArrowHelper(direction, this.position, length, linewidth, undefined, undefined, materialOrColor);
+    } else {
+      return new THREE.ArrowHelper(direction, this.position, length, undefined, undefined, materialOrColor);
+    }
+  }
+};
+
+OBBHelper.prototype.__createNormal = function(linewidth, materialOrColor) {
+  var axesLength = 0.25;
+  var length = this.scale.clone().multiplyScalar(axesLength).length();
+  return this.__createArrow(this.dominantNormal, length, linewidth, materialOrColor);
+};
+
+OBBHelper.prototype.__createAxes = function(linewidth) {
+  var axesLength = 0.25;
+  if (linewidth > 0) {
+    var lengths = this.scale.clone().multiplyScalar(axesLength).toArray();
+    return new FatAxesHelper(lengths, linewidth, this.position, this.quaternion);
+  } else {
+    var axes = new THREE.AxesHelper(axesLength);
+    axes.position.copy(this.position);
+    axes.scale.copy(this.scale);
+    axes.quaternion.copy(this.quaternion);
+    axes.isAxis = true;
+    return axes;
+  }
+};
+
+OBBHelper.prototype.toWireFrame = function(linewidth, showNormal, materialOrColor, showAxes, showOrientation) {
   materialOrColor = materialOrColor || this.material;
   var boxwf = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), Object3DUtil.getBasicMaterial(materialOrColor)));
   boxwf.position.copy(this.position);
@@ -96,31 +163,33 @@ OBBHelper.prototype.toWireFrame = function(linewidth, showNormal, materialOrColo
   boxwf.quaternion.copy(this.quaternion);
   boxwf.updateMatrix();
   if (linewidth > 0) {
-    var boxwffat = new FatLinesHelper(boxwf, linewidth, materialOrColor);
-    if (showNormal) {
-      var normal = this.dominantNormal;
-      if (normal) {
-        var boxWithNormal = new THREE.Object3D();
-        var fatArrow = new FatArrowHelper(normal, this.position, linewidth * 5, linewidth, undefined, undefined, materialOrColor);
-        boxWithNormal.add(boxwffat);
-        boxWithNormal.add(fatArrow);
-        return boxWithNormal;
-      }
-    }
-    return boxwffat;
-  } else {
-    if (showNormal) {
-      var normal = this.dominantNormal;
-      if (normal) {
-        var boxWithNormal = new THREE.Object3D();
-        var arrow = new THREE.ArrowHelper(normal, this.position, 0.05*Constants.metersToVirtualUnit, undefined, undefined, materialOrColor);
-        boxWithNormal.add(boxwf);
-        boxWithNormal.add(arrow);
-        return boxWithNormal;
-      }
-    }
-    return boxwf;
+    boxwf = new FatLinesHelper(boxwf, linewidth, materialOrColor);
   }
+  boxwf.userData.desc = 'obb-wireframe';
+  if (showNormal || showAxes || showOrientation) {
+    var normalArrow = showNormal? this.__createNormal(linewidth, materialOrColor) : null;
+    var axes = showAxes? this.__createAxes(linewidth) : null;
+    var orientArrows = showOrientation? this.__createOrientationArrows(linewidth) : null;
+    if (normalArrow || axes || orientArrows) {
+      console.log('Create box with normal')
+      var boxWithNormal = new THREE.Group();
+      boxWithNormal.add(boxwf);
+      if (normalArrow) {
+        normalArrow.userData.name = 'obb-dominantNormal';
+        boxWithNormal.add(normalArrow);
+      }
+      if (axes) {
+        axes.userData.name = 'obb-axes';
+        boxWithNormal.add(axes);
+      }
+      if (orientArrows) {
+        orientArrows.userData.name = 'obb-orient-arrows';
+        boxWithNormal.add(orientArrows);
+      }
+      return boxWithNormal;
+    }
+  }
+  return boxwf;
 };
 
 var LinesHelper = function (lines, materialOrColor) {
@@ -163,6 +232,16 @@ LinesHelper.prototype.__update = function (input) {
   }
 };
 
+function linesFromBoxCorners(points) {
+  // Assumes points[0] and points[4] should be paired
+  var lines = [];
+  for (var i = 0; i < 4; i++) {
+    lines.push([points[i], points[(i+1)%4]]);
+    lines.push([points[i], points[i+4]]);
+    lines.push([points[4+i], points[4+(i+1)%4]]);
+  }
+  return lines;
+}
 
 var FatLinesHelper = function (lines, width, materialOrColor, opts) {
   opts = opts || {};
@@ -182,11 +261,73 @@ var FatLinesHelper = function (lines, width, materialOrColor, opts) {
     this.material = Object3DUtil.getBasicMaterial(materialOrColor);
   }
   this.getWeight = opts.getWeight;
+  if (opts.inputType === 'boxCorners') {
+    lines = linesFromBoxCorners(lines);
+  }
   this.update(lines);
 };
 
 FatLinesHelper.prototype = Object.create(THREE.Group.prototype);
 FatLinesHelper.prototype.constructor = FatLinesHelper;
+
+function toLineSegments(input) {
+  var lines = null;
+  if (input instanceof THREE.Line) {
+    // Lets make these into our fat lines!!!
+    var verts = GeometryUtil.getVertices(input);
+    if (input.geometry.index) {
+      var index = input.geometry.index.array;
+      lines = [];
+      for (var i = 0; i < index.length; i += 2) {
+        var a = verts[index[i]];
+        var b = verts[index[i + 1]];
+        lines.push([a,b]);
+      }
+    } else {
+      lines = [];
+      for (var i = 0; i < verts.length; i += 2) {
+        var a = verts[i];
+        var b = verts[i + 1];
+        lines.push([a,b]);
+      }
+    }
+
+  } else if (input.length) {
+    if (input[0] instanceof THREE.Vector3) {
+      // Bunch of points in line
+      lines = [input];
+    } else if (input[0].length && input[0][0] instanceof THREE.Vector3) {
+      // Bunch of line segments
+      lines = input;
+    }
+  }
+  if (!lines) {
+    console.error('Unsupported line input');
+  }
+  return lines;
+}
+
+FatLinesHelper.prototype.setFromObject = function(input) {
+  this.lines = toLineSegments(input);
+  //if (input.matrix) {
+  // Object3DUtil.setMatrix(this, input.matrix);
+  //}
+};
+
+FatLinesHelper.prototype.__addLine = function (linePoints) {
+  var totalPoints = linePoints.length;
+  for (var j = 1; j < linePoints.length; j++) {
+    var cylinder = Object3DUtil.makeCylinder(linePoints[j - 1], linePoints[j],
+      this.width / 2, this.material);
+    if (this.getColor) {
+      var colors = this.getWeight?
+        [this.getColor(this.getWeight(i, j-1)), this.getColor(this.getWeight(i, j))]
+        : [this.getColor((j-1)/totalPoints), this.getColor(j/totalPoints)];
+      GeometryUtil.colorCylinderVertices(cylinder.geometry, colors[0], colors[1]);
+    }
+    this.add(cylinder);
+  }
+};
 
 FatLinesHelper.prototype.update = function (input) {
   // Create big fat cylinders connecting everything
@@ -197,63 +338,16 @@ FatLinesHelper.prototype.update = function (input) {
   }
 
   if (input) {
-    this.lines = null;
-    if (input instanceof THREE.Line) {
-      // Lets make these into our fat lines!!!
-      var verts = GeometryUtil.getVertices(input);
-      if (input.geometry.index) {
-        var index = input.geometry.index.array;
-        this.lines = [];
-        for (var i = 0; i < index.length; i += 2) {
-          var a = verts[index[i]];
-          var b = verts[index[i + 1]];
-          this.lines.push([a,b]);
-        }
-      } else {
-        this.lines = [];
-        for (var i = 0; i < verts.length; i += 2) {
-          var a = verts[i];
-          var b = verts[i + 1];
-          this.lines.push([a,b]);
-        }
-      }
-
-    } else if (input.length) {
-      if (input[0] instanceof THREE.Vector3) {
-        // Bunch of points in line
-        this.lines = [input];
-      } else if (input[0].length && input[0][0] instanceof THREE.Vector3) {
-        // Bunch of line segments
-        this.lines = input;
-      }
-    }
-    if (!this.lines) {
-      console.error('Unsupported input');
-    }
-    //if (input.matrix) {
-    // Object3DUtil.setMatrix(this, input.matrix);
-    //}
+    this.setFromObject(input);
   }
 
   // Add lines
   if (this.lines && this.lines.length) {
     for (var i = 0; i < this.lines.length; i++) {
-      var totalPoints = this.lines[i].length;
-      for (var j = 1; j < this.lines[i].length; j++) {
-        var cylinder = Object3DUtil.makeCylinder(this.lines[i][j - 1], this.lines[i][j],
-          this.width / 2, this.material);
-        if (this.getColor) {
-          var colors = this.getWeight?
-            [this.getColor(this.getWeight(i, j-1)), this.getColor(this.getWeight(i, j))]
-            : [this.getColor((j-1)/totalPoints), this.getColor(j/totalPoints)];
-          GeometryUtil.colorCylinderVertices(cylinder.geometry, colors[0], colors[1]);
-        }
-        this.add(cylinder);
-      }
+      this.__addLine(this.lines[i]);
     }
   }
 };
-
 
 var FatArrowHelper = function (dir, origin, length, lineWidth, headLength, headWidth, materialOrColor) {
   THREE.Group.call(this);
@@ -275,7 +369,7 @@ var FatArrowHelper = function (dir, origin, length, lineWidth, headLength, headW
   this.add(this.line);
 
   var coneGeometry = new THREE.CylinderGeometry(0, 0.5, 1, 5, 1);
-  coneGeometry.applyMatrix(new THREE.Matrix4().makeTranslation(0, -0.5, 0));
+  coneGeometry.applyMatrix4(new THREE.Matrix4().makeTranslation(0, -0.5, 0));
 
   this.cone = new THREE.Mesh(coneGeometry, this.material);
   this.cone.matrixAutoUpdate = false;
@@ -339,9 +433,16 @@ var FatAxesHelper = function (length, lineWidth, origin, quaternion) {
   this.lineWidth = lineWidth || 1;
   this.axes = [];
   for (var i = 0; i < AxesDirs.length; i++) {
-    this.axes[i] = new FatArrowHelper(AxesDirs[i], new THREE.Vector3(), this.length, this.lineWidth, undefined, undefined, AxesColors[i]);
+    var axisLength = (Array.isArray(this.length))? this.length[i] : this.length;
+    this.axes[i] = new FatArrowHelper(AxesDirs[i], new THREE.Vector3(), axisLength, this.lineWidth, undefined, undefined, AxesColors[i]);
     this.add(this.axes[i]);
   }
+  this.traverse(function(node) {
+    node.userData.isAxis = true;
+    if (node.material) {
+      node.axisMaterial = node.material;
+    }
+  });
 };
 
 FatAxesHelper.prototype = Object.create(THREE.Group.prototype);

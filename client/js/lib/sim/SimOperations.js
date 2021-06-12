@@ -561,14 +561,16 @@ SimOperations.prototype.putDown = function(simState, obj, targetPosition) {
  * Do something with object
  * @param simState {SimState}
  * @param obj {{node: THREE.Object3D, modelInstance: ModelInstance}} Object to act on
- * @param action
+ * @param action {string} Action name
+ * @param [args] {Array} Arguments to action
  * @returns {{capability, state}}
  */
-SimOperations.prototype.actOnObject = function(simState, obj, action) {
+SimOperations.prototype.actOnObject = function(simState, obj, action, args) {
   return this.__sceneOperations.actOnObject({
     object3D: obj.node,
     modelInstance: obj.modelInstance,
-    action: action
+    action: action,
+    arguments: args
   });
 };
 

@@ -8,7 +8,15 @@
  * @license MIT License <http://www.opensource.org/licenses/mit-license.php>
  */
 
-THREE.UTF8Loader = function () {};
+THREE.UTF8Loader = function (manager) {
+	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
+};
+
+THREE.UTF8Loader.prototype.getFileLoader = function(responseType) {
+	var loader =  new THREE.FileLoader(this.manager);
+	loader.setResponseType(responseType);
+	return loader;
+};
 
 /**
  * Load UTF8 encoded model
@@ -19,17 +27,15 @@ THREE.UTF8Loader = function () {};
  *                   geometryBase: Base url from which to load referenced geometries
  *                   materialBase: Base url from which to load referenced textures
  */
-
 THREE.UTF8Loader.prototype.load = function ( jsonUrl, callback, onerror, options ) {
-
-    this.downloadModelJson( jsonUrl, callback, onerror, options );
-
+    this.downloadModelJson( jsonUrl, function(err, res) {
+    	if (err) { onerror(err); } else { callback(res); }
+    }, options );
 };
 
 // BufferGeometryCreator
 
-THREE.UTF8Loader.BufferGeometryCreator = function (useDynamic) {
-    this.useDynamic = useDynamic;
+THREE.UTF8Loader.BufferGeometryCreator = function () {
 };
 
 THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray, indices ) {
@@ -37,7 +43,6 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 	var ntris = indices.length / 3;
 
 	var geometry = new THREE.BufferGeometry();
-    if (this.useDynamic) geometry.dynamic = true;
 
 	var positions = new Float32Array( ntris * 3 * 3 );
 	var normals = new Float32Array( ntris * 3 * 3 );
@@ -100,9 +105,9 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 	}
 
 	geometry.setIndex( new THREE.BufferAttribute( indices, 1 ) );
-	geometry.addAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
-	geometry.addAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
-	geometry.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
+	geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+	geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+	geometry.setAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
 
   geometry.groups.push( { start: 0, count: indices.length, index: 0 } );
 
@@ -272,7 +277,6 @@ THREE.UTF8Loader.GeometryCreator.prototype = {
 
 };
 
-
 // UTF-8 decoder from webgl-loader (r100)
 // http://code.google.com/p/webgl-loader/
 
@@ -319,46 +323,35 @@ var DEFAULT_DECODE_PARAMS = {
 // runtime for different combinations of stride, decodeOffset and
 // decodeScale?
 
-THREE.UTF8Loader.prototype.decompressAttribsInner_ = function ( str, inputStart, inputEnd,
-                                                                  output, outputStart, stride,
-                                                                  decodeOffset, decodeScale ) {
+function UTF8Decoder(decodeParams) {
+	this.decodeParams = decodeParams;
+}
 
+UTF8Decoder.prototype.__decompressAttribsInner = function ( str, inputStart, inputEnd,
+																														output, outputStart, stride,
+																														decodeOffset, decodeScale ) {
 	var prev = 0;
-
 	for ( var j = inputStart; j < inputEnd; j ++ ) {
-
 		var code = str.charCodeAt( j );
 		prev += ( code >> 1 ) ^ ( -( code & 1 ) );
-
 		output[ outputStart ] = decodeScale * ( prev + decodeOffset );
 		outputStart += stride;
-
 	}
-
 };
 
-THREE.UTF8Loader.prototype.decompressIndices_ = function( str, inputStart, numIndices,
-                                                            output, outputStart ) {
-
+UTF8Decoder.prototype.__decompressIndices = function( str, inputStart, numIndices,
+																											output, outputStart ) {
 	var highest = 0;
-
 	for ( var i = 0; i < numIndices; i ++ ) {
-
 		var code = str.charCodeAt( inputStart ++ );
-
 		output[ outputStart ++ ] = highest - code;
-
 		if ( code === 0 ) {
-
 			highest ++;
-
 		}
-
 	}
-
 };
 
-THREE.UTF8Loader.prototype.decompressAABBs_ = function ( str, inputStart, numBBoxen,
+UTF8Decoder.prototype.__decompressAABBs = function ( str, inputStart, numBBoxen,
                                                            decodeOffsets, decodeScales ) {
 	var numFloats = 6 * numBBoxen;
 
@@ -384,17 +377,13 @@ THREE.UTF8Loader.prototype.decompressAABBs_ = function ( str, inputStart, numBBo
 		bboxen[ outputStart ++ ] = decodeScales[0] * radiusX;
 		bboxen[ outputStart ++ ] = decodeScales[1] * radiusY;
 		bboxen[ outputStart ++ ] = decodeScales[2] * radiusZ;
-
 	}
 
 	return bboxen;
-
 };
 
-THREE.UTF8Loader.prototype.decompressMesh =  function ( str, meshParams, decodeParams, name, idx, callback ) {
-
-    // Extract conversion parameters from attribArrays.
-
+UTF8Decoder.prototype.decompressMesh =  function ( str, meshParams, decodeParams, name, idx, callback ) {
+	// Extract conversion parameters from attribArrays.
 	var stride = decodeParams.decodeScales.length;
 
 	var decodeOffsets = decodeParams.decodeOffsets;
@@ -409,60 +398,47 @@ THREE.UTF8Loader.prototype.decompressMesh =  function ( str, meshParams, decodeP
 	var attribsOut = new Float32Array( stride * numVerts );
 
 	for (var j = 0; j < stride; j ++ ) {
-
 		var end = inputOffset + numVerts;
-
 		var decodeScale = decodeScales[j];
 
 		if ( decodeScale ) {
-
-            // Assume if decodeScale is never set, simply ignore the
-            // attribute.
-
-			this.decompressAttribsInner_( str, inputOffset, end,
+			// Assume if decodeScale is never set, simply ignore the attribute.
+			this.__decompressAttribsInner( str, inputOffset, end,
                 attribsOut, j, stride,
                 decodeOffsets[j], decodeScale );
 		}
 
 		inputOffset = end;
-
 	}
 
-	var indexStart = meshParams.indexRange[ 0 ];
-	var numIndices = 3 * meshParams.indexRange[ 1 ];
+	var indexStart = meshParams.indexRange[0];
+	var numIndices = 3 * meshParams.indexRange[1];
 
 	var indicesOut = new Uint16Array( numIndices );
 
-	this.decompressIndices_( str, inputOffset, numIndices, indicesOut, 0 );
+	this.__decompressIndices( str, inputOffset, numIndices, indicesOut, 0 );
 
-    // Decode bboxen.
-
+	// Decode bboxen.
 	var bboxen = undefined;
 	var bboxOffset = meshParams.bboxes;
 
 	if ( bboxOffset ) {
-
-		bboxen = this.decompressAABBs_( str, bboxOffset, meshParams.names.length, decodeOffsets, decodeScales );
+		bboxen = this.__decompressAABBs( str, bboxOffset, meshParams.names.length, decodeOffsets, decodeScales );
 	}
 
-	callback( name, idx, attribsOut, indicesOut, bboxen, meshParams );
-
+	// Error first callback
+	callback(null, name, idx, attribsOut, indicesOut, bboxen, meshParams );
 };
 
-THREE.UTF8Loader.prototype.copyAttrib = function ( stride, attribsOutFixed, lastAttrib, index ) {
-
+UTF8Decoder.prototype.__copyAttrib = function ( stride, attribsOutFixed, lastAttrib, index ) {
 	for ( var j = 0; j < stride; j ++ ) {
-
 		lastAttrib[ j ] = attribsOutFixed[ stride * index + j ];
-
 	}
-
 };
 
-THREE.UTF8Loader.prototype.decodeAttrib2 = function ( str, stride, decodeOffsets, decodeScales, deltaStart,
+UTF8Decoder.prototype.__decodeAttrib2 = function ( str, stride, decodeOffsets, decodeScales, deltaStart,
                                                         numVerts, attribsOut, attribsOutFixed, lastAttrib,
                                                         index ) {
-
 	for ( var j = 0; j < 5; j ++ ) {
 
 		var code = str.charCodeAt( deltaStart + numVerts * j + index );
@@ -475,8 +451,7 @@ THREE.UTF8Loader.prototype.decodeAttrib2 = function ( str, stride, decodeOffsets
 
 };
 
-THREE.UTF8Loader.prototype.accumulateNormal = function ( i0, i1, i2, attribsOutFixed, crosses ) {
-
+UTF8Decoder.prototype.__accumulateNormal = function ( i0, i1, i2, attribsOutFixed, crosses ) {
 	var p0x = attribsOutFixed[ 8 * i0 ];
 	var p0y = attribsOutFixed[ 8 * i0 + 1 ];
 	var p0z = attribsOutFixed[ 8 * i0 + 2 ];
@@ -512,15 +487,12 @@ THREE.UTF8Loader.prototype.accumulateNormal = function ( i0, i1, i2, attribsOutF
 	crosses[ 3 * i2 ]     += p0x;
 	crosses[ 3 * i2 + 1 ] += p0y;
 	crosses[ 3 * i2 + 2 ] += p0z;
-
 };
 
-THREE.UTF8Loader.prototype.decompressMesh2 = function( str, meshParams, decodeParams, name, idx, callback ) {
-
+UTF8Decoder.prototype.decompressMesh2 = function( str, meshParams, decodeParams, name, idx, callback ) {
 	var MAX_BACKREF = 96;
 
-    // Extract conversion parameters from attribArrays.
-
+	// Extract conversion parameters from attribArrays.
 	var stride = decodeParams.decodeScales.length;
 
 	var decodeOffsets = decodeParams.decodeOffsets;
@@ -547,42 +519,33 @@ THREE.UTF8Loader.prototype.decompressMesh2 = function( str, meshParams, decodePa
 	var outputStart = 0;
 
 	for ( var i = 0; i < numIndices; i += 3 ) {
-
 		var code = str.charCodeAt( codeStart ++ );
-
 		var max_backref = Math.min( i, MAX_BACKREF );
 
 		if ( code < max_backref ) {
-
-            // Parallelogram
-
+			// Parallelogram
 			var winding = code % 3;
 			var backref = i - ( code - winding );
 			var i0, i1, i2;
 
 			switch ( winding ) {
-
 				case 0:
-
 					i0 = indicesOut[ backref + 2 ];
 					i1 = indicesOut[ backref + 1 ];
 					i2 = indicesOut[ backref + 0 ];
 					break;
 
 				case 1:
-
 					i0 = indicesOut[ backref + 0 ];
 					i1 = indicesOut[ backref + 2 ];
 					i2 = indicesOut[ backref + 1 ];
 					break;
 
 				case 2:
-
 					i0 = indicesOut[ backref + 1 ];
 					i1 = indicesOut[ backref + 0 ];
 					i2 = indicesOut[ backref + 2 ];
 					break;
-
 			}
 
 			indicesOut[ outputStart ++ ] = i0;
@@ -608,37 +571,28 @@ THREE.UTF8Loader.prototype.decompressMesh2 = function( str, meshParams, decodePa
 
 					attribsOutFixed[ stride * highest + j ] = prediction;
 					attribsOut[ stride * highest + j ] = decodeScales[ j ] * ( prediction + decodeOffsets[ j ] );
-
 				}
 
 				highest ++;
 
 			} else {
-
-				this.copyAttrib( stride, attribsOutFixed, lastAttrib, index );
-
+				this.__copyAttrib( stride, attribsOutFixed, lastAttrib, index );
 			}
 
-			this.accumulateNormal( i0, i1, index, attribsOutFixed, crosses );
-
+			this.__accumulateNormal( i0, i1, index, attribsOutFixed, crosses );
 		} else {
 
-            // Simple
-
+			// Simple
 			var index0 = highest - ( code - max_backref );
 
 			indicesOut[ outputStart ++ ] = index0;
 
 			if ( code === max_backref ) {
-
-				this.decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
+				this.__decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
                     numVerts, attribsOut, attribsOutFixed, lastAttrib,
                     highest ++ );
-
 			} else {
-
-				this.copyAttrib(stride, attribsOutFixed, lastAttrib, index0);
-
+				this.__copyAttrib(stride, attribsOutFixed, lastAttrib, index0);
 			}
 
 			code = str.charCodeAt( codeStart ++ );
@@ -647,15 +601,11 @@ THREE.UTF8Loader.prototype.decompressMesh2 = function( str, meshParams, decodePa
 			indicesOut[ outputStart ++ ] = index1;
 
 			if ( code === 0 ) {
-
-				this.decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
+				this.__decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
                     numVerts, attribsOut, attribsOutFixed, lastAttrib,
                     highest ++ );
-
 			} else {
-
-				this.copyAttrib( stride, attribsOutFixed, lastAttrib, index1 );
-
+				this.__copyAttrib( stride, attribsOutFixed, lastAttrib, index1 );
 			}
 
 			code = str.charCodeAt( codeStart ++ );
@@ -666,25 +616,18 @@ THREE.UTF8Loader.prototype.decompressMesh2 = function( str, meshParams, decodePa
 			if ( code === 0 ) {
 
 				for ( var j = 0; j < 5; j ++ ) {
-
 					lastAttrib[ j ] = ( attribsOutFixed[ stride * index0 + j ] + attribsOutFixed[ stride * index1 + j ] ) / 2;
-
 				}
 
-				this.decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
+				this.__decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
                     numVerts, attribsOut, attribsOutFixed, lastAttrib,
                     highest ++ );
-
 			} else {
-
-				this.copyAttrib( stride, attribsOutFixed, lastAttrib, index2 );
-
+				this.__copyAttrib( stride, attribsOutFixed, lastAttrib, index2 );
 			}
 
-			this.accumulateNormal( index0, index1, index2, attribsOutFixed, crosses );
-
+			this.__accumulateNormal( index0, index1, index2, attribsOutFixed, crosses );
 		}
-
 	}
 
 	for ( var i = 0; i < numVerts; i ++ ) {
@@ -704,268 +647,183 @@ THREE.UTF8Loader.prototype.decompressMesh2 = function( str, meshParams, decodePa
 		attribsOut[ stride * i + 7 ] = norm * nz + ((cz >> 1) ^ (-(cz & 1)));
 	}
 
-	callback( name, idx, attribsOut, indicesOut, undefined, meshParams );
+	// Error first callback
+	callback(null, name, idx, attribsOut, indicesOut, undefined, meshParams );
 
 };
 
-THREE.UTF8Loader.prototype.downloadMesh = function ( path, name, meshEntry, decodeParams, callback ) {
-
+UTF8Decoder.prototype.decodeMesh = function(encodedMesh, name, meshEntry, callback) {
 	var loader = this;
 	var idx = 0;
 
-	function onprogress( req, e ) {
+	var decodeParams = this.decodeParams;
+	while ( idx < meshEntry.length ) {
+		var meshParams = meshEntry[ idx ];
+		var indexRange = meshParams.indexRange;
 
-		while ( idx < meshEntry.length ) {
+		if ( indexRange ) {
+			var meshEnd = indexRange[ 0 ] + 3 * indexRange[ 1 ];
 
-			var meshParams = meshEntry[ idx ];
-			var indexRange = meshParams.indexRange;
+			if (encodedMesh.length < meshEnd ) break;
 
-			if ( indexRange ) {
+			loader.decompressMesh(encodedMesh, meshParams, decodeParams, name, idx, callback );
+		} else {
 
-				var meshEnd = indexRange[ 0 ] + 3 * indexRange[ 1 ];
+			var codeRange = meshParams.codeRange;
+			var meshEnd = codeRange[ 0 ] + codeRange[ 1 ];
 
-				if ( req.responseText.length < meshEnd ) break;
+			if (encodedMesh.length < meshEnd ) break;
 
-				loader.decompressMesh( req.responseText, meshParams, decodeParams, name, idx, callback );
-
-			} else {
-
-				var codeRange = meshParams.codeRange;
-				var meshEnd = codeRange[ 0 ] + codeRange[ 1 ];
-
-				if ( req.responseText.length < meshEnd ) break;
-
-				loader.decompressMesh2( req.responseText, meshParams, decodeParams, name, idx, callback );
-			}
-
-			++ idx;
-
+			loader.decompressMesh2(encodedMesh, meshParams, decodeParams, name, idx, callback );
 		}
-
-    }
-
-	getHttpRequest( path, function( req, e ) {
-
-		if ( req.status === 200 || req.status === 0 ) {
-
-			onprogress( req, e );
-
-		}
-
-        // TODO: handle errors.
-
-	}, onprogress );
-
-};
-
-THREE.UTF8Loader.prototype.downloadMeshes = function ( path, meshUrlMap, decodeParams, callback ) {
-
-	for ( var url in meshUrlMap ) {
-
-		var meshEntry = meshUrlMap[url];
-		this.downloadMesh( path + url, url, meshEntry, decodeParams, callback );
-
+		++ idx;
 	}
-
 };
 
-THREE.UTF8Loader.prototype.createMeshCallback = function( materialBaseUrl, loadModelInfo, allDoneCallback ) {
+// Supporting THREE UTF8Loader functions
 
+THREE.UTF8Loader.prototype.__downloadMesh = function ( path, name, meshEntry, decodeParams, callback) {
+	var loader = this.getFileLoader('utf8');
+	loader.load(path, function ( text ) {
+		var decoder = new UTF8Decoder(decodeParams);
+		decoder.decodeMesh(text, name, meshEntry, callback);
+	}, null, function(err) { callback(err); });
+};
+
+THREE.UTF8Loader.prototype.__downloadMeshes = function ( path, meshUrlMap, decodeParams, callback ) {
+	for ( var url in meshUrlMap ) {
+		var meshEntry = meshUrlMap[url];
+		this.__downloadMesh( path + url, url, meshEntry, decodeParams, callback);
+	}
+};
+
+THREE.UTF8Loader.prototype.__createMeshCallback = function( materialBaseUrl, loadModelInfo, allDoneCallback ) {
 	var nCompletedUrls = 0;
+	var nErrUrls = 0;
 	var nExpectedUrls = 0;
 
 	var expectedMeshesPerUrl = {};
 	var decodedMeshesPerUrl = {};
 
+	var errors = {};
 	var modelParts = {};
 
 	var meshUrlMap = loadModelInfo.urls;
 
 	for ( var url in meshUrlMap ) {
-
 		expectedMeshesPerUrl[ url ] = meshUrlMap[ url ].length;
 		decodedMeshesPerUrl[ url ] = 0;
 
 		nExpectedUrls ++;
 
 		modelParts[ url ] = new THREE.Object3D();
-
 	}
 
 	var model = new THREE.Object3D();
 
-    // Prepare materials first...
-
+	// Prepare materials first...
 	var materialCreator = new THREE.MTLLoader.MaterialCreator( materialBaseUrl, loadModelInfo.options );
 	materialCreator.setMaterials( loadModelInfo.materials );
-
 	materialCreator.preload();
 
 	// Create callback for creating mesh parts
+	var geometryCreator = new THREE.UTF8Loader.GeometryCreator();
+	var bufferGeometryCreator = new THREE.UTF8Loader.BufferGeometryCreator();
 
-    var useDynamic = (loadModelInfo.options && loadModelInfo.options.useDynamic !== undefined) ? loadModelInfo.options.useDynamic : true;
-    var geometryCreator = new THREE.UTF8Loader.GeometryCreator();
-    var bufferGeometryCreator = new THREE.UTF8Loader.BufferGeometryCreator(useDynamic);
+	var meshCallback = function(err, name, idx, attribArray, indexArray, bboxen, meshParams ) {
+		if (err) {
+			nErrUrls++;
+			errors[name] = err;
+ 		} else {
+			// Got ourselves a new mesh
 
-	var meshCallback = function( name, idx, attribArray, indexArray, bboxen, meshParams ) {
+			// name identifies this part of the model (url)
+			// idx is the mesh index of this mesh of the part
+			// attribArray defines the vertices
+			// indexArray defines the faces
+			// bboxen defines the bounding box
+			// meshParams contains the material info
 
-        // Got ourselves a new mesh
-
-        // name identifies this part of the model (url)
-        // idx is the mesh index of this mesh of the part
-        // attribArray defines the vertices
-        // indexArray defines the faces
-        // bboxen defines the bounding box
-        // meshParams contains the material info
-
-        var useBuffers = (loadModelInfo.options && loadModelInfo.options.useBuffers !== undefined) ? loadModelInfo.options.useBuffers : true;
-
-        if ( useBuffers ) {
-
-		var geometry = bufferGeometryCreator.create( attribArray, indexArray );
-
-        } else {
-
-            var geometry = geometryCreator.create( attribArray, indexArray );
-
-        }
-
-		var material = materialCreator.create( meshParams.material );
-
-		var mesh = new THREE.Mesh( geometry, material );
-        mesh.name = name + '-' + idx;
-        mesh.userData = {
-            index: idx
-        };
-		modelParts[ name ].add( mesh );
-
-        //model.add(new THREE.Mesh(geometry, material));
-
-		decodedMeshesPerUrl[ name ] ++;
-
-		if ( decodedMeshesPerUrl[ name ] === expectedMeshesPerUrl[ name ] ) {
-
-			nCompletedUrls ++;
-
-			model.add( modelParts[ name ] );
-
-			if ( nCompletedUrls === nExpectedUrls ) {
-
-                // ALL DONE!!!
-
-				allDoneCallback( model );
-
-			}
-
-		}
-
-	};
-
-	return meshCallback;
-
-};
-
-THREE.UTF8Loader.prototype.downloadModel = function ( geometryBase, materialBase, model, callback ) {
-
-	var meshCallback = this.createMeshCallback( materialBase, model, callback );
-	this.downloadMeshes( geometryBase, model.urls, model.decodeParams, meshCallback );
-
-};
-
-THREE.UTF8Loader.prototype.downloadModelJson = function ( jsonUrl, callback, onerror, options ) {
-
-	getJsonRequest( jsonUrl, function( loaded ) {
-
-		if ( ! loaded.decodeParams ) {
-
-			if ( options && options.decodeParams ) {
-
-				loaded.decodeParams = options.decodeParams;
-
+			// TODO: Always use buffer geometry
+			var useBuffers = (loadModelInfo.options && loadModelInfo.options.useBuffers !== undefined) ? loadModelInfo.options.useBuffers : true;
+			var geometry;
+			if (useBuffers) {
+				geometry = bufferGeometryCreator.create(attribArray, indexArray);
 			} else {
-
-				loaded.decodeParams = DEFAULT_DECODE_PARAMS;
-
+				geometry = geometryCreator.create(attribArray, indexArray);
 			}
 
-		}
+			var material = materialCreator.create(meshParams.material);
 
-		loaded.options = options;
+			var mesh = new THREE.Mesh(geometry, material);
+			mesh.name = name + '-' + idx;
+			mesh.userData = {
+				index: idx
+			};
+			modelParts[name].add(mesh);
 
-		var geometryBase = jsonUrl.substr( 0, jsonUrl.lastIndexOf( "/" ) + 1 );
-		var materialBase = geometryBase;
-
-		if ( options && options.geometryBase ) {
-
-			geometryBase = options.geometryBase;
-
-			if ( geometryBase.charAt( geometryBase.length - 1 ) !== "/" ) {
-
-				geometryBase = geometryBase + "/";
-
+			//model.add(new THREE.Mesh(geometry, material));
+			decodedMeshesPerUrl[name]++;
+			if (decodedMeshesPerUrl[name] === expectedMeshesPerUrl[name]) {
+				nCompletedUrls++;
+				model.add(modelParts[name]);
 			}
-
 		}
-
-		if ( options && options.materialBase ) {
-
-			materialBase = options.materialBase;
-
-			if ( materialBase.charAt( materialBase.length - 1 ) !== "/" ) {
-
-				materialBase = materialBase  + "/";
-
+		if (nCompletedUrls + nErrUrls === nExpectedUrls) {
+			// ALL DONE!!!
+			if (nErrUrls > 0) {
+				allDoneCallback(errors, model);
+			} else {
+				allDoneCallback(null, model);
 			}
-
 		}
-
-		this.downloadModel( geometryBase, materialBase, loaded, callback );
-
-        }.bind( this ),
-        onerror );
-
+	};
+	return meshCallback;
 };
 
-// XMLHttpRequest stuff
+THREE.UTF8Loader.prototype.__downloadModelMeshes = function ( geometryBase, materialBase, model, callback ) {
+	var meshCallback = this.__createMeshCallback( materialBase, model, callback );
+	this.__downloadMeshes( geometryBase, model.urls, model.decodeParams, meshCallback );
+};
 
-function getHttpRequest( url, onload, opt_onprogress ) {
-
-    var req = new XMLHttpRequest();
-
-	var LISTENERS = {
-
-        load: function( e ) { onload( req, e ); },
-        progress: function( e ) { opt_onprogress( req, e ); }
-
-    };
-
-	addListeners( req, LISTENERS );
-
-	req.open( 'GET', url, true );
-	req.send( null );
-}
-
-function getJsonRequest( url, onjson, onerror ) {
-	getHttpRequest( url,
-        function( e ) {
-            if ( e.status === 200 || e.status === 0 ) {
-                onjson( JSON.parse( e.responseText ) );
-            } else {
-                var msg = 'Couldn\'t load URL [' + url + ']';
-                if (onerror) onerror( msg );
-            }
-        },
-        function() {} );
-
-}
-
-function addListeners( dom, listeners ) {
-
-    // TODO: handle event capture, object binding.
-
-	for ( var key in listeners ) {
-
-		dom.addEventListener( key, listeners[ key ] );
-
+THREE.UTF8Loader.prototype.__parseModelJson = function(urlBase, loaded, options) {
+	if (!loaded.decodeParams) {
+		if ( options && options.decodeParams ) {
+			loaded.decodeParams = options.decodeParams;
+		} else {
+			loaded.decodeParams = DEFAULT_DECODE_PARAMS;
+		}
 	}
-}
+
+	loaded.options = options;
+	var geometryBase = urlBase;
+	var materialBase = geometryBase;
+
+	if ( options && options.geometryBase ) {
+		geometryBase = options.geometryBase;
+		if ( geometryBase.charAt( geometryBase.length - 1 ) !== "/" ) {
+			geometryBase = geometryBase + "/";
+		}
+	}
+
+	if ( options && options.materialBase ) {
+		materialBase = options.materialBase;
+		if ( materialBase.charAt( materialBase.length - 1 ) !== "/" ) {
+			materialBase = materialBase  + "/";
+		}
+	}
+
+	return { geometryBase: geometryBase, materialBase: materialBase };
+};
+
+THREE.UTF8Loader.prototype.downloadModelJson = function ( jsonUrl, callback, options ) {
+	var scope = this;
+	var loader = this.getFileLoader('json');
+	loader.load(jsonUrl, function (data) {
+		var urlBase = jsonUrl.substr( 0, jsonUrl.lastIndexOf( "/" ) + 1 );
+		var res = scope.__parseModelJson(urlBase, data, options);
+		scope.__downloadModelMeshes(res.geometryBase, res.materialBase, data, callback);
+	}, null, function(err) {
+		callback(err);
+	});
+};

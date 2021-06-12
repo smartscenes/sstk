@@ -3,11 +3,11 @@
 MY_PATH="`dirname \"$0\"`"
 
 csv=$1
-opts='--use_ids --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller'
-#opts='--use_ids --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller --split_by_material'
+opts='--input_type id --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller --export_materials --handle_material_side --skip_existing'
+#opts='--input_type id --filter_empty --auto_align --collapse_nested --world_front 0,0,1 --use_search_controller --split_by_material'
 output_dir=${2:-part-meshes}
 prefix=3dw
-n=4
+n=10
 
 mkdir -p $output_dir
 mkdir -p $output_dir/meshes

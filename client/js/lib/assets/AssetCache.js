@@ -21,6 +21,22 @@ function CacheEntry(id, asset, aSize, dispose) {
   this.timestamp = Date.now();
 }
 
+CacheEntry.prototype.update = function(asset, aSize, dispose) {
+  if (this.asset !== asset) {
+    if (this.dispose) {
+      this.dispose(this.asset);
+    }
+    this.asset = asset;
+    this.aSize = aSize;
+    this.dispose = dispose;
+  }
+  this.timestamp = Date.now();
+};
+
+AssetCache.prototype.hasKey = function(id) {
+  return this.cache.hasOwnProperty(id);
+};
+
 AssetCache.prototype.get = function (id) {
   if (this.cache.hasOwnProperty(id)) {
     this.cache[id].timestamp = Date.now();  // touch entry
@@ -46,6 +62,7 @@ AssetCache.prototype.getOrElse = function (id, fetch, dispose) {
 // implicitly treating them as all the same size)
 AssetCache.prototype.set = function (id, asset, aSize, disposeCb) {
   if (this.cache.hasOwnProperty(id)) {
+    this.cache[id].update(asset);
     return;
   }
 
@@ -116,4 +133,3 @@ AssetCache.prototype.clear = function (id) {
 
 // Exports
 module.exports = AssetCache;
-

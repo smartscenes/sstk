@@ -56,8 +56,10 @@ var STK = require('sstk-core');
 // Indicate that we are not on the browser
 STK.Constants.isBrowser = false;
 
-//console.log('baseUrl is ' + STK.Constants.baseUrl);
-//console.log('assetsDir is ' + STK.Constants.assetsDir);
+// console.log('baseUrl is ' + STK.Constants.baseUrl);
+// console.log('assetsDir is ' + STK.Constants.assetsDir);
+// console.log('dataDir is ' + STK.Constants.dataDir);
+// console.log('defaultVars is ', STK.Constants.defaultVars);
 // Who uses the XMLHttpRequest?  ColladaLoader and _.getJSON
 if (STK.Constants.baseUrl.startsWith('http:') || STK.Constants.baseUrl.startsWith('https:') ) {
   // NOTE: Don't support file://
@@ -83,6 +85,7 @@ var cachedImagesLoader = new STK.assets.CachedAssetLoader({
   assetCacheSize: sscConfig.imageCache.size,
   loadFn: function (loadOpts, callback) {
     //console.log('request image: ' + loadOpts.url);
+    //console.log('request image: ' + loadOpts.url.length, loadOpts.mimeType);
     getPixels(loadOpts.url, loadOpts.mimeType, callback);
     // fs.readAsync(loadOpts.url, 'arraybuffer', function(err, buffer) {
     //   if (buffer) {
@@ -185,7 +188,9 @@ THREE.ImageLoaderQueue.drain = function() {
 };
 function waitImagesLoaded(cb) {
   if (THREE.ImageLoaderQueue.idle()) {
-    setTimeout(function() { cb(); }, 0);
+    if (cb) {
+      setTimeout(function() { cb(); }, 0);
+    }
   } else {
     imageQueuePubSub.SubscribeOnce('drain', imageQueuePubSub, function() {
       // Keep waiting until it done, really really done!
@@ -197,21 +202,33 @@ function disableImagesLoading() {
   THREE.ImageLoaderQueue.disabled = true;
 }
 
+var PlaceholderImage = {
+  data: new Uint8Array(0),
+  width: 0,
+  height: 0
+};
+
 // TODO(MS): HACK!!! Replace ImageLoader load with version handling local filesystem access
 // TODO(AXC): HACK!!! Added extra argument waitForImageReady (see Materials.loadTextureImage) that allows us
 //   to load image, do some async final processing before declaring image ready
 THREE.ImageLoader.prototype.load = function (url, onLoad, onProgress, onError, waitForImageReady) {
   var task = { url: url, onLoad: onLoad, onError: onError, waitForImageReady: waitForImageReady};
+  var placeholder = { src: url };
   if (!THREE.ImageLoaderQueue.disabled) {
-    THREE.ImageLoaderQueue.push(task, function (err, image) { return image; });
+    THREE.ImageLoaderQueue.push(task, function (err, image) {
+      _.merge(placeholder, image || PlaceholderImage);
+      return placeholder;
+    });
   } else {
     if (onError) {
       onError('Image loading disabled');
     }
   }
+  return placeholder;
 };
 
 function resolvePath(refPath, p) {
+  if (p == null) { return null; }
   if (p.startsWith('https://') || p.startsWith('http://') || p.startsWith('file://')) {
     return p;
   } else {
@@ -219,31 +236,45 @@ function resolvePath(refPath, p) {
   }
 }
 
-// Read gaps lights map file and returns object mapping { p5dId: [lights] }
+// Read gaps lights map file and returns object mapping { modelId: [lights] }
 var readGapsLights = function (lightsfile) {
   var data = fs.readSync(lightsfile);
-  var lightsLoader = new STK.model.Planner5dLightsLoader();
+  var lightsLoader = new STK.assets.LightsLoader();
   return lightsLoader.parse(data);
 };
 
-var registerCustomAssetGroupSync = function (metadataFile, assetIdsFile, assetIdField) {
-  var json = fs.readSync(metadataFile);
-  if (!json) {
-    throw 'Error reading file ' + metadataFile;
+var registerCustomAssetGroupSync = function (metadata, assetIdsFile, assetIdField) {
+  var json;
+  if (typeof(metadata) === 'string') {
+    var metadataFile = metadata;
+    json = fs.readSync(metadataFile);
+    if (!json) {
+      throw 'Error reading file ' + metadataFile;
+    }
+    json = JSON.parse(json);
+  } else {
+    json = metadata;
   }
-  json = JSON.parse(json);
   var assetGroup = AssetGroups.createCustomAssetGroup(json);
   if (!assetIdsFile) {
     assetIdsFile = assetGroup.idsFile;
   }
-  var assetIdsString = fs.readSync(assetIdsFile);
-  if (!assetIdsString) {
-    throw 'Error reading file ' + assetIdsFile;
+  var assetIdsString;
+  if (assetIdsFile != null) {
+    assetIdsString = fs.readSync(assetIdsFile);
+    if (!assetIdsString) {
+      throw 'Error reading file ' + assetIdsFile;
+    }
+  }
+  if (assetIdField == null) {
+    assetIdField = assetGroup.assetIdField;
   }
   AssetGroups.registerAssetGroup(assetGroup);
   console.log('Registered asset group: ' + assetGroup.name);
-  var assetsDb = new AssetsDb({assetIdField: assetIdField});
-  assetsDb.loadAssetInfoFromData(assetGroup, assetIdsString, assetIdsFile);
+  var assetsDb = AssetGroups.createAssetDbForAssetGroup(assetGroup, {assetIdField: assetIdField});
+  if (assetIdsString) {
+    assetsDb.loadAssetInfoFromData(assetGroup, assetIdsString, assetIdsFile);
+  }
   assetGroup.setAssetDb(assetsDb);
   if (assetGroup.lightSpecsFile) {
     var res = fs.readSync(assetGroup.lightSpecsFile);
@@ -262,12 +293,15 @@ var registerCustomAssetGroupsSync = function(assetsMap, assetGroupNames, refPath
   var assetsToRegister = AssetGroups.getAssetsToRegister(assetsMap, assetGroupNames);
   for (var j = 0; j < assetsToRegister.length; j++) {
     var g = assetsMap[assetsToRegister[j]];
-    console.log('register ' + g.metadata);
-    var metadataRefPath = (g.refpath != null)? g.refpath : refPath;
-    var metadataPath = resolvePath(metadataRefPath, g.metadata);
+    var metadataRefPath = (g.refpath != null) ? g.refpath : refPath;
+    var metadata = g.metadata;
+    if (typeof(metadata) === 'string') {
+      console.log('register ' + metadata);
+      metadata = resolvePath(metadataRefPath, metadata);
+    }
     var idsPath = resolvePath(metadataRefPath, g.ids);
     //console.log(metadataPath, idsPath);
-    registerCustomAssetGroupSync(metadataPath, idsPath, g.assetIdField);
+    registerCustomAssetGroupSync(metadata, idsPath, g.assetIdField);
   }
 };
 
@@ -285,22 +319,28 @@ var registerAssetGroupsSync = function(opts) {
     AssetGroups.registerDefaults();
   }
   var assets = (opts.skipDefaults)? [] : require('./data/assets.json');
+  for (var i = 0; i < assets.length; i++) {
+    assets[i] = STK.util.interpolate(assets[i], STK.Constants.defaultVars);
+  }
   var assetsMap = _.keyBy(assets, 'name');
 
   var assetSources = opts.assetSources || [];
   var assetFiles = opts.assetFiles || [];
   for (var i = 0; i < assetFiles.length; i++) {
     // Load additional custom assets
-    var customAssetsPath = assetFiles[i];
-    if (!fs.existsSync(customAssetsPath)) {
-      console.error('Cannot register custom assets: ' + customAssetsPath + ' not found');
-    }
-    var customAssets = JSON.parse(STK.fs.readSync(customAssetsPath));
-    _.each(customAssets, function(a) {
-      if (a.refpath == null) {
-        a.refpath =  path.dirname(customAssetsPath);
+    var customAssets = assetFiles[i];
+    if (typeof(assetFiles[i]) === 'string') {
+      var customAssetsPath = assetFiles[i];
+      if (!fs.existsSync(customAssetsPath)) {
+        console.error('Cannot register custom assets: ' + customAssetsPath + ' not found');
       }
-    });
+      customAssets = JSON.parse(STK.fs.readSync(customAssetsPath));
+      _.each(customAssets, function (a) {
+        if (a.refpath == null) {
+          a.refpath = path.dirname(customAssetsPath);
+        }
+      });
+    }
 
     var customAssetsMap = _.keyBy(customAssets, 'name');
     _.merge(assetsMap, customAssetsMap); // Override with custom assets if duplicate name

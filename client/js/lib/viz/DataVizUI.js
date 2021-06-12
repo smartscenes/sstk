@@ -23,7 +23,21 @@ DataVizUI.prototype.loadCustomAttributes = function (file) {
   });
 };
 
+/**
+ * Initializes the data visualization UI
+ * @param params
+ * @param params.graphView {string} Selector for main view
+ * @param [params.filterPanel] {string} Selector for filter panel
+ * @param [params.filters]
+ * @param [params.schema] {DataSchema}
+ * @param [params.viewerUrl] {string} Template string indicating url for 3D view
+ * @param [params.viewerModal] {boolean} Whether viewer should be opened in a modal
+ * @param [params.customLoading] {string} Selector for custom loading panel
+ * @constructor
+ */
 DataVizUI.prototype.initialize = function (params) {
+  this.viewerUrlTemplate = _.template(params.viewerUrl || 'simple-model-viewer2.html?modelId=${modelId}');
+  this.viewerModal = params.viewerModal;
   this.schema = params.schema || new ModelSchema();
 
   this.graphWindow = params.graphView;  // NOTE: name difference is important
@@ -55,7 +69,6 @@ DataVizUI.prototype.initialize = function (params) {
     autoAlignModels: true,
     autoScaleModels: true,
     useBuffers: true,
-    useDynamic: true, // set dynamic to be true so our picking will work
     previewImageIndex: 13
   });
   this.assetsDb = new AssetsDb({
@@ -81,7 +94,7 @@ DataVizUI.prototype.initialize = function (params) {
 DataVizUI.prototype.bindKeys = function () {
   var scope = this;
   keymap({on: 'ctrl-e', do: 'Export pinned data'}, function () {
-    scope.viz.exportPinned("pinned.json");
+    scope.viz.exportPinned('pinned.json');
   });
 };
 

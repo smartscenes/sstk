@@ -1,0 +1,49 @@
+doctype html
+html(lang='en')
+  head
+    title='Motion Annotator'
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.css')
+    link(rel='stylesheet', href='https://use.fontawesome.com/releases/v5.7.0/css/all.css', integrity='sha384-lZN37f5QGtY3VHgisS14W3ExzMWZxybE1SJSEsQp9S+oqd12jhcu+A56Ebc1zFSJ', crossorigin='anonymous')
+    link(rel='stylesheet', href=`${baseUrl}/client/js/vendor/jquery-ui/css/opentip.css`)
+  body
+    #panel
+      #canvas
+        #mouseToolTip.mouse-tooltip
+      #sidebar
+    #content
+      #main
+
+    script.
+      window.globals = {
+        modelId: "#{modelId}",
+        userId: "#{userId}",
+        sessionId: "#{sessionId}",
+        condition: "#{condition}",
+        task: "#{task}",
+        parts: "#{parts}",
+        base_url: "#{baseUrl}"
+      };
+
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    script(src=`${baseUrl}/client/js/vendor/bootbox.form.min.js`)
+    script(src=`${baseUrl}/three.min.js`)
+    script(src=`${baseUrl}/articulationAnnotator.bundle.js`)
+    link(rel='stylesheet', href=`${baseUrl}/css/datgui-light.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/articulation-annotator.css`)
+    style.
+      .dg.ac {
+        z-index: 2;
+      }
+    script.
+      const canvas = document.getElementById('canvas');
+      const partAnnotator = new STK.ArticulationAnnotator({
+        container: canvas
+      });
+      window.app = partAnnotator;  // For console debugging!

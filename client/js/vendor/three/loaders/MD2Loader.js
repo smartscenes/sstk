@@ -4,11 +4,11 @@
 
 THREE.MD2Loader = function ( manager ) {
 
-	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
+	THREE.Loader.call( this, manager );
 
 };
 
-THREE.MD2Loader.prototype = {
+THREE.MD2Loader.prototype = Object.assign( Object.create( THREE.Loader.prototype ), {
 
 	constructor: THREE.MD2Loader,
 
@@ -17,6 +17,7 @@ THREE.MD2Loader.prototype = {
 		var scope = this;
 
 		var loader = new THREE.FileLoader( scope.manager );
+		loader.setPath( scope.path );
 		loader.setResponseType( 'arraybuffer' );
 		loader.load( url, function ( buffer ) {
 
@@ -113,8 +114,6 @@ THREE.MD2Loader.prototype = {
 		];
 
 		return function ( buffer ) {
-
-			console.time( 'MD2Loader' );
 
 			var data = new DataView( buffer );
 
@@ -299,9 +298,9 @@ THREE.MD2Loader.prototype = {
 
 			}
 
-			geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
-			geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
-			geometry.addAttribute( 'uv', new THREE.Float32BufferAttribute( uvs, 2 ) );
+			geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+			geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
+			geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( uvs, 2 ) );
 
 			// animation
 
@@ -365,10 +364,9 @@ THREE.MD2Loader.prototype = {
 
 			geometry.morphAttributes.position = morphPositions;
 			geometry.morphAttributes.normal = morphNormals;
+			geometry.morphTargetsRelative = false;
 
 			geometry.animations = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( frames, 10 );
-
-			console.timeEnd( 'MD2Loader' );
 
 			return geometry;
 
@@ -376,4 +374,4 @@ THREE.MD2Loader.prototype = {
 
 	} )()
 
-};
+} );

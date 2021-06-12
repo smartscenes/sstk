@@ -57,7 +57,7 @@ define(['Constants','assets/AssetManager','gfx/Lights', 'geo/Object3DUtil','cont
         camera: this.camera,
         useAmbientOcclusion: this.useAmbientOcclusion,
         useShadows: this.useShadows,
-        useLights: this.useLights
+        usePhysicalLights: this.usePhysicalLights
       });
 
       this.debugNode = new THREE.Object3D('debugNode');

@@ -25,7 +25,9 @@ var nounRemap = {
 var verbRemap = {
   'pick up': 'take',
   'turn on': 'turnOn',
-  'turn off': 'turnOff'
+  'turn off': 'turnOff',
+  'animate': 'play',
+  'stop': 'pause'
 };
 
 /**
@@ -188,7 +190,8 @@ SimDialog.prototype.process = function(lastActionResult, text, callback) {
             return;
           }
         } else {
-          var result = operations.actOnObject(simState, obj, action);
+          // Pass along extra options to action (probably not that great, but whatever)
+          var result = operations.actOnObject(simState, obj, action, parts.slice(2));
           console.log('Got result', result);
         }
         callback("Ok!");

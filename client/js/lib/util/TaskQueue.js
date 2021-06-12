@@ -10,7 +10,6 @@ var async = require('async');
  * @constructor
  */
 function TaskQueue(opts) {
-  // TODO: Improve so we can use to replace usage of d3-queue
   PubSub.call(this);
   opts = opts || {};
   var concurrency = opts.concurrency || 1;

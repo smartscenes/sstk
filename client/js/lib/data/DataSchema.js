@@ -324,6 +324,10 @@ DataSchema.prototype.queryFieldValues = function (options) {
     facetLimit: options.facetLimit,
     facetMinCount: 1,
     success: function (data) {
+      if (!data || !data.facet_counts) {
+        console.warn('No data queryFieldValues', data, options);
+        return;
+      }
       var results = data.facet_counts.facet_fields;
       for (var p in results) {
         if (results.hasOwnProperty(p)) {
@@ -360,6 +364,10 @@ DataSchema.prototype.queryFieldStats = function (options) {
     filter: options.filter,
     field: options.fieldNames,
     success: function (data) {
+      if (!data || !data.stats) {
+        console.warn('No data queryFieldStats', data, options);
+        return;
+      }
       var results = data.stats.stats_fields;
       for (var p in results) {
         if (results.hasOwnProperty(p)) {

@@ -105,9 +105,12 @@
   dataViz.initialize({
     schema: modelSchema,
     filterPanel: '#filters',
-    filters: [{ field: 'datasets', values: [ 'ShapeNetCore', 'ShapeNetSem' ], required: true, limited: true }],
+//    filters: [{ field: 'datasets', values: [ 'ShapeNetCore', 'ShapeNetSem' ], required: true, limited: true }],
+    filters: [{ field: 'datasets', values: [ 'ShapeNetCore', 'ShapeNetSem' ], required: false, limited: false }],
     graphView: '.graphView',
-    customLoading: '#customLoadingContents'
+    customLoading: '#customLoadingContents',
+    viewerUrl: 'model-viewer?modelId=${modelId}', // Omit to use default simple-model-view
+    viewerModal: false // Use true to have simple-model-view
   });
   // Make various components draggable
   $('#customLoadingPanel').draggable();

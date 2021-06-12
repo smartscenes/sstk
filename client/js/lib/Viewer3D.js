@@ -8,6 +8,7 @@ var CanvasUtil = require('ui/CanvasUtil');
 var ClippingBox = require('gfx/ClippingBox');
 var Object3DUtil = require('geo/Object3DUtil');
 var Lights = require('gfx/Lights');
+var Materials = require('materials/Materials');
 var PubSub = require('PubSub');
 var Renderer = require('gfx/Renderer');
 var System = require('system');
@@ -26,16 +27,19 @@ var _ = require('util/util');
  * @param [params.useDatGui=false] {boolean} Whether the dat.gui menu should be made visible
  * @param [params.screenshotMaxWidth] {int} Maximum width for a screenshot
  * @param [params.screenshotMaxHeight] {int} Maximum height for a screenshot
- * @param [params.uihookup] {Object.<string, {name: string, element: string, click: callback, shortcut: string}>} Map of ui controls (by name) to basic ui definition.
+ * @param [params.uihookups] {Object.<string, {name: string, element: string, click: callback, shortcut: string}>} Map of ui controls (by name) to basic ui definition.
  * @param [params.instructions] {string} HTML string for instructions
  * @param [params.useAmbientOcclusion=false] {boolean} Whether to use ambient occlusion for rendering or not
  * @param [params.ambientOcclusionType=ssao] {string} What type of ambient occlusion to use (ssao|sao)
  * @param [params.useEDLShader=false] {boolean} Whether to use eye-dome lighting shader pass for rendering or not
  * @param [params.useShadows=false] {boolean} Whether to use shadows for rendering or not
+ * @param [params.usePhysicalLights=false] {boolean} Whether to use physically based lights
  * @param [params.loadingIconUrl] {string} URL to use for loading icon
  * @param [params.maxGridCells] {int} The maximum number of cells to have for display of a 2D grid plane
  * @param [params.drawAxes=false] {boolean} Whether to draw axes on the scene or not
  * @param [params.showStats=false] {boolean} Whether to show javascript performance stats panel
+ * @param [params.useClippingPlanes=false] {boolean} Whether to support clipping planes
+ * @param [params.clipOnLookAt=false] {boolean} Whether to automatically set clipping planes on lookAt
  * @constructor
  */
 var Viewer3D = function (params) {
@@ -60,7 +64,8 @@ var Viewer3D = function (params) {
   this.ambientOcclusionType = params.ambientOcclusionType || 'ssao';
   this.useEDLShader = (params.useEDLShader !== undefined) ? params.useEDLShader : false;
   this.useShadows = (params.useShadows !== undefined) ? params.useShadows : false;
-  this.useLights = (params.useLights !== undefined) ? params.useLights : false;
+  this.lightsOn = (params.lightsOn !== undefined) ? params.lightsOn : false;
+  this.usePhysicalLights = (params.usePhysicalLights !== undefined) ? params.usePhysicalLights : false;
 
   this.cameraControls = null;
   this.camera = null;
@@ -70,8 +75,14 @@ var Viewer3D = function (params) {
   // Camera parameters
   this.viewNames = ['unspecified', 'left', 'right', 'bottom', 'top', 'front', 'back'];//, 'turntable-front'];
   this.viewNamesMap = _.invert(this.viewNames);
+  this.agentHeight = 1.7;
   this._viewIndex = (params.viewIndex !== undefined) ? params.viewIndex : 0;
   this._useOrthographicCamera = false;
+  this._mouseMode = null;
+  this._mouseModes = {
+    'positionAgentCamera': { cursor: 'crosshair' },
+    'selectPoint': {}
+  };
 
   // Camera controls parameters
   this.controlTypes = Constants.ControlTypes;
@@ -100,6 +111,13 @@ var Viewer3D = function (params) {
   this.__showMeshes = true;
   this.__showLines = true;
   this.__showPoints = true;
+  // Have outline or not
+  this.__useOutline = false;
+
+  // Have background
+  this.useBackground = false;
+  this._useHeadlight = false;
+  this._headlights = {};
 
   // Has this viewer been "launched" (i.e. initialized?)
   this.isLaunched = false;
@@ -140,6 +158,24 @@ Object.defineProperty(Viewer3D.prototype, 'useOrthographicCamera', {
   }
 });
 
+Object.defineProperty(Viewer3D.prototype, 'mouseMode', {
+  get: function () {return this._mouseMode; },
+  set: function (v) {
+    if (this._mouseMode !== v) {
+      if (this._mouseMode) {
+        this.__clearMouseModeCallbacks(this._mouseMode);
+      }
+    }
+    this._mouseMode = v;
+    if (this._mouseMode) {
+      var newcursor = _.get(this._mouseModes, [this._mouseMode, 'cursor'], 'crosshair');
+      this.renderer.domElement.style.cursor = newcursor;
+    } else {
+      this.renderer.domElement.style.cursor = 'auto';
+    }
+  }
+});
+
 Object.defineProperty(Viewer3D.prototype, 'showStats', {
   get: function () {return this._showStats; },
   set: function (v) {
@@ -148,6 +184,18 @@ Object.defineProperty(Viewer3D.prototype, 'showStats', {
       this.__perfStats.dom.style.visibility = 'visible';
     } else {
       this.__perfStats.dom.style.visibility = 'hidden';
+    }
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'useOutline', {
+  get: function () {return this.__useOutline; },
+  set: function (v) {
+    this.__useOutline = v;
+    if (v) {
+      this.renderer.setEffect('outline');
+    } else {
+      this.renderer.setEffect(null);
     }
   }
 });
@@ -195,9 +243,11 @@ Object.defineProperty(Viewer3D.prototype, 'controlTypeIndex', {
 });
 
 Object.defineProperty(Viewer3D.prototype, 'autoRotate', {
-  get: function () {return this.cameraControls.getAutoRotate(); },
+  get: function () {return this.cameraControls? this.cameraControls.getAutoRotate() : false; },
   set: function (v) {
-    this.cameraControls.setAutoRotate(v);
+    if (this.cameraControls) {
+      this.cameraControls.setAutoRotate(v);
+    }
   }
 });
 
@@ -297,6 +347,41 @@ Object.defineProperty(Viewer3D.prototype, 'show2D', {
     this._show2D = v;
   }
 });
+
+Viewer3D.prototype.__clearMouseModeCallbacks = function(mouseMode) {
+  // cancel whatever else was happening
+  var callbacks = _.get(this._mouseModes, [mouseMode, 'callbacks']);
+  if (callbacks) {
+    // console.log('Clearing callbacks', callbacks);
+    for (var i = 0; i < callbacks.length; i++) {
+      var callback = callbacks[i];
+      var deactivated = callback.deactivate();
+      if (deactivated > 0) {
+        callback.notify('canceled');
+      }
+    }
+    callbacks.splice(0, callbacks.length);
+  }
+};
+
+Viewer3D.prototype.__addEventBasedMouseModeCallback = function(mouseMode, eventname, limitOnce, cb) {
+  var scope = this;
+  var event_callback = function(event) {
+    cb(null, event);
+  };
+  var callback = {
+    notify: function(message) { cb(); },
+    deactivate: function() { return scope.Unsubscribe(eventname, scope, event_callback); }
+  };
+  this._mouseModes[mouseMode] = this._mouseModes[mouseMode] || {};
+  this._mouseModes[mouseMode].callbacks = this._mouseModes[mouseMode].callbacks || [];
+  this._mouseModes[mouseMode].callbacks.push(callback);
+  if (limitOnce) {
+    this.SubscribeOnce(eventname, this, event_callback);
+  } else {
+    this.Subscribe(eventname, this, event_callback, {});
+  }
+};
 
 Viewer3D.prototype.__computeGridPlanePosition = function() {
   var bbox = this.getSceneBoundingBox();
@@ -417,6 +502,7 @@ Viewer3D.prototype.setupInstructions = function () {
 
 Viewer3D.prototype.setupDatGui = function () {
   if (this.useDatGui) {
+    var scope = this;
     var showAll = !(this.useDatGui instanceof Object);
     var options = (this.useDatGui instanceof Object) ? this.useDatGui : {};
     // Set up dat gui;
@@ -428,6 +514,12 @@ Viewer3D.prototype.setupDatGui = function () {
       cameraGui.add(this, 'viewIndex', this.viewNamesMap).name('view').listen();
       cameraGui.add(this, 'controlTypeIndex', this.controlTypesMap).name('controls').listen();
       cameraGui.add(this, 'autoRotate').listen();
+      cameraGui.add(this, 'agentHeight', this.agentHeight).listen();
+      cameraGui.add({
+        positionAgent: function() {
+          scope.mouseMode = 'positionAgentCamera';
+        }
+      }, 'positionAgent').listen();
     }
     var viewGui = gui.addFolder('view');
     if (showAll || options['showAxes']) { viewGui.add(this, 'showAxes').listen(); }
@@ -438,12 +530,14 @@ Viewer3D.prototype.setupDatGui = function () {
     if (showAll || options['showStats']) { viewGui.add(this, 'showStats').listen(); }
     if (showAll || options['showLines']) { viewGui.add(this, 'showLines').listen(); }
     if (showAll || options['showPoints']) { viewGui.add(this, 'showPoints').listen(); }
-    if (showAll || options['showMeshes']) { viewGui.add(this, 'showMeshes').listen(); }
+
+    var renderingGui = gui.addFolder('rendering');
+    if (showAll || options['useOutline']) { renderingGui.add(this, 'useOutline').listen(); }
+    if (showAll) { this.renderer.setupDatGui(renderingGui); }
 
     if (this.clippingBox && (showAll || options['showClipping'])) {
       var clippingGui = viewGui.addFolder('clipping');
       this.clippingBox.updateDatGui(clippingGui);
-      var scope = this;
       this.renderer.renderer.clippingPlanes = Constants.EmptyArray;
       var propsClipping = {
         get 'enabled'() { return scope.renderer.renderer.clippingPlanes !== Constants.EmptyArray; },
@@ -722,11 +816,15 @@ Viewer3D.prototype.animate = function () {
 
 // Errors
 Viewer3D.prototype.showError = function (msg) {
-  UIUtil.showAlert(null, msg, 'alert-danger');
+  UIUtil.showAlert(msg, 'alert-danger');
 };
 
 Viewer3D.prototype.showWarning = function (msg) {
-  UIUtil.showAlert(null, msg, 'alert-warning');
+  UIUtil.showAlert(msg, 'alert-warning');
+};
+
+Viewer3D.prototype.showMessage = function (msg) {
+  UIUtil.showAlert(msg, 'alert-info');
 };
 
 // Hookups for event registration
@@ -737,24 +835,7 @@ Viewer3D.prototype.registerEventListeners = function () {
   this.registerCustomEventListeners();
 
   // Simple UIHookups
-  if (this.uihookups) {
-    for (var k in this.uihookups) {
-      if (this.uihookups.hasOwnProperty(k)) {
-        var h = this.uihookups[k];
-        if (h) {
-          if (h.element) {
-            var element = $(h.element);
-            element.click(h.click);
-            if (h.shortcut) {
-              keymap(_.defaults({on: h.shortcut, do: h.name}, h.keyopts || {}), h.click);
-            }
-          } else if (h.shortcut) {
-            keymap(_.defaults({on: h.shortcut, do: h.name}, h.keyopts || {}), h.click);
-          }
-        }
-      }
-    }
-  }
+  UIUtil.setupUIHookups(this.uihookups, keymap);
 };
 
 // Event listeners that we will always want
@@ -897,6 +978,14 @@ Viewer3D.prototype.loadTextFile = function (file, onsuccess, onerror) {
   }
 };
 
+Object.defineProperty(Viewer3D.prototype, 'showLocalPanel', {
+  get: function () { return $('#customLoadingPanel').is(':visible'); },
+  set: function (v) {
+    if (v) { $('#customLoadingPanel').show(); }
+    else { $('#customLoadingPanel').hide(); }
+  }
+});
+
 Viewer3D.prototype.setupLocalLoading = function (loadFromLocal, allowMultiple, fileTypes) {
   // Load from local button
   var loadingPanel = $('#customLoadingContents');
@@ -951,7 +1040,7 @@ Viewer3D.prototype.setupBasicRenderer = function() {
     useAmbientOcclusion: this.useAmbientOcclusion,
     useEDLShader: this.useEDLShader,
     useShadows: this.useShadows,
-    useLights: this.useLights
+    usePhysicalLights: this.usePhysicalLights
   });
 
   // Setup camera controls
@@ -981,7 +1070,84 @@ Viewer3D.prototype.setWireframeMode = function (flag) {
 };
 
 Viewer3D.prototype.createDefaultLight = function() {
-  return Lights.getDefaultHemisphereLight(this.useLights);
+  return Lights.getDefaultHemisphereLight(this.usePhysicalLights, this.lightsOn);
+};
+
+Viewer3D.prototype.positionCameraByAgentHeight = function(event, objects) {
+  var mouse = this.picker.getCoordinates(this.container, event);
+  var intersects = this.picker.getIntersectedDescendants(mouse.x, mouse.y, this.camera, objects);
+  if (intersects.length > 0) {
+    var cameraPosition = intersects[0].point.clone();
+    cameraPosition.y += this.agentHeight*Constants.metersToVirtualUnit;
+    var targetPosition = this.cameraControls.controls.target;
+    targetPosition.y = cameraPosition.y;
+    this.cameraControls.viewTarget({position: cameraPosition, target: targetPosition});
+    var cameraControlIndex = this.controlTypesMap['firstPerson'];
+    if (cameraControlIndex >= 0) {
+      this.updateCameraControl(cameraControlIndex);
+    }
+  }
+};
+
+Viewer3D.prototype.updateEnvironment = function() {
+  if (!this.pmremGenerator) {
+    this.pmremGenerator = new THREE.PMREMGenerator(this.renderer.renderer);
+    this.pmremGenerator.compileEquirectangularShader();
+  }
+  const environment = `${Constants.baseUrl}/data/envmaps/venice_sunset_1k.hdr`;
+  Materials.getCubeMapTexture( environment, this.pmremGenerator ).then(( { envMap } ) => {
+    this.sceneState.fullScene.environment = envMap;
+    this.sceneState.fullScene.background = this.useBackground? envMap : null;
+  });
+};
+
+Viewer3D.prototype.initHeadlights = function() {
+  var headlight1 = new THREE.PointLight('#ffffff', 0, 0, 2);
+  headlight1.position.y = .2;
+  headlight1.position.x = .2;
+  headlight1.shadow.bias = -0.02;
+  headlight1.shadow.mapSize = new THREE.Vector2(1024, 1024);
+  headlight1.name = 'headlight_point';
+  headlight1.castShadow = this.useShadows;
+  this._headlights['point'] = headlight1;
+
+  var headlight2  = new THREE.DirectionalLight('#ffffff', 0.5);
+  headlight2.position.set(0.5, 0, 0.866); // ~60º
+  headlight2.name = 'headlight_directional';
+  headlight2.castShadow = this.useShadows;
+  this._headlights['directional'] = headlight2;
+};
+
+Object.defineProperty(Viewer3D.prototype, 'useHeadlight', {
+  get: function () { return this._useHeadlight; },
+  set: function (v) {
+    this._useHeadlight = v;
+    if (this._headlights) {
+      _.each(this._headlights, (light, k) => {
+        if (this._useHeadlight) {
+          this.camera.add(light);
+        } else {
+          this.camera.remove(light);
+        }
+      });
+    }
+  }
+});
+
+Viewer3D.prototype.authenticate = function (cb) {
+  // Most basic auth ever
+  if (this.userId && !this.userId.startsWith('USER@')) {
+    cb({ username: this.userId });
+    return;
+  }
+  if (!this.auth) {
+    var Auth = require('util/Auth');
+    this.auth = new Auth();
+  }
+  this.auth.authenticate(function (user) {
+    this.userId = user.username;
+    cb(user);
+  }.bind(this));
 };
 
 module.exports = Viewer3D;

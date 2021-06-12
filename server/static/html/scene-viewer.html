@@ -4,6 +4,7 @@
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css"/>
+  <link rel="stylesheet" href="client/js/vendor/jpicker/jPicker-1.1.6.min.css">
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/search-panel.css">
   <link rel="stylesheet" href="css/scene-viewer.css">
@@ -29,6 +30,10 @@
     <ul>
       <li><a href="#tabs-1">Scenes</a></li>
       <li><a href="#tabs-2">Models</a></li>
+      <li><a href="#tabs-7">Texture</a></li>
+      <li><a href="#tabs-6">Colors</a></li>
+      <li><a href="#tabs-8">Arch</a></li>
+      <li><a href="#tabs-9">Scans</a></li>
       <li><a href="#tabs-3">Scene Hierarchy</a></li>
       <li><a href="#tabs-4">BVH</a></li>
       <li><a href="#tabs-5">Scene Generator Config</a></li>
@@ -40,6 +45,24 @@
     </div>
     <div id="tabs-2">
       <div id="modelSearchPanel" class="searchPanel">
+      </div>
+    </div>
+    <div id="tabs-7">
+      <div id="textureSearchPanel" class="searchPanel">
+      </div>
+    </div>
+    <div id="tabs-6">
+      <div id="colorsToolbar" class="tabsToolbar">
+      </div>
+      <div id="colorsPanel">
+      </div>
+    </div>
+    <div id="tabs-8">
+      <div id="archSearchPanel" class="searchPanel">
+      </div>
+    </div>
+    <div id="tabs-9">
+      <div id="scanSearchPanel" class="searchPanel">
       </div>
     </div>
     <div id="tabs-3">
@@ -54,7 +77,7 @@
       <div id="sceneGenConfig">
       </div>
     </div>
-    <!--<div id="tabs-6" style="height: 400px;">
+    <!--<div id="tabs-10" style="height: 400px;">
       <div id="sceneAnnotate">
       </div>
     </div>-->

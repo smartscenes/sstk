@@ -20,6 +20,7 @@ var self = {};
  * @enum
  */
 self.palettes = {
+  // TODO: freeze palettes
   // Colors from http://bl.ocks.org/aaizemberg/78bd3dade9593896a59d
   d3_category20: {
     name: 'd3_category_20',
@@ -28,7 +29,8 @@ self.palettes = {
       '#2ca02c', '#98df8a', '#d62728', '#ff9896',
       '#9467bd', '#c5b0d5', '#8c564b', '#c49c94',
       '#e377c2', '#f7b6d2', '#7f7f7f', '#c7c7c7',
-      '#bcbd22', '#dbdb8d', '#17becf', '#9edae5']
+      '#bcbd22', '#dbdb8d', '#17becf', '#9edae5'],
+    isFrozen: false
   },
   d3_category18: {
     // Just like d3_category20 but no grays!
@@ -38,7 +40,8 @@ self.palettes = {
       '#2ca02c', '#98df8a', '#d62728', '#ff9896',
       '#9467bd', '#c5b0d5', '#8c564b', '#c49c94',
       '#e377c2', '#f7b6d2', '#bcbd22', '#dbdb8d',
-      '#17becf', '#9edae5']
+      '#17becf', '#9edae5'],
+    isFrozen: false
   },
   d3_category18p: {
     // Just like d3_category18 but with the more pastel colors coming before the darker colors
@@ -48,7 +51,8 @@ self.palettes = {
       '#98df8a', '#2ca02c', '#ff9896', '#d62728',
       '#c5b0d5', '#9467bd', '#c49c94', '#8c564b',
       '#f7b6d2', '#e377c2', '#dbdb8d', '#bcbd22',
-      '#9edae5', '#17becf']
+      '#9edae5', '#17becf'],
+    isFrozen: false
   },
   d3_category19p: {
     // Just like d3_category18p but with the first color a blue gray (we don't always use the first color for some reason)!
@@ -59,25 +63,45 @@ self.palettes = {
       '#98df8a', '#2ca02c', '#ff9896', '#d62728',
       '#c5b0d5', '#9467bd', '#c49c94', '#8c564b',
       '#f7b6d2', '#e377c2', '#dbdb8d', '#bcbd22',
-      '#9edae5', '#17becf']
+      '#9edae5', '#17becf'],
+    isFrozen: false
   },
   unknown: {
     name: 'unknown',
-    colors: [ '#A9A9A9' ]
+    colors: [ '#A9A9A9' ],
+    isFrozen: false
   }
 };
 self.palettes['d3_unknown_category19p'] = {
   name: 'd3_unknown_category19p',
-  colors: self.palettes.unknown.colors.concat(self.palettes.d3_category19p.colors)
+  colors: self.palettes.unknown.colors.concat(self.palettes.d3_category19p.colors),
+  isFrozen: false
 };
 self.palettes['d3_unknown_category18'] = {
   name: 'd3_unknown_category18',
-  colors: self.palettes.unknown.colors.concat(self.palettes.d3_category18.colors)
+  colors: self.palettes.unknown.colors.concat(self.palettes.d3_category18.colors),
+  isFrozen: false
 };
 
-function toColor(value) {
+self.getNewPalette = function(initialPalette, name) {
+  if (typeof('initialPalette') === 'string') {
+    initialPalette = self.palettes[initialPalette];
+  }
+  if (initialPalette != null) {
+    var p = _.cloneDeep(initialPalette);
+    if (name != null) {
+      p.name = name;
+    }
+    p.isFrozen = false;
+    return p;
+  } else {
+    return { name: name, colors: [], isFrozen: false };
+  }
+};
+
+function toColor(value, clone) {
   if (value instanceof THREE.Color) {
-      return value;
+      return clone? value.clone() : value;
   } else {
     var color = new THREE.Color();
     if (typeof value === 'string') {
@@ -101,17 +125,24 @@ self.toColor = toColor;
 
 function createColor(id, palette, addToPalette) {
   var colorIdx = id;
+  var genColorIdx = colorIdx;
   if (palette) {
-    if (colorIdx < palette.colors.length && palette.colors[colorIdx] != undefined) {
-      return toColor(palette.colors[colorIdx]);
+    if (addToPalette == null) {
+      addToPalette = !palette.isFrozen;
+    }
+    var ncolors = palette.colors.length;
+    if (colorIdx < ncolors && palette.colors[colorIdx] != undefined) {
+      return toColor(palette.colors[colorIdx], true);
     } else {
-      palette.extra_colors_start = palette.extra_colors_start || palette.colors.length;
-      colorIdx = id - palette.extra_colors_start;
+      if (palette.extra_colors_start == null) {
+        palette.extra_colors_start = ncolors;
+      }
+      genColorIdx = colorIdx - palette.extra_colors_start;
     }
   }
-  var c = generateColor(colorIdx);
+  var c = generateColor(genColorIdx);
   if (addToPalette && palette) {
-    palette.colors[colorIdx] = c;
+    palette.colors[colorIdx] = c.clone();
   }
   return c;
 }

@@ -222,6 +222,7 @@ SceneOperations.prototype.setObjectMaterial = function(opts) {
  * @param opts.modelInstance {ModelInstance}
  * @param opts.object3D {THREE.Object3D}
  * @param [opts.action=toggle] {string} Name of action to perform
+ * @param [opts.arguments] {Array} arguments to pass to action
  * @returns {{capability: string, state}}
  */
 SceneOperations.prototype.actOnObject = function (opts) {
@@ -239,7 +240,7 @@ SceneOperations.prototype.actOnObject = function (opts) {
           action = opts.action;
         }
         //console.log('Trying capability ' + k + ' ' + action, operations);
-        var state = capabilities[k][action]();
+        var state = capabilities[k][action](...opts.arguments);
         return { capability: k, state: state };
       }
     }

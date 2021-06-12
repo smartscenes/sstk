@@ -18,8 +18,7 @@ function (SingleModelCanvas, AssetManager, SearchController, _) {
     this.assetManager = new AssetManager({
       autoAlignModels: true,
       autoScaleModels: true,
-      useBuffers: true,
-      useDynamic: true // Set dynamic to be true so our picking will work
+      useBuffers: true
     });
 
     params.assetManager = this.assetManager;

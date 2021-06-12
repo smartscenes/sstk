@@ -5,7 +5,7 @@ THREE.ZIPloader = ZIPLoader;
 
 THREE.ZippedJsonLoader = function (params) {
   params = _.defaults(params || {}, { regex: /^.*\.js$/ });
-  var baseLoader = params.loader || new THREE.JSONLoader();
+  var baseLoader = params.loader || new THREE.LegacyJSONLoader();
 
   function load ( ziploader, url, readyCallback, progressCallback, errorCallback ) {
     var text = ziploader.zip.file(url).asText();
@@ -36,10 +36,11 @@ THREE.KMZLoader = function(params) {
     try {
       var text = zipLoader.zip.file(url).asText();
       var xmlParser = new DOMParser();
-      var responseXML = xmlParser.parseFromString(text, "application/xml");
+      var responseXML = xmlParser.parseFromString(text, 'application/xml');
       colladaLoader.parse(responseXML, readyCallback, url);
     } catch (err) {
       if (errorCallback) {
+        console.error('Error parsing kmz', err);
         errorCallback('Error parsing kmz: ' + err);
       }
     }

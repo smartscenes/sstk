@@ -1,0 +1,36 @@
+[
+  {
+    "name": "nyuv2",
+    "metadata": "${assetsDir}/data/scannet/nyuv2.json",
+    "ids": "${assetsDir}/data/scannet/nyuv2.csv"
+  },
+  {
+    "name": "mp3d",
+    "metadata": "${assetsDir}/data/matterport/matterport3d.json",
+    "ids": "${assetsDir}/data/matterport/matterport3d.csv"
+  },
+  {
+    "name": "mpr3d",
+    "metadata": "${assetsDir}/data/matterport/mpr3d.json",
+    "ids": "${assetsDir}/data/matterport/mpr3d.csv"
+  },
+  {
+    "name": "partnetsim",
+    "type": "model",
+    "metadata": "${assetsDir}/data/partnet/partnetsim.models.metadata.json",
+    "assetIdField": "dirId",
+    "ids": "${assetsDir}/data/partnet/partnetsim.models.csv"
+  },
+  {
+    "name": "shape2motion",
+    "type": "model",
+    "metadata": "${assetsDir}/data/shape2motion/shape2motion.models.metadata.json",
+    "ids": "${assetsDir}/data/shape2motion/shape2motion.models.csv"
+  },
+  {
+    "name": "rpmnet",
+    "type": "model",
+    "metadata": "${assetsDir}/data/rpmnet/rpmnet.models.metadata.json",
+    "ids": "${assetsDir}/data/rpmnet/rpmnet.models.csv"
+  }
+]

@@ -133,7 +133,7 @@ THREE.Mirror = function ( renderer, camera, options ) {
 	this.material.uniforms.mirrorColor.value = mirrorColor;
 	this.material.uniforms.textureMatrix.value = this.textureMatrix;
 
-	if ( ! THREE.Math.isPowerOfTwo( width ) || ! THREE.Math.isPowerOfTwo( height ) ) {
+	if ( ! THREE.MathUtils.isPowerOfTwo( width ) || ! THREE.MathUtils.isPowerOfTwo( height ) ) {
 
 		this.renderTarget.texture.generateMipmaps = false;
 		this.renderTarget2.texture.generateMipmaps = false;
@@ -270,7 +270,9 @@ THREE.Mirror.prototype.render = function () {
 		var visible = this.material.visible;
 		this.material.visible = false;
 
-		this.renderer.render( scene, this.mirrorCamera, this.renderTarget, true );
+		this.renderer.setRenderTarget(this.renderTarget);
+		this.renderer.clear();
+		this.renderer.render( scene, this.mirrorCamera );
 
 		this.material.visible = visible;
 

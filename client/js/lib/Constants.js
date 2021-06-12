@@ -77,6 +77,8 @@ function () {
   Constants.defaultModelFront = new THREE.Vector3(0,-1,0);
   Constants.defaultSceneUp = new THREE.Vector3(0,0,1);
   Constants.defaultSceneFront = new THREE.Vector3(0,-1,0);
+  Constants.semanticUp = new THREE.Vector3(0,1,0);
+  Constants.semanticFront = new THREE.Vector3(0,0,-1);
 
   Constants.defaultCamera = {
     position: new THREE.Vector3(-50, 20, -100),
@@ -95,12 +97,14 @@ function () {
   Constants.metersToVirtualUnit = 100;
   Constants.virtualUnitToMeters = 1 / Constants.metersToVirtualUnit;
   Constants.modelUnitInches = 0.0254;
+  Constants.modelUnitFeet = Constants.modelUnitInches*12;
   Constants.modelUnitCentimeters = 0.01;
+  Constants.modelUnitMillimeters = 0.001;
   Constants.modelUnitMeters = 1.0;
 
   // Assume input model data is modeled in inches (WSS COLLADA mostly declares this)
   // Assume units are always stored in meters
-  Constants.defaultModelUnit = Constants.modelUnitInches;
+  Constants.defaultModelUnit = Constants.modelUnitMeters;
   Constants.defaultSceneUnit = Constants.defaultModelUnit;
 
   // TODO: Populate with stuff!
@@ -109,24 +113,25 @@ function () {
                arrayFields: ['datasets', 'category', 'variantIds', 'componentIds', 'setIds', 'wnsynset','wnsynsetkey'] },
     'scan':  { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultModelUp, defaultFront: Constants.defaultModelFront, defaultUnit: Constants.defaultModelUnit } },
     'room':  { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit } },
-    'scene': { defaults: { defaultDataType: "mesh", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit },
+    'scene': { defaults: { defaultDataType: "scene", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit },
                arrayFields: ['datasets', 'modelIds', 'modelCats', 'modelNames', 'modelTags', 'roomIds', 'roomTypes', 'origRoomTypes'] },
+    'arch':  { defaults: { defaultDataType: "arch", defaultUp: Constants.defaultSceneUp, defaultFront: Constants.defaultSceneFront, defaultUnit: Constants.defaultSceneUnit } },
     'texture': { defaults: { defaultDataType: "image" } }
   };
   Constants.assetTypeModel = 'model';
   Constants.assetTypeScan = 'scan';
   Constants.assetTypeRoom = 'room';
   Constants.assetTypeScene = 'scene';
+  Constants.assetTypeArch = 'arch';
   Constants.assetTypeTexture = 'texture';
 
   Constants.assetSources = {
     'scan': [/*'scans'*/],
+    'arch': [],
     'model': ['models3d'],
     'scene': ['scenes'],
     'texture': ['textures']
   };
-  Constants.assetsFile = 'resources/data/assets.json';
-  Constants.scanAssetsFile = 'resources/data/assets-scans.json';
 
   Constants.maxModelSize = 10000000;
   Constants.defaultModelSource = 'models3d';
@@ -139,8 +144,15 @@ function () {
   Constants.baseUrl = Constants.getGlobalOrDefault('base_url', process.env.NODE_BASE_URL || '');
   // TODO: Consolidate assets/resources
   Constants.assetsDir = Constants.getGlobalOrDefault('assets_url', Constants.baseUrl + '/resources/');
+  Constants.defaultVars = { baseUrl: Constants.baseUrl, assetsDir: Constants.assetsDir };
   Constants.screenShotDir = Constants.baseUrl + '/text2scene/screenshots/';
   Constants.defaultVideo = 'videos/sintel.ogv';
+
+  Constants.assetsFile = Constants.assetsDir + '/data/assets.json';
+  Constants.extraAssetsFile = Constants.assetsDir + '/data/assets-extra.json';
+  Constants.scanAssetsFile = Constants.extraAssetsFile; // Scans are in the extra assets files
+
+  Constants.indexedAssetsFile = Constants.baseUrl + '/assets/groups?hasSolr=true&type=model&include=metadata';
 
   //Rails asset urls
   //Constants.imageDir = Constants.baseUrl + '/data/image/';
@@ -166,6 +178,7 @@ function () {
   // Loading icon
   Constants.manipulatorImagesDir = Constants.imagesDir + '/manipulator/';
   Constants.cameraControlIconsDir = Constants.imagesDir + '/camera_icons/';
+  Constants.highlightIconsDir = Constants.imagesDir + '/highlight_icons/';
   Constants.toolbarIconsDir = Constants.imagesDir + '/toolbar_icons/';
   Constants.scaleLineImageDir = Constants.imagesDir + '/scaleline/';
   Constants.defaultLoadingIconUrl = Constants.imagesDir + '/loading.gif';
@@ -180,8 +193,6 @@ function () {
 
   Constants.autoRotateSpeed = 0.001;
 
-  // PartAnnotator
-  Constants.meshPrefix = 'SGPath-';
   // Annotations
   Constants.submitUpdateMain = true;
   Constants.submitPartAnnotationsURL = Constants.baseUrl + '/part-annotations/submit';
@@ -189,6 +200,7 @@ function () {
   Constants.retrieveSegmentsAnnotationsURL = Constants.baseUrl + '/query?qt=segments';
   Constants.retrieveAnnotationsURL = Constants.baseUrl + '/annotations/list';
   Constants.submitAnnotationsURL = Constants.baseUrl + '/annotations/submit';
+  Constants.retrieveAnnotationsURL = Constants.baseUrl + '/annotations/latest';
   Constants.submitSegmentsAnnotationsStatusURL = Constants.baseUrl + '/scans/segment-annotations/edit';
   Constants.submitSegmentAnnotationsURL = Constants.baseUrl + '/scans/segment-annotations/submit';
 
@@ -229,7 +241,8 @@ function () {
   Constants.EDIT_OPSTATE = Object.freeze({
     INIT: 'EDIT_INIT',
     PROGRESS: 'EDIT_PROGRESS',
-    DONE: 'EDIT_DONE'
+    DONE: 'EDIT_DONE',
+    CANCEL: 'EDIT_CANCEL'
   });
 
   // Command Type enum for UndoStack
@@ -294,7 +307,6 @@ function () {
   Constants.tutorialCameraPosition = [-145, 240, -72];
 
   // Experimental features
-  Constants.enableThumbnail = true;
   Constants.thumbnailPostfix = '_thumb.png';
   Constants.AssetGroup = Object.freeze({
       'ROTATING_IMAGE_INDEX': -10
@@ -302,7 +314,9 @@ function () {
 
   Constants.defaultTexturedObjects = ['WallInside', 'WallOutside', 'Floor', 'Ceiling'];
 
+  Constants.MAX_ASYNC_REQS = 10;
+  Constants.NONE = 'NONE';
+
   // Exports
   return Constants;
-
 });

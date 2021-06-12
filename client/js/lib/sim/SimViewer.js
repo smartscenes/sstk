@@ -141,7 +141,7 @@ function SimViewer(params) {
       {
         name: 'observe',
         click: function() {
-          scope.observe();
+          scope.observe(true);
         },
         shortcut: 'o'
       },
@@ -215,7 +215,7 @@ function SimViewer(params) {
   // Already in Viewer3D
   //this.useAmbientOcclusion = (allParams.useAmbientOcclusion !== undefined) ? allParams.useAmbientOcclusion : false;
   //this.useShadows = (allParams.useShadows !== undefined) ? allParams.useShadows : false;
-  //this.useLights = (allParams.useLights !== undefined) ? allParams.useLights : false;
+  //this.usePhysicalLights = (allParams.usePhysicalLights !== undefined) ? allParams.usePhysicalLights : false;
   this.defaultModelFormat = this.urlParams['modelFormat'] || params.defaultModelFormat || 'utf8v2';
   this.defaultSceneFormat = this.urlParams['format'] || params.defaultSceneFormat || 'wss';
   AssetGroups.setDefaultFormat(this.defaultModelFormat);
@@ -266,13 +266,14 @@ SimViewer.prototype.init = function () {
       container: this.container,
       isOffscreen: true,  // NOTE: enables return of color frames, slows down render loop
       useAmbientOcclusion: this.useAmbientOcclusion,
-      useLights: this.useLights,
+      usePhysicalLights: this.usePhysicalLights,
       useShadows: this.useShadows
     });
     var assetManager = new AssetManager({
       autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
       enableLights: this.allParams.useLights,
-      defaultLightState: this.allParams.defaultLightState
+      defaultLightState: this.allParams.defaultLightState,
+      supportArticulated: this.allParams.supportArticulated
     });
     assetManager.setSearchController(new SearchController());
     assetManager.searchController.setFilter('model', '+source:(wss OR p5d)');
@@ -285,6 +286,7 @@ SimViewer.prototype.init = function () {
     this.simulator = new Simulator({
       renderer: this.renderer,
       useLights: this.useLights,
+      usePhysicalLights: this.usePhysicalLights,
       useShadows: this.useShadows,
       useSky: this.allParams.useSky,
       width: width,
@@ -449,6 +451,15 @@ SimViewer.prototype.redisplay = function () {
         this.updateTopDownMap(this.mapContainer);
       }
     }
+    if (this.__autoUpdateObservations && !this.__isObserving && this.allParams.supportArticulated) {
+      // NOTE: this is also expensive and slows down the render loop
+      //console.log('Observe');
+      var scope = this;
+      scope.__isObserving = true;
+      this.observe(function(err, res) {
+        scope.__isObserving = false;
+      }, false);
+    }
   }
   this.updateAndRender();
   if (this.__perfStats) { this.__perfStats.end(); }
@@ -469,10 +480,10 @@ SimViewer.prototype.onWindowResize = function (options) {
   this.simEdit.onResize(options);
 };
 
-SimViewer.prototype.observe = function(cb) {
+SimViewer.prototype.observe = function(cb, verbose) {
   var scope = this;
   this.lastActionResult = this.simulator.getObservations(function(err, res) {
-    scope.visualizeSensorData(scope.sensorsContainer, res, true);
+    scope.visualizeSensorData(scope.sensorsContainer, res, verbose);
     if (cb) {
       cb(err, res);
     }
@@ -578,7 +589,7 @@ SimViewer.prototype.setupConsole = function () {
                 console.error(e.stack);
                 report(e.toString());
               }
-            });
+            }, true);
         } catch(e) {
           console.error(e.stack);
           return e.toString();

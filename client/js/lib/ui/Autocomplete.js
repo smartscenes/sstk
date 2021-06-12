@@ -9,10 +9,14 @@ var Autocomplete = function(params) {
 
 Autocomplete.prototype.__bind = function (input, suggester, options) {
   if (suggester) {
-    options.source = function(request, response) {
-      var suggestions = suggester.suggest(request.term);
-      response(suggestions);
-    };
+    if (Array.isArray(suggester)) {
+      options.source = suggester;
+    } else {
+      options.source = function (request, response) {
+        var suggestions = suggester.suggest(request.term);
+        response(suggestions);
+      };
+    }
     // What to do on select, return false to disable automatic replacement
     //options.select = function(event, ui) {
     //  return false;

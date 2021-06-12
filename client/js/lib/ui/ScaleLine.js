@@ -168,7 +168,7 @@ function (Object3DUtil, Constants, _) {
     this.doResizeCallback = true;
   };
 
-  ScaleLine.prototype.getRescaleCallback_ = function (size) {
+  ScaleLine.prototype.__getRescaleCallback = function (size) {
     return this.resizeCallback.bind(this, size);
   };
 
@@ -194,9 +194,9 @@ function (Object3DUtil, Constants, _) {
         var ref = this.refObjects[name];
         var displayHeight = Math.min(factor * Math.max(Math.log(ref.size),0) + minDisplayHeight, maxDisplayHeight);
         nBars = (prevRef) ? Math.round(Math.log(ref.size - prevRef.size) + minBars) : minBars;
-        barSizes = this.getInterpolateSizes_(nBars, (prevRef) ? prevRef.size : refMinSize, ref.size);
+        barSizes = this.__getInterpolateSizes(nBars, (prevRef) ? prevRef.size : refMinSize, ref.size);
         this.addBars(index, nBars, prevDisplayHeight, displayHeight, barSizes);
-        this.addRefObject(index + nBars, name, name, name + '.svg', displayHeight, this.getRescaleCallback_(ref.size));
+        this.addRefObject(index + nBars, name, name, name + '.svg', displayHeight, this.__getRescaleCallback(ref.size));
 
         for (var j = 0; j < nBars; j++) {
           this.refSizes[index] = {
@@ -216,7 +216,7 @@ function (Object3DUtil, Constants, _) {
         prevRef = ref;
       }
       nBars = minBars;
-      barSizes = this.getInterpolateSizes_(nBars, (prevRef) ? prevRef.size : refMinSize, refMaxSize);
+      barSizes = this.__getInterpolateSizes(nBars, (prevRef) ? prevRef.size : refMinSize, refMaxSize);
       this.addBars(index, nBars, prevDisplayHeight, maxDisplayHeight, barSizes);
       for (var j = 0; j < nBars; j++) {
         this.refSizes[index] = {
@@ -242,7 +242,7 @@ function (Object3DUtil, Constants, _) {
     this.populate();
   };
 
-  ScaleLine.prototype.getInterpolateSizes_ = function (nSizes, startSize, endSize)  {
+  ScaleLine.prototype.__getInterpolateSizes = function (nSizes, startSize, endSize)  {
     var sfactor = Math.pow(endSize / startSize, 1 / (nSizes + 2));
     var curSize = startSize;
     var sizes = [];
@@ -259,7 +259,7 @@ function (Object3DUtil, Constants, _) {
     for (var i = 0; i < nBars; i++) {
       var displayHeight = startDisplayHeight + i * delta;
       var size = (sizes) ? sizes[i] : displayHeight;
-      this.addBar(index, displayHeight, size.toFixed(2), this.getRescaleCallback_(size));
+      this.addBar(index, displayHeight, size.toFixed(2), this.__getRescaleCallback(size));
       this.addSpacer();
       index++;
     }
@@ -292,7 +292,7 @@ function (Object3DUtil, Constants, _) {
         if (scaleLine.doResizeCallback && callback) {
           callback(event);
         } else {
-          console.log('clicked ' + event.target);
+          //console.log('clicked ', event.target);
         }
       }
     });
@@ -325,7 +325,7 @@ function (Object3DUtil, Constants, _) {
         if (scaleLine.doResizeCallback && callback) {
           callback(event);
         } else {
-          console.log('clicked ' + event.target);
+          //console.log('clicked ' + event.target);
         }
       }
     });

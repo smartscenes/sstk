@@ -15,6 +15,8 @@ var _ = require('util/util');
  * @param params.filterEmptyGeometries
  * @param params.showMultiMaterial
  * @param params.collapseNestedPaths
+ * @param [params.updateAnnotationStats] Callback to adjust annotation statistics when something is labeled/unlabeled.
+ * @param [params.getMeshId] {function}
  * @extends BasePartLabeler
  */
 function MeshLabeler(params) {
@@ -22,11 +24,12 @@ function MeshLabeler(params) {
   this.filterEmptyGeometries = params.filterEmptyGeometries;
   this.showMultiMaterial = params.showMultiMaterial;
   this.collapseNestedPaths = params.collapseNestedPaths;
+  this.updateAnnotationStats = params.updateAnnotationStats;
   this.meshHierarchy = new MeshHierarchyPanel({
     filterEmptyGeometries: this.filterEmptyGeometries,
     showMultiMaterial: this.showMultiMaterial,
     collapseNestedPaths: this.collapseNestedPaths,
-    useSpecialMaterial: true,
+    defaultMaterialSetting: 'clear',
     getMeshId: params.getMeshId
   });
 }
@@ -47,6 +50,24 @@ MeshLabeler.prototype.showParts = function(flag) {
   this.meshHierarchy.showParts(flag);
 };
 
+MeshLabeler.prototype.setPartsVisible = function(flag, labelInfos, hideOtherParts) {
+  var parts;
+  if (labelInfos) {
+    var scope = this;
+    parts = _.flatMap(labelInfos, function(label) { return scope.getMeshesForLabel(label); });
+  } else {
+    parts = this.meshHierarchy.partNodes;
+  }
+  parts = parts.filter(function(x) { return x; });
+  if (parts.length) {
+    if (hideOtherParts) {
+      this.meshHierarchy.showPartsOnly(parts, flag, true);
+    } else {
+      this.meshHierarchy.setPartsVisibility(parts, flag, true);
+    }
+  }
+};
+
 MeshLabeler.prototype.getMeshes = function() {
   return this.meshHierarchy.getNodes();
 };
@@ -56,7 +77,7 @@ MeshLabeler.prototype.getMeshId = function(mesh) {
 };
 
 MeshLabeler.prototype.findMeshes = function(meshIds) {
-  return this.meshHierarchy.findNodes(meshIds);
+  return this.meshHierarchy.findNodesByMeshId(meshIds);
 };
 
 MeshLabeler.prototype.unlabelAll = function() {
@@ -122,7 +143,7 @@ MeshLabeler.prototype.hasParts = function (labelInfo) {
 };
 
 MeshLabeler.prototype.labelFromExisting = function(labelsPanel, options) {
-  var annotations = this.groupRawAnnotations(options);
+  var annotations = options.isGrouped? options.annotations : this.groupRawAnnotations(options);
   var labels = annotations.map(function(x) { return x.label; });
   labelsPanel.setLabels(annotations);
   this.updateLabels(labelsPanel.labelInfos);
@@ -225,6 +246,9 @@ MeshLabeler.prototype.merge = function(labelInfos, labels) {
 MeshLabeler.prototype.__label = function (part, labelInfo, opts) {
   if (part && labelInfo) {
     opts = opts || {};
+    if (this.updateAnnotationStats) {
+      this.updateAnnotationStats(part, +1);
+    }
     if (!opts.skipFitOBB) {
       this.__updateLabelOBB(labelInfo);
     }
@@ -234,6 +258,9 @@ MeshLabeler.prototype.__label = function (part, labelInfo, opts) {
 MeshLabeler.prototype.__unlabel = function (part, opts) {
   if (part && part.userData.labelInfo) {
     opts = opts || {};
+    if (this.updateAnnotationStats) {
+      this.updateAnnotationStats(part, -1);
+    }
     if (!opts.skipFitOBB) {
       this.__updateLabelOBB(part.userData.labelInfo, [part]);
     }
@@ -241,14 +268,14 @@ MeshLabeler.prototype.__unlabel = function (part, opts) {
 };
 
 MeshLabeler.prototype.__fitOBB = function(meshes) {
-  return OBBFitter.fitMeshOBB(meshes, { constrainVertical: true });
+  return OBBFitter.fitMeshOBB(meshes, { constrainVertical: false });
 };
 
 MeshLabeler.prototype.__updateLabelOBB = function(labelInfo, excludeParts) {
   var parts = this.getMeshesForLabel(labelInfo);
   if (excludeParts) {
     parts = _.filter(parts, function(p) {
-      return !Object3DUtil.isDescendantOf(p, excludeParts);
+      return !Object3DUtil.isDescendantOf(p, excludeParts, true);
     });
   }
   if (parts && parts.length) {
@@ -362,6 +389,10 @@ MeshLabeler.prototype.restore = function(labels, savedLabelInfos, options) {
   }
   this.updateLabels(labels.labelInfos);
   console.timeEnd('restore');
+};
+
+MeshLabeler.prototype.getMeshedObject3D = function() {
+  return this.meshHierarchy.partsNode;
 };
 
 

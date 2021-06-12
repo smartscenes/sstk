@@ -5,8 +5,29 @@ var GeometryUtil = require('geo/GeometryUtil');
 function ConnectivityGraph(geometry, remapVertices) {
   this.__vertexIndex = remapVertices? this.__buildVerticesIndex(geometry) : undefined;
   this.geometry = geometry;
+
+  // Mapping of face index to neighboring face indices
+  // neighbors are those faces that share a vertex
+  this.faceNeighbors = null;
+
+  // Mapping of face index to faces that are reverse faces
+  this.reverseFaceMapping = null;
+
+  // Mapping of faceIndex1-faceIndex2 to type of neighbor
+  this.faceNeighborTypes = null;
+
+  // Populate basic faceNeighbors
   this.build(geometry);
 }
+
+var NeighborTypes = {
+  REVERSE: { index: 0, name: 'REVERSE'},
+  SHARED_EDGE: { index: 1, name: 'SHARED_EDGE'},
+  PARTIAL_EDGE: { index: 2, name: 'PARTIAL_EDGE'},
+  SHARED_VERTEX: { index: 3, name: 'SHARED_VERTEX'}
+};
+
+ConnectivityGraph.NeighborTypes = NeighborTypes;
 
 /**
  * Builds a mapping of the vertices to a collapsed set of vertices
@@ -83,6 +104,67 @@ ConnectivityGraph.prototype.build = function(geometry) {
   this.faceNeighbors = faceNeighbors;
 };
 
+function hasSharedEdge(a1, a2) {
+  for (var i = 0; i < a1.length; i++) {
+    var v11 = a1[i];
+    var v12 = a1[(i+1)%a1.length];
+    for (var j = 0; j < a2.length; j++) {
+      var v21 = a2[j];
+      var v22 = a2[(j+1)%a2.length];
+      if (v11 === v21 && v12 === v22) {
+        return true;
+      } else if (v11 === v22 && v12 === v21) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+ConnectivityGraph.prototype.__getFaceNeighborTypes = function() {
+  if (this.faceNeighborTypes) {
+    return this.faceNeighborTypes;
+  }
+
+  var neighborTypes = {};
+  var remapping = this.__vertexIndex? this.__vertexIndex.mappedIndices : null;
+  var faceNeighbors = this.faceNeighbors;
+  var geometry = this.geometry;
+  var t1 = new THREE.Triangle();
+  var t2 = new THREE.Triangle();
+
+  GeometryUtil.forFaceVertexIndices(geometry, function(fi1, rawVertexIndices1) {
+    var neighbors = faceNeighbors[fi1];
+    var vertexIndices1 = remapping? rawVertexIndices1.map(function(rawvi) { return remapping[rawvi]; }): rawVertexIndices1;
+    if (neighbors && neighbors.length) {
+      GeometryUtil.getTriangle(geometry, fi1, t1);
+      for (var i = 0; i < neighbors.length; i++) {
+        var fi2 = neighbors[i];
+        var rawVertexIndices2 = GeometryUtil.getFaceVertexIndices(geometry, fi2);
+        var vertexIndices2 = remapping? rawVertexIndices2.map(function(rawvi) { return remapping[rawvi]; }): rawVertexIndices2;
+
+        var k = fi1 + '-' + fi2;
+        var isReversed = _.isReversed(vertexIndices1, vertexIndices2);
+        if (isReversed) {
+          neighborTypes[k] = NeighborTypes.REVERSE;
+        } else if (hasSharedEdge(vertexIndices1, vertexIndices2)) {
+          neighborTypes[k] = NeighborTypes.SHARED_EDGE;
+        } else {
+          GeometryUtil.getTriangle(geometry, fi2, t2);
+          if (GeometryUtil.trianglesShareEdge(t1, t2)) {
+            neighborTypes[k] = NeighborTypes.PARTIAL_EDGE;
+          } else {
+            neighborTypes[k] = NeighborTypes.SHARED_VERTEX;
+          }
+        }
+      }
+    }
+  });
+
+  this.faceNeighborTypes = neighborTypes;
+  return this.faceNeighborTypes;
+};
+
 ConnectivityGraph.prototype.getReverseFaceMappings = function() {
   if (this.reverseFaceMapping) {
     return this.reverseFaceMapping;
@@ -99,27 +181,37 @@ ConnectivityGraph.prototype.getReverseFaceMappings = function() {
         var iFaceOther = neighbors[i];
         var rawOtherVertexIndices = GeometryUtil.getFaceVertexIndices(geometry, iFaceOther);
         var otherVertexIndices = remapping? rawOtherVertexIndices.map(function(rawvi) { return remapping[rawvi]; }): rawOtherVertexIndices;
-        if (vertexIndices.length === otherVertexIndices.length) {
-//          var matched = _.every(vertexIndices, function(vi) { return otherVertexIndices.indexOf(vi) >= 0; });
-          var matched = true;
-          for (var j = 0; j < vertexIndices.length; j++) {
-            if (vertexIndices[j] !== otherVertexIndices[otherVertexIndices.length - j - 1]) {
-              matched = false;
-              break;
-            }
+        var isReversed = _.isReversed(vertexIndices, otherVertexIndices);
+        if (isReversed) {
+          if (!reverseFaceMapping[faceIndex]) {
+            reverseFaceMapping[faceIndex] = [];
           }
-          if (matched) {
-            if (!reverseFaceMapping[faceIndex]) {
-              reverseFaceMapping[faceIndex] = [];
-            }
-            reverseFaceMapping[faceIndex].push(iFaceOther);
-          }
+          reverseFaceMapping[faceIndex].push(iFaceOther);
         }
       }
     }
   });
   this.reverseFaceMapping = reverseFaceMapping;
   return reverseFaceMapping;
+};
+
+ConnectivityGraph.prototype.getFaceNeighbors = function(faceIndex) {
+  return this.faceNeighbors[faceIndex];
+};
+
+ConnectivityGraph.prototype.getFaceNeighborTypes = function(fi1) {
+  var neighborTypes = this.__getFaceNeighborTypes();
+  if (fi1 == null) {
+    return neighborTypes;
+  } else {
+    var faceNeighbors = this.faceNeighbors[fi1];
+    if (faceNeighbors && faceNeighbors.length) {
+      return _.map(faceNeighbors, fi2 => {
+        var key = fi1 + '-' + fi2;
+        return { faceIndex: fi2, neighborType: neighborTypes[key] };
+      });
+    }
+  }
 };
 
 ConnectivityGraph.prototype.gatherFaces = function(mainFaceIndex, maxLengthSq, normSimThreshold, point) {

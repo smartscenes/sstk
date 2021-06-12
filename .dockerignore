@@ -1,0 +1,10 @@
+*docker*
+node_modules/
+client/build/
+client/build-min/
+coverage/
+.idea/
+server/*.log
+*logs/
+jsdoc/
+*.sublime-*

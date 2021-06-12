@@ -174,7 +174,7 @@ ScanModelAligner.prototype.init = function () {
     this.__startFromExisting(this.startFrom);
   } else if (this.modelId) {
     this.timings.start('scanLoad');
-    this.viewer.loadModel(null, this.modelId, { useModelCoordFrame: true });
+    this.viewer.loadModel(null, this.modelId, null, { useModelCoordFrame: true });
   }
   this.viewer.editControls.dragdrop.putOnObject = false;  // allow putting objects anywhere
   this.viewer.editControls.dragdrop.attachToParent = false;  // Don't attach to parent
@@ -336,7 +336,7 @@ ScanModelAligner.prototype.__onModelLoaded = function (modelInstance) {
   if (modelInstance.model.isScan()) {
     this.timings.stop('scanLoad');
     this.setTarget(modelInstance);
-    UIUtil.showAlert(null, this.instructions.html, 'alert-warning', 15000);
+    UIUtil.showAlert(this.instructions.html, 'alert-warning', 15000);
   } else {  // inserted model
     // TODO: Fix segGroupIndex to use selectedSegmentIndex when the result was clicked (in case it was updated)
     // See SceneViewer.contextQueryControlsOnClickResult
@@ -609,7 +609,7 @@ ScanModelAligner.prototype.__startFromExisting = function(startFrom) {
       }
       scope.viewer.clearAndLoadScene({ data: result.data.scene });
     } else {
-      UIUtil.showAlert(null, 'Error loading existing annotation ' + startFrom);
+      UIUtil.showAlert('Error loading existing annotation ' + startFrom);
       scope.viewer.loadModel(null, this.modelId);
     }
   });

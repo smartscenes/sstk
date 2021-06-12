@@ -33,7 +33,7 @@ function ActionTraceVisualizer(opts) {
   this.showOrientations = (opts.showOrientations !== undefined)? opts.showOrientations : false;
   this.showStartOrientation = (opts.showStartOrientation !== undefined)? opts.showStartOrientation : false;
   this.showEndOrientation = (opts.showEndOrientation !== undefined)? opts.showEndOrientation : false;
-  this.fov = opts.fov || THREE.Math.degToRad(45);
+  this.fov = opts.fov || THREE.MathUtils.degToRad(45);
   this.agentRadius = opts.agentRadius || 0.25;
   this.colors = _.defaults(Object.create(null), opts.colors || {}, {
     orientations: 0x1f77b4,  // tableau blue

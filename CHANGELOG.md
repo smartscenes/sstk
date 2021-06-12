@@ -4,7 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [0.7.3] - 2010-01-14
+## [0.8.0] - 2021-06-11
+### Changes
+- Update to three.js r115 (changes to rendering behavior)
+- Add support for articulated objects
+- Add support for arch files with custom textures
+- Various improvements to annotation tools (for categorizing models, scaling models, part annotation)
+- Improved batch rendering scripts
+- Refactor and reformat many classes
+- Update dependencies
+
+## [0.7.3] - 2018-01-14
 ### Changes
 - Improve handling of array cameras and resizeable sensors
 - Change stats/v4/suncg paths to just stats/suncg

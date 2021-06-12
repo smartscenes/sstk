@@ -47,7 +47,7 @@ function identifyInnerRedundantSurfaces(object3D, visible, opts) {
     var isWhite = (material.color.r === 1) && (material.color.g === 1) && (material.color.b === 1);
     return isOpaque && !hasTexture && isWhite;
   }
-  var materials = Object3DUtil.getMaterials(object3D);
+  var materials = Object3DUtil.getMaterialsMap(object3D);
   if (checkReverseFaces) {
     var connectivityGraphs = {};
     _.each(materials, function (material, k) {
@@ -805,6 +805,24 @@ function populateUVColors (mesh, samples) {
       }
     }
   }
+}
+
+MeshSampling.getDefaultSampler = function(rng) {
+  rng = rng || RNG.global;
+  return {
+    sampleMeshes: function(meshes, nsamples) {
+      var samples = MeshSampling.getMeshesSurfaceSamples(meshes, nsamples, {
+        rng: rng,
+        skipUVColors: true
+      });
+      _.each(samples, function(meshSamples,index) {
+        _.each(meshSamples, function(s,index) {
+          s.meshIndex = index;
+        });
+      });
+      return samples;
+    }
+  };
 }
 
 module.exports = MeshSampling;

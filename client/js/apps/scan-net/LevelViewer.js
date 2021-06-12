@@ -68,7 +68,7 @@ LevelViewer.prototype.init = function() {
   ], function(err, results) {
     if (err) {
       console.log('Error initializing', err);
-      UIUtil.showAlert(null, 'Error showing annotations');
+      UIUtil.showAlert('Error showing annotations');
     } else {
       scope.__init();
     }

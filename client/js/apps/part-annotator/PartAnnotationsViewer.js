@@ -8,8 +8,8 @@ function PartAnnotationsViewer(params) {
   this.baseUrl = params.baseUrl || '';
   this.listUrl = this.baseUrl + '/part-annotations/list';
   this.viewUrl = this.baseUrl + '/part-viewer';
-  this.annotateUrl = this.baseUrl + '/part-annotator';
-//  this.editUrl = this.baseUrl + '/annotations/edit';
+  this.annotateUrl = this.baseUrl + '/part-annotator-single';
+  this.editUrl = this.baseUrl + '/annotations/edit';
   this.previewUrl = this.baseUrl + '/annotations/preview';
   this.jsonUrl = this.baseUrl + '/annotations/get';
   this.partsUrl = this.baseUrl + '/query?qt=parts';
@@ -106,6 +106,25 @@ PartAnnotationsViewer.prototype.createCommon = function() {
       help: 'Upload list of annotation ids for inspection'});
   loadIds.group.addClass('btn-group');
   buttonsPanel.append(loadIds.group);
+
+  var labelUseRegexInput = $('<input/>').attr('type', 'checkbox');
+  var labelSearchInput = $('<input/>').attr('type', 'search');
+  var labelSearchDiv = $('<span></span>').addClass("pull-right")
+    .append($('<label>Regex</label>').append(labelUseRegexInput))
+    .append(" ")
+    .append($('<label>Label: </label>').append(labelSearchInput));
+  buttonsPanel.append(labelSearchDiv);
+  labelSearchInput.change(function() {
+    var label = labelSearchInput.val();
+    var fieldName = labelUseRegexInput.prop( "checked")? 'label[$regex]' : 'label';
+    var labelParams = {};
+    labelParams[fieldName] = label;
+    var urlParams = filterParams(scope.urlParams, function(v,k) {
+      return !(k.startsWith('label[') || k == 'label');
+    });
+    var url = getFilterLink(scope.listUrl, labelParams, urlParams);
+    window.location.replace(url);
+  });
 };
 
 PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
@@ -211,12 +230,19 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
     }
   }
 
+  function getFixupParams(ann, startFrom) {
+    var params = { startFrom: startFrom, modelId: ann.itemId, task: ann.task, taskMode: 'fixup', condition: ann.condition, linkWordNet: true };
+    return params;
+  }
+
   function getFixupUrl(ann) {
-    return scope.annotateUrl + '?startFrom=' + ann.id + '&modelId=' + ann.itemId + '&taskMode=fixup&condition=manual';
+    var params = getFixupParams(ann, ann.id);
+    return scope.annotateUrl + '?' + $.param(params);
   }
 
   function getFixupLatestUrl(ann) {
-    return scope.annotateUrl + '?startFrom=latest' + '&modelId=' + ann.itemId + '&taskMode=fixup&condition=manual';
+    var params = getFixupParams(ann, 'latest');
+    return scope.annotateUrl + '?' + $.param(params);
   }
 
   function createViewLink(ann, label, extraParams) {
@@ -265,7 +291,13 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
       "data": "id",
       "title": "Id",
       render: function (data, type, full, meta) {
-        return getHtml(createGroup([createViewLink(full, full.id), createJsonLink(full, 'json'), createPartsLink(full, 'parts')], 'div'));
+        return getHtml(createGroup([
+          createViewLink(full, full.id),
+          //createLink('annotate this', getFixupUrl(full), '_blank'),
+          createLink('annotate', getFixupLatestUrl(full), '_blank'),
+          createJsonLink(full, 'json'),
+          createPartsLink(full, 'parts')],
+          'div'));
       }
     },
     {
@@ -344,13 +376,13 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
       defaultContent: ""
     },
     {
-      "data": "data.stats.percentComplete",
+      "data": "data.stats.total.percentComplete",
       "title": "% Complete",
       defaultContent: ""
     },
     {
-      "data": "data.stats.totalVertices",
-      "title": "# Vertices",
+      "data": "data.stats.total.totalFaces",
+      "title": "# Faces",
       defaultContent: ""
     },
     {

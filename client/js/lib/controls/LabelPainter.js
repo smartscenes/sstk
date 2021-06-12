@@ -11,7 +11,7 @@ var MODE_PICK = 3;
 /**
  * Controls for painting labels on meshes by clicking or dragging over parts of the mesh.
  * @param params Configuration parameters for LabelPainter
- * @param params.container Container in which to the LabelPainter will operate
+ * @param params.container Container in which the LabelPainter will operate
  * @param [params.tooltipContainer=#main] [string] Container in which the tooltip will be shown
  * @param params.labeler {BasePartLabeler} Labeler to use for labeling the parts
  * @param [params.selectMouseButton=Constants.LEFT_MOUSE_BTN] Which mouse button is used for painting
@@ -19,6 +19,7 @@ var MODE_PICK = 3;
  * @param [params.showPaintLabel=true]{boolean} Whether to show a tooltip indicating the label that will be used for painting
  * @param [params.showHoverLabel=true]{boolean} Whether to show a tooltip indicating the label of the part hovered over
  * @param [params.restrictPaintToFirstSelectedObject=false]{boolean} In drag mode, whether to allow painting of same object as original selection
+ * @param [params.eraseMat]{THREE.Material} Material to use when label is erased
  * @constructor
  * @memberOf controls
  */

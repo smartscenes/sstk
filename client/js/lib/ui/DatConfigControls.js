@@ -12,6 +12,7 @@ function DatConfigControls(params) {
   // Container in which config is displayed and configured
   this.container = params.container;
   this.options = params.options;
+  this.autoUpdate = params.autoUpdate;
   this.config = {};
   this.init();
 }
@@ -27,6 +28,9 @@ DatConfigControls.prototype.init = function () {
       var control = (field.min != undefined || field.max != undefined)?
         this.datgui.add(this.config, field.name, field.min, field.max).name(field.text || field.name) :
         this.datgui.add(this.config, field.name, field.values).name(field.text || field.name);
+      if (this.autoUpdate) {
+        control.listen();
+      }
       if (field.step != undefined) {
         control.step(field.step);
       }
@@ -44,6 +48,22 @@ DatConfigControls.prototype.getConfig = function () {
 
 DatConfigControls.prototype.getFieldValue = function (name) {
   return this.config[name];
+};
+
+DatConfigControls.prototype.hide = function() {
+  this.datgui.hide();
+};
+
+DatConfigControls.prototype.show = function() {
+  this.datgui.show();
+};
+
+DatConfigControls.prototype.close = function() {
+  this.datgui.close();
+};
+
+DatConfigControls.prototype.open = function() {
+  this.datgui.open();
 };
 
 // Exports

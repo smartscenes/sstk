@@ -10,6 +10,6 @@
   "view": {
     "phi": 0,
     "theta": 0.78539816339,
-    "distanceScale": 1.5
+    "cameraPositionStrategy": "positionToFit"
   }
 }

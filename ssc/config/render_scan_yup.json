@@ -1,0 +1,15 @@
+{
+  "assetInfo": {
+    "defaultUp": [ 0, 1, 0 ],
+    "defaultFront": [ -1, 0, 0],
+    "defaultUnit": 1,
+    "materialSidedness": "Front",
+    "useVertexColors": true,
+    "computeNormals": true
+  },
+  "view": {
+    "phi": 0,
+    "theta": 0.78539816339,
+    "cameraPositionStrategy": "positionToFit"
+  }
+}

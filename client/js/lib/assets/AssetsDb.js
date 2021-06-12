@@ -78,7 +78,7 @@ AssetsDb.prototype.query = function (params, callback) {
     callback(null, data);
   } else {
     var queryTerms = query.split(' ');
-    if (queryTerms.length === 1 && queryTerms[0].startsWith('fullId:')) {
+    if (queryTerms.length === 1 && queryTerms[0].startsWith('fullId:') && queryTerms[0].indexOf('*') < 0) {
       // Special handling if search by fullId
       var assetInfo = this.getAssetInfo(queryTerms[0].substring('fullId:'.length));
       var docs = [];
@@ -109,7 +109,33 @@ AssetsDb.prototype.query = function (params, callback) {
   //  callback('Unsupported query ' + query)
 };
 
+AssetsDb.prototype.getFilter = function(query) {
+  if (query == null || query === '' || query === '*:*') {
+    return null;
+  } else {
+    var filter;
+    try {
+      // Try parsing with special solrQueryParser
+      filter = SolrQueryParser.getFilter(query);
+      //console.log(filter);
+    } catch (err) {
+      console.error('Invalid query "' + query + '": ' + err.message);
+      console.error(err);
+      // Try simple filter
+      var queryTerms = query.split(' ');
+      filter = this.__getSimpleFilter(queryTerms);
+    }
+    return filter;
+  }
+};
+
 AssetsDb.prototype.getMatching = function (filter, start, limit, sort) {
+  if (start == null) {
+    start = 0;
+  }
+  if (limit == null) {
+    limit = 0;
+  }
   var matched = [];
   var nMatched = 0;
   var infos = this.assetInfos;
@@ -170,11 +196,15 @@ AssetsDb.prototype.__loadAssetInfoFromAssetIdList = function (assetGroup, data) 
 };
 
 AssetsDb.prototype.__updateAssetInfo = function(assetGroup, m) {
+  var assetIdField = this.assetIdField;
   if (assetGroup) {
-    m['fullId'] = assetGroup.name + '.' + m[this.assetIdField];
+    m['fullId'] = assetGroup.name + '.' + m[assetIdField];
     m['source'] = assetGroup.name;
+    if (assetIdField !== 'id' && m['id'] == null) {
+      m['id'] = m[assetIdField];
+    }
     if (assetGroup.assetFields && _.isArray(assetGroup.assetFields)) {
-      var loadInfo = assetGroup.getLoadInfo(m[this.assetIdField], m['format'], m);
+      var loadInfo = assetGroup.getLoadInfo(m[assetIdField], m['format'], m);
       _.defaults(m, _.pick(loadInfo, assetGroup.assetFields));
     }
   }
@@ -184,10 +214,11 @@ AssetsDb.prototype.__updateAssetInfo = function(assetGroup, m) {
 };
 
 AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
+  var scope = this;
   var parsed = IOUtil.parseDelimited(data, { header: true, skipEmptyLines: true,
     dynamicTyping: function(fieldname) {
         // Make sure id is treated as a string, but other fields are dynamically typed
-        if (fieldname === 'id') {
+        if (fieldname === scope.assetIdField || fieldname === 'id') {
           return false;
         } else {
           return true;
@@ -232,7 +263,16 @@ AssetsDb.prototype.__loadAssetInfoFromJsonData = function (assetGroup, data) {
     data = JSON.parse(data);
   }
   var assetInfos = data;
-  console.log('Got ' + assetInfos.length + ' assets');
+  console.log('Got ' + assetInfos.length + ' assets for ' + assetGroup.name);
+  return assetInfos;
+};
+
+AssetsDb.prototype.__loadAssetInfoFromJsonlData = function (assetGroup, data) {
+  if (typeof data === 'string') {
+    data = IOUtil.parseJsonl(data, { flatten: true });
+  }
+  var assetInfos = data;
+  console.log('Got ' + assetInfos.length + ' assets for ' + assetGroup.name);
   return assetInfos;
 };
 
@@ -241,14 +281,17 @@ AssetsDb.prototype.loadAssetInfoFromData = function (assetGroup, data, filename,
   var assetInfos;
   if (filename.endsWith('json') || options.format === 'json') {
     assetInfos = this.__loadAssetInfoFromJsonData(assetGroup, data);
+  } else if (filename.endsWith('jsonl') || options.format === 'jsonl') {
+    assetInfos = this.__loadAssetInfoFromJsonlData(assetGroup, data);
   } else if (filename.endsWith('csv') || filename.endsWith('tsv') || options.format === 'csv' || options.format === 'tsv') {
     assetInfos = this.__loadAssetInfoFromCsvData(assetGroup, data);
   } else {
     assetInfos = this.__loadAssetInfoFromAssetIdList(assetGroup, data);
   }
 
+  this.assetIdField = options.assetIdField || this.assetIdField;
+  var assetIdField = this.assetIdField;
   if (options.mode === 'merge' && options.assetField) {
-    var assetIdField = options.assetIdField || this.assetIdField;
     for (var i = 0; i < assetInfos.length; i++) {
       var m = assetInfos[i];
       var fullId = assetGroup.name + '.' + m[assetIdField];

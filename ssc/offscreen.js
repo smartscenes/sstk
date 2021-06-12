@@ -48,7 +48,9 @@ var render = function (scene, camera, pngFile) {
     format: THREE.RGBAFormat
   });
 
-  renderer.render(scene, camera, rtTexture, true);
+  renderer.setRenderTarget(rtTexture);
+  renderer.clear();
+  renderer.render(scene, camera);
 
   // read back in the pixel buffer
   var pixels = new Uint8Array(4 * width * height);

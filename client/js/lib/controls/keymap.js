@@ -26,10 +26,22 @@ function keymap(keyOpts, handler) {
   var filter = keyOpts.filter;
   if (!filter) {
     if (target) {
-      filter = function (event) {
-        // Only process event if it is meant for us
-        return (event.target === target);
-      };
+      if (Array.isArray(target)) {
+        filter = function (event) {
+          // Only process event if it is meant for us
+          for (var i = 0; i < target.length; i++) {
+            if (event.target === target[i]) {
+              return true;
+            }
+          }
+          return false;
+        };
+      } else {
+        filter = function (event) {
+          // Only process event if it is meant for us
+          return (event.target === target);
+        };
+      }
     } else {
       filter = function (event) {
         // By default, for global bindings, don't associate special key binds for anything that is a text input

@@ -160,40 +160,59 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 		function meshN( meshName, materialName ) {
 
 			if ( vertices.length > 0 && geometry.faces.length > 0 ) {
-
 				geometry.vertices = vertices;
-                                geometry.colors = colors;
+				geometry.colors = colors;
 
-				geometry.mergeVertices();
+				var mergeVertices = options.mergeVertices; // TODO: get rid of this merging of vertices
+				if (mergeVertices) {
+					var origStats = {nverts: geometry.vertices.length, nfaces: geometry.faces.length};
+					geometry.mergeVertices();
+
+					if (geometry.vertices.length === 0 || geometry.faces.length === 0) {
+						console.warn('No vertices/faces after merging: before (v='
+							+ origStats.nverts + ',f=' + origStats.nfaces + '), after (v='
+							+ geometry.vertices.length + ',f=' + geometry.faces.length + ')');
+					} else if (geometry.vertices.length !== origStats.length || geometry.faces.length !== origStats.nfaces) {
+						console.warn('Number of vertices/faces changed after merging: before (v='
+							+ origStats.nverts + ',f=' + origStats.nfaces + '), after (v='
+							+ geometry.vertices.length + ',f=' + geometry.faces.length + ')');
+					}
+				}
+				trackedMeshCount++;
+			}
+
+  		if ( geometry.vertices.length > 0 && geometry.faces.length > 0 ) {
 				if (options.computeNormals) {
 					geometry.computeVertexNormals();
 				}
 				geometry.computeFaceNormals();
 				geometry.computeBoundingSphere();
 
-                if (options.useBuffers) {
-                    var bufferGeom = new THREE.BufferGeometry();
-                    bufferGeom.fromGeometry(geometry);
-                    mesh.geometry = bufferGeom;
-                }
+				if (options.useBuffers) {
+					var bufferGeom = new THREE.BufferGeometry();
+					bufferGeom.fromGeometry(geometry);
+					mesh.geometry = bufferGeom;
+				}
 
-				object.add( mesh );
+				object.add(mesh);
 
 				geometry = new THREE.Geometry();
 				if (options.smooth) {
 					material.shading = THREE.SmoothShading;
 				}
-				mesh = new THREE.Mesh( geometry, material );
-                meshCount++;
+				mesh = new THREE.Mesh(geometry, material);
+				createdMeshCount++;
 			}
 
-			if ( meshName !== undefined ) mesh.name = meshName;
-            else if (mesh.name === undefined) {
-                mesh.name = 'mesh' + meshCount;
-            }
-            mesh.userData = {
-                index: meshCount
-            };
+			if ( meshName !== undefined ) {
+				mesh.name = meshName;
+			} else if (mesh.name === undefined) {
+				mesh.name = 'mesh' + createdMeshCount;
+			}
+			mesh.userData = {
+				index: createdMeshCount,
+				origMeshIndex: trackedMeshCount
+			};
 
 			if ( materialName !== undefined ) {
 
@@ -203,7 +222,6 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 				mesh.material = material;
 
 			}
-
 		}
 
 		var group = new THREE.Group();
@@ -212,7 +230,8 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 		var geometry = new THREE.Geometry();
 		var material = new THREE.MeshLambertMaterial();
 		var mesh = new THREE.Mesh( geometry, material );
-        var meshCount = 0;
+    var createdMeshCount = 0;  // How many meshes did we create
+    var trackedMeshCount = 0;  // How many meshes were there
 
 		var vertices = [];
 		var normals = [];
@@ -353,6 +372,7 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 
 			var line = lines[ i ];
 			line = line.trim();
+			var origLine = line;
 			line = line.toLowerCase();
 
 			// AXC: handle QNANs
@@ -449,24 +469,21 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 				// object
 
 				meshN();
-				face_offset = face_offset + vertices.length;
-				vertices = [];
-        colors = [];
 				object = new THREE.Object3D();
-				object.name = line.substring( 2 ).trim();
+				object.name = origLine.substring( 2 ).trim();
 				group.add( object );
 
 			} else if ( /^g /.test( line ) ) {
 
 				// group
 
-				meshN( line.substring( 2 ).trim(), undefined );
+				meshN( origLine.substring( 2 ).trim(), undefined );
 
 			} else if ( /^usemtl /.test( line ) ) {
 
 				// material
 
-				meshN( undefined, line.substring( 7 ).trim() );
+				meshN( undefined, origLine.substring( 7 ).trim() );
 
 			} else if ( /^mtllib /.test( line ) ) {
 
@@ -474,7 +491,7 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 
 				if ( mtllibCallback ) {
 
-					var mtlfile = line.substring( 7 );
+					var mtlfile = origLine.substring( 7 );
 					mtlfile = mtlfile.trim();
 					mtllibCallback( mtlfile );
 

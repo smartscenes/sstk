@@ -163,7 +163,7 @@ function cleanAnnotations(loadInfo, outfile, segments, aggregatedStats) {
   for (var i = 0; i < segGroups.length; i++) {
     var segGroup = segGroups[i];
     segGroup.obb = segments.fitOBB('Raw', segGroup.segments);
-    segGroup.obb.applyMatrix(modelWorldInverse);
+    segGroup.obb.applyMatrix4(modelWorldInverse);
     segGroup.nVertices = segments.getRawSegmentVerticesCount(segGroup.segments);
   }
   annotations.segGroups = _.filter(annotations.segGroups, function(x) {

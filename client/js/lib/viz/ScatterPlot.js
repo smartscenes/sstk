@@ -23,7 +23,9 @@ ScatterPlot.prototype.constructor = ScatterPlot;
 
 ScatterPlot.prototype.onClick = function (fn) {
   this.__onClickFn = fn || function () {};
-  this.__chartBody.selectAll('circle').on('click', this.__onClickFn);
+  if (!this.__zoomRectActive) {
+    this.__chartBody.selectAll('circle').on('click', this.__onClickFn);
+  }
 };
 
 //creates a scatterplot given two numeric field domains
@@ -65,7 +67,7 @@ ScatterPlot.prototype.__create = function (params) {
   this.__yAxis = d3.svg.axis().scale(this.__yScale).orient('left').outerTickSize(0);
 
   //add logic for pan and zoom
-  var zoom = d3.behavior.zoom().x(this.__xScale).y(this.__yScale).on("zoom", this.refresh.bind(this));
+  var zoom = d3.behavior.zoom().x(this.__xScale).y(this.__yScale).on('zoom', this.refresh.bind(this));
   this.__window.selection.call(zoom);
   svg = this.__addZoomRect(svg, width, height, this.__xScale, this.__yScale, zoom);
   this.__window.svg = svg;
@@ -127,28 +129,28 @@ ScatterPlot.prototype.__create = function (params) {
 ScatterPlot.prototype.__addZoomRect = function (svg, width, height, x, y, zoom) {
   var scope = this;
   var withZoomRect = svg.append('g')
-    .on("mousedown", function() {
+    .on('mousedown', function() {
       //if (!scope.__zoomRect) return;
       scope.__zoomRectActive = true;
       var e = this,
         origin = d3.mouse(e),
-        rect = svg.append("rect").attr("class", "zoom");
-      d3.select("body").classed("noselect", true);
+        rect = svg.append('rect').attr('class', 'zoom');
+      d3.select('body').classed('noselect', true);
       origin[0] = Math.max(0, Math.min(width, origin[0]));
       origin[1] = Math.max(0, Math.min(height, origin[1]));
       d3.select(window)
-        .on("mousemove.zoomRect", function() {
+        .on('mousemove.zoomRect', function() {
           var m = d3.mouse(e);
           m[0] = Math.max(0, Math.min(width, m[0]));
           m[1] = Math.max(0, Math.min(height, m[1]));
-          rect.attr("x", Math.min(origin[0], m[0]))
-            .attr("y", Math.min(origin[1], m[1]))
-            .attr("width", Math.abs(m[0] - origin[0]))
-            .attr("height", Math.abs(m[1] - origin[1]));
+          rect.attr('x', Math.min(origin[0], m[0]))
+            .attr('y', Math.min(origin[1], m[1]))
+            .attr('width', Math.abs(m[0] - origin[0]))
+            .attr('height', Math.abs(m[1] - origin[1]));
         })
-        .on("mouseup.zoomRect", function() {
-          d3.select(window).on("mousemove.zoomRect", null).on("mouseup.zoomRect", null);
-          d3.select("body").classed("noselect", false);
+        .on('mouseup.zoomRect', function() {
+          d3.select(window).on('mousemove.zoomRect', null).on('mouseup.zoomRect', null);
+          d3.select('body').classed('noselect', false);
           var m = d3.mouse(e);
           m[0] = Math.max(0, Math.min(width, m[0]));
           m[1] = Math.max(0, Math.min(height, m[1]));
@@ -162,10 +164,10 @@ ScatterPlot.prototype.__addZoomRect = function (svg, width, height, x, y, zoom) 
         }, true);
       d3.event.stopPropagation();
     });
-  withZoomRect.append("rect")
-    .attr("class", "transparent")
-    .attr("width", width)
-    .attr("height", height);
+  withZoomRect.append('rect')
+    .attr('class', 'transparent')
+    .attr('width', width)
+    .attr('height', height);
   return withZoomRect;
 };
 
@@ -184,6 +186,12 @@ ScatterPlot.prototype.refresh = function () {
       return scope.__yScale(d[scope.__yField] || 0);
     })
     .attr('fill', scope.__defaultColor);
+
+  // TODO: Update position of pinned tooltips to be next to new point positions
+  // for (var i = 0; i < this.__pinnedTips.length; i++) {
+  //   var tip = this.__pinnedTips[i];
+  //   // TODO: move tip to around tip.circle;
+  // }
 
   if (scope.__colorFn) {
     points.attr('fill', scope.__colorFn);

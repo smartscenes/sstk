@@ -13,14 +13,26 @@ require('jquery-lazy');
  * @param params
  * @param params.container Selector for container where the annotation view will be
  * @param params.assetGroup {{metadata: string, ids: string}} Asset group to view
- * @param params.viewerUrl {string} Link to go to when person clicks on the image (example: #{baseUrl}/part-annotator-single)
+ * @param [params.viewerUrl='${baseUrl}/model-viewer'] {string} Link to go to when person clicks on the image (example: #{baseUrl}/part-annotator-single)
  * @param params.annotateFromLatest {boolean} Whether to do fixup mode and annotate from latest annotation or not
- * @param params.groupBy {string} Field to group by (example: category)
+ * @param params.groupBy {string} Field to group by (example: category), can be specified as url parameter.
+ * @param [params.groupedSortBy] {string} Field to sort by (within a group), can be specified as url parameter.
+ * @param [params.sortBy] {string} Field to sort by for groups, can be specified as url parameter.
  * @param [params.viewerParams] {Object} Additional parameters for viewer
  * @param [params.task] {string} Annotation task name (used in database for storing/querying)
  * @param [params.annotationTasks] {string[]} Array of annotation task names to filter by (when querying)
  * @param [params.annotationConditions] {string[]} Array of annotation conditions to filter by (when querying)
  * @param [params.nTargetAnnotations=3] {int} Number of target annotations that we want to have (once this number is reached, the button becomes green, before that, the button is yellow-gold)
+ * @param [params.annotationsUrl='${baseUrl}/part-annotations/list'] {string} Url to fetch list of annotations
+ * @param [params.annotationsSummaryUrl] {string} Url to fetch summary of annotations
+ * @param [params.assetIdField='modelId'] {string} Field for looking up asset in viewerUrl
+ * @param [params.annotationItemIdField='itemId'] {string} Field for looking up asset in annotations
+ * @param [params.ignoreGroupRegex] {RegExp|string} Regular expression pattern of groups to ignore (can be specified as url parameter)
+ * @param [params.filter] {string} Filter on what items to include (can be specified as url parameter)
+ * @param [params.unannotated] {boolean} Only show what is annotated (can be specified as url parameter)
+ * @param [params.previewImageIndex] {int} Which image to use
+ * @param [params.imageUrlTemplates] {Map<string,template|string>} Image templates
+ * @param [params.useImage] {string} Which image to use
  * @constructor
  * @memberOf part-annotator
  */
@@ -34,7 +46,16 @@ function GroupedAnnotationsViewer(params) {
   this.loadingElement = $(params.loadingMessageSelector || '#loadingMessage');
   this.assetGroup = params.assetGroup;
   this.groupBy = _.getUrlParam('groupBy', params.groupBy);
+  this.filter = _.getUrlParam('filter', params.filter);
+  this.unannotatedOnly = _.getUrlParam('unannotated', params.unannotated);
+
+  // What image to show
   this.previewImageIndex = params.previewImageIndex || -1;
+  this.imageUrlTemplates = params.imageUrlTemplates;
+  if (this.imageUrlTemplates) {
+    _.templatizeCollection(this.imageUrlTemplates);
+  }
+  this.useImage = _.getUrlParam('image', params.useImage);
 
 //   this.baseUrl = params.baseUrl || '';
 //   this.listUrl = this.baseUrl + '/part-annotations/list';
@@ -46,9 +67,15 @@ function GroupedAnnotationsViewer(params) {
   this.viewerUrl = params.viewerUrl || Constants.baseUrl + '/model-viewer';
   this.viewerParams = params.viewerParams;
   this.annotationsUrl = params.annotationsUrl || Constants.baseUrl + '/part-annotations/list';
+  this.annotationsSummaryUrl = params.annotationsSummaryUrl;
   this.assetIdField = params.assetIdField || 'modelId';
-  this.sortBy = _.getUrlParam('sortBy', params.sortBy);
+  this.annotationItemIdField = params.annotationItemIdField || 'itemId';
+  this.groupedSortBy = _.getUrlParam('groupedSortBy', params.groupedSortBy, _.parseSortBy);
+  this.sortBy = _.getUrlParam('sortBy', params.sortBy, _.parseSortBy);
   this.assetManager = new AssetManager({ previewImageIndex: this.previewImageIndex });
+  this.ignoreGroupRegex = _.getUrlParam('ignoreGroupRegex', params.ignoreGroupRegex, _.parseRegex);
+  this.onHoverCallback = params.onHoverCallback;
+  window.addEventListener('resize', this.onWindowResize.bind(this), false);
 }
 
 GroupedAnnotationsViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) {
@@ -61,8 +88,8 @@ GroupedAnnotationsViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) 
 //    if (prevAnn) {
 //      var prevAnnIds = prevAnn.ids;
 //      var latestAnnId = _.max(prevAnnIds);
-      queryParams['taskMode'] = 'fixup';
-      queryParams['startFrom'] = 'latest'; //latestAnnId;
+    queryParams['taskMode'] = 'fixup';
+    queryParams['startFrom'] = 'latest'; //latestAnnId;
 //    }
   }
   var url = viewerUrl + '?' + $.param(queryParams);
@@ -70,22 +97,52 @@ GroupedAnnotationsViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) 
 };
 
 GroupedAnnotationsViewer.prototype.getAnnotationsUrl = function(assetInfo) {
-  return this.annotationsUrl + '?itemId=' + assetInfo.fullId;
+  return this.annotationsUrl + '?' + this.annotationItemIdField + '=' + assetInfo.fullId;
 };
 
 GroupedAnnotationsViewer.prototype.getGroupedAnnotationsUrl = function(assetInfo) {
-  return this.annotationsUrl + '?itemId[$regex]=' + this.assetGroup.source + '.' + assetInfo.id + '.*';
+  return this.annotationsUrl + '?' + this.annotationItemIdField + '[$regex]=' + this.assetGroup.source + '.' + assetInfo.id + '.*';
 };
+
+function getCachedImageUrl(assetInfo, key, getImageUrlFn) {
+  assetInfo.__cachedImageUrls = assetInfo.__cachedImageUrls || {};
+  var imageUrl = assetInfo.__cachedImageUrls[key];
+  if (!imageUrl) {
+    imageUrl = getImageUrlFn(assetInfo, key);
+    assetInfo.__cachedImageUrls[key] = imageUrl;
+  }
+  return imageUrl;
+}
 
 GroupedAnnotationsViewer.prototype.getAssetImageLink = function(assetGroup, assetInfo, viewerUrl, desc) {
   //var imageUrl = this.assetManager.getImagePreviewUrl(assetInfo.source, assetInfo.id, -1, assetInfo);
-  var imageUrl = assetGroup.getImagePreviewUrl(assetInfo.id, this.previewImageIndex, assetInfo);
+  var imageUrl;
+  var scope = this;
+  if (this.useImage && this.imageUrlTemplates && this.imageUrlTemplates[this.useImage]) {
+    //imageUrl = this.imageUrlTemplates[this.useImage](assetInfo);
+    imageUrl = getCachedImageUrl(assetInfo, this.useImage, function(info, key) {
+      return scope.imageUrlTemplates[key](info);
+    });
+  } else {
+    //imageUrl = assetGroup.getImagePreviewUrl(assetInfo.id, this.previewImageIndex, assetInfo);
+    imageUrl = getCachedImageUrl(assetInfo, this.previewImageIndex, function(info, key) {
+      return assetGroup.getImagePreviewUrl(info.id, key, info);
+    });
+  }
   var assetUrl = this.getAssetUrl(assetInfo, viewerUrl);
-  // TODO: Lazy loading of images
   var link = $('<a></a>').attr('href', assetUrl).append($('<img/>')
-    .attr('data-src', imageUrl).attr('width', '100').attr('height', '100').addClass('lazy'));
+    .attr('data-src', imageUrl).attr('width', '100').attr('height', '100')
+    .addClass('lazy').addClass('preview'));
   if (desc) {
     link.attr('title', desc);
+  }
+  if (this.onHoverCallback) {
+    var cb = this.onHoverCallback;
+    link.hover(function(e) {
+      cb(assetInfo, true, e);
+    }, function(e) {
+      cb(assetInfo, false, e);
+    });
   }
   return link;
 };
@@ -120,7 +177,8 @@ GroupedAnnotationsViewer.prototype.init = function() {
       }
     }));
   }
-  async.series([
+  var annotationItemIdField = this.annotationItemIdField;
+  async.parallel([
     function(cb) {
       if (assetGroupsToRegister.length > 0) {
         scope.assetManager.registerCustomAssetGroups({
@@ -134,19 +192,11 @@ GroupedAnnotationsViewer.prototype.init = function() {
     function(cb) {
       scope.__queryAnnotatedStats(function(err, annotationStats) {
         if (err) {
-          UIUtil.showAlert(null, 'Error fetching existing annotations');
+          UIUtil.showAlert('Error fetching existing annotations');
           scope.__annotatedByItemId = {};
           cb();
         } else {
-          if (scope.annotateFromLatest) {
-            for (var i = 0; i < annotationStats.length; i++) {
-              var s = annotationStats[i];
-              var ids = s.id.split(',');
-              s.ids = ids;
-              s.id = ids.length;
-            }
-          }
-          scope.__annotatedByItemId = _.keyBy(annotationStats, 'itemId');
+          scope.__annotatedByItemId = _.keyBy(annotationStats, annotationItemIdField);
           cb();
         }
       });
@@ -154,7 +204,7 @@ GroupedAnnotationsViewer.prototype.init = function() {
   ], function(err, results) {
     if (err) {
       console.log('Error initializing', err);
-      UIUtil.showAlert(null, 'Error showing annotations');
+      UIUtil.showAlert('Error showing annotations');
     } else {
       scope.__init();
     }
@@ -162,8 +212,10 @@ GroupedAnnotationsViewer.prototype.init = function() {
 };
 
 GroupedAnnotationsViewer.prototype.__queryAnnotatedStats = function(callback) {
-  var queryUrl = this.annotationsUrl + '?status[$ne]=rejected&status[$isnull]=true&status[$conj]=OR&$groupBy=itemId&format=json&itemId[$regex]=' + this.assetGroup.source + '.*';
-  if (this.annotateFromLatest) {
+  var queryUrl = this.annotationsSummaryUrl? (this.annotationsSummaryUrl + '?') : (this.annotationsUrl
+      + '?$groupBy=' + this.annotationItemIdField + '&format=json&');
+  queryUrl = queryUrl + 'status[$ne]=rejected&status[$isnull]=true&status[$conj]=OR&' + this.annotationItemIdField + '[$like]=' + this.assetGroup.source + '.%';
+  if (!this.annotationsSummaryUrl && this.annotateFromLatest) {
     queryUrl += '&$aggr[id]=GROUP_CONCAT';
   }
   if (this.annotationTasks) {
@@ -172,7 +224,42 @@ GroupedAnnotationsViewer.prototype.__queryAnnotatedStats = function(callback) {
   if (this.annotationConditions) {
     queryUrl += '&condition[$in]=' + this.annotationConditions.join(',');
   }
-  _.getJSON(queryUrl, callback);
+
+  var scope = this;
+  _.getJSON(queryUrl, function(err, annotationStats) {
+    // Populate nentries
+    if (annotationStats) {
+      if (scope.annotationsSummaryUrl) {
+        for (var i = 0; i < annotationStats.length; i++) {
+          var s = annotationStats[i];
+          s.ids = s.ids.split(',');
+          s.nentries = s.ids.length;
+        }
+      } else {
+        if (scope.annotateFromLatest) {
+          for (var i = 0; i < annotationStats.length; i++) {
+            var s = annotationStats[i];
+            if (s.id != null && s.id.split) {
+              var ids = s.id.split(',');
+              s.ids = ids;
+              s.nentries = ids.length;
+            } else {
+              s.nentries = 1;
+              delete s.id;
+            }
+          }
+        } else {
+          for (var i = 0; i < annotationStats.length; i++) {
+            var s = annotationStats[i];
+            s.nentries = 1;
+            delete s.id;
+          }
+        }
+      }
+    }
+
+    callback(err, annotationStats);
+  });
 };
 
 GroupedAnnotationsViewer.prototype.__init = function() {
@@ -181,35 +268,77 @@ GroupedAnnotationsViewer.prototype.__init = function() {
   var nTargetAnns = this.nTargetAnnotations;
   var summary = $('<div></div>');
   var table = $('<table></table>');
-  var assetInfos = this.assetGroup.assetDb.assetInfos;
+  var assetInfos = this.filter? this.assetGroup.assetDb.getMatching(
+    this.assetGroup.assetDb.getFilter(this.filter)).docs : this.assetGroup.assetDb.assetInfos;
 
   var groupedAssetInfos = _.groupByMulti(assetInfos, this.groupBy);
+
   //console.log(groupedAssetInfos);
   var stats = { counts: {}, hists: {} };
   stats.counts.totalAssets = assetInfos.length;
   stats.counts.totalAssetsAnnotated = _.size(scope.__annotatedByItemId);
+
+  var sortedGroups = [];
   for (var groupName in groupedAssetInfos) {
     if (!groupedAssetInfos.hasOwnProperty(groupName)) continue;
+    if (this.ignoreGroupRegex != null && this.ignoreGroupRegex.test(groupName)) {
+      continue;
+    }
     var groupInfos = groupedAssetInfos[groupName];
 
     //console.log(group);
-    var row = $('<tr></tr>');
     var group = null;
     var nGroupAnns = 0;
     var nGroupEntries = 0;
     if (groupInfos) {
       group = _.map(groupInfos, function(assetInfo) {
         var annotatedStats = scope.__annotatedByItemId[assetInfo.fullId];
-        return { assetInfo: assetInfo, nAnns: annotatedStats? annotatedStats.id : 0 };
+        return {
+          assetInfo: assetInfo,
+          nAnns: annotatedStats? annotatedStats.nentries : 0,
+          progress: annotatedStats? annotatedStats.progress : null
+        };
       });
+      if (this.unannotatedOnly) {
+        group = group.filter(function(x) { return x.nAnns == 0; });
+      }
+
+      if (this.groupedSortBy) {
+        if (this.groupedSortBy.fieldname == 'progress') {
+          group = _.orderBy(group, 'progress', this.groupedSortBy.order);
+        } else {
+          var groupedSortBy = this.groupedSortBy;
+          group = _.orderBy(group, function(x) { return x.assetInfo[groupedSortBy.fieldname]; }, this.groupedSortBy.order);
+        }
+      }
+
       nGroupAnns = group.filter(function(x) { return x.nAnns > 0; }).length;
       nGroupEntries = group.length;
+      sortedGroups.push( { name: groupName, group: group, nGroupAnns: nGroupAnns, nGroupEntries: nGroupEntries })
     }
+  }
+  if (this.sortBy) {
+    if (this.sortBy.fieldname === 'name') {
+      sortedGroups = _.orderBy(sortedGroups, 'name', this.sortBy.order);
+    } else if (this.sortBy.fieldname  === 'nentries') {
+      sortedGroups = _.orderBy(sortedGroups, 'nGroupEntries', this.sortBy.order);
+    } else if (this.sortBy.fieldname  === 'nannotated') {
+      sortedGroups = _.orderBy(sortedGroups, 'nGroupAnns', this.sortBy.order);
+    } else {
+      console.warn('Ignoring unsupported sortBy ' + this.sortBy.fieldname );
+    }
+  }
 
+  for (var i = 0; i < sortedGroups.length; i++) {
+    var g = sortedGroups[i];
+    var group = g.group;
+    var groupName = g.name;
+
+    var row = $('<tr></tr>');
     row.append($('<td></td>')
       .append(groupName)
       .append('<br/>')
-      .append(nGroupAnns + '/' + nGroupEntries)
+      .append(g.nGroupAnns + '/' + g.nGroupEntries)
     );
     var childCell = $('<td></td>');
     row.append(childCell);
@@ -225,7 +354,12 @@ GroupedAnnotationsViewer.prototype.__init = function() {
         }
         var nAnns = groupEntry.nAnns;
         var div = $('<td></td>');
+        div.append(assetInfo.id);
         div.append('<br/>');
+        if (groupEntry.progress != null) {
+          div.append(groupEntry.progress);
+          div.append('<br/>');
+        }
         div.append(this.getAssetImageLink(this.assetGroup, assetInfo, this.viewerUrl)
           .attr('target', '_blank')
           .attr('title', JSON.stringify(assetDetails, null, 2))
@@ -248,17 +382,21 @@ GroupedAnnotationsViewer.prototype.__init = function() {
   }
   var c = stats.counts;
   summary.append(
-      $('<span></span>').append('Annotated: '
-        + c.totalAssetsAnnotated + '/' + c.totalAssets));
+    $('<span></span>').append('Annotated: '
+      + c.totalAssetsAnnotated + '/' + c.totalAssets));
   this.container.append(summary);
   this.container.append(table);
   table.find('img.lazy').lazy({
     bind: 'event',
     threshold: 50,
     visibleOnly: true,
-    parent: this.container
+    parent: this.container,
+    appendScroll: this.container
   });
   this.loadingElement.hide();
+};
+
+GroupedAnnotationsViewer.prototype.onWindowResize = function () {
 };
 
 module.exports = GroupedAnnotationsViewer;

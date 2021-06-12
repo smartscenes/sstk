@@ -24,8 +24,8 @@ MaterialHelper.getPixel = function (imagedata, x, y) {
 };
 
 MaterialHelper.getPixelAtUV = function (imagedata, u, v) {
-  var x = THREE.Math.clamp(Math.round(u * imagedata.width), 0, imagedata.width-1);
-  var y = THREE.Math.clamp(Math.round(v * imagedata.height), 0, imagedata.height-1);
+  var x = THREE.MathUtils.clamp(Math.round(u * imagedata.width), 0, imagedata.width-1);
+  var y = THREE.MathUtils.clamp(Math.round(v * imagedata.height), 0, imagedata.height-1);
   return MaterialHelper.getPixel(imagedata, x, y);
 };
 

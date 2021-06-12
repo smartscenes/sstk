@@ -229,6 +229,7 @@ THREE.GPUPicker = function (option) {
   if (option === undefined) {
     option = {};
   }
+  this._tmpSize = new THREE.Vector2();
   this.pickingScene = new THREE.Scene();
   this.pickingTexture = new THREE.WebGLRenderTarget();
   this.pickingTexture.texture.minFilter = THREE.LinearFilter;
@@ -249,9 +250,14 @@ THREE.GPUPicker = function (option) {
   this.setFilter();
 };
 
+THREE.GPUPicker.prototype.getRendererSize = function() {
+  this.renderer.getSize(this._tmpSize);
+  return this._tmpSize;
+};
+
 THREE.GPUPicker.prototype.setRenderer = function (renderer) {
   this.renderer = renderer;
-  var size = renderer.getSize();
+  var size = this.getRendererSize();
   this.resizeTexture(size.width, size.height);
   this.needUpdate = true;
 };
@@ -269,7 +275,9 @@ THREE.GPUPicker.prototype.setCamera = function (camera) {
 
 THREE.GPUPicker.prototype.update = function (mouse, forceUpdate) {
   if (this.needUpdate || forceUpdate) {
-    this.renderer.render(this.pickingScene, this.camera, this.pickingTexture);
+    this.renderer.setRenderTarget(this.pickingTexture);
+    this.renderer.clear();
+    this.renderer.render(this.pickingScene, this.camera);
     //read the rendering texture
     if (this.useFullBuffer) {
       this.renderer.readRenderTargetPixels(this.pickingTexture, 0, 0, this.pickingTexture.width, this.pickingTexture.height, this.pixelBuffer);
@@ -416,7 +424,7 @@ THREE.GPUPicker.prototype._addElementID = function (object, baseId) {
         elementsCount = indices.length / units;
         positionBuffer = new Float32Array(elementsCount * 3 * units);
 
-        __pickingGeometry.addAttribute('position', new THREE.BufferAttribute(positionBuffer, 3));
+        __pickingGeometry.setAttribute('position', new THREE.BufferAttribute(positionBuffer, 3));
         for (el = 0; el < elementsCount; ++el) {
           el3 = units * el;
           for (i = 0; i < units; ++i) {
@@ -436,7 +444,7 @@ THREE.GPUPicker.prototype._addElementID = function (object, baseId) {
         elementsCount = verts.length / 3 - 1;
         positionBuffer = new Float32Array(elementsCount * units * 3);
 
-        __pickingGeometry.addAttribute('position', new THREE.BufferAttribute(positionBuffer, 3));
+        __pickingGeometry.setAttribute('position', new THREE.BufferAttribute(positionBuffer, 3));
         for (el = 0; el < elementsCount; ++el) {
           el3 = 3 * el;
           vertexIndex3 = el3;
@@ -463,7 +471,7 @@ THREE.GPUPicker.prototype._addElementID = function (object, baseId) {
           ids.array[i * units + j] = i;
         }
       }
-      __pickingGeometry.addAttribute('id', ids);
+      __pickingGeometry.setAttribute('id', ids);
       __pickingGeometry.elementsCount = vertexCount / units;
       // console.log('elementsCount', __pickingGeometry.elementsCount, 'vertexCount', vertexCount);
       //cache __pickingGeometry inside geometry
@@ -476,11 +484,12 @@ THREE.GPUPicker.prototype._addElementID = function (object, baseId) {
 
     var pointSize = object.material.size || 0.01;
     var linewidth = object.material.linewidth || 1;
+    var size = this.getRendererSize();
     object.material = new FaceIDMaterial();
     object.material.linewidth = linewidth + this.lineShell;//make the line a little wider to hit
     object.material.setBaseID(baseId);
     object.material.setPointSize(pointSize + this.pointShell);//make the point a little wider to hit
-    object.material.setPointScale(this.renderer.getSize().height * this.renderer.getPixelRatio() / 2);
+    object.material.setPointScale(size.height * this.renderer.getPixelRatio() / 2);
     return object.elementsCount;
   }
   return 0;

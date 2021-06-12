@@ -4,9 +4,16 @@
 
 var _ = require('util/util');
 
+/**
+ * Creates a graph with relationship between nodes
+ * @param opts
+ * @param [opts.nodes] {Node[]} Nodes
+ * @param [opts.relations] {Relation[]} Relations between nodes
+ * @constructor
+ */
 function RelationGraph(opts) {
   var nodes = opts.nodes || [];  // All nodes
-  var relations = opts.relations || []; // Relations (tuples of relation_type, relation_name, ids)
+  var relations = opts.relations || []; // Relations (tuples of relation_id, relation_type, relation_name, nodeIds)
   this.__init(nodes, relations);
 }
 
@@ -83,7 +90,7 @@ RelationGraph.prototype.removeNode = function(id) {
 
 RelationGraph.prototype.addRelation = function(type, name, ids) {
   var relationId = this.__getNextRelationId();
-  this.relations[relationId] = { id: relationId, type: type, relation: name, nodeIds: ids };
+  this.relations[relationId] = { id: relationId, type: type, name: name, nodeIds: ids };
   for (var i = 0; i < ids.length; i++) {
     var id = ids[i];
     this.__relationsByNode[id] = this.__relationsByNode[id] || [];
@@ -115,6 +122,15 @@ RelationGraph.prototype.getRelation = function(rid) {
   return this.relations[rid];
 };
 
+/**
+ * Get relations
+ * @param opts
+ * @param [opts.nodeIds] {string[]}
+ * @param [opts.relationType] {string}
+ * @param [opts.relationName] {string}
+ * @param [opts.checkedNodeIdsOrdering] {boolean}
+ * @returns {*}
+ */
 RelationGraph.prototype.getRelations = function(opts) {
   // Lookup relation by relationType, relationName, relationId or nodeIds
   if (opts.relationId != undefined) {
@@ -141,14 +157,37 @@ RelationGraph.prototype.getRelations = function(opts) {
     candidates = _.values(this.relations);
   }
   if (opts.relationType != undefined || opts.relationName != undefined) {
-    function filterRelations(r) {
+    var filterRelations = function(r) {
       var relTypeMatch = (opts.relationType != undefined) ? r.type === opts.relationType : true;
       var relNameMatch = (opts.relationName != undefined) ? r.name === opts.relationName : true;
       return relTypeMatch && relNameMatch;
-    }
+    };
     candidates = _.filter(candidates, filterRelations);
   }
   return candidates;
 };
+
+/**
+ * Node tuple
+ * @typedef Node
+ * @type {object}
+ * @property {string} id
+ * @property {string} type
+ * @property {string} name
+ * @property {string[]} children
+ * @property {string[]} parents
+ * @property {Object} [data]
+ * @property {THREE.Object3D} [object3D]
+ */
+
+/**
+ * Relation tuple
+ * @typedef Relation
+ * @type {object}
+ * @property {string} id
+ * @property {string} type
+ * @property {string} name
+ * @property {string[]} nodeIds
+ */
 
 module.exports = RelationGraph;

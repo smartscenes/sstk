@@ -232,9 +232,11 @@ KDTree.prototype.nearest = function(point, maxNodes, maxDistance) {
     result,
     bestNodes;
 
-  bestNodes = new BinaryHeap(
-    function (e) { return -e[1]; }
-  );
+  bestNodes = new BinaryHeap({
+    scoreFunc: function(e) {
+      return -e[1];
+    }
+  });
 
   function nearestSearch(node) {
     var bestChild,
@@ -308,13 +310,7 @@ KDTree.prototype.nearest = function(point, maxNodes, maxDistance) {
   if(self.root)
     nearestSearch(self.root);
 
-  result = [];
-
-  for (i = 0; i < Math.min(maxNodes, bestNodes.content.length); i += 1) {
-    if (bestNodes.content[i][0]) {
-      result.push([bestNodes.content[i][0].obj, bestNodes.content[i][1]]);
-    }
-  }
+  result = bestNodes.getSorted(function(x) { return x[0]; }, Math.min(maxNodes, bestNodes.size()));
   return result;
 };
 

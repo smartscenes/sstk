@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var SceneState = require('scene/SceneState');
 var Object3DUtil = require('geo/Object3DUtil');
 var PubSub = require('PubSub');
@@ -21,6 +22,10 @@ function SceneLoader(params) {
     this.room = parseInt(this.room);
   }
   this.defaultSource = undefined;
+
+  this.includeCeiling = (params.includeCeiling != undefined)? params.includeCeiling : true;
+  this.includeWalls = (params.includeWalls != undefined)? params.includeWalls : true;
+  this.includeFloor = (params.includeFloor != undefined)? params.includeFloor : true;
 }
 
 SceneLoader.prototype = Object.create(PubSub.prototype);
@@ -35,7 +40,12 @@ SceneLoader.prototype.load = function (url, onLoad, onProgress, onError, loadInf
   var loader = new THREE.FileLoader(scope.manager);
   //loader.setCrossOrigin(this.crossOrigin);
   return loader.load(url, function (text) {
-    scope.parse(JSON.parse(text), onLoad, url, loadInfo);
+    try {
+      scope.parse(JSON.parse(text), onLoad, url, loadInfo);
+    } catch (err) {
+      console.error('Error loading scene', url, err);
+      onError(err);
+    }
   }, onProgress, onError);
 };
 
@@ -50,7 +60,7 @@ SceneLoader.prototype.setObjectFlags = function(sceneState, modelInst) {
 // SceneResult comes at end since we do binding of callback
 SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
   // Convert to scene and make appropriate transforms
-  var scene = new THREE.Scene();
+  var scene = sceneResult.scene || new THREE.Scene();
   var roots = [];
   var transforms = [];
   for (var i = 0; i < sceneResult.modelInstancesMeta.length; i++) {
@@ -67,6 +77,19 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
     }
     this.setObjectFlags(sceneResult, modelInst);
     if (modelInst) {
+      if (sceneResult.assetTransforms) {
+        var assetTransform = sceneResult.assetTransforms[modelInst.model.info.source];
+        if (assetTransform) {
+          if (assetTransform.alignTo || assetTransform.scaleTo) {
+            var targetUp = assetTransform.alignTo ? Object3DUtil.toVector3(assetTransform.alignTo.up) : null;
+            var targetFront = assetTransform.alignTo ? Object3DUtil.toVector3(assetTransform.alignTo.front) : null;
+            modelInst.alignAndScale(targetUp, targetFront, Constants.metersToVirtualUnit * assetTransform.scaleTo);
+          }
+          if (assetTransform.centerTo) {
+            modelInst.centerTo(Object3DUtil.toVector3(assetTransform.centerTo));
+          }
+        }
+      }
       if (metadata.transform)  {
         var te = metadata.transform.data || metadata.transform;
         var transform = new THREE.Matrix4();
@@ -75,7 +98,6 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
           te[2], te[6], te[10], te[14],
           te[3], te[7], te[11], te[15]
         );
-        transforms.push(transform);
         modelInst.applyTransform(transform);
       } else {
         // No transform - try to apply the stuff we know about
@@ -92,8 +114,21 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
         if (metadata.position) {
           modelInst.setTranslation(metadata.position);
         }
-        transforms.push(modelInst.object3D.matrix);
+        if (metadata.visible != null) {
+          modelInst.object3D.visible = metadata.visible;
+        }
+        if (metadata.vertexColor != null) {
+          Object3DUtil.colorVertices(modelInst.object3D, metadata.vertexColor, metadata.opacity);
+        } else {
+          if (metadata.color != null) {
+            Object3DUtil.setMaterial(modelInst.object3D, Object3DUtil.getColor(metadata.color));
+          }
+          if (metadata.opacity != null) {
+            Object3DUtil.setOpacity(modelInst.object3D, metadata.opacity);
+          }
+        }
       }
+      transforms.push(modelInst.object3D.matrix.clone());
       // TODO: is this recursive linking okay?
       // Don't use userData since that is suppose to be well behaved and we are not
       // Probably not good if we want to export this scene
@@ -101,7 +136,7 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
         modelInstance: modelInst,
         metadata: metadata
       };
-      modelInst.object3D.name = '' + i;
+      modelInst.object3D.name = (metadata.name != null)? metadata.name : '' + i;
       if (this.useNormalizedCoordinateFrame) {
         transforms[i] = modelInst.ensureNormalizedModelCoordinateFrame().clone();
       }

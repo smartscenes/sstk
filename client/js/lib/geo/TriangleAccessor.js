@@ -45,8 +45,9 @@ TriangleAccessor.prototype.get = function (i) {
     face.vc = GeometryUtil.getGeometryVertex(this.geo, vidxs[2]);
 
     if (this.geo.groups) {  // material indices
+      var vi = i*3;
       var group = _.find(this.geo.groups, function (g) {
-        return (i >= g.start) && (i < g.start + g.count);
+        return (vi >= g.start) && (vi < g.start + g.count);
       });
       if (group) {
         face.materialIndex = group.materialIndex;
@@ -115,13 +116,68 @@ TriangleAccessor.prototype.get = function (i) {
 };
 
 TriangleAccessor.prototype.getTriangle = function(i, triangle, transform) {
-  triangle = triangle || new THREE.Triangle();
-
-  var vidxs = GeometryUtil.getFaceVertexIndices(this.geo, i);
-  GeometryUtil.getGeometryVertex(this.geo, vidxs[0], transform, triangle.a);
-  GeometryUtil.getGeometryVertex(this.geo, vidxs[1], transform, triangle.b);
-  GeometryUtil.getGeometryVertex(this.geo, vidxs[2], transform, triangle.c);
-  return triangle;
+  return GeometryUtil.getTriangle(this.geo, i, triangle, transform);
 };
 
-module.exports = TriangleAccessor;
+TriangleAccessor.prototype.getTriangleVertexIndices = function(i) {
+  return GeometryUtil.getFaceVertexIndices(this.geo, i);
+};
+
+TriangleAccessor.prototype.getTriangleArea = (function() {
+  var tri = new THREE.Triangle();
+  var scope = this;
+  return function(i, transform) {
+    scope.getTriangle(i, tri, transform);
+    return tri.getArea();
+  };
+}());
+
+// Extended triangle accessor will also handle partial meshes
+function ExtendedTriangleAccessor(mesh) {
+  if (mesh.mesh && mesh.faceIndices) {
+    TriangleAccessor.call(this, mesh.mesh);
+    this.faceIndices = mesh.faceIndices;
+  } else {
+    TriangleAccessor.call(this, mesh);
+  }
+}
+
+ExtendedTriangleAccessor.prototype = Object.create(TriangleAccessor.prototype);
+ExtendedTriangleAccessor.prototype.constructor = ExtendedTriangleAccessor;
+
+ExtendedTriangleAccessor.prototype.numTriangles = function () {
+  if (this.faceIndices) {
+    return this.faceIndices.length;
+  } else {
+    return TriangleAccessor.prototype.numTriangles.call(this);
+  }
+};
+
+
+ExtendedTriangleAccessor.prototype.get = function (i) {
+  if (this.faceIndices) {
+    var f = TriangleAccessor.prototype.get.call(this, this.faceIndices[i]);
+    return f;
+  } else {
+    return TriangleAccessor.prototype.get.call(this, i);
+  }
+};
+
+ExtendedTriangleAccessor.prototype.getTriangleVertexIndices = function(i) {
+  if (this.faceIndices) {
+    return TriangleAccessor.prototype.getTriangleVertexIndices.call(this, this.faceIndices[i]);
+  } else {
+    return TriangleAccessor.prototype.getTriangleVertexIndices.call(this, i);
+  }
+};
+
+ExtendedTriangleAccessor.prototype.getTriangle = function(i, triangle, transform) {
+  if (this.faceIndices) {
+    var f = TriangleAccessor.prototype.getTriangle.call(this, this.faceIndices[i], triangle, transform);
+    return f;
+  } else {
+    return TriangleAccessor.prototype.getTriangle.call(this, i, triangle, transform);
+  }
+};
+
+module.exports = ExtendedTriangleAccessor;

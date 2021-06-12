@@ -162,8 +162,9 @@ var getObjMtl = function (root, params, data) {
         }
       }
       GeometryUtil.forFaceVertexIndices(geometry, function (iface, verts) {
+        var iv = iface*3;
         var group = _.find(geometry.groups, function (g) {
-          return (iface >= g.start) && (iface < g.start + g.count);
+          return (iv >= g.start) && (iv < g.start + g.count);
         });
         var materialIndex = (materials.length > 1)? (group? group.materialIndex : 0) : 0;
         if (materialIndex === iMat) {
@@ -214,7 +215,7 @@ var getObjMtl = function (root, params, data) {
  * @param [opts.handleMaterialSide=false] {boolean} Whether to duplicate faces for Material.DoubleSide and reverse faces for Material.BackSide
  * @param [opts.defaultUvScale] {THREE.Vector2} How much to scale the uv coordinates if `map.repeat` is not specified
  * @param [opts.getGroupName] {function(THREE.Object3D):string} Function to generate name to use for non-leaf nodes.
- *   If provided and name is returned, then the groupname is appended to the group line `g <name> <groupname1> <groupname2>...`
+ *   If provided and name is returned, then the `groupname` is appended to the group line `g <name> <groupname1> <groupname2>...`
  *   for the descendant mesh.  Otherwise, names for non-leaf nodes are dropped.
  * @param [opts.getMeshName] {string|function(THREE.Mesh):string} Function to generate name to use for meshes (leaf objects).
  *   If provided, then the line `o <name>` is added to the output.
@@ -227,6 +228,8 @@ var getObjMtl = function (root, params, data) {
  * @param [opts.ensureUniqueObjectName=false] {boolean} Whether to append _i# to object names to ensure that they are unique
  * @param [opts.rewriteTexturePathFn] {function(string):string} Function to rewrite the texture path to be something more canonical
  * @param [opts.texturePath='images'] {string} Relative path wrt to obj where images are placed
+ * @param [opts.textureExportPath] {string} If we are exporting texture, where to store them on disk (used if `opts.exportTextures` is true)
+ * @param [opts.texturesIndex] {string} Index of textures
  */
 OBJMTLExporter.prototype.export = function (objects, opts) {
   var fileutil = this.__fs;
@@ -253,7 +256,7 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
   var taskQueue = new TaskQueue();
   var params = _.defaults({
       vertexOffset: 0, normalOffset: 0, uvOffset: 0, materialsOffset: 0,
-      textures: {}, texturesIndex: new Index(), taskQueue: taskQueue }, opts);
+      textures: {}, texturesIndex: opts.texturesIndex || new Index(), taskQueue: taskQueue }, opts);
 
   // Define default getXXX functions
   if (params.getObjectName && !_.isFunction(params.getObjectName)) {
@@ -352,9 +355,9 @@ OBJMTLExporter.prototype.export = function (objects, opts) {
   };
 
   // Start export by writing mtl header to objfile
-  var header = "# " + Constants.pkgname + "\n";
+  var header = '# ' + Constants.pkgname + '\n';
   if (opts.name) {
-    header += "# " + opts.name  + "\n";
+    header += '# ' + opts.name  + '\n';
   }
   header += (mtlfile ? ('mtllib ' + mtllib + '\n'):'');
   fileutil.fsWriteToFile(objfile, header, function(err, res) {
@@ -627,7 +630,7 @@ OBJMTLExporter.prototype.__getTexturePath = function(src, params) {
   if (params.rewriteTexturePathFn) {
     return params.rewriteTexturePathFn(src);
   } else {
-    var textureDir = params.textureDir ? params.textureDir : '';
+    var textureDir = params.texturePath ? params.texturePath : '';
     return textureDir + src.split('/').pop();
   }
 };
@@ -670,7 +673,9 @@ OBJMTLExporter.prototype.__getMaterialString = function(mat, matId, params) {
   var opacity = (mat.transparent)? mat.opacity : 1.0;
   if (opacity < 1.0) {
     mtl += 'illum 4\n';
-  } else if (mat.specular || mat.shininess != null) {
+  } else if (mat.reflectivity) {
+    mtl += 'illum 3\n';
+  } else if (!mat.flatShading && (mat.specular || mat.shininess != null)) {
     mtl += 'illum 2\n';
   } else {
     mtl += 'illum 1\n';

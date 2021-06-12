@@ -165,3 +165,24 @@ div.pagination {
     height: 100%;
     overflow: auto;
 }
+
+.tabsToolbar  {
+    position: absolute;
+    right: 10px;
+    z-index: 10;
+}
+
+.tabsToolbar > img {
+    opacity:0.6;
+    filter:alpha(opacity=60);
+}
+
+.tabsToolbar > img:hover   {
+    opacity:1.0;
+    filter:alpha(opacity=100);
+}
+
+#colorsPanel {
+    position: relative;
+    height: 100%;
+}

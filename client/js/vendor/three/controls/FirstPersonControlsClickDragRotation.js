@@ -77,6 +77,8 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 
 	this.onMouseDown = function ( event ) {
 
+		if ( this.enabled === false ) return;
+
 		if ( this.domElement !== document ) {
 
 			this.domElement.focus();
@@ -123,20 +125,18 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 
 	this.onMouseMove = function ( event ) {
 
-		if ( this.domElement === document ) {
+		if ( this.enabled === false ) return;
 
+		if ( this.domElement === document ) {
 			this.mouseX = event.pageX - this.viewHalfX;
 			this.mouseY = event.pageY - this.viewHalfY;
-
 		} else {
-
 			this.mouseX = event.pageX - this.domElement.offsetLeft - this.viewHalfX;
 			this.mouseY = event.pageY - this.domElement.offsetTop - this.viewHalfY;
 		}
 
-
-		if (this.mouseDragOn){
-			this.rotateCamera()
+		if (this.mouseDragOn) {
+			this.rotateCamera();
 		}
 	};
 
@@ -152,6 +152,8 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 	};
 
 	this.onKeyDown = function ( event ) {
+
+		if ( this.enabled === false ) return;
 
 		//event.preventDefault();
 
@@ -206,7 +208,7 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 
 		if ( this.heightSpeed ) {
 
-			var y = THREE.Math.clamp( this.object.position.y, this.heightMin, this.heightMax );
+			var y = THREE.MathUtils.clamp( this.object.position.y, this.heightMin, this.heightMax );
 			var heightDelta = y - this.heightMin;
 
 			this.autoSpeedFactor = delta * ( heightDelta * this.heightCoef );
@@ -249,13 +251,13 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 		// if( this.lookVertical ) this.lat -= this.mouseY * actualLookSpeed * verticalLookRatio;
 
 		// this.lat = Math.max( - 85, Math.min( 85, this.lat ) );
-		// this.phi = THREE.Math.degToRad( 90 - this.lat );
+		// this.phi = THREE.MathUtils.degToRad( 90 - this.lat );
 
-		// this.theta = THREE.Math.degToRad( this.lon );
+		// this.theta = THREE.MathUtils.degToRad( this.lon );
 
 		// if ( this.constrainVertical ) {
 
-		// 	this.phi = THREE.Math.mapLinear( this.phi, 0, Math.PI, this.verticalMin, this.verticalMax );
+		// 	this.phi = THREE.MathUtils.mapLinear( this.phi, 0, Math.PI, this.verticalMin, this.verticalMax );
 
 		// }
 

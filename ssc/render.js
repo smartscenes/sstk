@@ -6,18 +6,19 @@ var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
 var THREE = global.THREE;
+var _ = STK.util;
 
 cmd
   .version('0.0.1')
   .description('Renders asset by id')
-  .option('--id <id>', 'Scene or model id [default: 0020d9dab70c6c8cfc0564c139c82dce]', '0020d9dab70c6c8cfc0564c139c82dce')
+  .option('--id <id>', 'Scene or model id [default: e251dc99c5b4a9127af78305d7f7113c]', 'e251dc99c5b4a9127af78305d7f7113c')
   .option('--ids_file <file>', 'File with model ids')
-  .option('--source <source>', 'Scene or model source [default: p5dScene]', 'p5dScene')
+  .option('--source <source>', 'Scene or model source [default: 3dw]', '3dw')
   .option('--format <format>', 'Asset format')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--output_suffix <suffix>', 'Suffix to use in output png (sceneId.suffix.png)')
   .option('--use_subdir','Put output into subdirectory per id [false]')
-  .optionGroups(['config_file', 'scene', 'render_options', 'view', 'render_views', 'color_by', 'asset_cache'])
+  .optionGroups(['config_file', 'scene', 'render_options', 'view', 'render_views', 'color_by', 'transform3d', 'norm_geo', 'asset_cache'])
   .option('--skip_existing', 'Skip rendering existing images [false]')
   .option('--voxels <voxel-type>', 'Type of voxels to use [default: none]', 'none')
   .option('--extra <extra>', 'Additional stuff to render [wall|navmap]',
@@ -30,6 +31,9 @@ cmd
   .option('--repeat <num>', 'Number of times to repeat rendering of scene (for stress testing)', STK.util.cmd.parseInt, 1)
   .option('--heapdump <num>', 'Number of times to dump the heap (for memory debugging)', STK.util.cmd.parseInt, 0)
   .option('--material_type <material_type>')
+  .option('--material_side <material_side>')
+  .option('--support_articulated [flag]', 'Whether to parse articulated object', STK.util.cmd.parseBoolean)
+  .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 var msg = cmd.checkImageSize(cmd);
@@ -38,44 +42,32 @@ if (msg) {
   process.exit(-1);
 }
 
-var useSearchController = STK.Constants.baseUrl.startsWith('http://') || STK.Constants.baseUrl.startsWith('https://');
+var useSearchController = cmd.use_search_controller;
 // Parse arguments and initialize globals
 STK.Constants.setVirtualUnit(1);  // set to meters
+cmd.material_type = cmd.material_type || 'phong';
 if (cmd.material_type) {
-  STK.materials.Materials.DefaultMaterialType = STK.materials.Materials.getMaterialType(cmd.material_type)
+  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type);
+}
+if (cmd.material_side) {
+  STK.materials.Materials.DefaultMaterialSide = STK.materials.Materials.getMaterialSide(cmd.material_side, STK.materials.Materials.DefaultMaterialSide);
 }
 
-var use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
-var renderer = new STK.PNGRenderer({
-  width: cmd.width,
-  height: cmd.height,
-  useAmbientOcclusion: cmd.encode_index? false : use_ambient_occlusion,
-  useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
-  useOutlineShader: cmd.encode_index? false : cmd.use_outline_shader,
-  ambientOcclusionOptions: {
-    type: use_ambient_occlusion? cmd.ambient_occlusion_type : undefined
-  },
-  outlineColor: cmd.encode_index? false : cmd.outline_color,
-  useLights: cmd.encode_index? false : cmd.use_lights,
-  useShadows: cmd.encode_index? false : cmd.use_shadows,
-  compress: cmd.compress_png,
-  skip_existing: cmd.skip_existing,
-  reuseBuffers: true
-});
+var rendererOptions = cmd.getRendererOptions(cmd);
+var renderer = new STK.PNGRenderer(rendererOptions);
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: cmd.auto_align,
   autoScaleModels: false,
   assetCacheSize: cmd.assetCacheSize,
   enableLights: cmd.use_lights,
   defaultLightState: cmd.use_lights,
+  supportArticulated: cmd.support_articulated, mergeFixedParts: false,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
-var ids = cmd.id ? [cmd.id] : ['0020d9dab70c6c8cfc0564c139c82dce'];
+var ids = cmd.id ? [cmd.id] : ['e251dc99c5b4a9127af78305d7f7113c'];
 
-STK.assets.AssetGroups.registerDefaults();
-var assets = require('./data/assets.json');
-var assetsMap = _.keyBy(assets, 'name');
-STK.assets.registerCustomAssetGroupsSync(assetsMap, [cmd.source]);
+var assetFiles = (cmd.assets != null)? [cmd.assets] : [];
+STK.assets.registerAssetGroupsSync({ assetSources: [cmd.source], assetFiles: assetFiles });
 if (cmd.format) {
   STK.assets.AssetGroups.setDefaultFormat(cmd.format);
 }
@@ -104,7 +96,7 @@ if (cmd.repeat > 1) {
   ids = _.flatten(_.times(cmd.repeat, _.constant(ids)));
 }
 
-var sceneDefaults = { includeCeiling: true, defaultMaterialType: THREE.MeshPhongMaterial, preload: cmd.extra };
+var sceneDefaults = { includeCeiling: true, defaultMaterialType: STK.materials.Materials.DefaultMaterialType, preload: cmd.extra };
 if (cmd.scene) {
   sceneDefaults = _.merge(sceneDefaults, cmd.scene);
 }
@@ -184,14 +176,23 @@ function render(scene, renderer, renderOpts, cmdOpts) {
   var cameraControls = renderOpts.cameraControls;
   var camera = renderOpts.cameraControls.camera;
   var cb = renderOpts.callback;
-  console.log('cmdOpts', cmdOpts);
+  //console.log('cmdOpts', cmdOpts);
   var logdata = _.defaults({}, renderOpts.logdata || {});
+  if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
+    renderOpts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
+  }
+  if (cmd.convert_pixels && !renderOpts.postprocess) {
+    renderOpts.postprocess = { operation: 'convert', dataType: cmd.convert_pixels };
+  }
   if (cmdOpts.render_all_views) {
     // Render a bunch of views
     renderer.renderAllViews(scene, renderOpts);
   } else if (cmdOpts.render_turntable) {
     // Render turntable
     renderer.renderTurntable(scene, renderOpts);
+  } else if (cmdOpts.views) {
+    // Render multiple views
+    renderer.renderViews(scene, cmdOpts.views, renderOpts);
   } else {
     var errmsg  = null;  // Set to error message
     // Set view
@@ -233,13 +234,23 @@ function render(scene, renderer, renderOpts, cmdOpts) {
 
     if (!errmsg) {
       logdata.cameraConfig = cameraControls.lastViewConfig;
-      var opts = { logdata: logdata };
-      if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
-        opts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
-      }
+      var opts = { logdata: logdata, postprocess: renderOpts.postprocess };
       renderer.renderToPng(scene, camera, outbasename, opts);
     }
     setTimeout( function() { cb(errmsg); }, 0);
+  }
+}
+
+function convertViews(sceneState, cmdOpts) {
+  if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
+    cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
+  } else if (cmdOpts.views) {
+    for (var i = 0; i < cmdOpts.views.length; i++) {
+      var view = cmdOpts.views[i];
+      if (view.coordinate_frame === 'scene') {
+        cmdOpts.views[i] = sceneState.convertCameraConfig(view);
+      }
+    }
   }
 }
 
@@ -254,10 +265,19 @@ function processIds(assetsDb) {
     STK.util.checkMemory('Processing ' + id + ' index=' + index, memcheckOpts);
     // Create THREE scene
     var scene = new THREE.Scene();
-    var light = STK.gfx.Lights.getDefaultHemisphereLight(cmd.use_lights, cmd.use_lights);
     var camera = STK.gfx.Camera.fromJson(cameraConfig, cmd.width, cmd.height);
-    scene.add(light);
     scene.add(camera);
+    if (cmd.use_directional_lights) {
+      STK.gfx.Lights.addSimple2LightSetup(camera, new THREE.Vector3(0, 0, 0), true);
+    } else if (cmd.lights) {
+      var lights = STK.gfx.Lights.setupLights(cmd.lights);
+      for (var i = 0; i < lights.length; i++) {
+        scene.add(lights[i]);
+      }
+    } else {
+      var light = STK.gfx.Lights.getDefaultHemisphereLight(cmd.use_physical_lights, cmd.use_lights);
+      scene.add(light);
+    }
     var cameraControls = new STK.controls.CameraControls({
       camera: camera,
       container: renderer.canvas,
@@ -319,6 +339,17 @@ function processIds(assetsDb) {
         var bbdims = sceneBBox.dimensions();
         console.log('Loaded ' + sceneState.getFullID() +
           ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
+        var bboxes = [];
+        var transformInfo = STK.geo.Object3DUtil.applyTransforms(sceneState.fullScene, {
+          assetName: sceneState.getFullID() ,
+          hasTransforms: cmd.auto_align || cmd.auto_scale,
+          normalizeSize: cmd.normalize_size,
+          normalizeSizeTo: cmd.normalize_size_to,
+          center: cmd.center,
+          bboxes: bboxes,
+          debug: true
+        });
+
         var suffix = cmd.output_suffix || cmd.color_by;
         var outbasename = suffix? (basename + '.' + suffix) : basename;
         if (cmd.encode_index) {
@@ -362,14 +393,12 @@ function processIds(assetsDb) {
         }
 
         var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
+          _.pick(cmd, ['render_all_views', 'render_turntable', 'views', 'view', 'view_index',
             'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']) );
         if (cmdOpts.view == undefined && cmdOpts.view_index == undefined) {
           cmdOpts.view_index = 0;
         }
-        if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
-          cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
-        }
+        convertViews(sceneState, cmdOpts);
         if (cmdOpts.save_view_log) {
           renderer.viewlogFilename = outbasename + '.views.jsonl';
           shell.rm(renderer.viewlogFilename);
@@ -460,8 +489,10 @@ function processIds(assetsDb) {
       assetManager.clearCache();
       assetManager.getModelInstance(cmd.source, fullId, function (mInst) {
         // Ensure is normal geometry (for some reason, BufferGeometry not working with ssc)
-        STK.geo.Object3DUtil.traverseMeshes(mInst.object3D, false, function(m) {
-          m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
+        STK.geo.Object3DUtil.normalizeGeometry(mInst.object3D, {
+          assetName: fullId,
+          toGeometry: cmd.to_geometry,
+          toNonindexed: cmd.to_nonindexed
         });
         var sceneState = new STK.scene.SceneState(null, mInst.model.info);
         sceneState.addObject(mInst, cmd.auto_align);
@@ -470,6 +501,16 @@ function processIds(assetsDb) {
         var bbdims = sceneBBox.dimensions();
         console.log('Loaded ' + sceneState.getFullID() +
           ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
+        var bboxes = [];
+        var transformInfo = STK.geo.Object3DUtil.applyTransforms(sceneState.fullScene, {
+          assetName: fullId,
+          hasTransforms: cmd.auto_align || cmd.auto_scale,
+          normalizeSize: cmd.normalize_size,
+          normalizeSizeTo: cmd.normalize_size_to,
+          center: cmd.center,
+          bboxes: bboxes,
+          debug: true
+        });
 
         var suffix = cmd.output_suffix || cmd.color_by;
         var outbasename = suffix? (basename + '.' + suffix) : basename;
@@ -478,11 +519,9 @@ function processIds(assetsDb) {
         }
 
         var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index',
+          _.pick(cmd, ['render_all_views', 'render_turntable', 'views', 'view', 'view_index',
             'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']));
-        if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
-          cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
-        }
+        convertViews(sceneState, cmdOpts);
         if (cmdOpts.save_view_log) {
           renderer.viewlogFilename = outbasename + '.views.jsonl';
           shell.rm(renderer.viewlogFilename);
@@ -520,7 +559,14 @@ function processIds(assetsDb) {
           STK.util.waitImagesLoaded(onDrained);
         }
 
-        if (cmd.color_by) {
+        if (cmd.color_by === 'vertexAttribute' || cmd.color_by === 'faceAttribute') {
+          var okay = STK.scene.SceneUtil.colorObject3D(scene, {
+            colorBy: cmd.color_by,
+            color: cmd.color,
+            encodeIndex: cmd.encode_index
+          });
+          waitImages();
+        } else if (cmd.color_by) {
           STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
             loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
             color: cmd.color,

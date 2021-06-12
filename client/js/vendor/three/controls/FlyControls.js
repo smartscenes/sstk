@@ -4,9 +4,16 @@
 
 THREE.FlyControls = function ( object, domElement ) {
 
-	this.object = object;
+	if ( domElement === undefined ) {
 
-	this.domElement = ( domElement !== undefined ) ? domElement : document;
+		console.warn( 'THREE.FlyControls: The second parameter "domElement" is now mandatory.' );
+		domElement = document;
+
+	}
+
+	this.object = object;
+	this.domElement = domElement;
+
 	if ( domElement ) this.domElement.setAttribute( 'tabindex', - 1 );
 
 	// API
@@ -29,7 +36,11 @@ THREE.FlyControls = function ( object, domElement ) {
 	this.moveVector = new THREE.Vector3( 0, 0, 0 );
 	this.rotationVector = new THREE.Vector3( 0, 0, 0 );
 
+	// Set to false to disable this control
+	this.enabled = true;
+
 	this.handleEvent = function ( event ) {
+		if ( this.enabled === false ) return;
 
 		if ( typeof this[ event.type ] == 'function' ) {
 
@@ -40,6 +51,7 @@ THREE.FlyControls = function ( object, domElement ) {
 	};
 
 	this.keydown = function ( event ) {
+		if ( this.enabled === false ) return;
 
 		if ( event.altKey ) {
 
@@ -79,6 +91,7 @@ THREE.FlyControls = function ( object, domElement ) {
 	};
 
 	this.keyup = function ( event ) {
+		if ( this.enabled === false ) return;
 
 		switch ( event.keyCode ) {
 
@@ -110,6 +123,7 @@ THREE.FlyControls = function ( object, domElement ) {
 	};
 
 	this.mousedown = function ( event ) {
+		if ( this.enabled === false ) return;
 
 		if ( this.domElement !== document ) {
 
@@ -140,6 +154,7 @@ THREE.FlyControls = function ( object, domElement ) {
 	};
 
 	this.mousemove = function ( event ) {
+		if ( this.enabled === false ) return;
 
 		if ( ! this.dragToLook || this.mouseStatus > 0 ) {
 
@@ -157,6 +172,7 @@ THREE.FlyControls = function ( object, domElement ) {
 	};
 
 	this.mouseup = function ( event ) {
+		if ( this.enabled === false ) return;
 
 		event.preventDefault();
 		event.stopPropagation();

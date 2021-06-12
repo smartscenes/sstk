@@ -66,7 +66,7 @@ function toAjaxSucceededCallback(cb) {
 
 function toAjaxFailedCallback(cb) {
   return function(jqXHR, textStatus, errorThrown) {
-    cb(textStatus + ' ' + errorThrown, null);
+    cb(textStatus + ' ' + errorThrown, jqXHR.responseJSON);
   };
 }
 

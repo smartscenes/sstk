@@ -34,7 +34,7 @@ function BasicSearchController(params) {
   this.searchModulesBySource = {};  // Custom search modules by source
 
   this.useFiltered = true;
-  this.__initializeFilters();
+  this.__initializeFilters(params.assetFilters);
 
   this.sources = params.sources;
   if (!this.sources) {
@@ -73,6 +73,7 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
     'model': {
       name: 'models3d',
       defaultFilter: assetTypeFilterOptions['model'].filter,  // filter that will apply for all models
+      sourceFilter: assetTypeFilterOptions['model'].sourceFilter,  // filter that will apply for all models (for restricting asset sources)
       groupFilter: ' +hasModel:true -modelSize:[' + Constants.maxModelSize + ' TO * ]',  // filter just for when all models are queried
       searchUrl: Constants.models3dSearchUrl,
       //var modelFields = 'fullId,name,source,id,tags,category,category0,wnlemmas,unit,up,front,nfaces,materials,scenes,datasets,hasModel,popularity,score';
@@ -81,12 +82,14 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
     'scan': {
       name: 'scans',
       defaultFilter: assetTypeFilterOptions['scan'].filter,  // filter that will apply for all scans
+      sourceFilter: assetTypeFilterOptions['scan'].sourceFilter,  // filter that will apply for all scans (for restricting asset sources)
       searchUrl: Constants.models3dSearchUrl,
       fields: ''
     },
     'scene': {
       name: 'scenes',
       defaultFilter: assetTypeFilterOptions['scene'].filter,
+      sourceFilter: assetTypeFilterOptions['scene'].sourceFilter,  // filter that will apply for all scenes (for restricting asset sources)
       searchUrl: Constants.scenesSearchUrl,
       // TODO: If data is too big, only get it when user requests it
       // Also, add other informative fields for scenes
@@ -95,6 +98,7 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
     'room': {
       name: 'rooms',
       defaultFilter: assetTypeFilterOptions['room'].filter,
+      sourceFilter: assetTypeFilterOptions['room'].sourceFilter,  // filter that will apply for all rooms (for restricting asset sources)
       searchUrl: Constants.roomsSearchUrl,
       // TODO: If data is too big, only get it when user requests it
       // Also, add other informative fields for scenes
@@ -104,6 +108,7 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
     'texture': {
       name: 'textures',
       defaultFilter: assetTypeFilterOptions['texture'].filter,
+      sourceFilter: assetTypeFilterOptions['texture'].sourceFilter,  // filter that will apply for all textures (for restricting asset sources)
       searchUrl: Constants.texturesSearchUrl,
       fields: 'fullId,name,source,id,tags,category,imageSize,fileSize'
     }
@@ -124,6 +129,9 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
         fields: assetType.fields
       };
       var filter = assetType.defaultFilter || '';
+      if (assetType.sourceFilter) {
+        filter = filter + ' ' + assetType.sourceFilter;
+      }
       if (assetType.groupFilter) {
         filter = filter + ' ' + assetType.groupFilter;
       }
@@ -141,32 +149,37 @@ BasicSearchController.prototype.__initializeFilters = function(assetTypeFilterOp
         // console.log('Ignoring ' + name);
         continue;
       }
-      var assetGroup = assetGroups[name];
-      var assetTypeOptions = this.__searchOptionsByAssetType[assetGroup.type] || {};
-      this.searchUrls[name] = assetGroup.searchUrl || assetTypeOptions.searchUrl;
-      if (!this.searchUrls[assetGroup.assetType]) {
-        this.searchUrls[assetGroup.assetType] = this.searchUrls[name];
-      }
-      var filter = '+source:' + name;
-      this.defaultSearchOptionsUnfiltered[name] = {
-        filter: filter,
-        fields: assetTypeOptions.fields
-      };
-      if (assetGroup.defaultFilter) {
-        // Add filter for this asset group (other than the source:name filter)
-        filter = filter + ' ' + assetGroup.defaultFilter;
-      }
-      if (assetTypeOptions.defaultFilter) {
-        // Add filter for this assetType
-        filter = filter + ' ' + assetTypeOptions.defaultFilter;
-      }
-      this.defaultSearchOptionsFiltered[name] = {
-        filter: filter,
-        fields: assetTypeOptions.fields
-      };
+      this.__updateSearchFilterForAssetGroup(assetGroups[name]);
     }
   }
   this.enableFiltering(this.useFiltered);
+};
+
+BasicSearchController.prototype.__updateSearchFilterForAssetGroup = function(assetGroup) {
+  // TODO: move some of these to be properties of the asset group...
+  var name = assetGroup.name;
+  var assetTypeOptions = this.__searchOptionsByAssetType[assetGroup.type] || {};
+  this.searchUrls[name] = assetGroup.searchUrl || assetTypeOptions.searchUrl;
+  if (!this.searchUrls[assetGroup.assetType]) {
+    this.searchUrls[assetGroup.assetType] = this.searchUrls[name];
+  }
+  var filter = '+source:' + name;
+  this.defaultSearchOptionsUnfiltered[name] = {
+    filter: filter,
+    fields: assetTypeOptions.fields
+  };
+  if (assetGroup.defaultFilter) {
+    // Add filter for this asset group (other than the source:name filter)
+    filter = filter + ' ' + assetGroup.defaultFilter;
+  }
+  if (assetTypeOptions.defaultFilter) {
+    // Add filter for this assetType
+    filter = filter + ' ' + assetTypeOptions.defaultFilter;
+  }
+  this.defaultSearchOptionsFiltered[name] = {
+    filter: filter,
+    fields: assetTypeOptions.fields
+  };
 };
 
 BasicSearchController.prototype.__registerSearchModules = function() {
@@ -200,9 +213,13 @@ BasicSearchController.prototype.setFilter = function (assetType, filter) {
 };
 
 BasicSearchController.prototype.restrictModelSources = function (sources) {
+  this.restrictSources('models3d', sources);
+};
+
+BasicSearchController.prototype.restrictSources = function (datatype, sources) {
   var query = '(' + sources.join(' OR ') + ')';
-  this.defaultSearchOptionsFiltered['models3d']['filter'] = this.defaultSearchOptionsFiltered['models3d']['filter'] + ' +source:' + query;
-  this.defaultSearchOptionsUnfiltered['models3d']['filter'] = this.defaultSearchOptionsUnfiltered['models3d']['filter'] + ' +source:' + query;
+  this.defaultSearchOptionsFiltered[datatype]['filter'] = this.defaultSearchOptionsFiltered[datatype]['filter'] + ' +source:' + query;
+  this.defaultSearchOptionsUnfiltered[datatype]['filter'] = this.defaultSearchOptionsUnfiltered[datatype]['filter'] + ' +source:' + query;
 };
 
 BasicSearchController.prototype.hasSource = function (source) {
@@ -216,6 +233,10 @@ BasicSearchController.prototype.encodeQueryText = function (text) {
   text = encodeURIComponent(text);
   text = text.replace(/%20/g, '+');
   return text;
+};
+
+BasicSearchController.prototype.getQuerySortOrder = function () {
+  return '';
 };
 
 BasicSearchController.prototype.searchByIds = function (source, ids, searchSucceededCallback, searchFailedCallback) {
@@ -266,6 +287,10 @@ BasicSearchController.prototype.registerSearchModule = function (source, searchM
   if (typeof searchModule === 'string') {
     // Just a solr url
     this.searchUrls[source] = searchModule;
+    if (searchModule === this.searchUrls['models3d']) {
+      var assetGroups = AssetGroups.getAssetGroups();
+      this.__updateSearchFilterForAssetGroup(assetGroups[source]);
+    }
   } else {
     this.searchModulesBySource[source] = searchModule;
   }
@@ -310,6 +335,11 @@ BasicSearchController.prototype.queryIds = function(ids, callback) {
 BasicSearchController.prototype.getQueryUrl = function (opts) {
   var updatedQueryOpts = this.__createQueryOptions(opts);
   return this.defaultSearchModule.getQueryUrl(updatedQueryOpts);
+};
+
+BasicSearchController.prototype.getQueryOpts = function (opts) {
+  var updatedQueryOpts = this.__createQueryOptions(opts);
+  return this.defaultSearchModule.getQueryOpts(updatedQueryOpts);
 };
 
 BasicSearchController.prototype.__createQueryOptions = function (queryOpts) {

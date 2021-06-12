@@ -181,7 +181,7 @@ function SearchPanel(params) {
         this.sortOrderElem = $('<input/>').attr('type', 'text').attr('class', 'sortOrder').attr('size', '8');
         this.sortOrderDropdownElem = $('<select></select>').attr('class', 'sortOrder');
         this.sortOrderDropdownElem.attr('title', 'Specify sort order');
-        this.defaultSortOrders = ['score', 'id', 'time', 'size', 'popularity', 'quality', 'random', 'custom'];
+        this.defaultSortOrders = ['score', 'id', 'updated', 'size', 'popularity', 'quality', 'random', 'custom'];
         for (var i = 0; i < this.defaultSortOrders.length; i++) {
           var s = this.defaultSortOrders[i];
           this.sortOrderDropdownElem.append('<option value="' + s + '">' + s + '</option>');
@@ -193,8 +193,8 @@ function SearchPanel(params) {
               scope.sortOrderElem.val('');
             } else if (sort === 'id') {
               scope.sortOrderElem.val('id asc');
-            } else if (sort === 'time') {
-              scope.sortOrderElem.val('timestamp desc');
+            } else if (sort === 'updated') {
+              scope.sortOrderElem.val('updated desc');
             } else if (sort === 'popularity') {
               scope.sortOrderElem.val('popularity desc');
             } else if (sort === 'quality') {
@@ -266,7 +266,7 @@ function SearchPanel(params) {
         if (url) {
           window.open(url, 'Search Results');
         } else {
-          UIUtil.showAlert(scope.container, 'Please perform a search before saving ids', 'alert-warning');
+          UIUtil.showAlertWithPanel(scope.container, 'Please perform a search before saving ids', 'alert-warning');
         }
       });
       buttonGroup.append(saveListButton);
@@ -357,7 +357,7 @@ SearchPanel.prototype.loadIds = function(ids, options) {
   ids = _.uniq(ids);
   if (ids.length > batchSize) {
     var batches = _.chunk(ids, batchSize);
-    async.map(batches, function(item, cb) {
+    async.mapLimit(batches, Constants.MAX_ASYNC_REQS, function(item, cb) {
       scope.searchModule.queryIds(item, cb);
     }, function(err, results) {
       // Do some surgery on the results
@@ -394,7 +394,7 @@ SearchPanel.prototype.loadIdsFromFile = function(file) {
     undefined,
     function(err) {
       var filename = (typeof file === 'string')? file : file.name;
-      UIUtil.showAlert(scope.searchPanel, 'Error loading ids from ' + filename + ': ' + err);
+      UIUtil.showAlertWithPanel(scope.searchPanel, 'Error loading ids from ' + filename + ': ' + err);
       console.error('Error loading ids from ' + filename, err);
     });
 };
@@ -844,7 +844,9 @@ SearchPanel.prototype.updatePaging = function (start, numFound, callback) {
 
 SearchPanel.prototype.showMoreSearchResults = function (start) {
   // Need more results...
-  if (this.lastQuery) {
+  if (this.resultList && start >= this.resultListStart && start < (this.resultListStart + this.resultList.length)) {
+    this.showSearchResults(this.resultList, start, this.resultListStart);
+  } else if (this.lastQuery) {
     var callback = this.lastQuery.searchDisplayOptions? this.lastQuery.searchDisplayOptions.callback : undefined;
     this.search(_.defaults(Object.create(null), { start: start }, this.lastQuery.query), callback, this.lastQuery.searchDisplayOptions);
   }
@@ -1071,11 +1073,20 @@ SearchPanel.prototype.registerSource = function(source) {
   if (this.sourceElem && this.sourceElem.find('option[value="' + source + '"]').size() < 1) {
     this.sourceElem.append('<option value="' + source + '">' + source + '</option>');
   }
+  if (this.sources.length === 1) {
+    this.selectSource(source);
+  }
 };
 
 SearchPanel.prototype.getLastQueryURL = function (opts) {
   if (this.lastQuery) {
     return this.searchModule.getQueryUrl(_.defaults(Object.create(null), opts, this.lastQuery.query, { start: 0, limit: 1000000}));
+  }
+};
+
+SearchPanel.prototype.getLastQueryOptions = function(opts) {
+  if (this.lastQuery) {
+    return this.searchModule.getQueryOpts(_.defaults(Object.create(null), opts, this.lastQuery.query));
   }
 };
 

@@ -13,21 +13,5 @@
     "name": "mpr3d",
     "metadata": "../server/static/data/matterport/mpr3d.json",
     "ids": "../server/static/data/matterport/mpr3d.csv"
-  },
-  {
-    "name": "p5dTexture",
-    "metadata": "../server/static/data/suncg/suncg.planner5d.textures.json",
-    "assetIdField": "name",
-    "ids": "../server/static/data/suncg/suncg.planner5d.textures.csv"
-  },
-  {
-    "name": "p5d",
-    "metadata": "../server/static/data/suncg/suncg.planner5d.models.json",
-    "ids": "../server/static/data/suncg/suncg.planner5d.models.full.csv",
-    "requires": ["p5dTexture"]
-  },
-  {
-    "name": "p5dScene",
-    "requires": ["p5d"]
   }
 ]

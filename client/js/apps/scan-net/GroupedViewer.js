@@ -15,6 +15,7 @@ require('jquery-lazy');
  * @param params.parentAssetGroup {{metadata: string, ids: string}} Parent asset group (for grouping)
  * @param [params.groupBy=parentId] {string} Parent id field to group by
  * @param [params.assetIdField=modelId] {string} Field to use when specifying asset id in urls
+ * @param [params.assetImageKey=-1] {string|int} Image to show in the view
  * @param [params.viewerUrl=${baseUrl}/model-viewer] {string} Link to go to when person clicks on the image
  * @param [params.viewerParams] {Object} Additional parameters for viewer
  * @param [params.parentViewerUrl=params.viewerUrl] {string} Link to go to when person clicks on the image
@@ -36,6 +37,7 @@ function GroupedViewer(params) {
   this.viewerParams = params.viewerParams;
   this.parentViewerUrl = params.parentViewerUrl || this.viewerUrl;
   this.assetIdField = params.assetIdField || 'modelId';
+  this.assetImageKey = (params.assetImageKey != null)? params.assetImageKey : -1;
   this.parentType = params.parentType || 'scan';
   this.childType = params.childType || 'region';
   this.sortBy = params.sortBy || _.getUrlParam('sortBy');
@@ -61,7 +63,7 @@ GroupedViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) {
 
 GroupedViewer.prototype.getAssetImageLink = function(assetGroup, assetInfo, viewerUrl, desc) {
   //var imageUrl = this.assetManager.getImagePreviewUrl(assetInfo.source, assetInfo.id, -1, assetInfo);
-  var imageUrl = assetGroup.getImagePreviewUrl(assetInfo.id, -1, assetInfo);
+  var imageUrl = assetGroup.getImagePreviewUrl(assetInfo.id, this.assetImageKey, assetInfo);
   var assetUrl = this.getAssetUrl(assetInfo, viewerUrl);
   var link = $('<a></a>').attr('href', assetUrl).append($('<img/>')
     .attr('data-src', imageUrl).attr('width', this.imageSize.width).attr('height', this.imageSize.height).addClass('lazy'));
@@ -127,7 +129,7 @@ GroupedViewer.prototype.init = function() {
   ], function(err, results) {
     if (err) {
       console.log('Error initializing', err);
-      UIUtil.showAlert(null, 'Error showing annotations');
+      UIUtil.showAlert('Error showing annotations');
     } else {
       scope.__init();
     }

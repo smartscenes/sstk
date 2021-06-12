@@ -53,10 +53,11 @@ function loadTexture(zip, basePath, relPath, images, cacheOpts) {
       // Base64 encode
       var imageDataEncoded = btoa(imageData);
       var datauri = "data:image/" + imageType + ";base64," + imageDataEncoded;
+      var fullPath =  (zip.path != null)? zip.path + '/' + path : path;
       if (typeof Image !== 'undefined') {
         // In browser with Image
         img = new Image();
-        img.path = path;
+        img.path = fullPath;
         img.src = datauri;
         img.addEventListener('load', function() {
           // Need to wait for image to load before there is width and height to use
@@ -75,7 +76,7 @@ function loadTexture(zip, basePath, relPath, images, cacheOpts) {
         var pixels = ImageUtil.getPixelsSync(datauri, 'image/' + imageType);
         //var pixels = ImageUtil.bufferToRawPixelsSync(imgfile._data);
         img = {
-          src: path,
+          src: fullPath,
           data: pixels.data,
           width: pixels.shape? pixels.shape[0] : pixels.width,
           height: pixels.shape? pixels.shape[1] : pixels.height,
@@ -127,6 +128,7 @@ ZIPLoader.prototype = {
       'arraybuffer',
       function (data) {
         var zip = new JSZip(data);
+        zip.path = zipname;
         zipLoader.zip = zip;
         var regex = options.regex;
         var mainFile = null;

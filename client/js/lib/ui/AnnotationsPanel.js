@@ -1,8 +1,136 @@
 'use strict';
 
 var Constants = require('Constants');
+var PubSub = require('PubSub');
 var async = require('async');
 var _ = require('util/util');
+var UIUtil = require('ui/UIUtil');
+
+var DatConfigControls = require('ui/DatConfigControls');
+const VECTOR_DELIM = ',';
+
+class CoordinateInput extends DatConfigControls {
+  constructor(container, x, y, z, allowClear=true, presetToPosition = null) {
+    super({
+      container: container,
+      options: [
+        { name: 'x', min: x.min, max: x.max, step: x.step, defaultValue: x.value, onChange: () => this.__notifyChange() },
+        { name: 'y', min: y.min, max: y.max, step: y.step, defaultValue: y.value, onChange: () => this.__notifyChange() },
+        { name: 'z', min: z.min, max: z.max, step: z.step, defaultValue: z.value, onChange: () => this.__notifyChange() }
+      ],
+      autoUpdate: true
+    });
+    var scope = this;
+    if (presetToPosition) {
+      var presets = ['custom'];
+      _.each(presetToPosition, (pos, preset) => {
+        presets.push(preset);
+      });
+      this.config.preset = 'custom';
+      this.presetToPosition = presetToPosition;
+      var presetProps = {
+        get preset() {
+          return scope.config.preset;
+        },
+        set preset(v) {
+          scope.config.preset = v;
+          var p = scope.presetToPosition[v];
+          if (p) {
+            scope.setCoordinates(p);
+            scope.__notifyChange();
+          }
+        }
+      };
+      this.datgui.add(presetProps, 'preset', presets).name('').listen();
+    }
+    if (allowClear) {
+      this.datgui.add({
+        clear: function() {
+          scope.clearCoordinates();
+          scope.__notifyChange();
+        }
+      }, 'clear');
+    }
+    this.__tmpVector = new THREE.Vector3();
+  }
+
+  onChange(fn) {
+    this.__onChange = fn;
+  }
+
+  __notifyChange() {
+    if (this.config.preset != null) {
+      var p = this.presetToPosition[this.config.preset];
+      if (p && (p.x != this.config.x || p.y != this.config.y || p.z != this.config.z)) {
+        this.config.preset = 'custom';
+      }
+    }
+    if (this.__onChange) {
+      this.__onChange(this.getCoordinates());
+    }
+  }
+
+  clearCoordinates() {
+    this.config.x = null;
+    this.config.y = null;
+    this.config.z = null;
+  }
+
+  getCoordinates() {
+    if (this.config.x == null || this.config.y == null || this.config.z == null) {
+      return null;
+    } else {
+      this.__tmpVector.set(this.config.x, this.config.y, this.config.z);
+      return this.__tmpVector;
+    }
+  }
+
+  setCoordinates(v) {
+    this.config.x = v.x;
+    this.config.y = v.y;
+    this.config.z = v.z;
+  }
+
+}
+
+class RelCoordinateInput extends CoordinateInput {
+  constructor(container, x0=0, y0=0, z0=0, allowClear=true) {
+    // Add default top, bottom, left, right, front, back
+    var Object3DUtil = require('geo/Object3DUtil');
+    var presetToPosition = {};
+    _.each(Constants.BBoxFaces, function(i, name) {
+      const preset = name.toLowerCase();
+      presetToPosition[preset] = Object3DUtil.FaceCenters01[i];
+    });
+    super(container,
+      { min: 0, max: 1, step: 0.01, value: x0 },
+      { min: 0, max: 1, step: 0.01, value: y0 },
+      { min: 0, max: 1, step: 0.01, value: z0 },
+      allowClear, presetToPosition);
+    this.__worldVector = new THREE.Vector3();
+  }
+
+  setBBox(bbox) {
+    this.bbox = bbox;
+  }
+
+  toWorldCoordinates() {
+    var v = this.getCoordinates();
+    if (v) {
+      this.bbox.getWorldPosition(v, this.__worldVector);
+      return this.__worldVector;
+    } else {
+      return null;
+    }
+  }
+
+  fromWorldCoordinates(w) {
+    this.__worldVector.copy(w);
+    this.bbox.getLocalPosition(this.__worldVector, this.__tmpVector);
+    this.setCoordinates(this.__tmpVector);
+    return this.__tmpVector;
+  }
+}
 
 /**
  * Create a small panel for annotation fields
@@ -12,13 +140,23 @@ var _ = require('util/util');
  * @param params.attributeLinks {Map<string,LinkInfo>} Map of attribute name to linkage properties
  * @param params.attributeInfos {Map<string,Object>} Map of attribute name to custom attribute info
  * @param params.attributesReadOnly {string[]} List of readonly attributes
- * @param params.hideEmptyFields {boolean} Whether to hide empty fields or not
+ * @param params.hideEmptyFields {boolean} Whether to hide empty read-only fields or not
  * @param params.searchController {search.SearchController} Search controller for looking up field information
+ * @param [params.allowEnabledSelection] {boolean} Allow selection of which fields to enable to submit
+ * @param [params.allowOpSelection] {boolean} Allow selection of operation for multivalue fields
+ * @param [params.allowUpdateByQuery] {boolean} Allow updating of annotations by query
+ * @param [params.getQuery] {function} {Callback function returning the query to use when submitting}
+ * @param [params.enabledAttributes] {string[]} List of enabled attributes (defaults to all editable attributes)
+ * @param [params.submitAnnotationsUrl] {string} Url to use for posting model annotations
+ * @param [params.onSubmittedCallback] {function()} Callback for when annotations are submitted
+ * @param [params.onActivateSelectPoint] {function()} Callback for when we want to select a point
+ * @param [params.cancelActivateSelectPoint] {function()} Callback for when select point is canceled
  * @memberOf ui
  * @constructor
  */
 function AnnotationsPanel(params) {
-  // Where to submit annotaiton
+  PubSub.call(this);
+  // Where to submit annotation
   this.submitAnnotationsUrl = params.submitAnnotationsUrl || (Constants.baseUrl + '/submitModelAnnotations');
 
   // Panel
@@ -38,6 +176,10 @@ function AnnotationsPanel(params) {
 
   // Application callback indicating annotations submitted
   this.onSubmittedCallback = params.onSubmittedCallback;
+
+  // Application callback indicating that point selection is activated
+  this.onActivateSelectPoint = params.onActivateSelectPoint;
+  this.cancelActivateSelectPoint = params.cancelActivateSelectPoint;
 
   // Attributes that we will consider displaying (filtered to displayAttributes)
   this.__displayableAttributes = [].concat(this.attributes);
@@ -62,6 +204,17 @@ function AnnotationsPanel(params) {
   this.linkedAttributes = [];
   // List of all attribute names
   this.allAttributes = [];
+  // List of enabled submittable attributes
+  this.enabledDisplayAttributes = params.enabledAttributes;
+  // Allow for selecting of enabled submittable attributes
+  this.allowEnabledSelection = params.allowEnabledSelection;
+  // Allow for selecting of operation to use for multivalue fields
+  // TODO: Fix this for linked fields such as wnsynset (does not really work correctly)
+  this.allowOpSelection = params.allowOpSelection;
+  // Whether to allow update of annotations using query
+  this.allowUpdateByQuery = params.allowUpdateByQuery && params.getQuery;
+  this.getQuery = params.getQuery;
+  this.__updateBy = null;
 
   // Target specific fields
   // Model instance to annotate
@@ -70,8 +223,17 @@ function AnnotationsPanel(params) {
   // Annotations on the model instance
   this.annotations = {};
 
+  this.__relCoordInputs = [];
+  this.__panelId = 'annotationsPanel_' + _.generateRandomId();
   this.init();
 }
+
+AnnotationsPanel.prototype = Object.create(PubSub.prototype);
+AnnotationsPanel.prototype.constructor = AnnotationsPanel;
+
+Object.defineProperty(AnnotationsPanel.prototype, 'useQuery', {
+  get: function () { return this.allowUpdateByQuery && (this.__updateBy === 'queried_all' || this.__updateBy === 'queried_page'); }
+});
 
 AnnotationsPanel.prototype.init = function () {
   // Hook up clear button
@@ -95,8 +257,9 @@ AnnotationsPanel.prototype.init = function () {
 /**
  * Set the specified model instance as target for annotation
  * @param target {model.ModelInstance|model.ModelInstance[]}
+ * @param keepNewAnnotations {boolean} Whether to keep new annotations from this session
  */
-AnnotationsPanel.prototype.setTarget = function(target, keepNewAnnotations) {
+AnnotationsPanel.prototype.setTarget = function(target, keepNewAnnotations, targetWorldBBox) {
   var scope = this;
   var modelInfo = {};
   if (Array.isArray(target)) {
@@ -107,6 +270,7 @@ AnnotationsPanel.prototype.setTarget = function(target, keepNewAnnotations) {
   }
   this.target = target;
   this.targetIds = modelInfo.fullId;
+  this.updateTargetWorldBBox(targetWorldBBox);
 
   // Get linked attributes
   scope.__setAnnotationsFromModelInfo(modelInfo, keepNewAnnotations);
@@ -122,6 +286,13 @@ AnnotationsPanel.prototype.setTarget = function(target, keepNewAnnotations) {
     }, function (err) {
       scope.__setAnnotationsFromModelInfo(modelInfo, keepNewAnnotations);
     });
+  }
+};
+
+AnnotationsPanel.prototype.updateTargetWorldBBox = function(bbox) {
+  this.targetWorldBBox = bbox;
+  for (var i = 0; i < this.__relCoordInputs.length; i++) {
+    this.__relCoordInputs[i].setBBox(bbox);
   }
 };
 
@@ -182,7 +353,6 @@ AnnotationsPanel.prototype.__setAnnotationsFromModelInfo = function (modelInfo, 
       } else {
         this.showAttribute(name, field, undefined, 'noedit');
         if (this.hideEmptyFields) {
-          var field = this.attributesMap[name];
           field.div.hide();
         }
       }
@@ -264,6 +434,7 @@ AnnotationsPanel.prototype.__computeFieldDelta = function (field) {
 
 
 AnnotationsPanel.prototype.setAnnotation = function (fieldName, value, keepNewAnnotations) {
+  //console.log('setAnnotation', fieldName, value);
   if (!keepNewAnnotations || this.annotations['new'][fieldName] == undefined) {
     if (_.isArray(value)) {
       this.annotations['new'][fieldName] = [].concat(value);  // Make copy of array
@@ -278,6 +449,48 @@ AnnotationsPanel.prototype.setAnnotation = function (fieldName, value, keepNewAn
     this.annotations.update[fieldName] = update;
     // Update the UI
     this.showAttribute(fieldName, field, value, update);
+    this.Publish('FieldUpdated', field, this.getAnnotation(fieldName));
+  }
+};
+
+AnnotationsPanel.prototype.getRawAnnotation = function(fieldName) {
+  return this.annotations['new'][fieldName];
+};
+
+function convertValue(type, str) {
+  if (str == null) return str;
+  if (typeof str !== 'string') return str;
+  str = str.trim();
+  if (type === 'vector3') {
+    if (str.length === 0) return null;
+    return str.split(VECTOR_DELIM).map(x => parseFloat(x.trim()));
+  } else if (type === 'int') {
+    if (str.length === 0) return null;
+    return parseInt(str);
+  } else if (type === 'double' || type === 'float') {
+    if (str.length === 0) return null;
+    return parseFloat(str);
+  } else {
+    return str;
+  }
+}
+
+function convertFieldValue(field, value) {
+  if (value == null) { return value; }
+  if (field.multiValued) {
+    return Array.isArray(value)? value : value.split(',').map(x => convertValue(field.type, x));
+  } else {
+    return convertValue(field.type, value);
+  }
+}
+
+AnnotationsPanel.prototype.getAnnotation = function(fieldName) {
+  var v = this.getRawAnnotation(fieldName);
+  if (v != null) {
+    var field = this.attributesMap[fieldName];
+    return convertFieldValue(field, v);
+  } else {
+    return v;
   }
 };
 
@@ -325,6 +538,14 @@ AnnotationsPanel.prototype.addLinkedAnnotation = function (fieldName, rawValue, 
     //console.log('add linked annotation', linked);
     var fieldValue = linked.record[fieldName];
     this.addAnnotation(fieldName, fieldValue);
+  }
+};
+
+AnnotationsPanel.prototype.setLinkedAnnotation = function (fieldName, rawValue, linked) {
+  if (linked) {
+    //console.log('add linked annotation', linked);
+    var fieldValue = linked.record[fieldName];
+    this.setAnnotation(fieldName, fieldValue);
   }
 };
 
@@ -377,7 +598,68 @@ AnnotationsPanel.prototype.__createLabel = function (attrname, attrvalue, update
   return label;
 };
 
+AnnotationsPanel.prototype.getSelectEnabledSelector = function() {
+  return '#' + this.__panelId + '_selectEnabled';
+};
+
+AnnotationsPanel.prototype.__createSelectEnabled = function() {
+  var enabledSelectElem = $('<select multiple></select>');
+  enabledSelectElem.attr('id', this.__panelId + '_selectEnabled');
+  var options = this.displayAttributes.filter(name => {
+    var field = this.attributesMap[name];
+    return field.isSubmittable;
+  });
+  for (var i = 0; i < options.length; i++) {
+    var s = options[i];
+    var field = this.attributesMap[s];
+    enabledSelectElem.append('<option value="' + s + '" ' + (field.enabled? 'selected':'') + '>' + s + '</option>');
+  }
+  var scope = this;
+  enabledSelectElem.change(function () {
+    enabledSelectElem.find('option').each(function () {
+      //console.log($(this).val(), $(this).prop('selected'));
+      scope.setEnabled($(this).val(), $(this).prop('selected'));
+    });
+  });
+  return enabledSelectElem;
+};
+
+AnnotationsPanel.prototype.__createQueryElem = function() {
+  var scope = this;
+  var fieldUi = $('<div></div>').attr('id', 'annoquery_ui').attr('class','annotation');
+  var select = UIUtil.createSelect({
+    id: 'annoquery',
+    text: 'Update',
+    change: function(v) { scope.__updateBy = v; },
+    options: [
+      { value: 'selected', text: 'selected' },
+      { value: 'queried_page', text: 'queried (page)' },
+      { value: 'queried_all', text: 'queried (all)' }
+    ]
+  });
+  fieldUi.append(select.label).append('&nbsp;').append(select.select);
+  // var select = UIUtil.createSelect([
+  //     { value: 'selected', text: 'Update selected' },
+  //     { value: 'queried', text: 'Update all queried' }
+  //   ]);
+  // fieldUi.append(select);
+  // var textbox = UIUtil.createTextbox({
+  //   id: 'annoquery',
+  //   text: 'Query'
+  // });
+  // fieldUi.append(textbox.label).append('&nbsp;').append(textbox.textbox);
+  return fieldUi;
+};
+
 AnnotationsPanel.prototype.initPanel = function () {
+  if (this.allowUpdateByQuery) {
+    var queryElem = this.__createQueryElem();
+    this.container.append(queryElem);
+  }
+  if (this.allowEnabledSelection) {
+    var enabledSelectElem = this.__createSelectEnabled();
+    this.container.append(enabledSelectElem);
+  }
   for (var i = 0; i < this.displayAttributes.length; i++) {
     var name = this.displayAttributes[i];
     var field = this.attributesMap[name];
@@ -385,6 +667,95 @@ AnnotationsPanel.prototype.initPanel = function () {
       var fieldUi = this.__createAnnotationField(field);
       this.container.append(fieldUi);
     }
+  }
+};
+
+AnnotationsPanel.prototype.__updateFieldValue = function(field, fieldValue, isAdd) {
+  var fieldName = field.name;
+  if (!fieldValue.length && isAdd) {
+    // Ignore
+    return;
+  }
+  if (field.linker) {
+    var scope = this;
+    field.linker.linkLabel(fieldValue, function(err, linked) {
+      if (linked) {
+        if (isAdd) {
+          scope.addLinkedAnnotation(fieldName, fieldValue, linked);
+        } else {
+          scope.setLinkedAnnotation(fieldName, fieldValue, linked);
+        }
+      }
+    });
+  } else {
+    if (isAdd) {
+      this.addAnnotation(fieldName, fieldValue);
+    } else {
+      this.setAnnotation(fieldName, fieldValue);
+    }
+  }
+};
+
+AnnotationsPanel.prototype.__updateVector3AnnotationField = function(field, fieldUi, fieldInput) {
+  // Add button to initiate clicking on canvas to select a point
+  fieldInput.attr('disabled', true);
+
+  var allowEdit = !field.isReadOnly;
+  if (allowEdit) {
+    var scope = this;
+    var editButton = $('<button class="btn btn-default btn-xs"><i class="glyphicon glyphicon-pencil"></i></button>');
+    fieldUi.append(editButton);
+    var showButton = UIUtil.createGlyphShowHideButton(field, function(v) {
+      scope.Publish('ToggleVisibility', field, v);
+    }, 'isVisible');
+    fieldUi.append(showButton);
+    var relCoords = new RelCoordinateInput(fieldUi);
+    relCoords.onChange(function() {
+      var wCoords = relCoords.toWorldCoordinates();
+      if (wCoords) {
+        var localCoords = scope.target[0].worldToModel(wCoords);
+        var fieldValue = localCoords.toArray().join(VECTOR_DELIM);
+        scope.__updateFieldValue(field, fieldValue, false);
+      } else {
+        scope.__updateFieldValue(field, '', false);
+      }
+    });
+    relCoords.hide();
+    this.__relCoordInputs.push(relCoords);
+
+    field.isEditing = false;
+    editButton.click(function () {
+      field.isEditing = !field.isEditing;
+      if (field.isEditing) {
+        // Start editing
+        showButton.prop('disabled', true);
+        relCoords.show();
+        relCoords.open();
+        if (scope.onActivateSelectPoint) {
+          if (!field.isVisible) {
+            showButton.click();
+          }
+          scope.onActivateSelectPoint(function (err, event) {
+            // console.log('point selected', event);
+            if (event) {
+              relCoords.fromWorldCoordinates(event.world);
+              var fieldValue = event.local.toArray().join(',');
+              fieldInput.val(fieldValue);
+              scope.__updateFieldValue(field, fieldValue, false);
+            } else {
+              relCoords.hide();
+            }
+          }, false);
+        }
+      } else {
+        // Stop editing
+        showButton.prop('disabled', false);
+        relCoords.hide();
+        if (scope.cancelActivateSelectPoint) {
+          scope.cancelActivateSelectPoint();
+        }
+      }
+    });
   }
 };
 
@@ -400,7 +771,11 @@ AnnotationsPanel.prototype.__createAnnotationField = function(field) {
     inputType = 'number';
   }
   if (field.isReadOnly) {
+    // Readonly field
     var fieldLabel = $('<label></label>').text(fieldName).addClass('readonly');
+    if (field.description) {
+      fieldLabel.attr('title', field.description);
+    }
     fieldUi.append(fieldLabel);
     fieldUi.append('&nbsp;');
     if (multiValued) {
@@ -414,8 +789,12 @@ AnnotationsPanel.prototype.__createAnnotationField = function(field) {
       fieldUi.append(fieldInput);
     }
   } else {
+    // Editable field
     var fieldInput = $('<input/>').attr('id', 'anno_' + fieldName).attr('type', inputType);
     var fieldLabel = $('<label></label>').attr('for', 'anno_' + fieldName).text(fieldName);
+    if (field.description) {
+      fieldLabel.attr('title', field.description);
+    }
     var attrsToSet = ['placeholder'];
     if (inputType === 'number') {
       attrsToSet = attrsToSet.concat(['min', 'max', 'step']);
@@ -430,35 +809,45 @@ AnnotationsPanel.prototype.__createAnnotationField = function(field) {
     fieldUi.append(fieldLabel);
     fieldUi.append('&nbsp;');
     if (multiValued) {
+      // TODO: Update to handle vector3
+      // Multivalued
       var fieldValues = $('<span></span>').attr('id', 'annolist_' + fieldName);
       fieldUi.append(fieldValues);
       fieldUi.append(fieldInput);
-      // TODO: Make into add icon
-      addButton = $('<input/>').attr('type', 'button').attr('value', 'Add');
+      // addButton = $('<input/>').attr('type', 'button').attr('value', 'Add');
+      addButton = $('<button class="btn btn-default btn-xs"><i class="glyphicon glyphicon-plus"></i></button>');
       addButton.click(function () {
         var fieldValue = fieldInput.val().trim();
-        if (fieldValue.length) {
-          if (field.linker) {
-            field.linker.linkLabel(fieldValue, function(err, linked) {
-              if (linked) {
-                scope.addLinkedAnnotation(fieldName, fieldValue, linked);
-              }
-            });
-          } else {
-            scope.addAnnotation(fieldName, fieldValue);
-          }
-        }
+        scope.__updateFieldValue(field, fieldValue, true);
       });
       fieldUi.append(addButton);
+      if (this.allowOpSelection) {
+        var selectElem = $('<select></select>');
+        var options = ['set', 'add', 'remove'];
+        var op = 'set';
+        for (var j = 0; j < options.length; j++) {
+          var s = options[j];
+          selectElem.append('<option value="' + s + '" ' + (s === op? 'selected':'') + '>' + s + '</option>');
+        }
+        field.op = op;
+        selectElem.change(function() {
+          field.op = selectElem.val();
+        });
+        fieldUi.append(selectElem);
+      }
     } else {
+      // Single value
       fieldInput.change(function () {
         if (field.type === 'boolean') {
           scope.setAnnotation(fieldName, fieldInput.prop('checked'));
         } else {
-          scope.setAnnotation(fieldName, fieldInput.val());
+          scope.__updateFieldValue(field, fieldInput.val().trim(), false);
         }
       });
       fieldUi.append(fieldInput);
+    }
+    if (field.type === 'vector3') {
+      this.__updateVector3AnnotationField(field, fieldUi, fieldInput);
     }
     if (field.type !== 'boolean') {
       //So that typing into the textbox doesn't trigger other keyboard shortcuts:
@@ -469,6 +858,18 @@ AnnotationsPanel.prototype.__createAnnotationField = function(field) {
           return false;
         }
       });
+    }
+    // if (scope.allowEnabledSelection) {
+    //   // TODO: Make into x icon
+    //   var disableButton = $('<input/>').attr('type', 'button').attr('value', 'Hide');
+    //   disableButton.click(function() {
+    //     $(scope.getSelectEnabledSelector()).find('option[value="' + fieldName + '"]').attr("selected", null);
+    //     scope.setEnabled(fieldName, false);
+    //   });
+    //   fieldUi.append(disableButton);
+    // }
+    if (!field.enabled) {
+      fieldUi.hide();
     }
   }
   field.div = fieldUi;
@@ -497,6 +898,15 @@ AnnotationsPanel.prototype.saveNew = function () {
   this.reset();
 };
 
+function forAttributes(attributeMap, names, cb) {
+  names.forEach(name => {
+    var field = attributeMap[name];
+    if (field) {
+      cb(field);
+    }
+  });
+}
+
 /**
  * Lookup attribute fields and populate our ui panel
  * @private
@@ -506,10 +916,11 @@ AnnotationsPanel.prototype.lookupAttributeFields = function () {
     if (err) {
       console.error('Error looking up fields', err);
     } else if (data && data.fields) {
-      var map = {};
+      // Populate attributes map
+      var attributesMap = {};
       for (var i = 0; i < data.fields.length; i++) {
         var field = data.fields[i];
-        map[field.name] = field;
+        attributesMap[field.name] = field;
         if (this.attributeInfos) {
           var info = this.attributeInfos[field.name];
           if (info) {
@@ -517,21 +928,12 @@ AnnotationsPanel.prototype.lookupAttributeFields = function () {
           }
         }
       }
-      this.attributesMap = map;
-      this.displayAttributes = _.filter(this.__displayableAttributes, function(name) { return map.hasOwnProperty(name); });
+      this.attributesMap = attributesMap;
+      this.displayAttributes = _.filter(this.__displayableAttributes,
+        function(name) { return attributesMap.hasOwnProperty(name); });
       // Populate all attributes and isReadOnly flag
-      for (var i = 0; i < this.attributes.length; i++) {
-        var name = this.attributes[i];
-        if (this.attributesMap.hasOwnProperty(name)) {
-          this.attributesMap[name].isReadOnly = false;
-        }
-      }
-      for (var i = 0; i < this.attributesReadOnly.length; i++) {
-        var name = this.attributesReadOnly[i];
-        if (this.attributesMap.hasOwnProperty(name)) {
-          this.attributesMap[name].isReadOnly = true;
-        }
-      }
+      forAttributes(this.attributesMap, this.attributes, field => { field.isReadOnly = false; });
+      forAttributes(this.attributesMap, this.attributesReadOnly, field => { field.isReadOnly = true; });
       this.linkedAttributes = [];
       this.allAttributes = [].concat(this.displayAttributes);
       if (this.attributeLinks) {
@@ -555,16 +957,62 @@ AnnotationsPanel.prototype.lookupAttributeFields = function () {
                 }
               }
             } else {
-              console.error('Unknown field to link: ' + field);
+              console.error('Unknown field to link: ' + name);
             }
           }
         }
       }
-
+      forAttributes(this.attributesMap, this.submittableAttributes, field => { field.isSubmittable = true; });
+      forAttributes(this.attributesMap, this.displayAttributes, field => { field.isDisplayable = true; });
+      if (this.enabledDisplayAttributes) {
+        forAttributes(this.attributesMap, this.enabledDisplayAttributes, field => {
+          this.setFieldProperty(field, 'enabled', true, true);
+        });
+      } else {
+        forAttributes(this.attributesMap, this.submittableAttributes, field => { field.enabled = true; });
+      }
+      this.enabledDisplayAttributes = this.displayAttributes.filter(name => {
+        return attributesMap[name].enabled;
+      });
       this.initPanel();
     }
   }.bind(this);
   this.searchController.lookupFields(Constants.models3dFieldsUrl, saveFieldsCallback);
+};
+
+AnnotationsPanel.prototype.setFieldProperty = function(field, name, value, includeLinked) {
+  field[name] = value;
+  if (includeLinked && field.linker && field.linker.linkedFields) {
+    for (var i = 0; i < field.linker.linkedFields.length; i++) {
+      var f = field.linker.linkedFields[i];
+      var linkedField = this.attributesMap[f];
+      if (linkedField) {
+        linkedField[name] = value;
+      } else {
+        console.error('Unknown linked field to set: ' + f);
+      }
+    }
+  }
+};
+
+AnnotationsPanel.prototype.setEnabled = function(fieldname, flag) {
+  // Make a submittable field enabled or not
+  var field = this.attributesMap[fieldname];
+  if (field) {
+    this.setFieldProperty(field, 'enabled', flag, true);
+    if (field.enabled) {
+      // Show this field
+      field.div.show();
+    } else {
+      // Hide this field
+      field.div.hide();
+    }
+    this.enabledDisplayAttributes = this.displayAttributes.filter(name => {
+      return this.attributesMap[name].enabled;
+    });
+  } else {
+    console.error('Unknown field to set: ' + fieldname);
+  }
 };
 
 AnnotationsPanel.prototype.clear = function () {
@@ -609,6 +1057,7 @@ AnnotationsPanel.prototype.__updateLinked = function() {
       for (var k = 0; k < linkedFields.length; k++) {
         var name = linkedFields[k];
         var lf = this.attributesMap[name];
+        lf.op = field.op;
         this.annotations['update'][name] = this.__computeFieldDelta(lf);
       }
     }
@@ -616,29 +1065,74 @@ AnnotationsPanel.prototype.__updateLinked = function() {
 };
 
 AnnotationsPanel.prototype.preview = function () {
-  this.__updateLinked();
-  console.log(this.targetIds, this.annotations);
+  //this.__updateLinked();
+  //console.log(this.targetIds, this.annotations);
+  var submitInfo = this.__checkSubmitOkay();
+  var submitData = this.__getSubmitData(submitInfo);
+  console.log(submitData);
 };
 
-AnnotationsPanel.prototype.submit = function () {
-  this.__updateLinked();
-  var modelId = this.targetIds;
-  if (modelId == undefined) {
-    return;
+AnnotationsPanel.prototype.__checkSubmitOkay = function() {
+  var modelId;
+  var query;
+  if (this.useQuery) {
+    query = this.getQuery();
+    if (query == undefined) {
+      UIUtil.showAlert('Please enter a query', 'alert-warning');
+      return;
+    }
+    if (this.__updateBy === 'queried_all') {
+      query.start = 0;
+      query.rows = "all";
+    }
+  } else {
+    modelId = this.targetIds;
+    if (modelId == undefined || modelId.length === 0) {
+      UIUtil.showAlert('Please select some models to annotate', 'alert-warning');
+      return;
+    }
   }
+  return { modelId: modelId, query: query };
+};
+
+AnnotationsPanel.prototype.__getSubmitData = function(submitInfo) {
+  this.__updateLinked();
   var params = {
-    modelId: modelId,
+    modelId: submitInfo.modelId,
+    query: submitInfo.query,
     // userId: (window.globals)? window.globals.userId : "unknown",
     updateMain: Constants.submitUpdateMain
   };
+  var operation = {};
   var newAnno = this.annotations['new'];
   for (var i = 0; i < this.submittableAttributes.length; i++) {
     var name = this.submittableAttributes[i];
-    if (newAnno.hasOwnProperty(name) && newAnno[name] !== undefined) {
-      params[name] = newAnno[name];
+    var field = this.attributesMap[name];
+    if (field) {
+      if (field.enabled && newAnno.hasOwnProperty(name) && newAnno[name] !== undefined) {
+        params[name] = newAnno[name]; //convertFieldValue(field ,newAnno[name]);
+        if (field.op != null) {
+          operation[name] = field.op;
+        }
+      }
+    } else {
+      console.warn('Unknown field "' + name + '"');
     }
   }
-  var data = params;
+  if (this.allowOpSelection) {
+    params.operation = operation;
+  }
+  return params;
+};
+
+AnnotationsPanel.prototype.__submit = function (data) {
+  var submitInfo = null;
+  if (data.modelId != null) {
+    submitInfo = 'model ' + data.modelId;
+  } else {
+    submitInfo = 'query ' + data.query;
+  }
+  console.log('submitting', data);
   var inputs = this.submitButtons;
   inputs.prop('disabled', true);
   $.ajax({
@@ -647,7 +1141,8 @@ AnnotationsPanel.prototype.submit = function () {
     contentType: 'application/json;charset=utf-8',
     data: JSON.stringify(data),
     success: function (response, textStatus, jqXHR) {
-      console.log('Annotations successfully submitted for ' + modelId + '!!!');
+      UIUtil.showAlert('Annotations successfully submitted for', 'alert-success');
+      console.log('Annotations successfully submitted for ' + submitInfo + '!!!');
       this.saveNew();
       // Callback
       if (this.onSubmittedCallback) {
@@ -655,13 +1150,37 @@ AnnotationsPanel.prototype.submit = function () {
       }
     }.bind(this),
     error: function (jqXHR, textStatus, errorThrown) {
-      console.error('Error submitting annotations for '  + modelId + '!!!');
+      UIUtil.showAlert('Error submitting annotations', 'alert-danger');
+      console.error('Error submitting annotations for '  + submitInfo + '!!!');
     },
     complete: function () {
       // Re-enable inputs
       inputs.prop('disabled', false);
     }
   });
+};
+
+AnnotationsPanel.prototype.submit = function() {
+  var submitInfo = this.__checkSubmitOkay();
+  if (!submitInfo) {
+    // Abort - some issues (assumes __checkSubmitOkay() will have some alerts)
+    return;
+  }
+  var data = this.__getSubmitData(submitInfo);
+  if (_.keys(data).length === 2) {
+    UIUtil.showAlert('Nothing to submit', 'alert-warning');
+    return;
+  }
+  if (submitInfo.query != null) {
+    bootbox.confirm('Are you sure you want to submit annotations for query ' + JSON.stringify(submitInfo.query),
+      (result) => {
+        if (result) {
+          this.__submit(data);
+        }
+      });
+  } else {
+    this.__submit(data);
+  }
 };
 
 AnnotationsPanel.prototype.__createLinker = function(linkField, linkerInfo) {

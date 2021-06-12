@@ -3,7 +3,7 @@
  */
 'use strict';
 
-var Constants = require('Constants');
+var MatrixUtil = require('math/MatrixUtil');
 var Object3DUtil = require('geo/Object3DUtil');
 var _ = require('util/util');
 
@@ -18,8 +18,12 @@ Camera.prototype.constructor = Camera;
 // extrinsics is 4x4 transformation matrix taking camera coordinates to world.
 // Camera axes are +x=right, +y=up, -z=view
 // intrinsics are given as: { width, height, fx, fy, cx, cy }
-Camera.prototype.initFromExtrinsicsIntrinsics = function (extrMatrix, intr) {
+Camera.prototype.initFromExtrinsicsIntrinsics = function (extrMatrix, intr, extrCamDir) {
   this.matrix.copy(extrMatrix);
+  if (extrCamDir) {
+    var mat = MatrixUtil.getAlignmentMatrixSingle(new THREE.Vector3(0,0,-1), extrCamDir);
+    this.matrix.multiply(mat);
+  }
   this.matrix.decompose(this.position, this.quaternion, this.scale);
   if (intr) {
     this.fov = 2 * Math.atan(intr.height / (2 * intr.fy)) * (180 / Math.PI);
@@ -58,14 +62,14 @@ Camera.prototype.initFromGapsString = function (str, aspect) {
   var target = this.position.clone();
   target.add(towards);
   this.lookAt(target);
-  this.fov = THREE.Math.radToDeg(yf) * 2;  // set vertical fov and ignore horizontal fov
+  this.fov = THREE.MathUtils.radToDeg(yf) * 2;  // set vertical fov and ignore horizontal fov
   this.value = v;
   this.aspect = aspect;
 
   this.updateProjectionMatrix();
 };
 
-Camera.prototype.applyTransform = (function () {
+THREE.Camera.prototype.applyTransform = (function () {
   var normalMatrix = new THREE.Matrix3();
   var rot = new THREE.Matrix4();
   var q = new THREE.Quaternion();
@@ -116,7 +120,7 @@ Camera.fromJson = function(json, width, height) {
       camera = new THREE.PerspectiveCamera(json.fov, aspect, json.near, json.far);
       break;
   }
-  if (json.type === 'equirectangular' || json.type === "equirectangularCamera" || json.isEquirectangular) {
+  if (json.type === 'equirectangular' || json.type === 'equirectangularCamera' || json.isEquirectangular) {
     camera.isEquirectangular = true;
   }
   var updateProjectMatrixNeeded = false;
@@ -127,12 +131,22 @@ Camera.fromJson = function(json, width, height) {
   if (json.target) {
     camera.lookAt(Object3DUtil.toVector3(json.target));
     updateProjectMatrixNeeded = true;
+  } else if (json.lookat) {
+    camera.lookAt(Object3DUtil.toVector3(json.lookat));
+    updateProjectMatrixNeeded = true;
   }
   camera.updateMatrix();
   if (updateProjectMatrixNeeded/*&& json.type !== 'direct'*/) {
     camera.updateProjectionMatrix();
   }
+  if (json.name != null) {
+    camera.name = json.name;
+  }
   return camera;
+};
+
+Camera.prototype.setView = function(options) {
+  Camera.setView(this, options);
 };
 
 Camera.setView = function(camera, options) {
@@ -141,6 +155,11 @@ Camera.setView = function(camera, options) {
   var position = Object3DUtil.toVector3(options.position);    // Camera position
   var up = Object3DUtil.toVector3(options.up);  // Up direction
   var lookatUp = Object3DUtil.toVector3(options.lookatUp) || up;  // Up to use for looking at target
+
+  if (!target && options.direction) {
+    target = Object3DUtil.toVector3(options.direction);        // Direction to look at
+    target.add(position);
+  }
 
   // Set up to use for lookAt
   var cameraUp = up || camera.up.clone();

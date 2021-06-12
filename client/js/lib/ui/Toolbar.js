@@ -1,8 +1,5 @@
 'use strict';
 
-define([],
-function(){
-
 /**
  * Simple Toolbar
  * Toolbar buttons states:
@@ -182,6 +179,4 @@ Toolbar.prototype.applyOptions = function(options)
 
 
 // Exports
-return Toolbar;
-	
-});
+module.exports = Toolbar;

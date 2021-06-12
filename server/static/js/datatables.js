@@ -141,6 +141,16 @@ function createLink(element, url, target) {
   return link;
 }
 
+function filterParams(params, filter) {
+  var filtered = {};
+  _.each(params, function(v,k) {
+    if (filter(v,k)) {
+      filtered[k] = v;
+    }
+  });
+  return filtered;
+}
+
 function getFilterLink(url, params, defaultParams) {
   params = _.defaults(Object.create(null), params, defaultParams);
   return url + '?' + $.param(params);

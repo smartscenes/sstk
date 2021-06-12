@@ -230,7 +230,7 @@ HouseViewer.prototype.loadAnnotations = function(file, fileType) {
 
   //var assetLoader = new AssetLoader();
   //var filename = (typeof file === 'string')? file : file.name;
-  var HouseLoader = require('loaders/HouseLoader');
+  var HouseLoader = require('loaders/HouseTxtLoader');
   var houseLoader = new HouseLoader({ fs: require('io/FileUtil') });
   houseLoader.load(file, function(err, house) {
     house.name = info.id;

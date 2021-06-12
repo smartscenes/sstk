@@ -1,0 +1,15 @@
+{
+	"view": {
+		"cameraPositionStrategy": "positionToFit",
+		"viewIndex": 4
+	},
+	"camera": {
+		"type": "perspective",
+		"far": 1000000000
+	},
+	"assetInfo": {
+		"format": "arch",
+		"assetType": "arch",
+		"includeCeiling": false
+	}
+}

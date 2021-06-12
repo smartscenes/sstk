@@ -396,7 +396,7 @@ ScanAnnotator.prototype.setAnnotations = function(json) {
   var modelId = this.getTargetModelId();
   var idParts = modelId.split('.');
   if (json.fullId == undefined || json.annotations == undefined) {
-    UIUtil.showAlert(null, 'Invalid annotations file!');
+    UIUtil.showAlert('Invalid annotations file!');
   } else if (json.fullId === modelId || json.id === idParts[idParts.length-1]) {
     // Apply annotations
     var toWorld = scope.shapeEditor.matrixWorld;
@@ -410,7 +410,7 @@ ScanAnnotator.prototype.setAnnotations = function(json) {
     scope.shapeEditor.objectsNode.userData.id = idParts[idParts.length-1];
     this.regionsPanel.setRegions(scope.shapeEditor.objectsNode);
   } else {
-    UIUtil.showAlert(null, 'Annotations are not for current model.  Please load model ' + json.fullId + '.');
+    UIUtil.showAlert('Annotations are not for current model.  Please load model ' + json.fullId + '.');
     // bootbox.confirm('Annotations are not for current model. Do you want to load model ' + json.id + '?',
     //   function (result) {
     //     if (result) {
@@ -427,7 +427,7 @@ ScanAnnotator.prototype.hasAnnotations = function() {
 
 ScanAnnotator.prototype.loadAnnotations = function(file, fileType) {
   if (!file) {
-    UIUtil.showAlert(null, 'No annotations file!');
+    UIUtil.showAlert('No annotations file!');
     return;
   }
   console.log('loading ' + fileType, file);
@@ -441,7 +441,7 @@ ScanAnnotator.prototype.loadAnnotations = function(file, fileType) {
     var partType = partAssetGroup? partAssetGroup.regionName : this.defaultPartType;
     console.log('partAssetGroup', partAssetGroup);
 
-    var HouseLoader = require('loaders/HouseLoader');
+    var HouseLoader = require('loaders/HouseTxtLoader');
     var houseLoader = new HouseLoader({ fs: require('io/FileUtil') });
     houseLoader.load(file, function(err, house) {
       if (err) {
@@ -471,7 +471,7 @@ ScanAnnotator.prototype.loadAnnotations = function(file, fileType) {
       scope.setAnnotations(json);
       scope.house = null;
     }, null, function (err) {
-      UIUtil.showAlert(null, 'Error loading annotations ' + filename);
+      UIUtil.showAlert('Error loading annotations ' + filename);
       console.error('Error loading annotations ' + filename, err);
     });
   }

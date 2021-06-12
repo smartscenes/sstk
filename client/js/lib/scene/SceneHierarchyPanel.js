@@ -61,6 +61,15 @@ function SceneHierarchyPanel(params) {
   this.__nodeIdToMetadata = {};  // Make of node id to metadata
   this.__bbNodes = new THREE.Group(); // For holding our bounding box meshes
   this.__bbNodes.name = this.constructor.name + '-BoundingBoxes';
+
+  var iconBaseUrl = Constants.baseUrl + '/images/icons/';
+  this.__iconUrls = {
+    'Line': iconBaseUrl + 'line.svg',
+    'Mesh': iconBaseUrl + 'mesh.svg',
+    'Points': iconBaseUrl + 'points.svg',
+    'Camera': iconBaseUrl + 'camera.svg',
+    'Light': iconBaseUrl + 'light.svg',
+  };
   this.init();
 }
 
@@ -371,7 +380,7 @@ SceneHierarchyPanel.prototype.__createTreeNode = function(object3D, index) {
     id: shId,
     icon: false,
     parent: parentId,
-    text: object3D.name || index,
+    text: object3D.name || index.toString(),
     data: {objId: object3D.id, index: index}
   };
   var modelInstance = Object3DUtil.getModelInstance(object3D);
@@ -433,12 +442,15 @@ SceneHierarchyPanel.prototype.__createSummaryInfo = function(object3D) {
 SceneHierarchyPanel.prototype.__updateJsTreeNode = function(node) {
   if (node) {
     var object3D = this.__getObject3D(node);
-    var updatedTitle = JSON.stringify(this.__createSummaryInfo(object3D), null, ' ');
-    node.li_attr.title = updatedTitle;
+    if (object3D) {
+      var updatedTitle = JSON.stringify(this.__createSummaryInfo(object3D), null, ' ');
+      node.li_attr.title = updatedTitle;
+    }
   }
 };
 
 SceneHierarchyPanel.prototype.__addModelInfoToTreeNode = function(treeNode, modelInstance) {
+  //console.log('addModelInfoToTreeNode', modelInstance, this.useIcons, treeNode);
   if (modelInstance && modelInstance.model.info) {
     var object = modelInstance.object3D;
     var minfo = modelInstance.model.info;
@@ -457,11 +469,15 @@ SceneHierarchyPanel.prototype.__addModelInfoToTreeNode = function(treeNode, mode
     treeNode.li_attr = {
       title: JSON.stringify(info, null, ' ')
     };
-    if (this.useIcons && this.app && this.app.assetManager) {
+    if (this.useIcons && this.app && this.app.assetManager && minfo.id != null) {
       var screenshotUrl = this.app.assetManager.getImagePreviewUrl(minfo.source, minfo.id, undefined, minfo);
       if (screenshotUrl) {
         treeNode.icon = screenshotUrl;
       }
+    }
+    if (this.useIcons && !treeNode.icon) {
+      var nodeType = modelInstance.model.nodeType;
+      treeNode.icon = nodeType ? this.__iconUrls[nodeType] : null;
     }
   }
 };
@@ -471,6 +487,7 @@ SceneHierarchyPanel.prototype.__convertToTreeNodes = function(sceneState) {
   // get additional hierarchy encoded in scene structure
   // (include groups and add them as parents)
   var scope = this;
+  // TODO: Do something about object3D.userData.type === 'Part' in scene hierarchy
   sceneState.scene.traverse(function (object3D) {
     var nodeId = scope.__getTreeNodeId(object3D);
     if (nodeId != null) {
@@ -510,7 +527,7 @@ SceneHierarchyPanel.prototype.__convertModelInstancesToTreeNodes = function (sce
           id: shId,
           icon: false,
           parent: parentId,
-          text: index,
+          text: index.toString(),
           data: {objId: object.id, modelInstanceIndex: index, index: index}
         };
         child = treeNodes[index];
@@ -521,7 +538,7 @@ SceneHierarchyPanel.prototype.__convertModelInstancesToTreeNodes = function (sce
         id: shId,
         icon: false,
         parent: '#',
-        text: index,
+        text: index.toString(),
         data: { modelInstanceIndex: index, index: index }
       };
     }
@@ -552,6 +569,10 @@ SceneHierarchyPanel.prototype.__getObject3D = function(treeNode) {
       return this.sceneState.fullScene.getObjectById(objId);
     }
   }
+};
+
+SceneHierarchyPanel.prototype.__getRootObject3D = function() {
+  return this.sceneState.scene;
 };
 
 SceneHierarchyPanel.prototype.__getHilbertNumber = function(node) {
@@ -673,13 +694,24 @@ SceneHierarchyPanel.prototype.__getObjectsForNode = function(node, objects) {
   return objects;
 };
 
-SceneHierarchyPanel.prototype.__createGroup = function(name, parentObject3D) {
+SceneHierarchyPanel.prototype.__reattach3DObjects = function(treeNode, newParent, oldParent) {
+  // Reattach child to new parent (for restructuring underlying scene graph)
+  var childObject3D = this.__getObject3D(treeNode);
+  var newParentObject3D = this.__getObject3D(newParent);
+  if (childObject3D) {
+    Object3DUtil.attachToParent(childObject3D, newParentObject3D, this.__getRootObject3D());
+  } else {
+    console.log('Cannot find object3D', treeNode);
+  }
+};
+
+SceneHierarchyPanel.prototype.__createGroup3D = function(name, parentObject3D) {
   var newgroup = new THREE.Group();
   newgroup.name = name;
   newgroup.userData.type = name;
   newgroup.userData.sceneHierarchyGroup = true;
   this.sceneState.addExtraObject(newgroup);
-  Object3DUtil.attachToParent(newgroup, parentObject3D, this.sceneState.scene);
+  Object3DUtil.attachToParent(newgroup, parentObject3D, this.__getRootObject3D());
   return newgroup;
 };
 
@@ -710,9 +742,9 @@ SceneHierarchyPanel.prototype.__getFreeTreeNode = function(treeNodes, name, pare
     }
     g.name = name;
     g.userData.type = name;
-    Object3DUtil.attachToParent(g, parentObject3D, this.sceneState.scene);
+    Object3DUtil.attachToParent(g, parentObject3D, this.__getRootObject3D());
   } else {
-    var g = this.__createGroup(name, parentObject3D);
+    var g = this.__createGroup3D(name, parentObject3D);
     t = this.__addTreeNode(treeNodes, g);
   }
   t.parent = parent.id;
@@ -784,8 +816,8 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
       var order = scope.configControls.getFieldValue('sort');
       var n1 = scope.tree.jstree('get_node', id1);
       var n2 = scope.tree.jstree('get_node', id2);
-      var isFloor1 = n1.text.startsWith('Level#');
-      var isFloor2 = n2.text.startsWith('Level#');
+      var isFloor1 = (typeof(n1.text) === 'string') && n1.text.startsWith('Level#');
+      var isFloor2 = (typeof(n2.text) === 'string') && n2.text.startsWith('Level#');
       if (isFloor1 || isFloor2) {
         // Have floor nodes go before
         if (isFloor1 > isFloor2) return -1;
@@ -1073,13 +1105,7 @@ SceneHierarchyPanel.prototype.__updateSceneTree = function(treeNodes) {
       console.log('move_node', data);
       var oldParent = scope.tree.jstree('get_node', data.old_parent);
       var newParent = scope.tree.jstree('get_node', data.parent);
-      var childObject3D = scope.__getObject3D(data.node);
-      var newParentObject3D = scope.__getObject3D(newParent);
-      if (childObject3D) {
-        Object3DUtil.attachToParent(childObject3D, newParentObject3D, scope.sceneState.scene);
-      } else {
-        console.log('Cannot find object3D', data.node);
-      }
+      scope.__reattach3DObjects(data.node, newParent, oldParent);
       scope.__updateJsTreeNode(oldParent);
       scope.__updateJsTreeNode(newParent);
       scope.__fixIconSizes();
@@ -1309,12 +1335,13 @@ SceneHierarchyPanel.prototype.loadHierarchy = function(json) {
       }
       return object;
     } else {
-      var group = scope.__createGroup(node.type);
+      var group = scope.__createGroup3D(node.type);
       group.name = node.name;
       return group;
     }
   });
   // Parent
+  var rootObject3D = this.__getRootObject3D();
   var roots = [];
   for (var i = 0; i < nodes.length; i++) {
     var node = nodes[i];
@@ -1322,14 +1349,14 @@ SceneHierarchyPanel.prototype.loadHierarchy = function(json) {
     if (node.parent != undefined && node.parent >= 0) {
       var parentObj = objects[node.parent];
       //console.log('node ' + i + ', parent ' + node.parent);
-      Object3DUtil.attachToParent(obj, parentObj, this.sceneState.scene);
+      Object3DUtil.attachToParent(obj, parentObj, rootObject3D);
     } else {
       roots.push(i);
-      Object3DUtil.detachFromParent(obj, this.sceneState.scene);
+      Object3DUtil.detachFromParent(obj, rootObject3D);
     }
   }
   // clear empty groups from the scene
-  var emptyGroups = Object3DUtil.findNodes(this.sceneState.scene, function(x) {
+  var emptyGroups = Object3DUtil.findNodes(rootObject3D, function(x) {
     return (x instanceof THREE.Group) && (x.children.length === 0) && (x.userData.sceneHierarchyGroup);
   });
   //console.log('emptyGroups', emptyGroups);
@@ -1409,7 +1436,7 @@ SceneHierarchyPanel.prototype.onActivate = function() {
 
 SceneHierarchyPanel.prototype.showAlert = function(message, style) {
   console.log(message);
-  UIUtil.showAlert(this.container, message, style || 'alert-danger');
+  UIUtil.showAlertWithPanel(this.container, message, style || 'alert-danger');
 };
 
 // Exports

@@ -44,13 +44,23 @@ BBox.prototype.copy = function (bbox) {
   this.clearCache();
 };
 
-BBox.prototype.valid = function () {
+BBox.prototype.isFinite = function () {
   if (!isFinite(this.min.x)) return false;
   if (!isFinite(this.min.y)) return false;
   if (!isFinite(this.min.z)) return false;
   if (!isFinite(this.max.x)) return false;
   if (!isFinite(this.max.y)) return false;
   if (!isFinite(this.max.z)) return false;
+  return true;
+};
+
+BBox.prototype.valid = function () {
+  // if (this.min.x == undefined || !isNaN(this.min.x)) return false;
+  // if (this.min.y == undefined || !isNaN(this.min.y)) return false;
+  // if (this.min.z == undefined || !isNaN(this.min.z)) return false;
+  // if (this.max.x == undefined || !isNaN(this.max.x)) return false;
+  // if (this.max.y == undefined || !isNaN(this.max.y)) return false;
+  // if (this.max.z == undefined || !isNaN(this.max.z)) return false;
   return (this.min.x <= this.max.x) && (this.min.y <= this.max.y) && (this.min.z <= this.max.z);
 };
 
@@ -62,16 +72,28 @@ BBox.prototype.fromCenterRadius = function (cx, cy, cz, rx, ry, rz) {
   this.max.y = cy + ry;
   this.max.z = cz + rz;
   this.clearCache();
+  return this;
 };
 
 BBox.prototype.fromCenterRadiusArray = function (arr) {
   this.fromCenterRadius(arr[0], arr[1], arr[2], arr[3], arr[4], arr[5]);
+  return this;
 };
 
 BBox.prototype.includeBBox = function (bbox) {
-  this.__includePoint(bbox.min);
-  this.__includePoint(bbox.max);
+  if (bbox.valid()) {
+    this.__includePoint(bbox.min);
+    this.__includePoint(bbox.max);
+    this.clearCache();
+  }
+  return this;
+};
+
+BBox.prototype.includeOBB = function (obb) {
+  this.__includePoint(obb.min);
+  this.__includePoint(obb.max);
   this.clearCache();
+  return this;
 };
 
 BBox.prototype.includeLine = function (line, transform) {
@@ -81,6 +103,7 @@ BBox.prototype.includeLine = function (line, transform) {
     }
   );
   this.clearCache();
+  return this;
 };
 
 BBox.prototype.includeMesh = function (mesh, transform) {
@@ -101,15 +124,33 @@ BBox.prototype.includeMesh = function (mesh, transform) {
     //            console.log(mesh);
   }
   this.clearCache();
+  return this;
+};
+
+BBox.prototype.includeMeshes = function (meshes, transform) {
+  for (var i = 0; i < meshes.length; i++) {
+    var mesh = meshes[i];
+    this.includeMesh(mesh, transform);
+  }
+  this.clearCache();
+  return this;
 };
 
 BBox.prototype.includePoints = function (points, transform) {
   var scope = this;
-  GeometryUtil.forMeshVertices(points, function (v) {
-      scope.__includePoint(v, transform);
+  if (Array.isArray(points)) {
+    for (var i = 0; i < points.length; i++) {
+      scope.__includePoint(points[i], transform);
     }
-  );
+  } else if (points instanceof THREE.Points) {
+    GeometryUtil.forMeshVertices(points, function (v) {
+      scope.__includePoint(v, transform);
+    });
+  } else {
+    throw 'Unsupported type for BBox.includePoints';
+  }
   this.clearCache();
+  return this;
 };
 
 BBox.prototype.includeObject3D = function (root, transform, filter) {
@@ -144,27 +185,41 @@ BBox.prototype.includeObject3D = function (root, transform, filter) {
     }
   }
   this.includeBBox(bbox);
+  return this;
 };
 
 // Return world position given relative point, center is (0.5,0.5,0.5)
-BBox.prototype.getWorldPosition = function (relPoint) {
+BBox.prototype.getWorldPosition = function (relPoint, out) {
   if (relPoint) {
     var x = (1.0 - relPoint.x) * this.min.x + relPoint.x * this.max.x;
     var y = (1.0 - relPoint.y) * this.min.y + relPoint.y * this.max.y;
     var z = (1.0 - relPoint.z) * this.min.z + relPoint.z * this.max.z;
-    var p = new THREE.Vector3(x, y, z);
+    var p = out || new THREE.Vector3();
+    p.set(x,y,z);
     return p;
   } else {
-    return this.centroid();
+    return this.centroid(out);
   }
 };
 
-BBox.prototype.centroid = function () {
-  var centroid = new THREE.Vector3();
+// Return local position given world position, local center is (0.5, 0.5, 0.5)
+BBox.prototype.getLocalPosition = function (worldPoint, out) {
+  var d = this.dimensions();
+  var x = (d.x > 0)? (worldPoint.x - this.min.x)/d.x : 0.5;
+  var y = (d.y > 0)? (worldPoint.y - this.min.y)/d.y : 0.5;
+  var z = (d.z > 0)? (worldPoint.z - this.min.z)/d.z : 0.5;
+  var p = out || new THREE.Vector3();
+  p.set(x,y,z);
+  return p;
+};
+
+BBox.prototype.centroid = function (out) {
+  var centroid = out || new THREE.Vector3();
   centroid.addVectors(this.min, this.max);
   centroid.multiplyScalar(0.5);
   return centroid;
 };
+BBox.prototype.getCenter = BBox.prototype.centroid;
 
 BBox.prototype.radius = function () {
   return this.min.distanceTo(this.max) / 2;
@@ -237,22 +292,34 @@ BBox.prototype.hausdorffDistance = function (bbox, opt) {
 };
 
 BBox.prototype.distanceTo = function (bbox) {
-  var ca = this.centroid();
-  var cb = bbox.centroid();
-  var ha = this.dimensions().multiplyScalar(0.5);
-  var hb = bbox.dimensions().multiplyScalar(0.5);
-  var dc = ca.sub(cb);
-  dc.x = Math.abs(dc.x);  dc.y = Math.abs(dc.y);  dc.z = Math.abs(dc.z);
-  var hh = ha.add(hb);
-  var d = dc.sub(hh);
-  var isInside = d.x < 0 && d.y < 0 && d.z < 0;
-  var clampedD = new THREE.Vector3(Math.max(0, d.x), Math.max(0, d.y), Math.max(0, d.z));
-  return isInside ? 0 : clampedD.length();
+  if (this.valid() && bbox.valid()) {
+    var ca = this.centroid();
+    var cb = bbox.centroid();
+    var ha = this.dimensions().multiplyScalar(0.5);
+    var hb = bbox.dimensions().multiplyScalar(0.5);
+    var dc = ca.sub(cb);
+    dc.x = Math.abs(dc.x);
+    dc.y = Math.abs(dc.y);
+    dc.z = Math.abs(dc.z);
+    var hh = ha.add(hb);
+    var d = dc.sub(hh);
+    var isInside = d.x < 0 && d.y < 0 && d.z < 0;
+    var clampedD = new THREE.Vector3(Math.max(0, d.x), Math.max(0, d.y), Math.max(0, d.z));
+    return isInside ? 0 : clampedD.length();
+  }
 };
 
-BBox.prototype.dimensions = function () {
-  var dims = new THREE.Vector3();
+BBox.prototype.dimensions = function (out) {
+  var dims = out || new THREE.Vector3();
   dims.subVectors(this.max, this.min);
+  return dims;
+};
+BBox.prototype.getSize = BBox.prototype.dimensions;
+
+BBox.prototype.getHalfSizes = function (out) {
+  var dims = out || new THREE.Vector3();
+  dims.subVectors(this.max, this.min);
+  dims.divideScalar(2);
   return dims;
 };
 
@@ -267,11 +334,23 @@ BBox.prototype.maxDim = function () {
   return maxDim;
 };
 
-BBox.prototype.maxDimAxisName = function () {
+BBox.prototype.maxDimAxisIndex = function () {
   var dims = this.dimensions();
-  var dimsWithNames = [['x', dims.x], ['y', dims.y], ['z', dims.z]];
-  var maxDim = _.maxBy(dimsWithNames, function (d) { return d[1]; });
+  var dimsWithIndices = [[0, dims.x], [1, dims.y], [2, dims.z]];
+  var maxDim = _.maxBy(dimsWithIndices, function (d) { return d[1]; });
   return maxDim[0];
+};
+
+BBox.prototype.maxDimAxisName = function () {
+  return ['x','y','z'][this.maxDimAxisIndex()];
+};
+
+BBox.prototype.maxDimAxis = function (out) {
+  out = out || new THREE.Vector3();
+  var i = this.maxDimAxisIndex();
+  out.set(0,0,0);
+  out.setComponent(i, 1);
+  return out;
 };
 
 BBox.prototype.minDim = function () {
@@ -280,11 +359,30 @@ BBox.prototype.minDim = function () {
   return minDim;
 };
 
-BBox.prototype.minDimAxisName = function () {
+BBox.prototype.minDimAxisIndex = function () {
   var dims = this.dimensions();
-  var dimsWithNames = [['x', dims.x], ['y', dims.y], ['z', dims.z]];
-  var minDim = _.minBy(dimsWithNames, function (d) { return d[1]; });
-  return minDim[0];
+  var dimsWithIndices = [[0, dims.x], [1, dims.y], [2, dims.z]];
+  var maxDim = _.minBy(dimsWithIndices, function (d) { return d[1]; });
+  return maxDim[0];
+};
+
+BBox.prototype.minDimAxisName = function () {
+  return ['x','y','z'][this.minDimAxisIndex()];
+};
+
+BBox.prototype.minDimAxis = function (out) {
+  out = out || new THREE.Vector3();
+  var i = this.minDimAxisIndex();
+  out.set(0,0,0);
+  out.setComponent(i, 1);
+  return out;
+};
+
+BBox.prototype.getNumValidDimensions = function(min) {
+  min = min || 0;
+  var dims = this.dimensions();
+  var okayDims = _.filter(['x','y','z'], function(d) { return dims[d] > min; });
+  return okayDims.length;
 };
 
 BBox.prototype.includePoint = function (point, transform) {
@@ -405,6 +503,17 @@ BBox.prototype.__updateCorners = function (force) {
 BBox.prototype.getCorners = function (force) {
   this.__updateCorners(force);
   return this.corners;
+};
+
+BBox.prototype.getCornersVisOrder = function(force) {
+  // Get corners in a order that is good for visualization
+  var origCorners = this.getCorners(force);
+  var corners = origCorners.slice();
+  corners[2] = origCorners[3];
+  corners[3] = origCorners[2];
+  corners[6] = origCorners[7];
+  corners[7] = origCorners[6];
+  return corners;
 };
 
 BBox.prototype.__updateFaceCenters = function (force) {
@@ -574,6 +683,10 @@ BBox.prototype.isoperimetricQuotient = function () {
   return 216.0 * V * V / Math.pow(S, 3);
 };
 
+BBox.prototype.isAxisAligned = function() {
+  return true;
+};
+
 BBox.prototype.toString = function() {
   function vtoString(v) {
     return '[' + v.x + ',' + v.y + ',' + v.z + ']';
@@ -649,6 +762,17 @@ BBox.getFaceDims = function(dims) {
   faceDims[5] = faceDims[4];
   return faceDims;
 };
+
+// Vertices pointing toward the inside
+BBox.FACE_VERTS = [
+  [0, 2, 3, 1],      // -x
+  [4, 5, 7, 6],      // +x
+  [0, 1, 5, 4],      // -y
+  [2, 6, 7, 3],      // +y
+  [0, 4, 6, 2],      // -z
+  [1, 3, 7, 5],      // +z
+];
+
 
 // Exports
 module.exports = BBox;

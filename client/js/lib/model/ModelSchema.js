@@ -19,23 +19,23 @@ var fields = [
     description: 'Category of an object' +
       '(available for ShapeNetSem only, for ShapeNetCore, use wnhyperlemmas or wnlemmas).' +
       'Not restricted to words in WordNet (includes common modern electronics such as iPad, Xbox, etc.',
-    examples: [{ query: 'category:Xbox', description:'Xbox', filters: '+datasets:ShapeNetSem' }]
+    examples: [{ query: 'category:Xbox', description: 'Xbox', filters: '+datasets:ShapeNetSem' }]
   },
   { name: 'pcaDim', type: 'categorical',
     description: 'object shape is a pole (1D), a plane (2D), or 3D',
-    examples: [{ query: 'pcaDim:1D', description:'Long, thin objects such as pencils (available for ShapeNetSem only)' },
-      { query: 'pcaDim:2D', description:'Flat objects such as paintings, whiteboards, etc.' },
-      { query: 'pcaDim:3D', description:'Other more 3D objects' }]
+    examples: [{ query: 'pcaDim:1D', description: 'Long, thin objects such as pencils (available for ShapeNetSem only)' },
+      { query: 'pcaDim:2D', description: 'Flat objects such as paintings, whiteboards, etc.' },
+      { query: 'pcaDim:3D', description: 'Other more 3D objects' }]
   },
   { name: 'wnhyperlemmas', text: 'hypersynset', type: 'categorical', excludeFromFacet: false,
     suggestMethod: 'solr',
     description: 'WordNet lemma (includes objects belonging to child WordNet synsets)',
-    examples: [{ query: 'wnhyperlemmas:chair', description:'Objects identified as chairs' }]
+    examples: [{ query: 'wnhyperlemmas:chair', description: 'Objects identified as chairs' }]
   },
   { name: 'wnlemmas', text: 'synset', type: 'categorical', excludeFromFacet: false,
     suggestMethod: 'solr',
     description: 'WordNet lemma (exact synset)',
-    examples: [{ query: 'wnlemmas:chair', description:'Objects identified as chairs' }]
+    examples: [{ query: 'wnlemmas:chair', description: 'Objects identified as chairs' }]
   },
   { name: 'nvertices', text: '# of vertices', type: 'numeric', min: 0,
     description: 'Number of vertices'
@@ -108,6 +108,25 @@ function ModelSchema(params) {
 
 ModelSchema.prototype = Object.create(DataSchema.prototype);
 ModelSchema.prototype.constructor = ModelSchema;
+
+ModelSchema.ShapeNetSynsetAttributeLink = {
+  solrUrl: Constants.shapenetSearchUrl,
+  taxonomy: 'shapenet',
+  linkType: 'wordnet',
+  displayField: 'wnsynsetkey',  // Field to display
+  // Mapping from our field names to linked fields
+  // These are also fields that we should populate if the wnsynset changes
+  fieldMappings: {
+    wnsynsetkey: 'wn30synsetkey',
+    wnlemmas: 'words',
+    wnsynset: 'synsetid',
+    shapenetCoreSynset: 'shapenetcoresynsetid',
+    //wnsynset: "wn30synsetid"
+    // Special fields
+    wnhyperlemmas: 'wnhyperlemmas', //"ancestors.words",
+    wnhypersynsets: 'wnhypersynsets', //"ancestors.synsetid"
+  }
+};
 
 Constants.assetTypes['model'].schema = ModelSchema;
 

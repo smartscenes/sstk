@@ -362,9 +362,11 @@ SegmentAnnotator.prototype.createLabeler = function () {
     },
     getIntersected: function (e) { return scope.getIntersected(e); },
     onSegmentsLoaded:   function (segments) {
-      segments.colorSegments('Raw');
-      scope.annotationStats.compute(segments);
-      scope.__annotatorReady();
+      scope.waitAll(function() {
+        segments.colorSegments('Raw');
+        scope.annotationStats.compute(segments);
+        scope.__annotatorReady();
+      });
     },
     isLabelable: function (part, labelInfo) {
       if (!part || part.userData.labelInfo && (part.userData.labelInfo.fixed || part.userData.labelInfo.frozen)) {
@@ -382,7 +384,7 @@ SegmentAnnotator.prototype.createLabeler = function () {
       var labelable = scope.labeler.segments.segmentHasPointInOBB(part.segmentIndex, obb);
       //console.timeEnd('checkLabelable');
       if (scope.painter.isMouseDown && !labelable && !scope.__shownDistanceHeuristicAlert) {
-        UIUtil.showAlert(null, 'Please label separate objects with different labels',
+        UIUtil.showAlert('Please label separate objects with different labels',
             'alert-danger', 5000);
         scope.__shownDistanceHeuristicAlert = true;
       }
@@ -495,7 +497,7 @@ SegmentAnnotator.prototype.annotate = function (debug) {
       if (labelInfo.segIndices && labelInfo.segIndices.length > 0) {
         var obbWorld = this.labeler.segments.fitOBB('Raw', labelInfo.segIndices);
         var obb = obbWorld.clone();
-        obb.applyMatrix(modelWorldInverse);
+        obb.applyMatrix4(modelWorldInverse);
         if (debug) {
           this.__addOBB(obb, labelInfo.colorMat, modelObject3D.matrixWorld);
         }
@@ -512,7 +514,7 @@ SegmentAnnotator.prototype.annotate = function (debug) {
           label: labelInfo.label,
           labelType: this.labelType,
           obb: obb.toJSON(),
-          dominantNormal: obb.dominantNormal().toArray(),
+          dominantNormal: obb.dominantNormal.toArray(),
           initialPoint: initialPoint,
           segments: labelInfo.segIndices
         });
@@ -585,8 +587,7 @@ SegmentAnnotator.prototype.onModelLoad = function (modelInstance) {
   }
 //  this.clearAnnotations({clearLabels: true});
   this.clearAnnotations(this.defaultClearAnnotationOptions);
-  UIUtil.showAlert(null, this.messages['initialAlert'],
-    'alert-warning', 15000);
+  UIUtil.showAlert(this.messages['initialAlert'], 'alert-warning', 15000);
 };
 
 // Series of checks before submission is allowed

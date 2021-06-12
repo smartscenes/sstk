@@ -52,7 +52,7 @@ SSCServer.prototype.getSimpleRenderer = function(opts) {
       //debugFilename: 'debugOffscreenRender',
       isOffscreen: true,
       useAmbientOcclusion: false,
-      useLights: false,
+      usePhysicalLights: false,
       width: opts.width,
       height: opts.height,
       reuseBuffers: false
@@ -203,7 +203,7 @@ SSCServer.prototype.__loadAndRender = function(opts, callback) {
             cameraControls.viewTarget(viewOpts);
           } else if (viewIndex != undefined) {
             var views = cameraControls.generateViews(sceneBBox, width, height);
-            viewIndex = THREE.Math.clamp(viewIndex, 0, views.length - 1);
+            viewIndex = THREE.MathUtils.clamp(viewIndex, 0, views.length - 1);
             cameraControls.viewTarget(views[viewIndex]);  // default
           } else {
             log.info('Using existing camera');

@@ -355,7 +355,7 @@ SegmentLabeler.prototype.hasParts = function (labelInfo) {
 
 SegmentLabeler.prototype.setTarget = function (modelInstance) {
   this.segments.init(modelInstance);
-  this.segments.loadSegments(function (err, res) {
+  this.segments.ensureSegments(function (err, res) {
     if (!err && this.onSegmentsLoaded) {
       this.onSegmentsLoaded(this.segments);
     }

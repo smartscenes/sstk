@@ -78,5 +78,6 @@ module.exports = Survey;
  * @property inputType {string} `textbox|textarea|email|select|checkbox|date|time|number|password`
  * @property inputOptions {Object[]} Array of options for `select` and `checkbox`.
  * @property customInput {Object} custom input
+ * @property autocomplete jQuery autocomplete options
  * @memberOf ui
  */

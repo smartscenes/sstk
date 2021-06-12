@@ -125,7 +125,7 @@ Visualizer.prototype.exportPinned = function(filename) {
       allData[this.charts[i].name] = data;
     }
   }
-  var blob = new Blob([JSON.stringify(allData)], {type: "text/plain;charset=utf-8"});
+  var blob = new Blob([JSON.stringify(allData)], {type: 'text/plain;charset=utf-8'});
   FileSaver.saveAs(blob, filename);
 };
 
@@ -156,13 +156,13 @@ Visualizer.prototype.createDefaultWindow = function () {
 
 //pie chart to visualize counts of 3D model properties
 Visualizer.prototype.createPieChart = function (field, valueLabel, countData) {
-  var window = this.createDefaultWindow();
+  var vizWindow = this.createDefaultWindow();
 
   var pieChart = new PieChart({
     key: { field: field, label: this.schema.getDisplayText(field) },
     value: { label: valueLabel },
     data: countData.counts,
-    window: window
+    window: vizWindow
   });
   this.charts.push(pieChart);
   return pieChart;
@@ -185,8 +185,8 @@ Visualizer.prototype.createCategoryBarChart = function (field, countData, second
   var newMargin = this.ui.defaultMargins;
 
   //params
-  var window = this.createGraphWindow(this.ui.defaultWidth, newHeight, newMargin);
-  window.svg.style('overflow', 'auto');
+  var vizWindow = this.createGraphWindow(this.ui.defaultWidth, newHeight, newMargin);
+  vizWindow.svg.style('overflow', 'auto');
 
   var barChart = new BarChart({
     key: { field: field, label: this.schema.getDisplayText(field) },
@@ -196,7 +196,7 @@ Visualizer.prototype.createCategoryBarChart = function (field, countData, second
     bars: 'horizontal',
     xLabelPosition: 'top',
     includeLabels: true,
-    window: window
+    window: vizWindow
   });
   this.charts.push(barChart);
   return barChart;
@@ -211,7 +211,7 @@ Visualizer.prototype.createHistogram = function (field, data) {
   var settings = this.ui.getSettings();
   var frequency = settings.histogram.frequency;
 
-  var window = this.createDefaultWindow();
+  var vizWindow = this.createDefaultWindow();
   var scope = this;
   var histogram = new Histogram({
     value: {field: field, label: this.schema.getDisplayText(field)},
@@ -224,7 +224,7 @@ Visualizer.prototype.createHistogram = function (field, data) {
     binTicks: 10,
     countTicks: 10,
     xLabelPosition: 'top',
-    window: window,
+    window: vizWindow,
     onClickFn: function(d) {
       if (d.length > 20) {
         scope.createHistogram(field, d);
@@ -248,13 +248,20 @@ Visualizer.prototype.createScatterPlot = function (params) {
   var tooltipHtmlFn = function (d) {
     return scope.generateTooltipText(fieldArray, d);
   };
+  var viewerUrlTemplate = this.ui.viewerUrlTemplate;
   var showItemFn = function (d) {
     var fullId = AssetManager.toFullId(d.source, d.id);
-    var url = 'simple-model-viewer2.html?modelId=' + fullId;
-    d3.select('#itemFrame').property('src', url);
-    var imgURL = scope.ui.assetManager.getImagePreviewUrl(d.source, d.id, undefined, d);
-    d3.select('#itemImage').property('src', imgURL);
-    $('.itemViewerDialog').dialog('open');
+    var url = viewerUrlTemplate({ modelId: fullId });
+    if (scope.ui.viewerModal) {
+      // Open viewer as a modal
+      d3.select('#itemFrame').property('src', url);
+      var imgURL = scope.ui.assetManager.getImagePreviewUrl(d.source, d.id, undefined, d);
+      d3.select('#itemImage').property('src', imgURL);
+      $('.itemViewerDialog').dialog('open');
+    } else {
+      // Open viewer in a separate window
+      window.open(url);
+    }
   };
   var colorFn = params.colorFn;
   //rudimentary color visualization based on triangle count
@@ -269,7 +276,7 @@ Visualizer.prototype.createScatterPlot = function (params) {
     colorFn = this.getColorFnFromData(data);
   }
 
-  var window = this.createDefaultWindow();
+  var visWindow = this.createDefaultWindow();
 
   var scatterPlot = new ScatterPlot({
     x: { field: xField, label: xLabel },
@@ -278,20 +285,27 @@ Visualizer.prototype.createScatterPlot = function (params) {
     colorFn: colorFn,
     //onClickFn: onClickFn,
     tooltipHtmlFn: tooltipHtmlFn,
-    window: window
+    window: visWindow
   });
   scatterPlot.onClick(function (d) {
-    var tooltip = scatterPlot.pinTooltip(d);
-    var id = tooltip.attr('id');
-    var s = d3.select(this);
-    var color = s.style('fill');
-    s.style('fill', 'red');
-    $('#' + id + ' .close').click( function() {
-      s.style('fill', color);
-    });
-    // Make clicking on image open 3D view
-    d3.select('#' + id).select(' img.tooltipImage')
-      .on('click', function () { showItemFn(d); });
+    var oldtip = scatterPlot.getPinnedTooltipById(d.id);
+    if (oldtip) {
+      var id = oldtip.attr('id');
+      $('#' + id + ' .close').click();
+    } else {
+      var tooltip = scatterPlot.pinTooltip(d, scatterPlot.tipDataIdSame);
+      var id = tooltip.attr('id');
+      var s = d3.select(this);
+      var color = s.style('fill');
+      s.style('fill', 'red');
+      $('#' + id + ' .close').click( function() {
+        s.style('fill', color);
+      });
+      // tooltip.circle = s; // Save relation to circle
+      // Make clicking on image open 3D view
+      d3.select('#' + id).select(' img.tooltipImage')
+        .on('click', function () { showItemFn(d); });
+    }
   });
   this.charts.push(scatterPlot);
   return scatterPlot;

@@ -16,8 +16,10 @@ __backfaceRaycaster.intersectBackFaces = true;
  * @property {number} distance
  * @property {THREE.Vector3} point
  * @property {int} index
- * @property {THREE.Face3} face Face being interfacted
+ * @property {THREE.Face3} face Face being intersected
  * @property {int} faceIndex Index of face
+ * @property {THREE.Object3D} object
+ * @property {THREE.Mesh} descendant
  */
 
 /**
@@ -39,7 +41,7 @@ self.getIntersectedForRay = function (raycaster, objects, ignore, n, renderer) {
 /**
  * Filters intersected by renderer clippingPlanes
  * @param intersected {Intersect[]}
- * @param renderer {THREE.Renderer}
+ * @param renderer {gfx.Renderer}
  * @returns {*}
  */
 self.filterClipped = function(intersected, renderer) {
@@ -113,7 +115,7 @@ self.selectIntersectedObjects = function (intersected, objects, ignore, n, allow
     if (index >= 0 || allowAllModelInstances) {
       intersected[i].object = o;
       intersected[i].descendant = c;
-      var ignoreObject = (ignore && Object3DUtil.isDescendantOf(o, ignore));
+      var ignoreObject = (ignore && Object3DUtil.isDescendantOf(o, ignore, true));
       if (!ignoreObject) {
         intersectedObjects.push(intersected[i]);
       }

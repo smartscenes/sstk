@@ -5,19 +5,21 @@ var async = require('async');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var THREE = global.THREE;
-var cmd = require('commander');
+var cmd = require('./ssc-parseargs');
 cmd
   .version('0.0.1')
   .description('Create colored voxels for a model')
   .option('--id [id]', 'Model id [default: 26d98eed64a7f76318a93a45bf780820]', '26d98eed64a7f76318a93a45bf780820')
-  .option('--source [source]', 'Model source (p5d, 3dw, wss) [default: 3dw]', '3dw')
+  .option('--source [source]', 'Model source (3dw, wss) [default: 3dw]', '3dw')
   .option('--format [format]', 'Model format')
   .option('--resolution [number]', 'Voxel grid resolution [default: 32 (32x32x32)]', STK.util.cmd.parseInt, 32)
   .option('--samples [number]', 'Number of samples [default: 100000]', STK.util.cmd.parseInt, 100000)
   .option('--downsample [multiplier]', 'Downsample voxel grid resolution down from original voxel resolution [default: 1]. Example: use 4 to takes 128^3 to 32^3', STK.util.cmd.parseInt, 1)
   .option('--voxels [voxel-type]', 'Type of voxels to use [default: none]', 'none')
   .option('--output_dir [dir]', 'Base directory for output files', '.')
+  .optionGroups(['config_file', 'color_by'])
   .option('--skip_existing', 'Whether to skip output of existing files', STK.util.cmd.parseBoolean, false)
+  .option('--assets <filename>', 'Additional assets files')
   .parse(process.argv);
 
 var argv = cmd;
@@ -29,10 +31,13 @@ var assetManager = new STK.assets.AssetManager({
 });
 var ids = argv.id ? [argv.id] : ['26d98eed64a7f76318a93a45bf780820'];
 
-STK.assets.AssetGroups.registerDefaults();
-var assets = require('./data/assets.json');
-var assetsMap = _.keyBy(assets, 'name');
-STK.assets.registerCustomAssetGroupsSync(assetsMap, [argv.source]);
+var assetFiles = (cmd.assets != null)? [cmd.assets] : [];
+STK.assets.registerAssetGroupsSync({
+  assetSources: [cmd.source],
+  assetFiles: assetFiles,
+  skipDefault: false,
+  includeAllAssetFilesSources: true
+});
 if (argv.format) {
   STK.assets.AssetGroups.setDefaultFormat(argv.format);
 }
@@ -74,7 +79,22 @@ function processIds(assetsDb) {
           }
         });
       }
-      STK.util.waitImagesLoaded(onDrained);
+      function waitImages() {
+        STK.util.waitImagesLoaded(onDrained);
+      }
+      if (cmd.color_by) {
+        STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
+          color: cmd.color,
+          loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
+          encodeIndex: cmd.encode_index,
+          writeIndex: cmd.write_index? basename + '/' + id : null,
+          restrictToIndex: cmd.restrict_to_color_index,
+          fs: STK.fs,
+          callback: function() { waitImages(); }
+        });
+      } else {
+        waitImages();
+      }
     }, function (error) {
       console.error('Error loading ' + fullId, error);
     }, metadata);

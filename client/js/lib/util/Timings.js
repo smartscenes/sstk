@@ -11,6 +11,14 @@ TimeRecord.prototype.setEnd = function(end) {
   this.duration = end - this.start;
 };
 
+TimeRecord.prototype.toJson = function() {
+  return {
+    start: this.start,
+    end: this.end,
+    duration: this.duration
+  };
+};
+
 function Timings() {
   this.__times = {};
   this.mark('initial');
@@ -67,7 +75,9 @@ Timings.prototype.getDuration = function(name, start) {
 
 Timings.prototype.toJson = function() {
   var res = {};
-  res.times = this.__times;
+  res.times = _.mapValues(this.__times, function(x) {
+    return (x instanceof TimeRecord)? x.toJson():x;
+  });
   res.durations = {};
   for (var name in res.times) {
     if (res.times.hasOwnProperty(name) && name !== 'initial') {

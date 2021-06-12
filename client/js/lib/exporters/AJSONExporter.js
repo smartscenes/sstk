@@ -23,7 +23,11 @@ JSONExporter.prototype.export = function(obj, opts) {
   var callback = opts.callback;
 
   // Linearize nodes and put meshes into an array
-  var indexed = Object3DUtil.getIndexedNodes(obj, { splitByMaterial: opts.splitByMaterial });
+  var indexed = Object3DUtil.getIndexedNodes(obj, {
+    keepDoubleFacesTogether: opts.keepDoubleFacesTogether,
+    splitByMaterial: opts.splitByMaterial,
+    splitByConnectivity: opts.splitByConnectivity
+  });
   var nodes = _.map(indexed.nodes, function(node) {
     var meshIds;
     var childIds;
@@ -34,7 +38,8 @@ JSONExporter.prototype.export = function(obj, opts) {
     }
     return {
       id: node.userData.nodeIndex,
-      name: node.name || (node.userData && node.userData.id) || ("node" + node.userData.nodeIndex),
+      name: node.name || (node.userData.id != null? node.userData.id : node.userData.name) || ("node" + node.userData.nodeIndex),
+      partId: node.userData.partId,
       path: node.userData.sceneGraphPath,
       transformation: node.matrix.toArray(),
       meshes: meshIds,

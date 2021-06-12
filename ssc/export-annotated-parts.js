@@ -9,8 +9,8 @@ var cmd = require('commander');
 cmd
   .version('0.0.1')
   .description('Export part annotations')
-  .option('--id <id>', 'Model id [default: 101]', STK.util.cmd.parseList, ['101'])
-  .option('--source <source>', 'Model source [default: p5d]', 'p5d')
+  .option('--id <id>', 'Model id', STK.util.cmd.parseList, [])
+  .option('--source <source>', 'Model source')
 //  .option('--ann_type <type>', 'Annotation type', /^(raw|clean|aggr)$/)
   .option('-n, --ann_limit <num>', 'Limit on number of annotations to export', STK.util.cmd.parseInt, 1)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
@@ -23,10 +23,7 @@ var argv = cmd;
 var skip_existing = argv.skip_existing;
 var assetManager = new STK.assets.AssetManager({ autoAlignModels: false, autoScaleModels: false });
 var ids = argv.id;
-
-var assets = require('./data/assets.json');
-var assetsMap = _.keyBy(assets, 'name');
-STK.assets.registerCustomAssetGroupsSync(assetsMap, [argv.source]);
+STK.assets.registerAssetGroupsSync({ assetSources: [cmd.source] });
 
 var assetGroup = STK.assets.AssetGroups.getAssetGroup(argv.source);
 var assetsDb = assetGroup? assetGroup.assetDb : null;
@@ -83,7 +80,7 @@ function exportAnnotation(loadInfo, outdir, callback) {
         }
         basename = outdir + '/' + basename;
         segments.indexedSegmentation.annId = loadInfo.annId;
-        fs.writeFileSync(basename + '.json', JSON.stringify(segments.indexedSegmentation));
+        fs.writeFileSync(basename + '.parts.json', JSON.stringify(segments.indexedSegmentation));
         callback(err, res);
       } else {
         console.error(err, res);
@@ -115,7 +112,7 @@ function processIds(ids, outdir, doneCallback) {
                 x.data = JSON.parse(x.data);
               }
             });
-            fs.writeFileSync(basename + '/' + id + '.anns.json', JSON.stringify(data));
+            fs.writeFileSync(basename + '/' + id + '.parts.anns.json', JSON.stringify(data));
             var annIds = data.map(function (rec) {
               return rec.id;
             });

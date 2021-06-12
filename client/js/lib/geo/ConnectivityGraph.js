@@ -155,7 +155,7 @@ ConnectivityGraph.prototype.gatherFaces = function(faceIndex, maxLengthSq, normS
   if (!point) {
     var face = mainFace.face;
     var tri = new THREE.Triangle(this.geometry.vertices[face.a], this.geometry.vertices[face.b], this.geometry.vertices[face.c]);
-    var point = new THREE.Vector3();
+    point = new THREE.Vector3();
     point = tri.getMidPoint(point);
   }
   var maxRadiusSq = maxLengthSq/4;

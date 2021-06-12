@@ -1,0 +1,18 @@
+{
+	"view": {
+		"cameraPositionStrategy": "positionToFit",
+		"viewIndex": 4
+	},
+	"camera": {
+		"type": "perspective"
+	},
+	"assetGroups": ["wss"],
+	"assetInfo": {
+		"assetType": "scene",
+		"defaultModelFormat": "obj",
+		"includeCeiling": false,
+		"ignoreOriginalArchHoles": false,
+		"attachWallsToRoom": false,
+		"createArch": true
+	}
+}

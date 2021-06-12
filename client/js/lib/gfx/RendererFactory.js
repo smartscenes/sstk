@@ -42,10 +42,11 @@ RendererFactory.createRenderer = function(opts) {
 };
 
 RendererFactory.createOffscreenRenderer = function(opts) {
-  opts = _.defaults({ isOffscreen: true }, opts, {
+  opts = _.defaults({ isOffscreen: true, isEncodedMode: true }, opts, {
     useAmbientOcclusion: false,
-    useLights: false,
+    usePhysicalLights: false,
     useShadows: false,
+    antialias: false,
     reuseBuffers: true
   });
   return RendererFactory.createRenderer(opts);

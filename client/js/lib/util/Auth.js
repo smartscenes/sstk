@@ -2,17 +2,25 @@ function Auth() {
 }
 
 Auth.prototype.authenticate = function(onSuccess) {
-  var user = window.localStorage.getItem('user');
-  if (user) {
-    onSuccess(JSON.parse(user));
+  var user = window.localStorage.getItem('stkuser');
+  var prompt = true;
+  try {
+    user = JSON.parse(user);
+    prompt = false;
+  } catch (err) {
+    console.warn('Error parsing stored username (JSON object expected)', user);
+  }
+  if (!prompt && user != null) {
+    onSuccess(user);
   } else {
     bootbox.prompt({
-      title: "Please enter your username",
+      title: 'Please enter your username',
       inputType: 'text',
+      value: user,
       callback: function (result) {
         if (result) {
           var user = { username: result };
-          window.localStorage.setItem('user', JSON.stringify(user));
+          window.localStorage.setItem('stkuser', JSON.stringify(user));
           onSuccess(user);
         }
       }

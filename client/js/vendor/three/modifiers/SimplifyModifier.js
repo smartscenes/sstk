@@ -1,4 +1,4 @@
-/*
+/**
  *	@author zz85 / http://twitter.com/blurspline / http://www.lab4games.net/zz85/blog
  *
  *	Simplification Geometry Modifier
@@ -167,7 +167,7 @@ THREE.SimplifyModifier = function () {};
 		if ( f.v3 ) removeFromArray( f.v3.faces, f );
 
 		// TODO optimize this!
-		var vs = [ this.v1, this.v2, this.v3 ];
+		var vs = [ f.v1, f.v2, f.v3 ];
 		var v1, v2;
 
 		for ( var i = 0; i < 3; i ++ ) {
@@ -484,7 +484,7 @@ THREE.SimplifyModifier = function () {};
 
 		//
 
-		simplifiedGeometry.addAttribute( 'position', new THREE.Float32BufferAttribute( position, 3 ) );
+		simplifiedGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( position, 3 ) );
 		simplifiedGeometry.setIndex( index );
 
 		return simplifiedGeometry;

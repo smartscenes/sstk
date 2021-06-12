@@ -26,6 +26,7 @@ cmd
   .option('--skip_existing [flag]', 'Whether to skip output of existing files', STK.util.cmd.parseBoolean, false)
   .option('--disable_ply_output [flag]', 'Whether to skip writing PLY files', STK.util.cmd.parseBoolean, false)
   .option('--ply_format [format]', 'Ply format to use (binary_little_endian or ascii)')
+  .option('--ensure_obbs [flag]', 'Whether to make sure there is obb information', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 var argv = cmd;
 
@@ -228,6 +229,9 @@ function colorize(loadInfo, outdir, callback) {
           basename = (annIndex != undefined) ? id + '_' + annIndex : id;
         }
         basename = outdir + '/' + basename;
+        if (argv.ensure_obbs) {
+          segments.ensureSegmentGroupObbInfo();
+        }
         if (segments.segmentGroupsData) {
           fs.writeFileSync(basename + '.semseg.json', JSON.stringify(segments.segmentGroupsData));
         }
@@ -259,7 +263,7 @@ function processIds(ids, outdir, doneCallback) {
       // Don't really care about the result, discard
       cb();
     }
-    console.log('Proccessing ' + id);
+    console.log('Processing ' + id);
     var mInfo = assetsDb.getAssetInfo(argv.source + '.' + id);
     var loadInfo = assetManager.getLoadModelInfo(argv.source, id, mInfo);
     var segmentsInfo = loadInfo[segmentsType];

@@ -125,8 +125,12 @@ ModelVoxels.prototype.__updateVoxelGrid = function (grid) {
         // Scale to model
         // We need the bb of the the untransformed modelObject
         var modelBB = Object3DUtil.computeBoundingBoxLocal(this.model.object3D);
-        // Assumes normalized to diagonal unit
-        if (mi.voxelsNormalizedAligned) {
+        if (mi.voxelsNormalizedAligned === 'max') {
+          var dims = modelBB.dimensions();
+          var scale = Math.max(dims.x, dims.y, dims.z);
+          voxelNodeModelSpace.scale.multiplyScalar(scale);
+        } else {
+          // Assumes normalized to diagonal unit
           var scale = modelBB.dimensions().length();
           voxelNodeModelSpace.scale.multiplyScalar(scale);
         }

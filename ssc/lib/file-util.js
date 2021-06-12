@@ -61,7 +61,7 @@ function toArrayBuffer(buf) {
 function download(url, opts, cb) {
   // Reinterpret encoding to handle binary arraybuffer (see https://github.com/request/request)
   var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
-  var enc = (encoding === 'arraybuffer') ? null : encoding;
+  var enc = convertEncodingString(encoding);
   request({ method: 'GET', url: url, encoding: enc },
     function (err, resp, body) {
       if (err) {
@@ -72,6 +72,13 @@ function download(url, opts, cb) {
       } else {
         if (encoding === 'arraybuffer') {
           body = toArrayBuffer(body);
+        } else if (encoding === 'json') {
+          try {
+            body = JSON.parse(body);
+          } catch (err) {
+            cb(err);
+            return;
+          }
         }
         if (opts.saveFile) {
           // save file at cache location
@@ -117,6 +124,17 @@ function fsReadFile(filename, successCallback, errorCallback) {
   successCallback(content);
 }
 
+function convertEncodingString(encoding) {
+  if (encoding === 'arraybuffer') {
+    return null;
+  } else if (encoding === 'json') {
+    return 'utf8';
+  } else if (encoding === 'jsonl') {
+    return 'utf8';
+  } else {
+    return encoding;
+  }
+}
 
 /**
  * read URL/file from uri synchronously
@@ -136,11 +154,16 @@ function readSync(uri, opts) {
       return;
     }
     var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
-    var enc = (encoding === 'arraybuffer') ? null : encoding;
+    var enc = convertEncodingString(encoding);
     var fsOpts = (typeof opts === 'string') ? enc : _.defaults({encoding: enc}, opts);
     var data = fs.readFileSync(uri, fsOpts);
     if (data && encoding === 'arraybuffer') {
       data = toArrayBuffer(data);
+    } else if (data && encoding === 'json') {
+      data = JSON.parse(data);
+    } else if (data && encoding === 'jsonl') {
+      // Not very performant jsonl parsing (see IOUtil for faster json parsing)
+      data = _.map(_.filter(data.split("\n"), (x) => x.length > 0), (x) => JSON.parse(x) );
     }
     return data;
   }
@@ -160,7 +183,7 @@ function readAsync(uri, opts, cb) {
   } else {
     if (uri.startsWith('file://')) { uri = uri.substr(7); }
     var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
-    var enc = (encoding === 'arraybuffer') ? null : encoding;
+    var enc = convertEncodingString(encoding);
     var fsOpts = (typeof opts === 'string') ? enc : _.defaults({ encoding: enc }, opts);
     fs.readFile(uri, fsOpts, function (err, data) {
       if (err) {
@@ -168,6 +191,18 @@ function readAsync(uri, opts, cb) {
       } else {
         if (encoding === 'arraybuffer') {
           data = toArrayBuffer(data);
+        } else if (encoding === 'json' || encoding === 'jsonl') {
+          try {
+            if (encoding === 'json') {
+              data = JSON.parse(data);
+            } else {
+              // Not very performant jsonl parsing (see IOUtil for faster json parsing)
+              data = _.map(_.filter(data.split("\n"), (x) => x.length > 0), (x) => JSON.parse(x) );
+            }
+          } catch (err) {
+            cb(err);
+            return;
+          }
         }
         cb(null, data);
       }
@@ -350,6 +385,8 @@ var self = {
   options: __globalOptions,
   existsSync: fs.existsSync,
   writeFileSync: fs.writeFileSync,
+  createReadStream: fs.createReadStream,
+  createWriteStream: fs.createWriteStream,
   fsReadFile: fsReadFile,
   readSync: readSync,
   readAsync: readAsync,

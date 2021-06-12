@@ -173,7 +173,7 @@ ViewGenerator.prototype.getFrustumParams = function(objectDepth, objectWidth, pi
   var objectWidthFar = 2 * (pixelWidth + (objectWidth / 2));
   var far = objectWidthFar * objectDepth / (2 * pixelWidth) + eps;
   var near = far - objectDepth - eps;
-  return { fov: THREE.Math.radToDeg(fov), near: near, far: far };
+  return { fov: THREE.MathUtils.radToDeg(fov), near: near, far: far };
 };
 
 ViewGenerator.prototype.__getViewBBoxDims = function(dims, theta, phi) {

@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var AssetLoader = require('assets/AssetLoader');
 var ConfigControls  = require('ui/ConfigControls');
 var Object3DUtil = require('geo/Object3DUtil');
@@ -9,11 +10,27 @@ var FileUtil = require('io/FileUtil');
 var UIUtil = require('ui/UIUtil');
 var TypeUtils = require('data/TypeUtils');
 var keymap = require('controls/keymap');
-var hilbert = require('hilbert');
 var _ = require('util/util');
 
 // The LabelHierarchyPanel visualizes the label hierarchy as is
 //   with each node in the tree mapping to a labelInfo
+
+/**
+ * The LabelHierarchyPanel visualizes the label hierarchy as is
+ #   with each node in the tree mapping to a labelInfo
+ * @param params
+ * @param [params.container]
+ * @param params.assetManager {assets.AssetManager}
+ * @param [params.tooltipIncludeFields] {string[]} List of fields to include for tooltip shown on hover
+ * @param [params.onhoverCallback] {function(node, objects)} Callback for hovering over a tree node
+ * @param [params.allowEditLabels=false] {boolean} Whether editing of the labels are allowed
+ * @param [params.allowEditHierarchy=false] {boolean} Whether editing of the hierarchy is allowed
+ * @param [params.allowLoadSave=true] {boolean} Whether loading/saving of the hierarchy is supported
+ * @param [params.autoCreateTree=true] {boolean}
+ * @param [params.useIcons=false] {boolean} Whether to use screenshot icons in the tree nodes
+ * @param [params.app] {Object} Parent application for scene hierarchy panel
+ * @constructor
+ */
 function LabelHierarchyPanel(params) {
   // Container in which the scene hierarchy is displayed
   this.container = params.container;
@@ -25,8 +42,6 @@ function LabelHierarchyPanel(params) {
   this.allowLoadSave = (params.allowLoadSave != undefined)? params.allowLoadSave : true;
   this.autoCreateTree = (params.autoCreateTree != undefined)? params.autoCreateTree : true;
   this.useIcons = params.useIcons;
-  this.defaultSortOrder = params.defaultSortOrder || 'hilbert';
-  //this.modelViewerUrl = params.modelViewerUrl || (params.app? params.app.modelViewerUrl: undefined) || 'model-viewer';
   this.app = params.app;
   // TODO: Remove this __treeNodes and __freeTreeNodes
   this.__relationGraph = null;
@@ -123,10 +138,12 @@ LabelHierarchyPanel.prototype.init = function () {
 
     this.configPanel.append(this.treeSearchPanel);
     this.configPanel.append(this.buttonsPanel);
+    this.infoPanel = $('<div><div>');
+    this.container.append(this.infoPanel);
     this.container.append(this.configPanel);
     this.container.append(this.treePanel);
 
-    keymap({ on: 'g', do: 'Group selected models', filter: function(evt) {
+    keymap({ on: 'g', do: 'Group selected nodes', filter: function(evt) {
       return $.contains(scope.treePanel[0], evt.target);
     } }, function () {
       if (scope.allowEditHierarchy) {
@@ -134,7 +151,7 @@ LabelHierarchyPanel.prototype.init = function () {
       }
     });
 
-    keymap({ on: 'esc', do: 'Group selected models', filter: function(evt) {
+    keymap({ on: 'esc', do: 'Deselect all', filter: function(evt) {
       return $.contains(scope.treePanel[0], evt.target);
     } }, function () {
       if (scope.allowEditHierarchy) {
@@ -156,6 +173,17 @@ LabelHierarchyPanel.prototype.getTreeNodes = function () {
 LabelHierarchyPanel.prototype.getSelectedObjects = function() {
   var selected = this.tree.jstree('get_selected', true);
   return this.__getObjects(selected);
+};
+
+LabelHierarchyPanel.prototype.__getObjects = function(nodes, objects) {
+  objects = objects || [];
+  if (!Array.isArray(nodes)) {
+    nodes = [nodes];
+  }
+  for (var i = 0; i < nodes.length; i++) {
+    this.__getObjectsForNode(nodes[i], objects);
+  }
+  return objects;
 };
 
 LabelHierarchyPanel.prototype.__getObjectKey = function(object) {
@@ -227,16 +255,11 @@ LabelHierarchyPanel.prototype.__createTreeNode = function(object3D, index) {
     text: object3D.name || index,
     data: {objId: object3D.id, index: index}
   };
-  var modelInstance = Object3DUtil.getModelInstance(object3D);
-  if (modelInstance) {
-    this.__addModelInfoToTreeNode(treeNode, modelInstance);
-  } else {
-    var info = this.__createSummaryInfo(object3D);
-    treeNode.li_attr = {
-      title: JSON.stringify(info, null, ' ')
-    };
-  }
-  this.__nodeIdToMetadata[shId] = { object3D: object3D, modelInstance: modelInstance };
+  var info = this.__createSummaryInfo(object3D);
+  treeNode.li_attr = {
+    title: JSON.stringify(info, null, ' ')
+  };
+  this.__nodeIdToMetadata[shId] = { object3D: object3D };
   return treeNode;
 };
 
@@ -249,6 +272,7 @@ LabelHierarchyPanel.prototype.__addTreeNode = function(treeNodes, object3D, inde
 };
 
 LabelHierarchyPanel.prototype.__createSummaryInfo = function(node) {
+  // TODO: Update this
   // var stats = {};
   // stats = _.pickBy(stats, function(x) { return x > 0; });
   // // Create title data for a Object3D node
@@ -295,6 +319,22 @@ LabelHierarchyPanel.prototype.__getObject3D = function(treeNode) {
     if (node != undefined) {
       return node.object3D;
     }
+  }
+};
+
+LabelHierarchyPanel.prototype.__getRootObject3D = function() {
+  // TODO: Replace scene state
+  return this.sceneState.scene;
+};
+
+LabelHierarchyPanel.prototype.__reattach3DObjects = function(treeNode, newParent, oldParent) {
+  // Reattach child to new parent (for restructuring underlying scene graph)
+  var childObject3D = this.__getObject3D(treeNode);
+  var newParentObject3D = this.__getObject3D(newParent);
+  if (childObject3D) {
+    Object3DUtil.attachToParent(childObject3D, newParentObject3D, this.__getRootObject3D());
+  } else {
+    console.log('Cannot find object3D', treeNode);
   }
 };
 
@@ -367,7 +407,7 @@ LabelHierarchyPanel.prototype.__showBoundingBoxForNode = function(node, flag) {
     var mesh = new MeshHelpers.BoxMinMax(bbox.min, bbox.max, Object3DUtil.TransparentMat);
     var boxwf = new THREE.BoxHelper(mesh);
     var material = this.app.picker.highlightMaterial;
-    var boxwffat = new MeshHelpers.FatLines(boxwf, 5, material);
+    var boxwffat = new MeshHelpers.FatLines(boxwf, 0.05*Constants.metersToVirtualUnit, material);
 
     bboxMesh = boxwffat;
     this.__bbNodes.add(bboxMesh);
@@ -384,7 +424,7 @@ LabelHierarchyPanel.prototype.__getObjectsForTreeNodes = function(treeNodes, obj
   var scope = this;
   var nodes = _.map(treeNodes, function(tn) {
     var nodeId = tn.data.nodeId;
-    return scope.__relationGraph.gtNode(nodeId);
+    return scope.__relationGraph.getNode(nodeId);
   });
   nodes = _.filter(nodes);
   return this.__getObjectsForNodes(nodes, objects);
@@ -448,7 +488,7 @@ LabelHierarchyPanel.prototype.__getFreeTreeNode = function(treeNodes, name, pare
     }
     g.name = name;
     g.userData.type = name;
-    Object3DUtil.attachToParent(g, parentObject3D, this.sceneState.scene);
+    Object3DUtil.attachToParent(g, parentObject3D, this.__getRootObject3D());
   } else {
     var g = this.__createGroup(name, parentObject3D);
     t = this.__addTreeNode(treeNodes, g);
@@ -484,6 +524,7 @@ LabelHierarchyPanel.prototype.__updateTree = function(treeNodes) {
         } else if (obj.userData.id != null && obj.userData.id.toString().toLowerCase() === s) {
           return true;
         } else {
+          // TODO: Update this
           var modelInstance = Object3DUtil.getModelInstance(obj);
           if (modelInstance) {
             if (modelInstance.model.hasCategorySimilar(s)) {
@@ -521,73 +562,105 @@ LabelHierarchyPanel.prototype.__updateTree = function(treeNodes) {
     },
     'contextmenu':{
       "items": function(node) {
+        var selected = scope.tree.jstree('get_selected', true);
+        var targets = scope.__getObjects(selected);
         var basicItems = {
-          lookAtItem : {
-            "label" : "Look at",
-            "action" : function(item) {
+          lookAtItem: {
+            "label": "Look at",
+            "action": function (item) {
               // Handle look at item for multiple selected
-              var selected = scope.tree.jstree('get_selected', true);
-              var targets = scope.__getObjects(selected);
               //var targets = scope.__getObjects(node);  // Only look at single item
               if (targets && targets.length) {
                 scope.app.lookAt(targets);
               }
             },
-            "_class" : "class"
+            "_class": "class"
           },
-          showItem : {
-            "label" : "(S)how - hide other nodes",
+          toggleVisible: {
+            "label": function (item) {
+              var label = "Toggle visible";
+              if (targets && targets.length) {
+                var isAllVisible = _.every(targets, function (x) {
+                  return x.visible;
+                });
+                var isAllHidden = _.every(targets, function (x) {
+                  return !x.visible;
+                });
+                if (isAllVisible) {
+                  label += " (hide)";
+                }
+                else if (isAllHidden) {
+                  label += " (show)";
+                }
+              }
+              return label;
+            },
+            "action": function (item) {
+              if (targets && targets.length) {
+                _.each(targets, function (target) {
+                  target.visible = !target.visible;
+                });
+              }
+            },
+            "_class": "class"
+          },
+          showItem: {
+            "label": "(S)how - hide other nodes",
             "shortcut": 83,
             "shortcut_label": 's',
-            "action" : function(item) {
+            "action": function (item) {
               // Handle show item for multiple selected
-              var selected = scope.tree.jstree('get_selected', true);
               scope.__showItems(selected);
             },
-            "_class" : "class"
+            "_class": "class"
           },
-          showAll : {
-            "label" : "Show (a)ll",
+          showAll: {
+            "label": "Show (a)ll",
             "shortcut": 65,
             "shortcut_label": 'a',
-            "action" : function(item) {
+            "action": function (item) {
               scope.app.showAll();
             },
-            "_class" : "class"
-          },
-          openModelViewer : {
-            "label" : "Show (m)odel",
-            "shortcut": 77,
-            "shortcut_label": 'm',
-            "action" : function(item) {
-              scope.__openModelViewer(node);
-            },
-            "_class" : "class"
+            "_class": "class"
           }
         };
-        if (!scope.modelViewerUrl) {
-          delete basicItems['openModelViewer'];
+
+        function addSetVisibleOption(items, name, label, flag, recursive) {
+          basicItems[name] = {
+            "label" : label,
+            "action" : function(item) {
+              _.each(targets, function(x) {
+                Object3DUtil.setVisible(x, flag, recursive);
+              });
+            },
+            "_class" : "class"
+          };
+
         }
+
+        if (targets && targets.length) {
+
+          var isAllVisible = _.every(targets, function(x) { return x.visible; });
+          var isAllHidden = _.every(targets, function(x) { return !x.visible; });
+
+          if (isAllVisible) {
+            //addSetVisibleOption(basicItems, "setTreeVisibleFalse", "Hide tree", false, true);
+            addSetVisibleOption(basicItems, "setNodeVisibleFalse", "Hide node", false, false);
+          } else if (isAllHidden) {
+            //addSetVisibleOption(basicItems, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(basicItems, "setNodeVisibleTrue", "Show node", true, false);
+          } else {
+            //addSetVisibleOption(basicItems, "setTreeVisibleFalse", "Hide tree", false, true);
+            //addSetVisibleOption(basicItems, "setTreeVisibleTrue", "Show tree", true, true);
+            addSetVisibleOption(basicItems, "setNodeVisibleFalse", "Hide node", false, false);
+            addSetVisibleOption(basicItems, "setNodeVisibleTrue", "Show node", true, false);
+          }
+        }
+
         var items = basicItems;
 
         // Remove disallowed entries
         var target = scope.__getObject3D(node);
-        var modelInstance = Object3DUtil.getModelInstance(target);
-        if (!modelInstance) {
-          delete items['openModelViewer'];
-        } else {
-          if (scope.supportAttachment) {
-            items['identifyAttachment'] = {
-              "separator_before": false,
-              "separator_after": false,
-              "label": "Identify attachment",
-              "action": function (obj) {
-                var attachment = scope.sceneState.identifyAttachment(modelInstance);
-                console.log(attachment);
-              }
-            };
-          }
-        }
         if (scope.allowEditHierarchy) {
           // Add edit entries
           items = _.merge(basicItems,
@@ -693,13 +766,7 @@ LabelHierarchyPanel.prototype.__updateTree = function(treeNodes) {
       console.log('move_node', data);
       var oldParent = scope.tree.jstree('get_node', data.old_parent);
       var newParent = scope.tree.jstree('get_node', data.parent);
-      var childObject3D = scope.__getObject3D(data.node);
-      var newParentObject3D = scope.__getObject3D(newParent);
-      if (childObject3D) {
-        Object3DUtil.attachToParent(childObject3D, newParentObject3D, scope.sceneState.scene);
-      } else {
-        console.log('Cannot find object3D', data.node);
-      }
+      scope.__reattach3DObjects(data.node, newParent, oldParent);
       scope.__updateJsTreeNode(oldParent);
       scope.__updateJsTreeNode(newParent);
       scope.__fixIconSizes();
@@ -751,14 +818,6 @@ LabelHierarchyPanel.prototype.__updateTree = function(treeNodes) {
         scope.onhoverCallback(null);
       }
     );
-  }
-};
-
-LabelHierarchyPanel.prototype.__openModelViewer = function(node) {
-  var modelInstance = this.__getModelInstanceOrObject3D(node);
-  if (modelInstance && modelInstance.model) {
-    var fullId = modelInstance.model.getFullID();
-    window.open(this.modelViewerUrl + '?modelId=' + fullId, 'Model Viewer');
   }
 };
 
@@ -913,6 +972,7 @@ LabelHierarchyPanel.prototype.loadHierarchy = function(json) {
     }
   });
   // Parent
+  var rootObject3D = this.__getRootObject3D();
   var roots = [];
   for (var i = 0; i < nodes.length; i++) {
     var node = nodes[i];
@@ -920,14 +980,14 @@ LabelHierarchyPanel.prototype.loadHierarchy = function(json) {
     if (node.parent != undefined && node.parent >= 0) {
       var parentObj = objects[node.parent];
       //console.log('node ' + i + ', parent ' + node.parent);
-      Object3DUtil.attachToParent(obj, parentObj, this.sceneState.scene);
+      Object3DUtil.attachToParent(obj, parentObj, rootObject3D);
     } else {
       roots.push(i);
-      Object3DUtil.detachFromParent(obj, this.sceneState.scene);
+      Object3DUtil.detachFromParent(obj, rootObject3D);
     }
   }
   // clear empty groups from the scene
-  var emptyGroups = Object3DUtil.findNodes(this.sceneState.scene, function(x) {
+  var emptyGroups = Object3DUtil.findNodes(rootObject3D, function(x) {
     return (x instanceof THREE.Group) && (x.children.length === 0) && (x.userData.sceneHierarchyGroup);
   });
   //console.log('emptyGroups', emptyGroups);
@@ -938,8 +998,8 @@ LabelHierarchyPanel.prototype.loadHierarchy = function(json) {
   this.setSceneState(this.sceneState);
 };
 
-LabelHierarchyPanel.prototype.selectObject = function(object, deselectOthers) {
-  var nodeId = this.__getTreeNodeId(object);
+LabelHierarchyPanel.prototype.selectObject = function(object3D, deselectOthers) {
+  var nodeId = this.__getTreeNodeId(object3D);
   if (nodeId != null) {
     var treeNode = this.tree.jstree('get_node', nodeId);
     if (treeNode) {
@@ -951,14 +1011,14 @@ LabelHierarchyPanel.prototype.selectObject = function(object, deselectOthers) {
       if (element) {
         element.scrollIntoView();
       } else {
-        this.__addDeferred( this.selectObject.bind(this,object,deselectOthers) );
+        this.__addDeferred( this.selectObject.bind(this,object3D,deselectOthers));
       }
     } else {
       console.warn('Unable to select node ' + nodeId);
-      this.__addDeferred( this.selectObject.bind(this,object,deselectOthers) );
+      this.__addDeferred( this.selectObject.bind(this,object3D,deselectOthers));
     }
   }
-  this.__showObjectDetails(object);
+  this.__showObjectDetails(object3D);
 };
 
 LabelHierarchyPanel.prototype.setSelectedObjects = function(objects) {
@@ -1006,7 +1066,7 @@ LabelHierarchyPanel.prototype.onActivate = function() {
 };
 
 LabelHierarchyPanel.prototype.showAlert = function(message, style) {
-  UIUtil.showAlert(this.container, message, style || 'alert-danger');
+  UIUtil.showAlertWithPanel(this.container, message, style || 'alert-danger');
 };
 
 LabelHierarchyPanel.prototype.hide = function() {

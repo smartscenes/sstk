@@ -13,6 +13,16 @@ module.exports = {
     CachedAssetLoader: require('./assets/CachedAssetLoader'),
     LightsLoader: require('./assets/LightsLoader')
   },
+  /** @namespace articulations */
+  articulations: {
+    PartsLoader: require('./articulations/PartsLoader'),
+    ConnectivityGraphHelper: require('./articulations/ConnectivityGraphHelper'),
+    ArticulationAnnotationsLoader: require('./articulations/ArticulationAnnotationsLoader'),
+    Articulation: require('./articulations/Articulation'),
+    DisplayAxis: require('./articulations/DisplayAxis'),
+    DisplayRadar: require('./articulations/DisplayRadar'),
+    ArticulationsRenderHelper: require('./articulations/ArticulationsRenderHelper')
+  },
   /** @namespace controls */
   controls: {
     CameraControls: require('./controls/CameraControls'),
@@ -44,14 +54,19 @@ module.exports = {
     GeometryUtil: require('./geo/GeometryUtil'),
     MeshHelpers: require('./geo/MeshHelpers'),
     MeshSampling: require('./geo/MeshSampling'),
+    OBB: require('./geo/OBB'),
+    OBBFitter: require('./geo/OBBFitter'),
+    OBBIntersections: require('./geo/OBBIntersections'),
     Object3DUtil: require('./geo/Object3DUtil'),
+    ObjectCleaner: require('./geo/ObjectCleaner'),
+    ObjectSegmentator: require('./geo/ObjectSegmentator'),
     Segments: require('./geo/Segments'),
-    ShapeGenerator: require('./geo/ShapeGenerator'),
+    SemanticOBB: require('./geo/SemanticOBB'),
     Voxels: require('./geo/Voxels')
   },
   /** @namespace loaders */
   loaders: {
-    HouseLoader: require('./loaders/HouseLoader'),
+    HouseLoader: require('./loaders/HouseTxtLoader'),
     VoxelLoader: require('./loaders/VoxelLoader'),
     WallLoader: require('./loaders/WallLoader')
   },
@@ -82,6 +97,7 @@ module.exports = {
     ClippingBox: require('./gfx/ClippingBox'),
     EDLPass: require('./gfx/EDLPass'),
     Lights: require('./gfx/Lights'),
+    SceneSetupHelper: require('./gfx/SceneSetupHelper'),
     Renderer: require('./gfx/Renderer'),
     RendererFactory: require('./gfx/RendererFactory'),
     ViewOptimizer: require('./gfx/ViewOptimizer'),
@@ -100,6 +116,12 @@ module.exports = {
     BasicSearchController: require('./search/BasicSearchController'),
     SolrQuerier: require('./search/SolrQuerier')
   },
+  /** @namespace shape */
+  shape: {
+    CompositeShapeGenerator: require('./shape/CompositeShapeGenerator'),
+    MissingGeometryGenerator: require('./shape/MissingGeometryGenerator'),
+    ShapeGenerator: require('./shape/ShapeGenerator')
+  },
   /** @namespace sim */
   sim: {
     FirstPersonAgent: require('./sim/FirstPersonAgent'),
@@ -112,10 +134,17 @@ module.exports = {
   ssg: {
     SceneStatistics: require('./ssg/SceneStatistics')
   },
+  /** @namespace parts */
+  parts: {
+    LabeledParts: require('./parts/LabeledParts'),
+    Part: require('./parts/Part'),
+    PartConnectivityGraph: require('./parts/PartConnectivityGraph')
+  },
   Colors: require('./util/Colors'),
   LabelRemap: require('./util/LabelRemap'),
   ImageUtil: require('./util/ImageUtil'),
   Timings: require('./util/Timings'),
+  TaskQueue: require('./util/TaskQueue'),
   PubSub: require('./PubSub'),
   util: require('./util/util')
 };

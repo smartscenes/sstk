@@ -105,8 +105,7 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
         {
           autoAlignModels: true,
           autoScaleModels: true,
-          useBuffers: true,
-          useDynamic: true // set dynamic to be true so our picking will work
+          useBuffers: true
         }
       );
 

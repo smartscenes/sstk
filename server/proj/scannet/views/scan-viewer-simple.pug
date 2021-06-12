@@ -31,12 +31,7 @@ html(lang="en")
             p#labelTypeSelectDiv
               label(for="labelType") Label
               select#labelType
-            p
-              input(type="checkbox", id="keepSegmentColors", checked)
-              label(for="keepSegmentColors") Keep segment colors
-            p#showSegmentOBBsDiv
-              input(type="checkbox", id="showSegmentOBBs")
-              label(for="showSegmentOBBs") Show segment OBBs
+            p#showSegmentsDiv
         .panel.panel-default
           h4.panel-heading.panel-title.collapsed(data-toggle='collapse', data-target='#images') Images
           #images.panel-collapse.collapse
@@ -67,9 +62,11 @@ html(lang="en")
         useNewImages: true,
         partsPanel: {
           partTypes: ['none', 'surfaces', 'voxels-solid', 'voxels-surface', 'voxels-labeled'],
-          labelTypes: ['Raw', 'Category', 'Object'],
+          labelTypes: ['Raw', 'Neutral', 'Normal', 'Category', 'Object'],
           defaultPartType: 'none',
-          defaultLabelType: 'Object'
+          defaultLabelType: 'Object',
+          neutralColor: STK.util.getUrlParam('neutralColor'),
+          useColorSequence: true
         }
       });
       function setLabelColors(labelMappings, cb) {

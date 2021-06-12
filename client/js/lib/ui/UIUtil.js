@@ -28,6 +28,30 @@ function createGlyphIcon(name) {
 
 self.createGlyphIcon = createGlyphIcon;
 
+function createGlyphShowHideButton(field, onChanged=null, isVisible= 'isVisible', initialState=false,
+                                   visibleIcon='glyphicon-eye-open', hiddenIcon='glyphicon-eye-close') {
+  function updateButtonState(button, visible) {
+    if (visible) {
+      button.find('.glyphicon').removeClass(hiddenIcon).addClass(visibleIcon);
+    } else {
+      button.find('.glyphicon').removeClass(visibleIcon).addClass(hiddenIcon);
+    }
+  }
+  var showButton = $('<button class="btn btn-default btn-xs"><i class="glyphicon"></i></button>');
+  field[isVisible] = initialState;
+  updateButtonState(showButton, field[isVisible]);
+  showButton.click(function () {
+    field[isVisible] = !field[isVisible];
+    updateButtonState(showButton, field[isVisible]);
+    if (onChanged) {
+      onChanged(field[isVisible]);
+    }
+  });
+  return showButton;
+}
+
+self.createGlyphShowHideButton = createGlyphShowHideButton;
+
 function createNumberSpinner(opts) {
   var input = $('<input/>').attr('id', opts.id).attr('name', opts.name || opts.id);
   var label = $('<label></label>').attr('for', opts.id).append(opts.label);
@@ -49,7 +73,96 @@ function createNumberSpinner(opts) {
 
 self.createNumberSpinner = createNumberSpinner;
 
-function setupLocalLoading(loadLocalFile, loadLocalFilename, loadFromLocalFn, allowMultiple, fileTypes) {
+function __createSelectWithOptions(options, defaultValue) {
+  var select = $('<select></select>');
+  for (var i = 0; i < options.length; i++) {
+    var s = options[i];
+    var value;
+    var label;
+    if (typeof(s) === 'string') {
+      label = s;
+      value = s;
+    } else {
+      label = s.text;
+      value = (s.value != null)? s.value : s.text;
+    }
+    select.append('<option value="' + value + '">' + label + '</option>');
+  }
+  if (defaultValue != null) {
+    select.val(defaultValue);
+  }
+  if (select.selectNext == null) {
+    select.selectNext = function() {
+      var sel = select[0];
+      var i = sel.options.selectedIndex;
+      sel.options[++i%sel.options.length].selected = true;
+      select.change();
+    };
+  }
+  return select;
+}
+
+function __createSelect(options, defaultValue) {
+  var id = options.id;
+  var select = __createSelectWithOptions(options.options, defaultValue);
+  if (options.change) {
+    select.change(() => options.change(select.val()));
+  }
+  if (options.id != null) {
+    select.attr('id', id);
+  }
+  var label = null;
+  if (options.text != null) {
+    label = $('<label></label>').attr('for', options.id).text(options.text);
+  }
+  return { label: label, select: select };
+}
+
+function createSelect(options, defaultValue) {
+ if (_.isArray(options)) {
+   return __createSelectWithOptions(options, defaultValue);
+ } else {
+   return __createSelect(options, defaultValue);
+ }
+}
+self.createSelect = createSelect;
+
+
+function createCheckbox(options, defaultValue) {
+  var id = options.id;
+  var checkbox = $('<input/>').attr('type', 'checkbox')
+    .attr('id', id)
+    .prop('checked', defaultValue);
+  if (options.change) {
+    checkbox.change(() => options.change(checkbox.prop('checked')));
+  }
+  var label = null;
+  if (options.text != null) {
+    label = $('<label></label>').attr('for', id).text(options.text);
+  }
+  return { label: label, checkbox: checkbox };
+}
+
+self.createCheckbox = createCheckbox;
+
+function createTextbox(options, defaultValue) {
+  var id = options.id;
+  var textbox = $('<input/>').attr('type', 'text')
+    .attr('id', id)
+    .prop('checked', defaultValue);
+  if (options.change) {
+    textbox.change(() => options.change(textbox.val()));
+  }
+  var label = null;
+  if (options.text != null) {
+    label = $('<label></label>').attr('for', id).text(options.text);
+  }
+  return { label: label, textbox: textbox };
+}
+
+self.createTextbox = createTextbox;
+
+function setupLocalLoading(loadLocalFile, loadLocalFilename, loadFromLocalFn, allowMultipleFn, fileTypes) {
   // console.log('setup local loading');
   // Load from local button
   loadLocalFile.click(function() {
@@ -61,13 +174,16 @@ function setupLocalLoading(loadLocalFile, loadLocalFilename, loadFromLocalFn, al
     var numFiles = input.get(0).files ? input.get(0).files.length : 0;
     var label = input.val().replace(/\\/g, '/').replace(/.*\//, '');
     //input.trigger('fileselect', [numFiles, label]);
-    loadLocalFilename.val(label);
+    if (loadLocalFilename) {
+      loadLocalFilename.val(label);
+    }
     if (numFiles > 0 && loadFromLocalFn) {
       console.log('Loading ' + label);
       var fileType;
       if (fileTypes) {
         fileType = fileTypes.val();
       }
+      var allowMultiple = allowMultipleFn && allowMultipleFn(fileType);
       if (allowMultiple) {
         loadFromLocalFn(input.get(0).files, fileType);  // Multiple files allowed
       } else {
@@ -79,6 +195,43 @@ function setupLocalLoading(loadLocalFile, loadLocalFilename, loadFromLocalFn, al
 
 self.setupLocalLoading = setupLocalLoading;
 
+function getAllowMultipleFn(allowMulti) {
+  if (typeof allowMulti === 'function') {
+    return allowMulti;
+  } else if (typeof allowMulti === 'boolean' || !allowMulti) {
+    return function() { return false; };
+  } else if (typeof allowMulti === 'object') {
+    return function(fileType) { return allowMulti[fileType]; };
+  } else {
+    throw "Cannot convert to function";
+  }
+}
+
+function popupFileInput(callback) {
+  var x = document.createElement("INPUT");
+  x.setAttribute("type", "file");
+  x.style.visibility = "hidden";
+  document.body.appendChild(x);
+  setupLocalLoading($(x), null, callback);
+  $(x).click();
+}
+self.popupFileInput = popupFileInput;
+
+/**
+ * Create a file input (with element for file and element for displaying the filename) with labels for local loading
+ * @param params
+ * @param [params.id] {string} DOM id prefix for the fileinput elements (existing elements are used if found)
+ * @param [params.label] {string} Label to show on load button
+ * @param [params.loadFn] {function} Callback for loading the selected file
+ * @param [params.help] {string} Message to show for the help element
+ * @param [params.hideFilename] {boolean} Whether the filename is hidden
+ * @param [params.allowMultiple] {boolean} Whether multiple input files are allowed
+ * @param [params.inline] {boolean} Whether to use inline span or a separate div
+ * @param [params.style] {string} How to style the fileinput ('bootstrap' (default), 'basic', 'existing', 'hidden')
+ * @param [params.labelButton] {jQuery} JQuery element for the load button (used for 'existing' style)
+ * @param [params.fileTypes] {string[]} Allowed filetypes (a separate select element is created if specified)
+ * @returns {{file: jQuery, filename: jQuery, group: jQuery, fileTypes: jQuery}}
+ */
 function createFileInput(params) {
   console.log('createFileInput', params);
   var id = params.id;
@@ -86,7 +239,7 @@ function createFileInput(params) {
   var loadFn = params.loadFn;
   var help = params.help;
   var hideFilename = params.hideFilename;
-  var allowMultiple = params.allowMultiple;
+  var allowMultipleFn = getAllowMultipleFn(params.allowMultiple);
   var inline = params.inline;
   var style = params.style || 'bootstrap';
   var fileTypes = params.fileTypes;
@@ -126,16 +279,19 @@ function createFileInput(params) {
       div.prepend(helpIcon);
     }
   }
-  if (allowMultiple) {
-    file.attr('multiple', 'multiple');
-  } else {
-    file.removeAttr('multiple');
+  function updateFileMultiple(allowMulti) {
+    if (allowMulti) {
+      file.attr('multiple', 'multiple');
+    } else {
+      file.removeAttr('multiple');
+    }
   }
   var inputElements = {
     group: div,
     file: file,
     filename: filename
   };
+  updateFileMultiple(allowMultipleFn());
   if (fileTypes) {
     var fileTypesSelect = $('<select></select>');
     for (var i = 0; i < fileTypes.length; i++) {
@@ -150,9 +306,13 @@ function createFileInput(params) {
     }
     file.parent().after(fileTypesSelect);
     inputElements.fileTypes = fileTypesSelect;
+    fileTypesSelect.change(function(event) {
+      var allowMulti = allowMultipleFn(fileTypesSelect.val());
+      updateFileMultiple(allowMulti);
+    });
   }
   if (loadFn) {
-    setupLocalLoading(inputElements.file, inputElements.filename, loadFn, allowMultiple, inputElements.fileTypes);
+    setupLocalLoading(inputElements.file, inputElements.filename, loadFn, allowMultipleFn, inputElements.fileTypes);
   }
   return inputElements;
 }
@@ -192,27 +352,55 @@ function destroyAlert(alertBox) {
   alertBox.remove();
 }
 
-function showAlert(parent, message, style, timeout, fontSize) {
-  parent = parent || 'body';
+function createAlert(message, style, timeout, fontSize) {
   style = style || 'alert-danger';
   fontSize = fontSize || '18pt';
+  timeout = (timeout == undefined)? 5000 : timeout;
   var alertMessage = $('<span class="center"/>');
   var alertBox = $('<div class="alert"/>');
   alertBox.append($('<button class="close" type="button"/>').html('&times').click(
     function() { destroyAlert(alertBox); }));
   alertBox.append(alertMessage);
 
-  setTimeout(function() { destroyAlert(alertBox); }, timeout || 5000);
+  if (timeout > 0) {
+    setTimeout(function () { destroyAlert(alertBox); }, timeout);
+  }
   alertMessage.html(message);
   alertBox.addClass(style);
   alertBox.css('font-size', fontSize);
-  //alertBox.css('z-index', '10').css('position', 'absolute').css('margin-left', 'auto').css('margin-right', 'auto');
+  return alertBox;
+}
+
+function __showAlert(parent, message, style, timeout, fontSize) {
+  parent = parent || 'body';
+  var alertBox = createAlert(parent, message, style, timeout, fontSize);
   alertBox.show();
   $(parent).append(alertBox);
   return alertBox;
 }
 
+function showAlert(message, style, timeout, fontSize) {
+  __showAlert(null, message, style, timeout, fontSize);
+}
+
 self.showAlert = showAlert;
+
+function showAlertWithPanel(parent, message, style, timeout, fontSize) {
+  __showAlert(parent, message, style, timeout, fontSize);
+}
+
+self.showAlertWithPanel = showAlertWithPanel;
+
+function showOverlayAlert(parent, message, style, timeout, fontSize) {
+  parent = parent || 'body';
+  var alertBox = createAlert(message, style, timeout, fontSize);
+  alertBox.css('z-index', '10').css('position', 'absolute').css('margin-left', 'auto').css('margin-right', 'auto');
+  alertBox.show();
+  $(parent).prepend(alertBox);
+  return alertBox;
+}
+
+self.showOverlayAlert = showOverlayAlert;
 
 function makeToggleable(controlElement, toggleable) {
   controlElement.click(function () {
@@ -248,6 +436,71 @@ function bindVideoPreview(element) {
 }
 
 self.bindVideoPreview = bindVideoPreview;
+
+function setupUIHookups(uihookups, keymap) {
+  if (uihookups) {
+    for (var k in uihookups) {
+      if (uihookups.hasOwnProperty(k)) {
+        var h = uihookups[k];
+        if (h) {
+          if (h.element) {
+            var element = $(h.element);
+            element.click(h.click);
+            if (h.shortcut) {
+              keymap(_.defaults({on: h.shortcut, do: h.name}, h.keyopts || {}), h.click);
+            }
+          } else if (h.shortcut) {
+            keymap(_.defaults({on: h.shortcut, do: h.name}, h.keyopts || {}), h.click);
+          }
+        }
+      }
+    }
+  }
+}
+
+self.setupUIHookups = setupUIHookups;
+
+function createButton(opts, keymap) {
+  var button = $('<input/>')
+    .attr('type', 'button')
+//    .attr('class', 'btn btn-default')
+//    .attr('role', 'button')
+    .attr('value', opts.name);
+  var callback = (opts.callback != null)? opts.callback : opts.click;
+  button.click(callback);
+  if (opts.shortcut != null || opts.accessKey != null) {
+    var shortcut = (opts.shortcut != null)? opts.shortcut : opts.accessKey;
+    keymap(_.defaults({on: shortcut, do: opts.name}, opts.keyopts || {}), callback);
+  }
+  return button;
+}
+
+self.createButton = createButton;
+
+function addButtons(panel, items, keymap) {
+  _.forEach(items, (v,k) => {
+    if (v.items) {
+      var div = createPanel(v, keymap);
+      panel.append(div);
+    } else {
+      var button = createButton(v, keymap);
+      panel.append(button);
+    }
+  });
+}
+
+function createPanel(options, keymap) {
+  var panel = $('<div></div>');
+  if (options.name != null) {
+    panel.append($('<label></label>').append(options.name)).append('&nbsp;');
+  }
+  if (options.items) {
+    addButtons(panel, options.items, keymap);
+  }
+  return panel;
+}
+
+self.createPanel = createPanel;
 
 function copy(selector) {
   var copyText = document.querySelector(selector);

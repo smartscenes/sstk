@@ -24,9 +24,12 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
   var canvas = document.getElementById('canvas');
   var sceneViewer = new SceneViewer({
       container: canvas,
+      tabs: ['scenes', 'models', 'textures', 'colors', 'arch', 'scans', 'sceneHierarchy', 'bvh', 'sceneGen'],
+      onTabsActivate: onResize,
       addGround: true,
       loadingIconUrl:  Constants.defaultLoadingIconUrl,
       allowEdit: true,
+      allowMaterialMode: true,
       editMode: false,
       allowBBoxQuery: true,
       allowSelectMode: true,
@@ -34,12 +37,13 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
       allowScenePrevNext: true,
       allowHighlightMode: true,
       allowMagicColors: true,
+      supportArticulated: true,
       enableUILog: true,
       showSearchSourceOption: true,
       showInstructions: true,
       contextQueryOptions: { showPriorsViz: true, allowGroupExpansion: true },
       useAmbientOcclusion: false,
-      useLights: true,
+      usePhysicalLights: false,
       useShadows: true,
       useDatGui: true
     });
@@ -47,23 +51,16 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
     sceneViewer.skipLoadInitialScene = true;
     sceneViewer.launch();
     sceneViewer.assetManager.registerCustomAssetGroups({
-      assetFiles: Constants.scanAssetsFile,
+      assetFiles: Constants.extraAssetsFile,
       filterByAssetId: sceneViewer.urlParams.scanModelId,
       callback: function (err, res) {
         sceneViewer.loadInitialScene();
       }
     });
-  } else if (sceneViewer.urlParams.scans) {
+  } else if (sceneViewer.urlParams.scans || sceneViewer.urlParams.extra) {
     sceneViewer.skipLoadInitialScene = true;
     sceneViewer.launch();
-    sceneViewer.assetManager.registerCustomAssetGroups({
-      assetFiles: Constants.scanAssetsFile,
-      filterByType: "scene",
-      searchController: sceneViewer.sceneSearchController,
-      callback: function (err, res) {
-        sceneViewer.loadInitialScene();
-      }
-    });
+    sceneViewer.registerAssets(Constants.extraAssetsFile);
   } else {
     sceneViewer.launch();
   }
@@ -74,27 +71,6 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
   sceneViewer.modelSearchController.searchPanel.Subscribe('SearchSucceededPreparePanel', null, function () {
       $('#tabs').tabs({ active: 1 });
     });
-  $('#tabs').bind('tabsactivate', function (event, ui) {
-    onResize();
-    switch (ui.newPanel.attr('id')) {
-      case 'tabs-1':
-        sceneViewer.sceneSearchController.onResize();
-        break;
-      case 'tabs-2':
-        sceneViewer.modelSearchController.onResize();
-        break;
-      case 'tabs-3':
-        if (sceneViewer.sceneHierarchy) {
-          sceneViewer.sceneHierarchy.onActivate();
-        }
-        break;
-      case 'tabs-4':
-        if (sceneViewer.bvhVisualizer) {
-          sceneViewer.bvhVisualizer.onActivate();
-        }
-        break;
-    }
-  });
 
   // Make text scene form toggleable
   //$( '#textSceneForm' ).hide();

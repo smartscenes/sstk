@@ -1,31 +1,53 @@
 var mysql = require('mysql');
 var async = require('async');
 var _ = require('lodash');
-var log = require('../lib/logger')('SQLQuerier');
+var _log = require('../lib/logger')('SQLQuerier');
 var tables = {};
 
-
 // NOTE: COUNT_DISTINCT is not true SQL function
+// NOTE: It would be nice to have FIRST/LAST but MySql/MariaDB doesn't appear to support them
 var validAggrFunctions = ['AVG', 'COUNT', 'GROUP_CONCAT', 'MAX', 'MIN', 'STD', 'SUM', 'VAR', 'COUNT_DISTINCT'];
 
-// Wrapper around mysql for communication with SQL databases
-// params should contain members: host, user, password, database
-function SQLQuerier(params) {
+/**
+ * Wrapper around mysql for communication with SQL databases
+ * @param params should contain members: host, user, password, database
+ * @param params.host {string} Hostname of SQL server
+ * @param params.user {string} Username for accessing SQL server
+ * @param params.password {string} Password for accessing SQL server
+ * @param params.database {string} Database name to use when accessing SQL server
+ * @param [params.connectionLimit] {int} Connection limit
+ * @param [params.port] {int} Port of SQL server (default: 3306)
+ * @param [params.connectionLimit] {int} Connection limit (default: 100)
+ * @param [params.debug] {boolean} Whether to use debugging (default: false)
+ * @param [log]
+ * @constructor
+ */
+function SQLQuerier(params, log) {
   if (params && params.host && params.user && params.password && params.database) {
+    params = _.defaults(Object.create(null), params, { connectionLimit: 100, port: 3306, debug: false });
     this.pool = mysql.createPool({
-      connectionLimit : 100, //important
+      connectionLimit : params.connectionLimit, //important
       host     : params.host,
       port     : params.port,
       user     : params.user,
       password : params.password,
       database : params.database,
-      debug    : false
+      debug    : params.debug
     });
+    this.log = log || _log;
   } else {
     throw new Error('Tried to create SQLQuerier with invalid params:' + params);
   }
 }
 
+/**
+ * Executes a parameterized query using a connection pool, making sure to release the connection after use
+ * Use ?? for ids (column/table names) ? for other values for properly escaping
+ * (and query plan reuse)
+ * @param queryString {string} Query string
+ * @param queryParams {Array} List of query parameters in order
+ * @param callback {function(err,rows)} Error first callback
+ */
 SQLQuerier.prototype.execute = function(queryString, queryParams, callback) {
   this.pool.getConnection(function(err, connection) {
     if (err) {
@@ -34,18 +56,28 @@ SQLQuerier.prototype.execute = function(queryString, queryParams, callback) {
       return;
     }
 
-    connection.query(queryString, queryParams, function(err, rows) {
-      connection.release();
-      callback(err, rows);
-    });
-    //connection.on('error', onError);
+    if (queryString.indexOf('GROUP_CONCAT') >= 0) {
+      // Fix bug #76 - where group concat returns aggregated values that are too short
+      connection.query('SET SESSION group_concat_max_len = 10000', function() {
+        connection.query(queryString, queryParams, function(err, rows) {
+          connection.release();
+          callback(err, rows);
+        });
+      });
+    } else {
+      connection.query(queryString, queryParams, function(err, rows) {
+        connection.release();
+        callback(err, rows);
+      });
+    }
   });
 };
 
 SQLQuerier.prototype.__getErrorCallback = function(res) {
+  var log = this.log;
   return function(err) {
     log.error('Error querying database', err);
-    res.status(500).json({"code" : 500, "status" : "Error in database connection: " + err});
+    res.status(500).json({'code': 500, 'status': 'Error in database connection: ' + err});
   };
 };
 
@@ -66,8 +98,8 @@ SQLQuerier.prototype.queryDb = function(queryString, queryParams, res, onSuccess
 
 SQLQuerier.prototype.updateById = function(table, fields, ids, callback) {
   var batchsize = 1000;
-  var fieldsSetStmt = fields.map(function(f) { return "?? = ?"; });
-  var queryBase = "UPDATE ?? SET " + fieldsSetStmt + " WHERE ";
+  var fieldsSetStmt = fields.map(function(f) { return '?? = ?'; });
+  var queryBase = 'UPDATE ?? SET ' + fieldsSetStmt + ' WHERE ';
   var queryParamsBase = [table].concat( _.flatten(fields.map(function(f) { return [f.name, f.value]; } )));
 
   var begin = 0;
@@ -79,7 +111,7 @@ SQLQuerier.prototype.updateById = function(table, fields, ids, callback) {
       begin = end;
       end = Math.min(begin + batchsize, ids.length);
       var batchIds = ids.slice(begin, end);
-      var query = queryBase + '(' + batchIds.map(function(f) { return "?"; }).join(',') + ')';
+      var query = queryBase + '(' + batchIds.map(function(f) { return '?'; }).join(',') + ')';
       var queryParams = queryParamsBase.concat(batchIds);
       scope.execute(query, queryParams, callback);
     },
@@ -94,11 +126,12 @@ SQLQuerier.prototype.updateById = function(table, fields, ids, callback) {
  * @param opts
  * @param opts.table {string} Table name
  * @param opts.data {Object.<string,Object<string,*>>[]} Map of id to map of field/value pairs to update for the id.
- * @param opts.validUpdateFields {string[]} List of valid fields for update
+ * @param opts.updateFields {string[]} List of valid fields for update
  * @param opts.idField=id {string} id field
  * @param opts.callback
  */
 SQLQuerier.prototype.updateRecords = function(opts) {
+  var log = this.log;
   var table = opts.table;
   var idToUpdates = opts.data;
   var validUpdateFields = opts.updateFields;
@@ -120,10 +153,10 @@ SQLQuerier.prototype.updateRecords = function(opts) {
         async.forEachOfSeries(idToUpdates, function (allFields, id, cb) {
           var fields = _.pick(allFields, validUpdateFields);
           var fieldsSetStmt = _.map(fields, function (v, f) {
-            return "?? = ?";
+            return '?? = ?';
           });
           if (fieldsSetStmt.length > 0) {
-            var queryString = "UPDATE ?? SET " + fieldsSetStmt + " WHERE " + idField + " = ?";
+            var queryString = 'UPDATE ?? SET ' + fieldsSetStmt + ' WHERE ' + idField + ' = ?';
             var queryParams = [table].concat(_.flatten(
               _.map(fields, function (v, f) {
                 return [f, v];
@@ -164,7 +197,7 @@ SQLQuerier.prototype.updateRecords = function(opts) {
 };
 
 SQLQuerier.prototype.__queryColumnNames = function(tablename, onSuccessCallback, onErrorCallback) {
-  var query = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=?";
+  var query = 'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=?';
   this.queryDb(query, [tablename], null, function(rows) {
     onSuccessCallback(rows.map(function(x) { return x['COLUMN_NAME']; }));
   }, onErrorCallback);
@@ -186,11 +219,12 @@ SQLQuerier.prototype.queryColumnNames = function(tablename, onSuccessCallback, o
 };
 
 SQLQuerier.prototype.queryImageData = function(tablename, field, idField, id, onSuccessCallback, onErrorCallback) {
-  var query = "SELECT ?? from ?? where ?? = ?";
+  var query = 'SELECT ?? from ?? where ?? = ?';
   this.queryDb(query, [field, tablename, idField, id], null, onSuccessCallback, onErrorCallback);
 };
 
 SQLQuerier.prototype.handleImageQuery = function(req, res, tablename, field, idField, id) {
+  var log = this.log;
   var errMessage = 'Error fetching image field ' + field + ' from table '
     + tablename + ' with ' + idField + '=' + id;
   this.queryImageData(tablename, field, idField, id,
@@ -241,6 +275,14 @@ SQLQuerier.OPMAP = {
 };
 SQLQuerier.OPS = _.values(SQLQuerier.OPMAP);
 
+/**
+ * Given input query parameters, and a set of valid parameter fields,
+ * returns
+ * @param params
+ * @param validParamFields {Array<string|SqlFieldInfo>>} Valid parameters (with mappings to SQL column fields)
+ * @param [tableName] {string} Optional name of table used to prefix field names
+ * @returns {SqlQueryFilterInfo}
+ */
 SQLQuerier.prototype.getQueryFilters = function(params, validParamFields, tableName) {
   var baseFilters = this.__getConjQueryFilters(params, validParamFields, tableName);
   var ors = params['$or'];
@@ -271,8 +313,9 @@ SQLQuerier.prototype.getQueryFilters = function(params, validParamFields, tableN
 };
 
 SQLQuerier.prototype.__getConjQueryFilters = function(params, validParamFields, tableName) {
+  var log = this.log;
   var filters = [];
-  var filterString = "";
+  var filterString = '';
   var gconj = 'AND';
   function toConj(str, dft) {
     if (str && str.toLowerCase() === 'or') {
@@ -300,8 +343,8 @@ SQLQuerier.prototype.__getConjQueryFilters = function(params, validParamFields, 
   }
   for (var i = 0; i < validParamFields.length; i++) {
     var pfield = validParamFields[i];
-    if (typeof pfield === "string") {
-      pfield = { field: pfield, param: pfield, op: "=" };
+    if (typeof pfield === 'string') {
+      pfield = { field: pfield, param: pfield, op: '=' };
     }
     var value = params[pfield.param];
     if (value !== undefined) {
@@ -311,7 +354,7 @@ SQLQuerier.prototype.__getConjQueryFilters = function(params, validParamFields, 
       }
       if (_.isArray(value)) {
         var values = value.map(function(x) { return mysql.escape(x); });
-        appendFilter("?? IN (" + values.join(',') + ")", [fieldName]);
+        appendFilter('?? IN (' + values.join(',') + ')', [fieldName]);
       } else if (_.isObject(value)) {
         var fconj = toConj(value['$conj'], gconj);
         var fFilterString = '';
@@ -364,7 +407,7 @@ SQLQuerier.prototype.__getConjQueryFilters = function(params, validParamFields, 
           appendFilter(fFilterString);
         }
       } else {
-        appendFilter("?? " + pfield.op + " ?", [fieldName, value]);
+        appendFilter('?? ' + pfield.op + ' ?', [fieldName, value]);
       }
     }
   }
@@ -373,9 +416,9 @@ SQLQuerier.prototype.__getConjQueryFilters = function(params, validParamFields, 
 
 SQLQuerier.prototype.appendQueryFilter = function(filters, column, op, value, appendValueDirectly) {
   if (filters.filterString.length > 0) {
-    filters.filterString = filters.filterString + " AND ";
+    filters.filterString = filters.filterString + ' AND ';
   }
-  filters.filterString = filters.filterString + " ?? " + op + " " + (appendValueDirectly? value:"?");
+  filters.filterString = filters.filterString + ' ?? ' + op + ' ' + (appendValueDirectly? value:'?');
   filters.filters.push(column);
   if (!appendValueDirectly) {
     filters.filters.push(value);
@@ -387,12 +430,39 @@ SQLQuerier.prototype.formatQuery = function(sql, filters) {
   return mysql.format(sql, filters);
 };
 
+/**
+ * Queries table ordered by created at
+ * @param options
+ * @param res
+ * @param onSuccess
+ * @param onError
+ */
 SQLQuerier.prototype.queryTableByCreatedAt = function(options, res, onSuccess, onError) {
   options.orderBy = 'created_at DESC';
   this.queryTable(options, res, onSuccess, onError);
 };
 
+
+/**
+ * Query table
+ * @param options
+ * @param options.table {string}
+ * @param [options.queryFilters] {SqlQueryFilterInfo}
+ * @param [options.params]
+ * @param [options.validParamFields] {Array<string|SqlFieldInfo>>} Valid parameters (with mappings to SQL column fields)
+ * @param [options.columns] {string[]} Name of columns to query
+ * @param [options.limit] {int}
+ * @param [options.offset] {int}
+ * @param [options.orderBy] {string} Optional ordering (of the form 'column_name DESC')
+ * @param [options.groupBy] {string}
+ * @param [options.aggregate] {string}
+ * @param [options.defaultAggregate] {string}
+ * @param res
+ * @param onSuccess
+ * @param onError
+ */
 SQLQuerier.prototype.queryTable = function(options, res, onSuccess, onError) {
+  var log = this.log;
   // Get queryFilters
   if (!options.queryFilters) {
     if (options.params && options.validParamFields) {
@@ -403,7 +473,7 @@ SQLQuerier.prototype.queryTable = function(options, res, onSuccess, onError) {
   var f = options.queryFilters;
   var pool = this.pool;
   var columns = (options.columns && options.columns.length)?
-    options.columns.map( function(x) { return pool.escapeId(x); }) : ['*'];
+    options.columns.map(function(x) { return pool.escapeId(x); }) : ['*'];
   var groupById = options.groupBy? pool.escapeId(options.groupBy) : null;
   if (groupById) {
     // Trying to do groupBy
@@ -452,15 +522,15 @@ SQLQuerier.prototype.queryTable = function(options, res, onSuccess, onError) {
   var columnsStr = columns.join(',');
 
   var tableName = options.table;
-  var limitTo = (options.limit)? parseInt(options.limit) : null;
-  var offset = (options.offset)? parseInt(options.offset) : null;
+  var limitTo = (options.limit != null)? parseInt(options.limit) : null;
+  var offset = (options.offset != null)? parseInt(options.offset) : null;
   var query;
   if (f.filters.length > 0) {
-    var sql = "SELECT " + columnsStr + " FROM " + tableName + " where " + f.filterString;
+    var sql = 'SELECT ' + columnsStr + ' FROM ' + tableName + ' where ' + f.filterString;
     log.info('query filters', f.filters);
     query = mysql.format(sql, f.filters);
   } else {
-    query = "SELECT " + columnsStr + " FROM " + tableName;
+    query = 'SELECT ' + columnsStr + ' FROM ' + tableName;
   }
   if (groupById) {
     query += ' GROUP BY ' + groupById;
@@ -479,3 +549,20 @@ SQLQuerier.prototype.queryTable = function(options, res, onSuccess, onError) {
 };
 
 module.exports = SQLQuerier;
+
+/**
+ * Information about a field.
+ * @typedef SqlFieldInfo
+ * @type {object}
+ * @property {string} field - SQL column field name
+ * @property {string} param - Parameter name
+ * @property {string} op - Default operator to use for field
+ */
+
+/**
+ * Sql filter string and parameters (to be used as arguments to mysql.format())
+ * @typedef SqlQueryFilterInfo
+ * @type {object}
+ * @property {string} filterString - Parameterize query string (with ?? and ?)
+ * @property {Array} filters - values to insert into the filterString (in place of ?? and ?) so that mysql.format can perform proper escaping
+ */

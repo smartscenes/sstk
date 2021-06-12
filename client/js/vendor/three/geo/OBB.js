@@ -100,14 +100,14 @@ OBB.prototype.setFromObject = ( function() {
 		w = object.matrixWorld.elements;
 
 		// assign the transform center to the position member
-		aabb.center( this.position ).applyMatrix4( object.matrixWorld );
+		aabb.getCenter( this.position ).applyMatrix4( object.matrixWorld );
 
 		// extract the rotation and assign it to the basis of the OBB
 		// for numerical stability, you could orthonormalize the basis
 		this.basis.extractRotation( object.matrixWorld );
 
 		// calculate half sizes for each axis
-		aabb.size( this.halfSizes ).multiplyScalar( 0.5 );
+		aabb.getSize( this.halfSizes ).multiplyScalar( 0.5 );
 
 		// extract the (uniform) scaling and apply it to the halfSizes
 		scale = vector.set( w[ 0 ], w[ 1 ], w[ 2 ] ).length();
@@ -129,9 +129,9 @@ OBB.prototype.setFromObject = ( function() {
  */
 OBB.prototype.setFromAABB = function( aabb ) {
 
-	aabb.center( this.position );
+	aabb.getCenter( this.position );
 
-	aabb.size( this.halfSizes ).multiplyScalar( 0.5 );
+	aabb.getSize( this.halfSizes ).multiplyScalar( 0.5 );
 
 	this.basis.identity();
 
@@ -192,7 +192,7 @@ OBB.prototype.closestPoint = ( function() {
 		// project the target onto the OBB axes and walk towards that point
 		for ( index = 0; index < 3; index++ )
 		{
-			value = THREE.Math.clamp( displacement.dot( axis[ index ] ), -this.halfSizes.getComponent( index ), this.halfSizes.getComponent( index ) );
+			value = THREE.MathUtils.clamp( displacement.dot( axis[ index ] ), -this.halfSizes.getComponent( index ), this.halfSizes.getComponent( index ) );
 
 			closesPoint.add( axis[ index ].multiplyScalar( value ) );
 		}
@@ -700,7 +700,7 @@ OBB.prototype.copy = function( obb ) {
  */
 OBB.prototype.clone = function() {
 
-	return new OBB().copy( this );
+	return new this.constructor().copy( this );
 };
 
 module.exports = OBB;

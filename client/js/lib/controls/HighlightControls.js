@@ -1,6 +1,5 @@
 'use strict';
 
-var Picker = require('controls/Picker');
 var PubSub = require('PubSub');
 
 /**
@@ -80,6 +79,7 @@ HighlightControls.prototype.highlight = function (object3D) {
       this.highlightCallback(object3D, 1);
     } else {
       this.picker.highlightObject(object3D);
+      this.Publish('HighlightChanged', object3D, 1);
     }
   }
 };
@@ -90,6 +90,7 @@ HighlightControls.prototype.unhighlight = function (object3D) {
       this.highlightCallback(object3D, 0);
     } else {
       this.picker.unhighlightObject(object3D);
+      this.Publish('HighlightChanged', object3D, 0);
     }
   }
 };

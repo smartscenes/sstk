@@ -2,7 +2,6 @@
 
 var async = require('async');
 var path = require('path');
-var fs = require('fs');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
@@ -11,6 +10,7 @@ var _ = STK.util;
 
 cmd
   .version('0.0.1')
+  .description('Print some basic information about the asset (no scaling/alignment).')
   .option('--input <filename>', 'Input path')
   .option('--input_format <format>', 'Input file format to use')
   .option('--inputType <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
@@ -24,24 +24,11 @@ if (!cmd.input) {
   console.error('Please specify --input <filename>');
   process.exit(-1);
 }
-var files = [cmd.input];
-if (cmd.input.endsWith('.txt')) {
-  // Read files form input file
-  var data = STK.util.readSync(cmd.input);
-  files = data.split('\n').map(function(x) { return STK.util.trim(x); }).filter(function(x) { return x.length > 0; });
-}
+var files = cmd.getInputs(cmd.input);
 
-if (cmd.assetInfo && cmd.assetInfo.source) {
-  var source = cmd.assetInfo.source;
-  if (!cmd.assetGroups) { cmd.assetGroups = [source]; }
-  if (cmd.assetGroups.indexOf(source) < 0) { cmd.assetGroups.push(source); }
-}
-
-if (cmd.assetGroups) {
-  STK.assets.AssetGroups.registerDefaults();
-  var assets = require('./data/assets.json');
-  var assetsMap = _.keyBy(assets, 'name');
-  STK.assets.registerCustomAssetGroupsSync(assetsMap, cmd.assetGroups);  // Make sure we get register necessary asset groups
+var assetSources = cmd.getAssetSources(cmd.inputType, files, cmd.assetGroups);
+if (assetSources) {
+  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
 }
 
 var output_basename = cmd.output;
@@ -67,7 +54,7 @@ function printAssetInfo(asset) {
     var stats = STK.geo.Object3DUtil.getObjectStats(asset.object3D, true);
     console.log(stats);
   } else {
-    throw "Unsupported asset type";
+    throw 'Unsupported asset type';
   }
 }
 
@@ -80,7 +67,7 @@ function processFiles() {
     var scenename;
     if (basename) {
       // Specified output - append index
-      if (files.length > 0) {
+      if (files.length > 1) {
         basename = basename + '_' + index;
       }
       scenename = basename;
@@ -112,7 +99,7 @@ function processFiles() {
         metadata.id = id;
       } else if (cmd.inputType === 'path') {
         info = { file: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
-        metadata.path = path;
+        metadata.path = file;
       }
       if (cmd.assetInfo) {
         info = _.defaults(info, cmd.assetInfo);
@@ -121,7 +108,10 @@ function processFiles() {
       timings.start('load');
       assetManager.loadAsset(info, function (err, asset) {
         timings.stop('load');
-        STK.util.waitImagesLoaded(function() { printAssetInfo(asset); });
+        STK.util.waitImagesLoaded(function() {
+          printAssetInfo(asset);
+          callback();
+        });
       });
     }
   }, function (err, results) {

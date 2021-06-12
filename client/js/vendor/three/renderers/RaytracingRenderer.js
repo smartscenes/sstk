@@ -1,14 +1,12 @@
 /**
  * RaytracingRenderer renders by raytracing it's scene. However, it does not
- * compute the pixels itself but it hands off and coordinates the taks for workers.
+ * compute the pixels itself but it hands off and coordinates the tasks for workers.
  * The workers compute the pixel values and this renderer simply paints it to the Canvas.
  *
  * @author zz85 / http://github.com/zz85
  */
 
 THREE.RaytracingRenderer = function ( parameters ) {
-
-	console.log( 'THREE.RaytracingRenderer', THREE.REVISION );
 
 	parameters = parameters || {};
 
@@ -20,8 +18,6 @@ THREE.RaytracingRenderer = function ( parameters ) {
 	var context = canvas.getContext( '2d', {
 		alpha: parameters.alpha === true
 	} );
-
-	var maxRecursionDepth = 3;
 
 	var canvasWidth, canvasHeight;
 
@@ -39,15 +35,16 @@ THREE.RaytracingRenderer = function ( parameters ) {
 
 	console.log( '%cSpinning off ' + workers + ' Workers ', 'font-size: 20px; background: black; color: white; font-family: monospace;' );
 
-	this.setWorkers = function( w ) {
+	this.setWorkers = function ( w ) {
 
 		workers = w || navigator.hardwareConcurrency || 4;
 
 		while ( pool.length < workers ) {
-			var worker = new Worker( parameters.workerPath );
-			worker.id = workerId++;
 
-			worker.onmessage = function( e ) {
+			var worker = new Worker( parameters.workerPath );
+			worker.id = workerId ++;
+
+			worker.onmessage = function ( e ) {
 
 				var data = e.data;
 
@@ -75,7 +72,7 @@ THREE.RaytracingRenderer = function ( parameters ) {
 
 			};
 
-			worker.color = new THREE.Color().setHSL( Math.random() , 0.8, 0.8 ).getHexString();
+			worker.color = new THREE.Color().setHSL( Math.random(), 0.8, 0.8 ).getHexString();
 			pool.push( worker );
 
 			updateSettings( worker );
@@ -109,7 +106,7 @@ THREE.RaytracingRenderer = function ( parameters ) {
 
 	this.setWorkers( workers );
 
-	this.setClearColor = function ( color, alpha ) {
+	this.setClearColor = function ( color /*, alpha */ ) {
 
 		clearColor.set( color );
 
@@ -124,8 +121,6 @@ THREE.RaytracingRenderer = function ( parameters ) {
 
 		canvasWidth = canvas.width;
 		canvasHeight = canvas.height;
-
-		context.fillStyle = 'white';
 
 		pool.forEach( updateSettings );
 
@@ -155,6 +150,7 @@ THREE.RaytracingRenderer = function ( parameters ) {
 	}
 
 	function renderNext( worker ) {
+
 		if ( ! toRender.length ) {
 
 			renderering = false;
@@ -175,7 +171,6 @@ THREE.RaytracingRenderer = function ( parameters ) {
 		} );
 
 		context.fillStyle = '#' + worker.color;
-
 		context.fillRect( blockX, blockY, blockSize, blockSize );
 
 	}
@@ -213,6 +208,7 @@ THREE.RaytracingRenderer = function ( parameters ) {
 		}
 
 		materials[ mat.uuid ] = props;
+
 	}
 
 	this.render = function ( scene, camera ) {
@@ -234,7 +230,7 @@ THREE.RaytracingRenderer = function ( parameters ) {
 
 		scene.traverse( serializeObject );
 
-		pool.forEach( function( worker ) {
+		pool.forEach( function ( worker ) {
 
 			worker.postMessage( {
 				scene: sceneJSON,
@@ -242,9 +238,12 @@ THREE.RaytracingRenderer = function ( parameters ) {
 				annex: materials,
 				sceneId: sceneId
 			} );
+
 		} );
 
-		context.clearRect( 0, 0, canvasWidth, canvasHeight );
+		context.fillStyle = clearColor.getStyle();
+		context.fillRect( 0, 0, canvasWidth, canvasHeight );
+
 		reallyThen = Date.now();
 
 		xblocks = Math.ceil( canvasWidth / blockSize );
@@ -266,7 +265,7 @@ THREE.RaytracingRenderer = function ( parameters ) {
 
 			for ( var i = 0; i < totalBlocks; i ++ ) {
 
-				var swap = Math.random()  * totalBlocks | 0;
+				var swap = Math.random() * totalBlocks | 0;
 				var tmp = toRender[ swap ];
 				toRender[ swap ] = toRender[ i ];
 				toRender[ i ] = tmp;

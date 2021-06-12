@@ -16,15 +16,16 @@ function SearchController(params) {
   var defaults = {
     // Fields to include in tooltip
     tooltipIncludeFields: ['fullId', 'name', 'source', 'id',
+      'tags', 'description', 'category', 'category0', 'wnlemmas', 'wnsynsetkey',
       'color', 'material', 'shape', 'depicts', 'state', 'usedFor', 'foundIn', 'hasPart', 'attr',
       'solidVolume', 'surfaceVolume', 'supportSurfaceArea',
       'volume', 'weight', 'staticFrictionForce',
       'isCornerPiece', 'isContainerLike', 'materialsCategory',
       'setIds', 'componentIds',
-      'isSingleCleanObject', 'isAligned',
-      'tags', 'description', 'category', 'category0', 'wnlemmas', 'wnsynsetkey',
+      'isSingleCleanObject', 'hasNestedObjects', 'hasMultipleObjects', 'isAligned',
+      'support', 'symType',
       'unit', 'up', 'front', 'nfaces',
-      'scenes', 'datasets',
+      'scenes', 'datasets', 'datatags',
       'nrooms', 'nlevels', 'nmodels', 'nobjects', 'ndoors', 'nwindows', 'nwalls', 'npeople', 'nmisc', // scenes
       'levelRating', 'overallRating', // scene ratings
       'floorArea', 'floorAreaFilled', // Rooms
@@ -84,6 +85,10 @@ Object.defineProperty(SearchController.prototype, 'isSearchBySize', {
 Object.defineProperty(SearchController.prototype, 'source', {
   get: function () { return this.searchPanel.source; },
   set: function (source) { this.searchPanel.selectSource(source); }
+});
+
+Object.defineProperty(SearchController.prototype, 'searchText', {
+  get: function () { return this.searchPanel.getSearchText(); }
 });
 
 SearchController.prototype.loadIdsFromFile = function(file) {

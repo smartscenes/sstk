@@ -1,24 +1,31 @@
 'use strict';
 
-var log = require('../lib/logger')();
+var Logger = require('../lib/logger');
 var base = require('../lib/base');
 var cacheControl = require('cache-control');
 var config = require('../config');
 var express = require('express');
 var compression = require('compression');
-var fs = require('fs');
-var http = require('http');
 var path = require('path');
 var bodyParser = require('body-parser');
 var methodOverride = require('method-override');
 var proxyRules = require('./routes/proxy-rules');
-var runReverseProxy = require('../lib/reverse-proxy');
+var proxySetup = require('../lib/http-proxy-setup');
 var assets = require('./assets');
 var _ = require('lodash');
 
 var app = express();
+var log = Logger();
 
 app.use(log.expressLogger);
+
+proxySetup({
+  rules: proxyRules,
+  baseUrl: config.baseUrl,
+  default: config.defaultRoute,
+  app: app,
+  log: Logger('reverse-proxy')
+});
 
 // app configuration
 app.set('views', path.join(__dirname, '../views'));
@@ -49,6 +56,7 @@ if (process.env.NODE_ENV === 'prod') {
 
 //app.use(app.router);
 //app.use(express.directory(path.join(__dirname, '../../')));
+app.use('/resources', express.static(path.join(__dirname, '../static/')));
 app.use(express.static(path.join(__dirname, '../../')));
 app.use(express.static(path.join(__dirname, '../static/html/')));
 app.use(express.static(path.join(__dirname, '../../client/js/vendor/three/')));
@@ -97,15 +105,6 @@ for (var i = 0; i < projects.length; i++) {
 
 /// START SERVER
 //console.log(app.routes);
-http.createServer(app).listen(config.httpServerPort, function mainApp() {
+app.listen(config.httpServerPort, function () {
   console.log('STK running on localhost:' + config.httpServerPort);
-  runReverseProxy({
-    port: config.reverseProxyPort,
-    rules: proxyRules,
-    default: 'http://127.0.0.1:' + config.httpServerPort,
-    log: require('../lib/logger')('reverse-proxy')
-  }, function proxyServerReady() {
-    console.log('Reverse proxy running on localhost:' + config.reverseProxyPort);
-    console.log('*** Done booting server. Access through localhost:' + config.reverseProxyPort + ' ***');
-  });
 });

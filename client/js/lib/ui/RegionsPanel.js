@@ -76,7 +76,7 @@ RegionsPanel.prototype.init = function () {
       if (filename) {
         scope.loadAnnotations(filename, fileType);
       } else {
-        UIUtil.showAlert(null, 'No ' + fileType + ' for model');
+        UIUtil.showAlert('No ' + fileType + ' for model');
       }
     }
   });

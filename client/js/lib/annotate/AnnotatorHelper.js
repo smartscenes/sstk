@@ -121,6 +121,7 @@ AnnotatorHelper.prototype.authenticate = function(cb) {
   // Most basic auth ever
   if (this.app.userId && !this.app.userId.startsWith('USER@')) {
     cb({ username: this.app.userId });
+    return;
   }
   if (!this.auth) {
     var Auth = require('util/Auth');

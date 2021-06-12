@@ -14,14 +14,18 @@ cmd
   .option('--input <filename>', 'Input path')
   .option('--format <format>', 'File format to use')
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')
+  .option('--assetGroups <groups>', 'Asset groups (scene or model) to load', STK.util.cmd.parseList)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--output <filename>', 'Output path')
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
-  .optionGroups(['config_file', 'render_options', 'view', 'render_views', 'color_by'])
-  .option('--skip_existing', 'Skip rendering existing images [false]')
+  .optionGroups(['config_file', 'render_options', 'view', 'render_views', 'color_by', 'transform3d', 'norm_geo'])
+  .option('--skip_existing', 'Skip rendering existing images [false]', STK.util.cmd.parseBoolean, false)
   .option('--material_type <material_type>')
+  .option('--material_side <material_side>')
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
+
+STK.Constants.setVirtualUnit(1);  // set to meters
 
 // Parse arguments and initialize globals
 var msg = cmd.checkImageSize(cmd);
@@ -34,48 +38,26 @@ if (!cmd.input) {
   console.error('Please specify --input <filename>');
   process.exit(-1);
 }
-var files = [cmd.input];
-if (cmd.input.endsWith('.txt')) {
-  // Read files form input file
-  var data = STK.util.readSync(cmd.input);
-  files = data.split('\n').map(function(x) { return STK.util.trim(x); }).filter(function(x) { return x.length > 0; });
-}
+var files = cmd.getInputs(cmd.input);
 
-if (cmd.assetInfo && cmd.assetInfo.source) {
-  var source = cmd.assetInfo.source;
-  if (!cmd.assetGroups) { cmd.assetGroups = [source]; }
-  if (cmd.assetGroups.indexOf(source) < 0) { cmd.assetGroups.push(source); }
-}
-
-if (cmd.assetGroups) {
-  STK.assets.AssetGroups.registerDefaults();
-  var assets = require('./data/assets.json');
-  var assetsMap = _.keyBy(assets, 'name');
-  STK.assets.registerCustomAssetGroupsSync(assetsMap, cmd.assetGroups);  // Make sure we get register necessary asset groups
+var assetSources = cmd.getAssetSources('path', files, cmd.assetGroups);
+if (assetSources) {
+  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
 }
 
 //STK.Constants.setVirtualUnit(1);  // set to meters
+cmd.material_type = cmd.material_type || 'phong';
 if (cmd.material_type) {
-  STK.materials.Materials.DefaultMaterialType = STK.materials.Materials.getMaterialType(cmd.material_type)
+  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type)
+}
+if (cmd.material_side) {
+  STK.materials.Materials.DefaultMaterialSide = STK.materials.Materials.getMaterialSide(cmd.material_side, STK.materials.Materials.DefaultMaterialSide);
 }
 
 var output_basename = cmd.output;
-var use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
-// Parse arguments and initialize globals
-var renderer = new STK.PNGRenderer({
-  width: cmd.width, height: cmd.height,
-  useAmbientOcclusion: cmd.encode_index? false : use_ambient_occlusion,
-  useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
-  useOutlineShader: cmd.encode_index? false : cmd.use_outline_shader,
-  ambientOcclusionOptions: {
-    type: use_ambient_occlusion? cmd.ambient_occlusion_type : undefined
-  },
-  outlineColor: cmd.encode_index? false : cmd.outline_color,
-  useLights: cmd.encode_index? false : cmd.use_lights,
-  useShadows: cmd.encode_index? false : cmd.use_shadows,
-  compress: cmd.compress_png, skip_existing: cmd.skip_existing, reuseBuffers: true,
-  flipxy: cmd.flipxy,
-});
+var rendererOptions = cmd.getRendererOptions(cmd);
+var renderer = new STK.PNGRenderer(rendererOptions);
+
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 100,
@@ -127,14 +109,23 @@ function render(scene, renderer, renderOpts, cmdOpts) {
   var cameraControls = renderOpts.cameraControls;
   var camera = renderOpts.cameraControls.camera;
   var cb = renderOpts.callback;
-  console.log('cmdOpts', cmdOpts);
+  // console.log('cmdOpts', cmdOpts);
   var logdata = _.defaults({}, renderOpts.logdata || {});
+  if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
+    renderOpts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
+  }
+  if (cmd.convert_pixels && !renderOpts.postprocess) {
+    renderOpts.postprocess = { operation: 'convert', dataType: cmd.convert_pixels };
+  }
   if (cmdOpts.render_all_views) {
     // Render a bunch of views
     renderer.renderAllViews(scene, renderOpts);
   } else if (cmdOpts.render_turntable) {
     // Render turntable
     renderer.renderTurntable(scene, renderOpts);
+  } else if (cmdOpts.views) {
+    // Render multiple views
+    renderer.renderViews(scene, cmdOpts.views, renderOpts);
   } else {
     var errmsg  = null;  // Set to error message
     // Set view
@@ -176,10 +167,7 @@ function render(scene, renderer, renderOpts, cmdOpts) {
 
     if (!errmsg) {
       logdata.cameraConfig = cameraControls.lastViewConfig;
-      var opts = { logdata: logdata };
-      if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
-        opts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
-      }
+      var opts = { logdata: logdata, postprocess: renderOpts.postprocess };
       renderer.renderToPng(scene, camera, outbasename, opts);
     }
     setTimeout( function() { cb(errmsg); }, 0);
@@ -215,13 +203,13 @@ function processFiles() {
       shell.mkdir('-p', path.dirname(pngfilename));
 
       console.log('Processing ' + file + '(' + index + '/' + files.length + ')');
-      var info = { file: file, format: cmd.format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
+      var info = { file: file, format: cmd.format, assetType: cmd.assetType, defaultMaterialType: STK.materials.Materials.DefaultMaterialType };
       if (cmd.assetInfo) {
-        info = _.defaults(info, cmd.assetInfo);
+        info = cmd.combine(info, cmd.assetInfo, ['format', 'assetType']);
       }
       //console.log('info', info)
-
-      assetManager.loadAsset(info, function (err, asset) {
+      var loadFunction = (info.assetType === 'model')? 'loadAsset' : 'loadAssetAsScene';
+      assetManager[loadFunction](info, function (err, asset) {
         var sceneState;
         var defaultViewOpts = {};
         if (asset instanceof STK.scene.SceneState) {
@@ -232,12 +220,11 @@ function processFiles() {
         } else if (asset instanceof STK.model.ModelInstance) {
           var modelInstance = asset;
           sceneState = new STK.scene.SceneState(null, modelInstance.model.info);
-          console.time('toGeometry');
-          // Ensure is normal geometry (for some reason, BufferGeometry not working with ssc)
-          STK.geo.Object3DUtil.traverseMeshes(modelInstance.object3D, false, function(m) {
-            m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
+          STK.geo.Object3DUtil.normalizeGeometry(modelInstance.object3D, {
+            assetName: file,
+            toGeometry: cmd.to_geometry,
+            toNonindexed: cmd.to_nonindexed
           });
-          console.timeEnd('toGeometry');
           sceneState.addObject(modelInstance, cmd.auto_align);
         } else if (err) {
           console.error("Error loading asset", info, err);
@@ -249,7 +236,6 @@ function processFiles() {
 
         // Create THREE scene
         var scene = new THREE.Scene();
-        var light = STK.gfx.Lights.getDefaultHemisphereLight(false, false);
         var camera;
         //console.log('use_scene_camera', cmd.use_scene_camera);
         var use_scene_camera = false;
@@ -274,7 +260,17 @@ function processFiles() {
         if (!camera) {
           camera = STK.gfx.Camera.fromJson(cameraConfig, cmd.width, cmd.height);
         }
-        scene.add(light);
+        if (cmd.use_directional_lights) {
+          STK.gfx.Lights.addSimple2LightSetup(camera, new THREE.Vector3(0, 0, 0), true);
+        } else if (cmd.lights) {
+          var lights = STK.gfx.Lights.setupLights(cmd.lights);
+          for (var i = 0; i < lights.length; i++) {
+            scene.add(lights[i]);
+          }
+        } else {
+          var light = STK.gfx.Lights.getDefaultHemisphereLight(cmd.use_physical_lights, cmd.use_lights);
+          scene.add(light);
+        }
         scene.add(camera);
         var cameraControls = new STK.controls.CameraControls({
           camera: camera,
@@ -286,14 +282,24 @@ function processFiles() {
 
         sceneState.compactify();  // Make sure that there are no missing models
         scene.add(sceneState.fullScene);
-        if (!cmd.assetInfo) {
-          STK.geo.Object3DUtil.centerAndRescaleObject3DToWorld(sceneState.fullScene, 200);
-        }
+        //if (!cmd.assetInfo) {
+        //  STK.geo.Object3DUtil.centerAndRescaleObject3DToWorld(sceneState.fullScene, 200);
+        //}
         var sceneBBox = STK.geo.Object3DUtil.getBoundingBox(sceneState.fullScene);
         var bbdims = sceneBBox.dimensions();
         console.log('Loaded ' + sceneState.getFullID() +
           ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
         console.log('bbox', sceneBBox);
+        var bboxes = [];
+        var transformInfo = STK.geo.Object3DUtil.applyTransforms(sceneState.fullScene, {
+          assetName: sceneState.getFullID() ,
+          hasTransforms: cmd.auto_align || cmd.auto_scale,
+          normalizeSize: cmd.normalize_size,
+          normalizeSizeTo: cmd.normalize_size_to,
+          center: cmd.center,
+          bboxes: bboxes,
+          debug: true
+        });
 
         var outbasename = cmd.color_by? (basename + '.' + cmd.color_by) : basename;
         if (cmd.encode_index) {
@@ -316,7 +322,7 @@ function processFiles() {
         };
 
         var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'view', 'view_index', 'view_target_ids',
+          _.pick(cmd, ['render_all_views', 'render_turntable', 'views', 'view', 'view_index', 'view_target_ids',
             'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), defaultViewOpts);
         if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
           cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);

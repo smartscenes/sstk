@@ -80,7 +80,7 @@ SceneQuerier.prototype.getViewResultUrl = function(fullId, result) {
 
 SceneQuerier.prototype.showResult = function (source, id, result) {
   if (this.selectedAssetType === 'room') {
-    var sceneSource = (source === 'p5dRoom')? 'p5dScene' : source;
+    var sceneSource = (source.endsWith('Room'))? source.substring(0, source.length - 4) + 'Scene' : source;
     var fullId = AssetManager.toFullId(sceneSource, result.sceneId);
     this.showRoom(fullId, result.floor, result.roomIndex, this.showRoomWithEntireScene);
   } else {

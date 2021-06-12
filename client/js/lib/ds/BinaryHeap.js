@@ -17,6 +17,10 @@ function BinaryHeap(options){
 }
 BinaryHeap.prototype.constructor = BinaryHeap;
 
+Object.defineProperty(BinaryHeap.prototype, 'isEmpty', {
+  get: function () { return this.values.length === 0; }
+});
+
 BinaryHeap.prototype.clone = function() {
   var b = new BinaryHeap({ scoreFunc: this.scoreFunc });
   b.values = b.values.concat(this.values);
@@ -51,17 +55,20 @@ BinaryHeap.prototype.pop = function() {
 };
 
 // Returns elements in sorted order
-BinaryHeap.prototype.getSorted = function(convertFn) {
- var sorted = [];
- var b = this.clone();
- while (b.size() > 0) {
-   if (convertFn) {
-     sorted.push(convertFn(b.pop()));
-   } else {
-     sorted.push(b.pop());
-   }
- }
- return sorted;
+BinaryHeap.prototype.getSorted = function(convertFn, limit) {
+  var sorted = [];
+  var b = this.clone();
+  while (b.size() > 0) {
+    if (convertFn) {
+      sorted.push(convertFn(b.pop()));
+    } else {
+      sorted.push(b.pop());
+    }
+    if (limit != null && sorted.length >= limit) {
+      break;
+    }
+  }
+  return sorted;
 };
 
 BinaryHeap.prototype.peek = function() {
@@ -69,16 +76,23 @@ BinaryHeap.prototype.peek = function() {
 };
 
 BinaryHeap.prototype.remove = function(node) {
+  return this.removeWhere(function(n) { return n == node; });
+};
+
+BinaryHeap.prototype.removeWhere = function(predicate) {
   var length = this.values.length;
+  var removed;
   for (var i = 0; i < length; i++) {
-    if (this.values[i] != node) { continue; }
+    if (!predicate(this.values[i])) { continue; }
     var end = this.values.pop();
     if (i == length - 1) { break; }
+    removed = this.values[i];
     this.values[i] = end;
     this.bubbleUp(i);
     this.sinkDown(i);
     break;
   }
+  return removed;
 };
 
 BinaryHeap.prototype.size = function() {

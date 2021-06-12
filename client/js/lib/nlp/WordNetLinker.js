@@ -74,7 +74,7 @@ WordNetLinker.prototype.showSynsets = function(label, callback, options) {
     }
 
     if (err) {
-      UIUtil.showAlert(null, 'Error looking up WordNet synsets', 'alert-danger', 2000, '10pt').css('bottom', '5px');
+      UIUtil.showAlert('Error looking up WordNet synsets', 'alert-danger', 2000, '10pt').css('bottom', '5px');
       console.error(err); // TODO: handles error for now but might want to improve.
       if (callback) { callback(err); }
     } else {
@@ -215,14 +215,14 @@ WordNetLinker.prototype.showSynsets = function(label, callback, options) {
                   // Some relations maybe trimmed....
                   b.hide();
                 } else {
-                  UIUtil.showAlert(null, 'Error looking up hyponyms for ' + synset.wn30synsetkey, 'alert-danger', 2000, '10pt').css('bottom', '5px');
+                  UIUtil.showAlert('Error looking up hyponyms for ' + synset.wn30synsetkey, 'alert-danger', 2000, '10pt').css('bottom', '5px');
                 }
               } else {
                 //console.log(taxNodes);
                 if (taxNodes && taxNodes.length && taxNodes[0].children && taxNodes[0].children.length) {
                   prevSynsets.push(synsets);
                   __showSynsetsForm(null, taxNodes[0].children, prevSynsets);
-                  dialog.trigger("escape.close.bb");
+                  dialog.trigger('escape.close.bb');
                 } else {
                   b.hide();
                 }
@@ -289,7 +289,7 @@ WordNetLinker.prototype.linkWordNet = function (labelInfos, label, pattern) {
     });
   } else {
     // If multiple labels, show alert about invalid link
-    UIUtil.showAlert(null, 'Please select one label for linking to WordNet', 'alert-info', 2000, '10pt').css('bottom', '5px');
+    UIUtil.showAlert('Please select one label for linking to WordNet', 'alert-info', 2000, '10pt').css('bottom', '5px');
   }
 };
 

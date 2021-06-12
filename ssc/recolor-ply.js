@@ -199,7 +199,7 @@ function processFiles() {
     var basename = output_basename;
     if (basename) {
       // Specified output - append index
-      if (files.length > 0) {
+      if (files.length > 1) {
         basename = basename + '_' + index;
       }
       basename = outputDir? outputDir + '/' + basename : basename;

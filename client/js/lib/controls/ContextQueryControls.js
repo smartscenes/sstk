@@ -644,7 +644,7 @@ ContextQueryControls.prototype.__showQueryContainer = function () {
   var regionPts = this.getQueryRegionPoints();
   // convert from 3D to 2D screen coords
   var pos = this.__topRightCoordinate(regionPts);
-  pos.y = THREE.Math.clamp(pos.y, 100,
+  pos.y = THREE.MathUtils.clamp(pos.y, 100,
     this.container.clientHeight - this.queryResultsContainer.height() - 100);
 
   if (pos.x > this.container.clientWidth - 350) {  // right side
@@ -653,7 +653,7 @@ ContextQueryControls.prototype.__showQueryContainer = function () {
   } else {  // left side
     pos.x += 120;
   }
-  pos.x = THREE.Math.clamp(pos.x, 30, pos.x + 1);
+  pos.x = THREE.MathUtils.clamp(pos.x, 30, pos.x + 1);
 
   this.queryResultsContainer.css('left', pos.x + 'px');
   this.queryResultsContainer.css('top', pos.y + 'px');

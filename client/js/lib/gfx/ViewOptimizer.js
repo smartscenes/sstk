@@ -114,7 +114,7 @@ function findPositionWithVisibleTargets(opts) {
   // See what is between us and the target
   // do ray from bbpoint to currentPos and get the first contact point
   var collisions = collisionsBetween(scene, bbpoint, currentPos,
-    function(x) { return !Object3DUtil.isDescendantOf(x.object, targetObjs); });
+    function(x) { return !Object3DUtil.isDescendantOf(x.object, targetObjs, true); });
   if (collisions && collisions.length > 0) {
     return {
       position: collisions[0].point,
@@ -145,7 +145,7 @@ SimpleViewScorer.prototype.score = function(camera, sceneState, targetObjs) {
   if (intersects.length > 0) {
     var firstIntersected = intersects[0].object;
     for (var i = 0; i < targetObjs.length; i++) {
-      if (Object3DUtil.isDescendantOf(firstIntersected, targetObjs[i])) {
+      if (Object3DUtil.isDescendantOf(firstIntersected, targetObjs[i], true)) {
         return 1.0;
       }
     }

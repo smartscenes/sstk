@@ -174,6 +174,24 @@ Agent.prototype.getState = function (state) {
   return state;
 };
 
+Agent.prototype.getExtendedState = function (opts, state) {
+  state = this.getState(state);
+  if (opts) {
+    if (opts.sensors) {
+      var sensorState = {};
+      _.each(this.sensors.camera, function(sensor, name) {
+        var position = new THREE.Vector3();
+        var direction = new THREE.Vector3();
+        sensor.camera.getWorldPosition(position);
+        sensor.camera.getWorldDirection(direction);
+        sensorState[name] = { position: position, orientation: direction };
+      });
+      state.sensors = sensorState;
+    }
+  }
+  return state;
+};
+
 Agent.prototype.act = function (action) {
   var actFn = this.__actions[action.name];
   if (actFn) {
@@ -385,7 +403,7 @@ Agent.prototype.setPredictedVs = function(dt) {
   this.angularVelocity += dt * this.__massInv * this.torque;
   this.velocity.y = 0;  // ignore vertical component
   this.velocity.clampLength(0, this.maxSpeed);
-  THREE.Math.clamp(this.angularVelocity, -this.maxAngularSpeed, this.maxAngularSpeed);
+  THREE.MathUtils.clamp(this.angularVelocity, -this.maxAngularSpeed, this.maxAngularSpeed);
 
   // clear force and torque
   this.force.set(0, 0, 0);
@@ -493,7 +511,7 @@ Agent.prototype.__parsePosition = function(sensor) {
 Agent.prototype.__tiltCameras = function (theta, resetToValue) {
   _.forOwn(this.sensors.camera, function (sensor) {
     var newRotation = resetToValue ? theta : (sensor.camera.rotation.x + theta);
-    sensor.camera.rotation.x = THREE.Math.clamp(newRotation, -this.__PI_2, this.__PI_2);
+    sensor.camera.rotation.x = THREE.MathUtils.clamp(newRotation, -this.__PI_2, this.__PI_2);
   }.bind(this));
 };
 

@@ -6,18 +6,37 @@ var AssetGroups = require('assets/AssetGroups');
 var AssetLoader = require('assets/AssetLoader');
 var AssetManager = require('assets/AssetManager');
 var SearchController = require('search/SearchController');
-var SearchModule = require('search/SearchModule');
+var LabelsPreviewPanel = require('ui/LabelsPreviewPanel');
+var CustomListLabelsPreviewPanel = require('ui/CustomListLabelsPreviewPanel');
+var LabelCountsPanel = require('ui/LabelCountsPanel');
 var _ = require('util/util');
 require('dragscrollable');
 require('jquery-lazy');
 
-// Interface for labeling assets
+/**
+ * Interface for labeling assets
+ * @param options
+ * @param [options.gridWidth] {int}
+ * @param [options.viewerWindowName] {string}
+ * @param [options.labelField] {string}
+ * @param [options.labelsPanel] Options for the labelsPanel
+ * @param [options.searchPanel] Options for the searchPanel
+ * @param [options.assetGroups]
+ * @param [options.suggestedLabels] {string[]} Labels for autocomplete
+ * @param [options.source] {string}
+ * @param [options.sources] {string[]}
+ * @param [options.submitLabelsUrl] {string}
+ * @param [options.viewerUrl] {string}
+ * @param [options.viewerIframe]
+ * @param [options.viewerModal]
+ * @memberOf model-tools
+ * @constructor
+ */
 function AssetLabeler(options) {
   // Keep our own copy of labels
   // labels are stored as map:
   //   fullId -> { cat1: 'del', cat2: 'add', cat3: '', ...}
   this.assetLabels = {};
-  this.selectedAssets = {};
   this.metadataCache = {};
   var defaults = {
     gridWidth: 100,
@@ -50,9 +69,8 @@ AssetLabeler.prototype.init = function (options) {
   this.assetLoader = new AssetLoader();
   this.assetManager = new AssetManager();
 
-  this.labelsPanel = $(options.labelsPanel.container);
-
   console.log(options);
+  var scope = this;
   if (options.assetGroups) {
     var sources = [];
     for (var i = 0; i < options.assetGroups.length; i++) {
@@ -74,17 +92,17 @@ AssetLabeler.prototype.init = function (options) {
   this.searchController = new SearchController({
     searchSucceededCallback: this.searchSucceeded.bind(this),
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
-    sourceChangedCallback: this.showLabels.bind(this),
+    sourceChangedCallback: this.updateLabelsPanel.bind(this),
     onClickResultCallback: function (source, id) {
       var checkBox = $('#check_' + source + '_' + id + '_search');
       var checked = checkBox.prop('checked');
       checkBox.prop('checked', !checked);
-      this.updateNumberChecked();
-    }.bind(this),
+      scope.updateNumberChecked();
+    },
     appendResultElemCallback: function (source, id, result, elem) {
       var fullId = AssetManager.toFullId(source, id);
       elem.data('fullId', fullId);
-      if (this.selectedAssets[fullId]) {
+      if (scope.isOnCustomModelList(fullId)) {
         elem.addClass('searchResultSelected');
       }
       elem.append($('<input/>').attr('type', 'checkbox')
@@ -92,21 +110,23 @@ AssetLabeler.prototype.init = function (options) {
         .attr('id', 'check_' + source + '_' + id + '_search')
         .attr('data-id', fullId)
         .click(function (e) {
-          this.updateNumberChecked();
+          scope.updateNumberChecked();
           e.stopPropagation();
-        }.bind(this))
+        })
       );
       var labelTags = $('<div></div>')
         .attr('class', 'searchResultLabels')
         .attr('id', 'labels_' + source + '_' + id)
         .attr('data-id', fullId);
-      this.metadataCache[fullId] = result;
-      this.cacheLabels(result[this.labelField], fullId);
-      this.addSelectedLabelsToCached(fullId);
-      this.updateLabelTags(labelTags, source, id);
+      scope.metadataCache[fullId] = result;
+      scope.cacheLabels(result[scope.labelField], fullId);
+      if (scope.customAssetListPanel) {
+        scope.addCustomListLabelsToCached(fullId, scope.customAssetListPanel.getIdToLabels());
+      }
+      scope.updateLabelTags(labelTags, source, id);
       elem.prepend(labelTags);
-      elem.dblclick(this.showAsset.bind(this, fullId));
-    }.bind(this),
+      elem.dblclick(scope.showAsset.bind(scope, fullId));
+    },
     sources: options.sources,
     entriesPerRow: options.searchPanel.entriesPerRow,
     nRows: options.searchPanel.nRows,
@@ -122,6 +142,19 @@ AssetLabeler.prototype.init = function (options) {
   this.searchController.Subscribe('ClearResult', this, function() {
     this.metadataCache = {};
   });
+
+  this.labelsPreviewPanel = new LabelsPreviewPanel({
+    container: '#previewPane',
+    gridWidth: 100,
+    createLabelTag: function(fullId, label, update) {
+      var sid = AssetManager.toSourceId(null, fullId);
+      return scope.createLabelTag(sid.source, sid.id, label, update);
+    },
+    createAssetElement: function(panelTag, fullId) {
+      return scope.createAssetElem(panelTag, fullId);
+    }
+  });
+
   // Hook up select all checkbox
   this.selectAll = $('#selectAll');
   this.selectAll.click(
@@ -139,9 +172,6 @@ AssetLabeler.prototype.init = function (options) {
     });
   }
 
-  this.labels = {};
-  this.updateSolrLabels();
-
   // Hook up add and remove buttons
   var addButton = $('#buttonAdd');
   addButton.click(this.addLabels.bind(this));
@@ -158,19 +188,35 @@ AssetLabeler.prototype.init = function (options) {
   var submitButton = $('#submit');
   submitButton.click(this.submitLabels.bind(this));
 
+  // Show labels
+  this.labelsPanel = new LabelCountsPanel({
+    container: options.labelsPanel.container,
+    searchController: this.searchController,
+    labelName: this.labelField
+  });
+  this.labelsPanel.Subscribe('LabelsUpdated', this, function(labels) {
+    scope.updateAutocompleteLabels(labels);
+  });
+  this.updateLabelsPanel();
+
   // Hook up selected panel elements
-  var selectedAddButton = $('#selectedAdd');
-  selectedAddButton.click(this.addToSelected.bind(this));
-
-  var selectedClearButton = $('#selectedClear');
-  selectedClearButton.click(this.clearSelected.bind(this));
-
-  var selectedSaveButton = $('#selectedSave');
-  selectedSaveButton.click(this.saveSelected.bind(this));
-
-  var selectedLoadButton = $('#selectedLoad');
-  selectedLoadButton.click(this.loadSelected.bind(this));
-
+  this.customAssetListPanel = new CustomListLabelsPreviewPanel({
+    container: '#selectedPane',
+    gridWidth: 100,
+    createLabelTag: function(fullId, label, update) {
+      var sid = AssetManager.toSourceId(null, fullId);
+      return scope.createLabelTag(sid.source, sid.id, label, update);
+    },
+    createAssetElement: function(panelTag, fullId) {
+      return scope.createAssetElem(panelTag, fullId);
+    },
+    getChecked: function() {
+      return scope.getCheckedLabelMods();
+    },
+    onLoaded: function(assetIdToMods) {
+      scope.fetchAssetLabels(Object.keys(assetIdToMods), assetIdToMods);
+    }
+  });
 
   var newImagesCheckbox = $('#newImages');
   if (newImagesCheckbox && newImagesCheckbox.length > 0) {
@@ -204,16 +250,13 @@ AssetLabeler.prototype.init = function (options) {
   window.addEventListener('resize', this.onWindowResize.bind(this), false);
 };
 
-AssetLabeler.prototype.updateLabels = function (labels, source) {
-  this.labels[source] = labels;
+AssetLabeler.prototype.updateAutocompleteLabels = function (labels) {
   var allLabels = [];
   if (this.suggestedLabels) {
     allLabels = allLabels.concat(this.suggestedLabels);
   }
-  for (var s in this.labels) {
-    if (this.labels.hasOwnProperty(s)) {
-      allLabels = allLabels.concat(this.labels[s]);
-    }
+  if (labels) {
+    allLabels.concat(labels);
   }
   this.labelText.autocomplete({
     source: _.uniq(allLabels)
@@ -243,6 +286,34 @@ AssetLabeler.prototype.updateNumberChecked = function () {
   }
 };
 
+AssetLabeler.prototype.getCheckedElements = function(all) {
+  if (all) {
+    return $('.assetCheckbox:checked');
+  } else {
+    return this.searchPanel.find('.assetCheckbox:checked');
+  }
+};
+
+AssetLabeler.prototype.getCheckedIds = function(all) {
+  var elements = this.getCheckedElements(all);
+  var ids = [];
+  elements.each(function() {
+    ids.push($(this).attr('data-id'));
+  });
+  return ids;
+};
+
+AssetLabeler.prototype.getCheckedLabelMods = function(all) {
+  var elements = this.getCheckedElements(all);
+  var labels = this.assetLabels;
+  var map = {};
+  elements.each(function() {
+    var id = $(this).attr('data-id');
+    map[id] = labels[id];
+  });
+  return map;
+};
+
 AssetLabeler.prototype.updateLabelTagsForCheckElem = function (elem, label, add) {
   var fullId = elem.attr('data-id');
   if (fullId) {
@@ -269,7 +340,7 @@ AssetLabeler.prototype.addLabels = function () {
     }
   );
   this.previewChanges();
-  this.updateSelectedPanel();
+  this.updateCustomListPanel();
 };
 
 // Removing label from checked assets
@@ -284,7 +355,7 @@ AssetLabeler.prototype.removeLabels = function () {
     }
   );
   this.previewChanges();
-  this.updateSelectedPanel();
+  this.updateCustomListPanel();
 };
 
 // Adds label to asset
@@ -365,7 +436,7 @@ AssetLabeler.prototype.createLabelTag = function (source, id, label, update) {
     labelDiv.click(function (e) {
       this.addLabel(label, source, id);
       this.previewChanges();
-      this.updateSelectedPanel();
+      this.updateCustomListPanel();
       e.stopPropagation();
     }.bind(this));
     //change.attr('src','resources/images/16/add.png');
@@ -375,7 +446,7 @@ AssetLabeler.prototype.createLabelTag = function (source, id, label, update) {
     labelDiv.click(function (e) {
       this.removeLabel(label, source, id);
       this.previewChanges();
-      this.updateSelectedPanel();
+      this.updateCustomListPanel();
       e.stopPropagation();
     }.bind(this));
     //change.attr('src','resources/images/16/delete.png');
@@ -440,7 +511,7 @@ AssetLabeler.prototype.searchSucceeded = function (source, resultList) {
 AssetLabeler.prototype.onWindowResize = function () {
   this.searchController.onResize();
   this.resizePreviewPanel();
-  this.resizeSelectedPanel();
+  this.resizeCustomListPanel();
 };
 
 AssetLabeler.prototype.redisplay = function () {
@@ -448,91 +519,18 @@ AssetLabeler.prototype.redisplay = function () {
 };
 
 AssetLabeler.prototype.resizePreviewPanel = function () {
-  var previewPane = $('#previewPane');
-  var previewNumElem = previewPane.find('#previewNum');
-  var viewport = previewPane.find('.scrollableDiv');
-  viewport.css('width', previewPane.width() + 'px');
-  viewport.css('height', (previewPane.height() - 1 * previewNumElem.height()) + 'px');
+  this.labelsPreviewPanel.resize();
 };
 
 // Previews changes
 AssetLabeler.prototype.previewChanges = function () {
-  var previewPane = $('#previewPane');
-  var previewNumElem = previewPane.find('#previewNum');
-  if (previewNumElem.length === 0) {
-    previewNumElem = $('<div id="previewNum"></div>');
-    previewPane.append(previewNumElem);
-  }
-  var previewTable = previewPane.find('table');
-  if (previewTable.length === 0) {
-    previewTable = $('<table></table>');
-    previewTable.addClass('dragger');
-    var viewport = $('<div></div>').addClass('scrollableDiv');
-    previewPane.append(viewport.append(previewTable));
-    viewport.
-    dragscrollable({dragSelector: '.dragger:first', acceptPropagatedEvent: true});
-  }
-  previewTable.empty();
-  var nChangedAssets = 0;
-  var width = this.gridWidth;
-  var height = width;
-  var tdCss = {
-    'width': width + 'px',
-    'min-width': '50px',
-    'max-width': width + 'px',
-    'max-height': height + 'px'
-  };
-  for (var fullId in this.assetLabels) {
-    if (this.assetLabels.hasOwnProperty(fullId)) {
-      var orig = [];
-      var changed = [];
-      var labels = this.assetLabels[fullId];
-      for (var label in labels) {
-        if (labels.hasOwnProperty(label)) {
-          if (labels[label]) {
-            changed.push(label);
-          } else {
-            orig.push(label);
-          }
-        }
-      }
-      if (changed.length > 0) {
-        var origElem = $('<div></div>');
-        var addElem = $('<div></div>');
-        var delElem = $('<div></div>');
-        for (var label in labels) {
-          if (labels.hasOwnProperty(label)) {
-            var update = labels[label];
-            var sid = AssetManager.toSourceId(null, fullId);
-            var labelTag = this.createLabelTag(sid.source, sid.id, label, update);
-            if (update === 'add') {
-              addElem.append(labelTag);
-            } else if (update === 'del') {
-              delElem.append(labelTag);
-            } else {
-              origElem.append(labelTag);
-            }
-          }
-        }
-        nChangedAssets++;
-        var assetElem = this.createAssetElem('preview', fullId);
-        var row = $('<tr></tr>')
-          .append($('<td></td>').text(nChangedAssets))
-          .append($('<td></td>').css(tdCss).append(assetElem))
-          .append($('<td></td>').append(origElem))
-          .append($('<td></td>').append(addElem))
-          .append($('<td></td>').append(delElem));
-        previewTable.append(row);
-      }
-    }
-  }
-  previewNumElem.text(nChangedAssets + ' changed');
+  this.labelsPreviewPanel.update(this.assetLabels);
 };
 
 AssetLabeler.prototype.clearChanges = function () {
   this.assetLabels = {};
   this.previewChanges();
-  this.updateSelectedPanel();
+  this.updateCustomListPanel();
   this.searchController.refreshSearch();
 };
 
@@ -591,8 +589,7 @@ AssetLabeler.prototype.submitLabels = function () {
     var inputs = $('input');
     inputs.prop('disabled', true);
 
-    $.ajax
-    ({
+    $.ajax({
       type: 'POST',
       url: this.submitLabelsUrl + '?commit=true',
       contentType: 'application/json;charset=utf-8',
@@ -621,12 +618,13 @@ AssetLabeler.prototype.submitLabels = function () {
     var inputs = $('input');
     inputs.prop('disabled', true);
 
-    var data = jQuery.param(params);
+    var data = params;
     $.ajax
     ({
       type: 'POST',
       url: this.submitLabelsUrl,
-      data: data,
+      contentType: 'application/json;charset=utf-8',
+      data: JSON.stringify(data),
       success: function (response, textStatus, jqXHR) {
         console.log('labels successfully submitted for ' + changedAssets.length + ' assets!!!');
         this.clearChanges();
@@ -642,120 +640,26 @@ AssetLabeler.prototype.submitLabels = function () {
   }
 };
 
-
-AssetLabeler.prototype.labelSearchSucceeded = function (data, textStatus, jqXHR) {
-  this.labelsPanel.empty();
-  var resultsList = data.facet_counts.facet_fields;
-  var labels = resultsList[this.labelField];
-  for (var i = 0; i < labels.length; i += 2) {
-    var label = labels[i];
-    var count = labels[i + 1];
-    var search = $('<span class="labelName"></span>').text(label).click(
-      function (label, e) {
-        var query = this.labelField + ':"' + label + '"';
-        this.searchController.setSearchText(query);
-        this.searchController.search(query);
-      }.bind(this, label)
-    );
-    var labelElem = $('<div></div>')
-      .append(search)
-      .append($('<span></span>').text(' (' + count + ')'));
-    this.labelsPanel.append(labelElem);
-  }
-
-  var labelNames = [];
-  for (var i = 0; i < labels.length; i += 2) {
-    labelNames.push(labels[i]);
-  }
-  this.updateLabels(labelNames, this.searchController.source);
+AssetLabeler.prototype.updateLabelsPanel = function () {
+  if (!this.labelsPanel) return;
+  this.labelsPanel.updateSolrLabels();
 };
 
-AssetLabeler.prototype.labelSearchFailed = function (jqXHR, textStatus, errorThrown) {
-  console.error('Error getting updated labels: ' + textStatus);
+AssetLabeler.prototype.isOnCustomAssetList = function(fullId) {
+  return (this.customAssetListPanel && this.customAssetListPanel.assetIdToLabelMods[fullId]);
 };
 
-AssetLabeler.prototype.showLabels = function () {
-  this.searchController.facetFieldSearch({
-    source: this.searchController.source,
-    facetField: this.labelField,
-    facetSort: SearchModule.facetOrderCount,
-    success: this.labelSearchSucceeded.bind(this),
-    error: this.labelSearchFailed.bind(this)
-  });
-};
-
-AssetLabeler.prototype.updateSolrLabels = function () {
-  this.searchController.facetFieldSearch({
-    source: this.source,
-    facetField: this.labelField,
-    facetSort: SearchModule.facetOrderIndex,
-    success: function (data, textStatus, jqXHR) {
-      var resultsList = data.facet_counts.facet_fields;
-      var labels = resultsList[this.labelField];
-      var labelNames = [];
-      for (var i = 0; i < labels.length; i += 2) {
-        labelNames.push(labels[i]);
-      }
-      this.updateLabels(labelNames, this.source);
-    }.bind(this)
-  });
-};
-
-AssetLabeler.prototype.updateSelectedForCheckElem = function (elem, add) {
-  var fullId = elem.attr('data-id');
-  if (fullId) {
-    if (add) {
-      this.selectedAssets[fullId] = [];
-    } else {
-      delete this.selectedAssets[fullId];
-    }
-  }
-};
-
-// Add checked assets to selected list
-AssetLabeler.prototype.addToSelected = function () {
-  var checked = this.searchPanel.find('.assetCheckbox:checked');
-  var scope = this;
-  checked.each(
-    function () {
-      scope.updateSelectedForCheckElem($(this), true);
-    }
-  );
-  this.updateSelectedPanel();
-};
-
-// Removing checked assets from selected list
-AssetLabeler.prototype.removeFromSelected = function () {
-  var checked = this.searchPanel.find('.assetCheckbox:checked');
-  var scope = this;
-  checked.each(
-    function () {
-      scope.updateSelectedForCheckElem($(this), false);
-    }
-  );
-  this.updateSelectedPanel();
-};
-
-AssetLabeler.prototype.clearSelected = function () {
-  this.selectedAssets = {};
-  this.updateSelectedPanel();
-};
-
-AssetLabeler.prototype.saveSelected = function () {
-  var labeled = this.getSelectedAssetsWithLabels();
-  console.log(JSON.stringify(labeled, null, ' '));
-};
-
-AssetLabeler.prototype.addSelectedLabelsToCached = function (fullId) {
-  if (this.selectedAssets[fullId] && this.selectedAssets[fullId].length > 0) {
+AssetLabeler.prototype.addCustomListLabelsToCached = function (fullId, loadedIdToLabels) {
+  var customAssets = loadedIdToLabels;
+  if (customAssets[fullId] && customAssets[fullId].length > 0) {
     var labels = this.assetLabels[fullId];
     if (!labels) {
       labels = {};
       this.assetLabels[fullId] = labels;
     }
     // Add these labels as well....
-    for (var i = 0; i < this.selectedAssets[fullId].length; i++) {
-      var label = this.selectedAssets[fullId][i];
+    for (var i = 0; i < customAssets[fullId].length; i++) {
+      var label = customAssets[fullId][i];
       var sid = AssetManager.toSourceId(null, fullId);
       this.addLabel(label, sid.source, sid.id);
     }
@@ -763,92 +667,29 @@ AssetLabeler.prototype.addSelectedLabelsToCached = function (fullId) {
 };
 
 // Fetch missing asset labels (keeps old labels if we have them)
-AssetLabeler.prototype.fetchAssetLabelsSucceeded = function (data, textStatus, jqXHR) {
-  var resultList = data.response.docs;
+AssetLabeler.prototype.updateAssetLabels = function (resultList, customIdToLabels) {
   for (var i = 0; i < resultList.length; i++) {
     var result = resultList[i];
     if (!this.assetLabels[result.fullId]) {
       this.cacheLabels(result[this.labelField], result.fullId);
     }
-    this.addSelectedLabelsToCached(result.fullId);
+    this.addCustomListLabelsToCached(result.fullId, customIdToLabels);
   }
   this.previewChanges();
-  this.updateSelectedPanel();
+  this.updateCustomListPanel();
 };
 
-AssetLabeler.prototype.fetchAssetLabelsFailed = function (jqXHR, textStatus, errorThrown) {
-  console.error('Unable to fetch asset labels: ' + textStatus);
-  this.updateSelectedPanel();
-};
-
-AssetLabeler.prototype.fetchAssetLabels = function (ids) {
+AssetLabeler.prototype.fetchAssetLabels = function (ids, customIdToLabels) {
   this.searchController.searchByIds(
     this.source, ids,
-    this.fetchAssetLabelsSucceeded.bind(this),
-    this.fetchAssetLabelsFailed.bind(this)
-  );
-
-};
-
-AssetLabeler.prototype.loadSelected = function (jsonFile) {
-  console.log('loading selected assets from ' + jsonFile);
-  this.selectedAssets = {};
-  this.assetLoader.load(jsonFile, 'json',
-    function (data) {
-      console.log(data);
-      for (var cat in data) {
-        // console.log(cat);
-        if (data.hasOwnProperty(cat)) {
-          var catIds = data[cat];
-          for (var i = 0; i < catIds.length; i++) {
-            var id = catIds[i];
-            if (!this.selectedAssets[id]) {
-              this.selectedAssets[id] = [cat];
-            } else {
-              this.selectedAssets[id].push(cat);
-            }
-          }
-        }
-      }
-      //console.log(this.selectedAssets);
-      this.fetchAssetLabels(Object.keys(this.selectedAssets));
-      //this.updateSelectedPanel();
+    function(data, textStatus, jqXHR) {
+      this.updateAssetLabels(data.response.docs, customIdToLabels);
+    }.bind(this),
+    function (jqXHR, textStatus, errorThrown) {
+      console.error('Unable to fetch asset labels: ' + textStatus);
+      this.updateCustomListPanel();
     }.bind(this)
   );
-};
-
-AssetLabeler.prototype.getSelectedAssetsWithLabels = function () {
-  var labeled = {};
-  for (var id in this.selectedAssets) {
-    if (this.selectedAssets.hasOwnProperty(id)) {
-      //   fullId -> { cat1: 'del', cat2: 'add', cat3: '', ...}
-      var selectedLabels = this.selectedAssets[id];
-      var labels = (selectedLabels.length > 0) ? selectedLabels : this.getCurrentLabels(id);
-      if (labels.length === 0) {
-        labels.push('__NOCAT__');
-      }
-      for (var i = 0; i < labels.length; i++) {
-        var label = labels[i];
-        if (!labeled[label]) labeled[label] = [];
-        labeled[label].push(id);
-      }
-    }
-  }
-  return labeled;
-};
-
-AssetLabeler.prototype.getCurrentLabels = function (id) {
-  var labels = this.assetLabels[id];
-  var filteredKeys = [];
-  if (labels) {
-    for (var cat in labels) {
-      if (labels.hasOwnProperty(cat) && (labels[cat] !== 'del')) {
-        filteredKeys.push(cat);
-      }
-    }
-  }
-
-  return filteredKeys;
 };
 
 AssetLabeler.prototype.getViewAssetUrl = function(fullId) {
@@ -868,80 +709,19 @@ AssetLabeler.prototype.openViewer = function (url, windowName) {
   }
 };
 
-AssetLabeler.prototype.resizeSelectedPanel = function () {
-  var selectedPane = $('#selectedPane');
-  var selectedNumElem = selectedPane.find('#selectedNum');
-  var viewport = selectedPane.find('.scrollableDiv');
-  viewport.css('width', selectedPane.width() + 'px');
-  viewport.css('height', (selectedPane.height() - selectedNumElem.height()) + 'px');
+AssetLabeler.prototype.resizeCustomListPanel = function () {
+  this.customAssetListPanel.resize();
 };
 
-AssetLabeler.prototype.updateSelectedPanel = function () {
-  var selectedPane = $('#selectedPane');
-  var selectedNumElem = selectedPane.find('#selectedNum');
-  if (selectedNumElem.length === 0) {
-    selectedNumElem = $('<div id="selectedNum"></div>');
-    selectedPane.append(selectedNumElem);
-  }
-  var selectedTable = selectedPane.find('table');
-  if (selectedTable.length === 0) {
-    selectedTable = $('<table></table>');
-    selectedTable.addClass('dragger');
-    var viewport = $('<div></div>').addClass('scrollableDiv');
-    selectedPane.append(viewport.append(selectedTable));
-    viewport.
-    dragscrollable({dragSelector: '.dragger:first', acceptPropagatedEvent: true});
-  }
-  selectedTable.empty();
-
-  var totalSelected = Object.keys(this.selectedAssets).length;
-  selectedNumElem.text(totalSelected + ' selected');
-
-  var width = this.gridWidth;
-  var height = width;
-  var tdCss = {
-    'width': width + 'px',
-    'max-width': width + 'px',
-    'max-height': height + 'px'
-  };
-  var labeled = this.getSelectedAssetsWithLabels();
-  for (var label in labeled) {
-    if (labeled.hasOwnProperty(label)) {
-      var fullIds = labeled[label];
-      var labelRow = $('<tr></tr>').addClass('selectedLabel')
-        .append($('<td colspan="3"></td>')
-          .text(label))
-        .append($('<td class="selectedCatNum"></td>').text(fullIds.length));
-      selectedTable.append(labelRow);
-      for (var i = 0; i < fullIds.length; i++) {
-        var fullId = fullIds[i];
-        var catElem = $('<div></div>');
-        var sid = AssetManager.toSourceId(null, fullId);
-        this.updateLabelTags(catElem, sid.source, sid.id);
-        var assetElem = this.createAssetElem('selected', fullId);
-        var delElem = $('<img/>')
-          .addClass('imageButton')
-          .attr('src', 'resources/images/16/delete.png')
-          .attr('title', 'Remove').attr('alt', 'Remove')
-          .click(function (fullId) {
-            delete this.selectedAssets[fullId];
-            this.updateSelectedPanel();
-          }.bind(this, fullId));
-        var row = $('<tr></tr>')
-          .append($('<td></td>').text(i + 1))
-          .append($('<td></td>').css(tdCss).append(assetElem))
-          .append($('<td></td>').append(catElem))
-          .append($('<td></td>').css('text-align', 'right').append(delElem));
-        selectedTable.append(row);
-      }
-    }
-  }
-  var AssetLabeler = this;
+AssetLabeler.prototype.updateCustomListPanel = function () {
+  this.customAssetListPanel.updateLabels(this.assetLabels);
+  this.customAssetListPanel.update(this.customAssetListPanel.assetIdToLabelMods);
+  var customListPanel = this.customAssetListPanel;
   var searchResultElems = this.searchPanel.find('.searchResult');
   searchResultElems.each(
     function () {
       var fullId = $(this).data('fullId');
-      if (AssetLabeler.selectedAssets[fullId]) {
+      if (customListPanel.assetIdToLabelMods[fullId]) {
         $(this).addClass('searchResultSelected');
       } else {
         $(this).removeClass('searchResultSelected');

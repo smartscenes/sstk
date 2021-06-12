@@ -143,7 +143,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     });
   };
 
-// Renders all views of scene and saves into pngs strippedId_<viewName>.png
+  // Renders all defauit views of scene and saves into pngs strippedId_<viewName>.png
   OffscreenRenderer.prototype.renderAllViews = function (scene, opts) {
     var cameraControls = opts.cameraControls;
     var targetBBox = opts.targetBBox;
@@ -162,16 +162,34 @@ function OffscreenRendererFactory (baseRendererClass) {
     });
   };
 
+  // Renders specified views of scene and saves into pngs
+  OffscreenRenderer.prototype.renderViews = function (scene, views, opts) {
+    var cameraControls = opts.cameraControls;
+    var basename = opts.basename;
+    var onDone = opts.callback;
+
+    var scope = this;
+    async.forEachOfSeries(views, function (view, i, callback) {
+      cameraControls.viewTarget(view);
+      var name = (view.name != null)? view.name : ((view.id != null)? view.id : i);
+      var pngfile = basename + '-' + name + '.png';
+      scope.renderToPng(scene, cameraControls.camera, pngfile, opts);
+      setTimeout(function () { callback(); });
+    }, function () {
+      onDone();
+    });
+  };
+
   // Flip XY with respect to upper left corner
-  OffscreenRenderer.prototype.__flipXY_ul = function (p, width, height, pout) {
-    var numElementsPerRow = 4 * width;
-    var numElementsPerColumn = 4 * height;
+  OffscreenRenderer.prototype.__flipXY_ul = function (p, width, height, pout, bpp) {
+    var numElementsPerRow = bpp * width;
+    var numElementsPerColumn = bpp * height;
     for (var row = 0; row < height; row++) {
       var base = numElementsPerRow * row;
       for (var col = 0; col < width; col++) {
-        var idx = base + (col << 2);
-        var idxOut = numElementsPerColumn*col + (row << 2);
-        for (var k = 0; k < 4; k++) {
+        var idx = base + (col * bpp);
+        var idxOut = numElementsPerColumn*col + (row * bpp);
+        for (var k = 0; k < bpp; k++) {
           pout[idxOut + k] = p[idx + k];
         }
       }
@@ -179,17 +197,17 @@ function OffscreenRendererFactory (baseRendererClass) {
   };
 
   // Flip XY with respect to lower left corner
-  OffscreenRenderer.prototype.__flipXY_ll = function (p, width, height, pout) {
-    var numElementsPerRow = 4 * width;
-    var numElementsPerColumn = 4 * height;
+  OffscreenRenderer.prototype.__flipXY_ll = function (p, width, height, pout, bpp) {
+    var numElementsPerRow = bpp * width;
+    var numElementsPerColumn = bpp * height;
     for (var row = 0; row < height; row++) {
       var base = numElementsPerRow * row;
       var rowOut = height - row - 1;
       for (var col = 0; col < width; col++) {
         var colOut = width - col - 1;
-        var idx = base + (col << 2);
-        var idxOut = numElementsPerColumn*colOut + (rowOut << 2);
-        for (var k = 0; k < 4; k++) {
+        var idx = base + (col * bpp);
+        var idxOut = numElementsPerColumn*colOut + (rowOut * bpp);
+        for (var k = 0; k < bpp; k++) {
           pout[idxOut + k] = p[idx + k];
         }
       }
@@ -197,21 +215,28 @@ function OffscreenRendererFactory (baseRendererClass) {
   };
 
   OffscreenRenderer.prototype.writePNG = function (pngFile, width, height, pixels) {
+    // colorType (0 = grayscale, 2 = RGB, 4 = grayscale alpha, 6 = RGBA)
     var opts = { width: width, height: height, bpp: 4 };
     if (pixels instanceof Uint16Array) {  // 16-bit depth
       opts.inputColorType = 0;
       opts.inputHasAlpha = false;
-      opts.colorType = 0;
+      opts.colorType = 0; // grayscale
       opts.bitDepth = 16;
       opts.bpp = 2;
+    } else if (pixels instanceof Uint8Array && pixels.length === width*height) { // 8 bit png
+      opts.inputColorType = 0;
+      opts.inputHasAlpha = false;
+      opts.colorType = 0; // grayscale
+      opts.bitDepth = 8;
+      opts.bpp = 1;
     }
     var buf = Buffer.alloc(opts.bpp * opts.width * opts.height);
     if (this.flipxy) {
       opts.width = height;  opts.height = width;
       if (this.flipxy === 'lower_left') {
-        this.__flipXY_ll(pixels, width, height, buf);
+        this.__flipXY_ll(pixels, width, height, buf, opts.bpp);
       } else {
-        this.__flipXY_ul(pixels, width, height, buf);
+        this.__flipXY_ul(pixels, width, height, buf, opts.bpp);
       }
     } else {
       var pixbuf = new Uint8Array(pixels.buffer);
@@ -224,7 +249,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     console.log('Saved ' + pngFile);
   };
 
-// converts png sequence input to video file out
+  // converts png sequence input to video file out (uses ffmpeg)
   OffscreenRenderer.prototype.pngSeqToVideo = function (input, out, opts) {
     var tmpfilename = __getTempFilename('white', 'png');
     //console.log(tmpfilename);
@@ -237,6 +262,34 @@ function OffscreenRendererFactory (baseRendererClass) {
     var cmdline = cmdWithArgs.join(' ');
     this.__fs.execSync(cmdline);
     this.__fs.execSync('rm -f ' + tmpfilename);
+  };
+
+  // converts png sequence input to gif file out (uses convert)
+  OffscreenRenderer.prototype.pngSeqToGif = function (input, out, opts) {
+    //parallel --plus --eta convert -dispose previous -delay 10 *.png -coalesce -layers OptimizePlus -loop 0 2.gif
+    opts = opts || {};
+    let delay = 10;
+    if (opts.delay != null) {
+      delay = opts.delay;
+    } else if (opts.framerate != null) {
+      delay = '1x' + opts.framerate;
+    }
+    var cmdWithArgs = ['convert','-dispose', 'background', '-delay', delay, input, '-loop','0', out];
+    var cmdline = cmdWithArgs.join(' ');
+    this.__fs.execSync(cmdline);
+    this.__fs.execSync('rm -f ' + input);
+  };
+
+  // converts gif sequence input to gif file out (uses convert)
+  OffscreenRenderer.prototype.gifSeqToGif = function (input, out) {
+    this.__fs.execSync('rm -f ' + out);
+    var cmdWithArgs = ['convert', input, out];
+    var cmdline = cmdWithArgs.join(' ');
+    this.__fs.execSync(cmdline);
+  };
+
+  OffscreenRenderer.prototype.removeFile = function (input) {
+    this.__fs.execSync('rm -f ' + input);
   };
 
   return OffscreenRenderer;

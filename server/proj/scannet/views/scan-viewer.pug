@@ -33,12 +33,7 @@ html(lang="en")
             p#labelTypeSelectDiv
               label(for="labelType") Label
               select#labelType
-            p
-              input(type="checkbox", id="keepSegmentColors")
-              label(for="keepSegmentColors") Keep segment colors
-            p#showSegmentOBBsDiv
-              input(type="checkbox", id="showSegmentOBBs")
-              label(for="showSegmentOBBs") Show segment OBBs
+            p#showSegmentsDiv
         #tabs-7
           #imagesPanel
         #tabs-8
@@ -97,7 +92,8 @@ html(lang="en")
         partsPanel: {
           partTypes: ['none', 'meshes', 'surfaces', 'surfaces-coarse', 'surfaces-fine', 'surfaces-finest', 'voxels-solid', 'voxels-surface', 'voxels-labeled'],
           defaultPartType: STK.util.getUrlParam('defaultPartType') || 'none',
-          defaultLabelType: STK.util.getUrlParam('defaultLabelType') || 'Raw'
+          defaultLabelType: STK.util.getUrlParam('defaultLabelType') || 'Raw',
+          useColorSequence: false
         },
         tabs: ['models', 'images', 'parts', 'annotations']
       });
@@ -116,16 +112,6 @@ html(lang="en")
         }
       });
 
-      tabsDiv.bind('tabsactivate', function (event, ui) {
-        switch (ui.newPanel.attr('id')) {
-          case 'tabs-1':
-            modelViewer.modelSearchController.onResize();
-            break;
-          case 'tabs-7':
-            modelViewer.modelImagesPanel.onResize();
-            break;
-        }
-      });
       $('#instructions').hide();
       $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
       $('#namesPanel').draggable();

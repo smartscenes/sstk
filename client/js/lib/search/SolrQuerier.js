@@ -90,6 +90,13 @@ SolrQuerier.prototype.getQueryUrl = function (params) {
   return solrUrl + '?' + queryParams;
 };
 
+SolrQuerier.prototype.getQueryOpts = function (params) {
+  // Get base solr query URL
+  var solrUrl = params.url || this.searchUrl;
+  var queryData = this.__toQueryData(params);
+  return queryData;
+};
+
 /**
  * Execute basic query
  * @param params Query parameters
@@ -224,14 +231,13 @@ SolrQuerier.prototype.lookupFields = function (params, callback) {
     url: solrUrl,
     contentType: 'application/json;charset=utf-8',
     dataType: 'json',
-    callback: callback,
+    callback: cb,
     timeout: this.timeout
   });
 };
 
-
 SolrQuerier.prototype.__query = function (solrUrl, queryData, callback) {
-  var timeout = this.searchTimeout;
+  var timeout = this.timeout;
   return _.ajax
   ({
     type: 'POST',

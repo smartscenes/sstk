@@ -1,10 +1,12 @@
 'use strict';
 
 var Constants = require('Constants');
-//var MeshAnnotationStats = require('./MeshAnnotationStats');
+var MeshAnnotationStats = require('part-annotator/MeshAnnotationStats');
 var ModelPartViewer = require('part-annotator/ModelPartViewer');
 var BasePartAnnotator = require('part-annotator/BasePartAnnotator')(ModelPartViewer);
 var Object3DUtil = require('geo/Object3DUtil');
+var UIUtil = require('ui/UIUtil');
+var FileUtil = require('io/FileUtil');
 var _ = require('util/util');
 
 require('physijs');
@@ -23,6 +25,7 @@ require('physijs');
  *   `aggr` (will use precomputed aggregated segmentation),
  *   or id (integer) specifying specific annotation from database.
  *   Also url param.
+ * @param [params.breakItUp] {boolean} Whether to break up annotated parts
  * @constructor
  * @extends ModelPartViewer
  * @extends BasePartAnnotator
@@ -43,10 +46,11 @@ function PartAnnotator(params) {
   params = params || {};
   var scope = this;
   var uihookups = [];
+  this.annPartIdField = 'partId';
   uihookups.push(
     {
       name: 'debug',
-        click: this.debugAnnotations.bind(this),
+      click: this.debugAnnotations.bind(this),
       shortcut: 'ctrl-shift-d'
     }
   );
@@ -99,6 +103,19 @@ function PartAnnotator(params) {
       shortcut: 'ctrl-c'
     });
   }
+  this.debug = params.debug || this.urlParams['debug'];
+  if (this.debug) {
+    uihookups.push({
+      name: 'saveAnnotation',
+      click: function() { this.saveAnnotations(); }.bind(this),
+      shortcut: 'ctrl-s'
+    });
+    uihookups.push({
+      name: 'loadAnnotation',
+      click: function() { this.loadAnnotationsWithForm(); }.bind(this),
+      shortcut: 'ctrl-l'
+    });
+  }
   var defaults = {
     appId: 'PartAnnotator.v3',
     submitAnnotationsUrl: Constants.submitPartAnnotationsURL,
@@ -118,7 +135,7 @@ function PartAnnotator(params) {
       html:
       'Step 1: Select a name on the right<br>' +
       'Step 2: Color in parts of the object using the mouse<br>' +
-      'Step 3: Press BreakItUp! button (or Shift+B key) to remove colored parts and get to more parts!' +
+      'Step 3: Press BreakItUp! button (or Shift+B key) to remove colored parts and get to more parts!<br>' +
       '<b>Controls</b><br>' +
       'Left click = Paint object<br>' +
       'Left click and drag = paint continuously<br>' +
@@ -132,7 +149,9 @@ function PartAnnotator(params) {
       'C = toggle colors and enable/disable annotation<br>' +
       'Number keys = Keyboard shortcut for part name<br>' +
       'CTRL(CMD)-Z/Y = Undo/Redo<br>' +
-      'CTRL(CMD)-C = Copy selected label<br>'
+      'CTRL(CMD)-C = Copy selected label<br>' +
+        ((this.debug)? 'CTRL-S = Save annotation to file<br>' : '') +
+        ((this.debug)? 'CTRL-L = Load annotation from file<br>' : '')
     },
     labelsPanel: {
       allowNewLabels: true,
@@ -148,14 +167,14 @@ function PartAnnotator(params) {
             callback: function () {
               scope.mergeSelected();
             },
-            accesskey: "M"
+            accesskey: 'M'
           },
           labelOBB: {
             name: 'Label box',
             callback: function () {
               scope.fillSelected(true);
             },
-            accesskey: "E"
+            accesskey: 'E'
           },
           unlabelOBB: {
             name: 'Unlabel box',
@@ -163,47 +182,105 @@ function PartAnnotator(params) {
               scope.fillSelected(false);
             }
           },
-          // groupParts: {
-          //   name: 'Group parts',
+          //groupParts: {
+          //  name: 'Group parts',
+          //  callback: function () {
+          //    scope.addGroup();
+          //  },
+          //  accesskey: 'G'
+          //},
+          // decompose: {
+          //   name: 'Decompose selected part',
           //   callback: function () {
-          //     scope.addGroup();
+          //     scope.decompose();
           //   },
-          //   accesskey: "G"
+          //   accesskey:'"D'
           // },
           // markRelation: {
           //   name: 'Add relation',
           //   callback: function () {
           //     scope.addRelation();
           //   },
-          //   accesskey: "R"
+          //   accesskey: 'R'
           // },
           renameLabel: {
             name: 'Rename',
             callback: function () {
               scope.renameLabels();
             },
-            accesskey: "N"
+            accesskey: 'N'
           },
           lookAt: {
             name: 'LookAt',
             callback: function () {
               scope.lookAtSelected();
             },
-            accesskey: "L"
+            accesskey: 'L'
           },
           freeze: {
             name: 'Freeze',
             callback: function() {
               scope.freezeSelected(true);
             },
-            accesskey: "F"
+            accesskey: 'F'
           },
           unfreeze: {
             name: 'Unfreeze',
             callback: function() {
               scope.freezeSelected(false);
             }
-          }
+          },
+          showItem: {
+            name: 'Show selected',
+            callback: function () {
+              // Handle show item for multiple selected
+              scope.showSelected();
+            },
+            accesskey: 'S'
+          },
+          hideItem: {
+            name: 'Hide selected',
+            callback: function () {
+              // Handle show item for multiple selected
+              scope.hideSelected();
+            },
+            accesskey: 'H'
+          },
+          showItemOnly: {
+            name: 'Show selected only',
+            callback: function () {
+              // Handle show item for multiple selected
+              scope.showSelectedOnly();
+            }
+          },
+          showUnknown: {
+            name: 'Show unknown',
+            callback: function () {
+              scope.showUnknown();
+            },
+            accesskey: 'U'
+          },
+          showAll: {
+            name: 'Show all',
+            callback: function () {
+              scope.showAll();
+            },
+            accesskey: 'A'
+          },
+          selectAll: {
+            name: 'Select all',
+            callback: function () {
+              scope.selectAll();
+            },
+            accesskey: 'L'
+          },
+          // Test functions for generating missing geometry
+          generate: {
+           name: 'Generate',
+           callback: function() {
+             scope.generateMissingGeometryForSelected();
+           }
+          },
         }
       }
     },
@@ -265,10 +342,10 @@ PartAnnotator.prototype.getState = function(options) {
     return info;
   });
   var removedPartIds = _.map(this.removedParts, function(x) { return x.id; });
-  //var stats = _.clone(this.annotationStats.get());
+  var stats = _.clone(this.annotationStats.get());
   var selectedIndex = this.labeler.currentLabelInfo? this.labeler.currentLabelInfo.index : -1;
   //console.log('selectedIndex', selectedIndex);
-  var state = { annotations: annotations, /*stats: stats, */ selectedIndex: selectedIndex, removedPartIds: removedPartIds };
+  var state = { annotations: annotations, stats: stats,  selectedIndex: selectedIndex, removedPartIds: removedPartIds };
   return state;
 };
 
@@ -333,7 +410,7 @@ PartAnnotator.prototype.restoreState = function(saveState, deltaState, prevState
     this.showPartOBBs(activeLabelInfos);
   }
   // Restore statistics
-  //this.annotationStats.set(state.data.stats);
+  this.annotationStats.set(state.data.stats);
   this.__trackUndo(true);
 };
 
@@ -357,7 +434,12 @@ PartAnnotator.prototype.createLabeler = function () {
         scope.debugNode.add(node);
       },
       onSegmentsLoaded:   function (segments) {
-        scope.__annotatorReady();
+        scope.waitAll(function() {
+          scope.__annotatorReady();
+        });
+      },
+      updateAnnotationStats: function (part, multiplier) {
+        scope.annotationStats.update(part, multiplier);
       },
       getIntersected: scope.getIntersectedMesh.bind(scope),
       isLabelable: isLabelable
@@ -375,6 +457,9 @@ PartAnnotator.prototype.createLabeler = function () {
         scope.debugNode.add(node);
       },
       getIntersected: scope.getIntersectedMesh.bind(scope),
+      updateAnnotationStats: function (part, multiplier) {
+        scope.annotationStats.update(part, multiplier);
+      },
       isLabelable: isLabelable
     });
   }
@@ -394,18 +479,20 @@ PartAnnotator.prototype.createLabeler = function () {
 PartAnnotator.prototype.createPanel = function () {
   BasePartAnnotator.prototype.createPanel.call(this);
 
-  // var counterBox = $('#counterBox');
-  // if (counterBox && counterBox.length > 0) {
-  //   var current = this.numItemsAnnotated + 1;
-  //   var totalToAnnotate = this.numItemsTotal;
-  //   this.overallProgressCounter = $('<div></div>').text('Objects: ' + current + '/' + totalToAnnotate);
-  //   counterBox.append(this.overallProgressCounter);
-  //   this.modelProgressCounter = $('<div></div>');
-  //   counterBox.append(this.modelProgressCounter);
-  //   this.annotationStats.progressCounter = this.modelProgressCounter;
-  //   this.modelInfoElem = $('<div></div>');
-  //   counterBox.append(this.modelInfoElem);
-  // }
+  var counterBox = $('#counterBox');
+  if (counterBox && counterBox.length > 0) {
+    var current = this.numItemsAnnotated + 1;
+    var totalToAnnotate = this.numItemsTotal;
+    this.overallProgressCounter = $('<div></div>').text('Objects: ' + current + '/' + totalToAnnotate);
+    counterBox.append(this.overallProgressCounter);
+    this.modelProgressCounter = $('<div></div>');
+    counterBox.append(this.modelProgressCounter);
+    if (this.annotationStats) {
+      this.annotationStats.progressCounter = this.modelProgressCounter;
+    }
+    this.modelInfoElem = $('<div></div>');
+    counterBox.append(this.modelInfoElem);
+  }
 };
 
 PartAnnotator.prototype.__annotatorReady = function() {
@@ -417,7 +504,7 @@ PartAnnotator.prototype.__annotatorReady = function() {
     m.userData.meshIndex = i;
   });
   //console.log('meshes', this.__meshes);
-  //this.annotationStats = new MeshAnnotationStats({ meshes: this.__meshes });
+  this.annotationStats = new MeshAnnotationStats({ meshes: this.__meshes, counter: this.modelProgressCounter });
 
   this.annotations = {};
   this.initLevelSelector(this.__options['levelSelector']);
@@ -479,6 +566,9 @@ PartAnnotator.prototype.__computeAnnotations = function (debug) {
     if (annotation) {
       annotation.data = labelInfo.data;
     }
+    if (labelInfo.obb) {
+      annotations[id].obb = labelInfo.obb.toJSON();
+    }
   });
   return annotations;
 };
@@ -535,6 +625,35 @@ PartAnnotator.prototype.breakItUp = function () {
   this.onEditOpDone('breakItUp', { ids: breakUpIds });
 };
 
+PartAnnotator.prototype.getAnnotationStats = function (statsType) {
+  if (this.annotationStats) {
+    if (statsType === 'delta') {
+      return this.annotationStats.getDelta('initial');
+    } else if (statsType) {
+      return this.annotationStats.get(statsType);
+    } else {
+      if (this.taskMode === 'new') {
+        return this.annotationStats.get();
+      } else {
+        var delta = this.annotationStats.getDelta('initial');
+        var total = this.annotationStats.get();
+        var initial = this.annotationStats.get('initial');
+        return { initial: initial, delta: delta, total: total };
+      }
+    }
+  }
+};
+
+PartAnnotator.prototype.saveAnnotations = function () {
+  var annPartIdField = this.annPartIdField;
+  if (this.useSegments && this.labeler.segments.isCustomSegmentation) {
+    this.annPartIdField = 'segments';
+  }
+  BasePartAnnotator.prototype.saveAnnotations.call(this);
+  this.annPartIdField = annPartIdField;
+};
+
+
 /* Creates annotations and submits to backend */
 PartAnnotator.prototype.__submitAnnotations = function () {
   this.annotate();
@@ -553,28 +672,37 @@ PartAnnotator.prototype.__submitAnnotations = function () {
   // NOTE: With the exception of this conversion of this.annotations to partAnnotations
   //  and the submission of a score (which is constant for now)
   //  and the missing annotation stats, this is pretty much identical to the base functions
+  this.timings.mark('annotationSubmit');
+  var params = this.getAnnotationsJson(this.annotations, true);
+  this.__submitAnnotationData(params, modelId);
+};
+
+PartAnnotator.prototype.getAnnotationsJson = function(annotations, includeScreenshot) {
+  var modelId = this.modelId;
   var partAnnotations = []; //All annotations to be submitted
 
-  for (var id in this.annotations) {
-    if (!this.annotations.hasOwnProperty(id)) {
+  for (var id in annotations) {
+    if (!annotations.hasOwnProperty(id)) {
       continue;
     }
-    var rec = this.annotations[id];
+    var rec = annotations[id];
     var ann = {
       modelId: modelId,
       partSetId: id,
-      partId: rec.meshIds,  //mesh ids
       label: rec.label, //name of the part
       labelType: 'category',
-      data: rec.data
+      data: rec.data,
+      obb: rec.obb
     };
+    ann[this.annPartIdField] = rec.meshIds; //mesh ids
     partAnnotations.push(ann);
   }
 
   // Get part labels (in case user has added label)
   var partLabels = this.labeler.getLabels();
 
-  var screenshot = this.getImageData(this.screenshotMaxWidth, this.screenshotMaxHeight);
+  var screenshot = includeScreenshot?
+    this.getImageData(this.screenshotMaxWidth, this.screenshotMaxHeight) : undefined;
   var params = {
     appId: this.appId,
     sessionId: Constants.getGlobalOrDefault('sessionId', 'local-session'),
@@ -582,18 +710,27 @@ PartAnnotator.prototype.__submitAnnotations = function () {
     task: Constants.getGlobal('task'),
     taskMode: this.taskMode,
     userId: this.userId,  // This is set to workerId under mturk
+  };
+  params[this.itemIdField] = this.itemId;
+  params = _.merge(params, {
     annotations: partAnnotations, //All parts
     screenshot: screenshot,
     parts: partLabels,
     score: 100 // Constant
-  };
-  params[this.itemIdField] = this.itemId;
+  });
+  if (this.useSegments && this.labeler.segments.isCustomSegmentation) {
+    params.segmentation = this.labeler.segments.segmentationJson;
+  }
+
   var data = {};
-  // var annStats = this.getAnnotationStats();
-  // if (annStats) {
-  //   stats['stats'] = annStats;
-  // }
-  this.timings.mark('annotationSubmit');
+  var annStats = this.getAnnotationStats();
+  if (annStats) {
+    data['stats'] = annStats;
+  }
+  var totalStats = this.annotationStats.get();
+  if (totalStats) {
+    params['progress'] = totalStats.percentComplete;
+  }
   var timings = this.timings.toJson();
   if (timings) {
     data['timings'] = timings;
@@ -605,8 +742,7 @@ PartAnnotator.prototype.__submitAnnotations = function () {
     data['form'] = this.form;
   }
   params['data'] = data;
-
-  this.__submitAnnotationData(params, modelId);
+  return params;
 };
 
 PartAnnotator.prototype.__hasAnnotations = function (annotations) {
@@ -733,7 +869,8 @@ PartAnnotator.prototype.loadLatestAnnotation = function (modelId) {
 
 PartAnnotator.prototype.__labelFromExisting = function(opts) {
   var anns = null;
-  this.metadata = {'startFrom': this.startFrom};
+  this.metadata = this.metadata || {};
+  this.metadata['startFrom'] = this.startFrom;
   var hasFixupAnnotations = this.__bestFixupAnnotation && this.__bestFixupAnnotation.length > 0;
   if (this.startFrom === 'latest' && hasFixupAnnotations) {
     anns = this.__bestFixupAnnotation;
@@ -755,6 +892,118 @@ PartAnnotator.prototype.__labelFromExisting = function(opts) {
     this.__trackUndo(true);
   }
 };
+
+PartAnnotator.prototype.generateMissingGeometry = function(labelInfo) {
+  if (!this.__shapeGenerator) {
+    var MissingGeometryGenerator = require('shape/MissingGeometryGenerator');
+    this.__shapeGenerator = new MissingGeometryGenerator();
+    this.__generatedByLabelId = this.__generatedByLabelId || {};
+    this.__generatedGroup = this.__generatedGroup || new THREE.Group();
+    this.scene.add(this.__generatedGroup);
+  }
+  console.log('generate', labelInfo);
+  var scope = this;
+  var geometryInfo = {
+    label: labelInfo.label,
+    obb: this.labeler.getLabelOBB(labelInfo),
+    object3D: this.debugNode
+  };
+  this.__shapeGenerator.generateMissingGeometryForPart(geometryInfo, function(err, obj) {
+    if (err) {
+      console.error('Error generating shape', err);
+    } else if (obj) {
+      if (scope.__generatedByLabelId[labelInfo.id]) {
+        scope.__generatedGroup.remove(scope.__generatedByLabelId[labelInfo.id]);
+      }
+      scope.__generatedByLabelId[labelInfo.id] = obj;
+      scope.__generatedGroup.add(obj);
+      console.log('generated', obj);
+    } else {
+      console.log('no missing geometry to generate')
+    }
+  });
+};
+
+PartAnnotator.prototype.generateMissingGeometryForSelected = function() {
+  var selected = this.labelsPanel.getAllSelected();
+  if (selected && selected.length) {
+    //this.onEditOpInit('generate', { labelInfo: selected });
+    //this.__trackUndo(false);
+    for (var i = 0; i < selected.length; i++) {
+      this.generateMissingGeometry(selected[i]);
+    }
+    //this.__trackUndo(true);
+    //this.onEditOpDone('generate', { labelInfo: selected });
+  }
+
+};
+
+PartAnnotator.prototype.showSelectedOnly = function () {
+  var selected = this.labelsPanel.getAllSelected();
+  if (selected && selected.length) {
+    this.labeler.setPartsVisible(true, selected, true);
+  }
+};
+
+PartAnnotator.prototype.showSelectedOnlyWithUnknown = function () {
+  this.showUnknown();
+  this.showSelected();
+};
+
+PartAnnotator.prototype.showSelected = function () {
+  var selected = this.labelsPanel.getAllSelected();
+  if (selected && selected.length) {
+    this.labeler.setPartsVisible(true, selected);
+  }
+};
+
+PartAnnotator.prototype.hideSelected = function () {
+  var selected = this.labelsPanel.getAllSelected();
+  if (selected && selected.length) {
+    this.labeler.setPartsVisible(false, selected);
+  }
+};
+
+PartAnnotator.prototype.showAll = function () {
+  this.labeler.setPartsVisible(true);
+};
+
+PartAnnotator.prototype.showUnknown = function () {
+  this.showAll();
+  this.labeler.setPartsVisible(false, this.labelsPanel.labelInfos);
+};
+
+PartAnnotator.prototype.selectAll = function () {
+  this.labelsPanel.selectAll();
+};
+
+PartAnnotator.prototype.__loadAnnotationsFromFile = function (data, options) {
+  if (this.useSegments) {
+    var anns = _.map(data.annotations, (ann) => {
+      var res = _.clone(ann);
+      if (res.segments) {
+        res.partIds = res.segments;
+        delete res.segments;
+      }
+      return res;
+    });
+    this.__trackUndo(false);
+    this.labeler.applySegmentAnnotation(data, (err, res) => {
+//      var annIds = _.uniq(_.map(anns, function(ann) { return ann.annId; }));
+//      annIds.sort();
+//      this.metadata['startAnnotations'] = annIds.join(',');
+      this.waitAll(() => {
+        this.__trackUndo(false);
+        this.labeler.labelFromExisting(this.labelsPanel, { keepInstance: true, annotations: anns, isGrouped: true });
+        this.__trackUndo(true);
+      });
+    });
+  } else {
+    console.log('Please implement support for loading annotations from file', data);
+  }
+};
+
+
 
 // Exports
 module.exports = PartAnnotator;

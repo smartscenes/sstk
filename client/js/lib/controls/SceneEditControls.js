@@ -3,7 +3,6 @@
 var Constants = require('Constants');
 var Manipulator = require('controls/Manipulator');
 var DragDrop = require('controls/DragDrop');
-var Picker = require('controls/Picker');
 var PubSub = require('PubSub');
 var Object3DUtil = require('geo/Object3DUtil');
 var ModelInstance = require('model/ModelInstance');
@@ -89,6 +88,8 @@ SceneEditControls.prototype.init = function () {
   this.initDragDrop();
   this.Subscribe(Constants.EDIT_OPSTATE.INIT, this.app, this.app.onEditOpInit.bind(this.app));
   this.Subscribe(Constants.EDIT_OPSTATE.DONE, this.app, this.app.onEditOpDone.bind(this.app));
+  this.Subscribe(Constants.EDIT_OPSTATE.CANCEL, this.app, this.app.onEditOpCancel.bind(this.app));
+  this.Subscribe("SelectedInstanceChanged", this.app, this.app.onSelectedInstanceChanged.bind(this.app));
 };
 
 SceneEditControls.prototype.initDragDrop = function () {
@@ -108,6 +109,12 @@ SceneEditControls.prototype.initDragDrop = function () {
   });
   this.dragdrop.Subscribe(Constants.EDIT_OPSTATE.INIT, this.app, this.app.onEditOpInit.bind(this.app));
   this.dragdrop.Subscribe(Constants.EDIT_OPSTATE.DONE, this.app, this.app.onEditOpDone.bind(this.app));
+
+  this.dragdrop.Subscribe("HighlightChanged", this, function(object3d, isHighlight){
+    this.Publish("HighlightChanged", object3d, isHighlight);
+    // console.log({"callback": "HighlightChanged", "object3d": object3d, "isHighlight": isHighlight});
+  });
+
   this.dragdrop.Subscribe('AttachmentChanged', this, function (attachment) {
     if (attachment && attachment.bbFaceIndex !== undefined) {
       this.manipulator.setAttachmentFace(attachment.bbFaceIndex);
@@ -216,6 +223,7 @@ SceneEditControls.prototype.cancelInsertion = function () {
     cancelled = this.dragdrop.cancelInsertion();
   }
   this.detach();
+  this.Publish(Constants.EDIT_OPSTATE.CANCEL, Constants.CMDTYPE.INSERT, { object: cancelled });
   return cancelled;
 };
 
@@ -244,6 +252,16 @@ SceneEditControls.prototype.select = function (event) {
     console.log('selected point', picked.point);
   }
   return picked? picked.object : null;
+};
+
+SceneEditControls.prototype.selectMesh = function (event) {
+  var fullScene = this.scene;
+  var selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
+  var picked = this.getIntersected(event, selectables);
+  if (picked) {
+    console.log('selected point', picked.point);
+  }
+  return picked? picked.descendant : null;
 };
 
 SceneEditControls.prototype.pick = function (event) {
@@ -464,7 +482,7 @@ SceneEditControls.prototype.handleTransformControllerKeys = function (event) {
 
       case 17: // Ctrl
         this.transformControls.setTranslationSnap(0.5*Constants.metersToVirtualUnit);
-        this.transformControls.setRotationSnap(THREE.Math.degToRad(15));
+        this.transformControls.setRotationSnap(THREE.MathUtils.degToRad(15));
         return false;
 
       case 87: // W

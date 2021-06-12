@@ -58,9 +58,8 @@ typings/
 .env
 
 # custom SSTK gitignores
-server/node_modules/
-node_modules/
 .idea/
+.vscode/
 *.iml
 server/*.log
 coverage/

@@ -1,0 +1,107 @@
+doctype html
+html(lang="en")
+    head
+        title= "Grouped Motion Annotations"
+        meta(charset= "UTF-8")
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+        link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+        link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    body
+        // UI Markup
+        #main
+            a.btn.btn-default(href=`${baseUrl}/articulation-annotations/list?task=motion-annotate&$latest=true`, target='_blank') List Latest Annotations
+            a.btn.btn-default(href=`${baseUrl}/articulation-annotations/list?task=motion-annotate`, target='_blank') List All Annotations
+            select#assetGroupChoice
+            select#mainImageChoice
+                option screenshot
+                option connectivity
+            select#hoverImageChoice
+                option parts
+                option articulations
+                option connectivity
+            #hoverImageBar(style='height: 100px; overflow: auto')
+            #container(style='width: 100%; overflow: auto')
+                span#loading Loading...
+
+        script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+        script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+        script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+        script(src=`${baseUrl}/three.min.js`)
+        script(src=`${baseUrl}/articulationGroupedViewer.bundle.js`)
+        script.
+          var assetGroupName = "#{assetGroupName}" || "shape2motion";
+          var assetGroups = {
+            "rpmnet": {
+              metadata: '#{baseUrl}/assets/metadata/rpmnet',
+              ids: '#{baseUrl}/assets/ids/rpmnet',
+              assetIdsFileFormat: 'csv'
+            },
+            "shape2motion": {
+              metadata: '#{baseUrl}/assets/metadata/shape2motion',
+              ids: '#{baseUrl}/assets/ids/shape2motion',
+              assetIdsFileFormat: 'csv'
+            },
+            "partnetsim": {
+              metadata: '#{baseUrl}/assets/metadata/partnetsim',
+              ids: '#{baseUrl}/assets/ids/partnetsim',
+              assetIdsFileFormat: 'csv'
+            },
+          };
+          var mainImageChoice = $('#mainImageChoice');
+          var assetGroupChoice = $('#assetGroupChoice');
+          var assetGroupNames = Object.keys(assetGroups);
+          for (var i = 0; i < assetGroupNames.length; i++) {
+              var name = assetGroupNames[i];
+              var selected = name === assetGroupName;
+              assetGroupChoice.append($(selected? '<option selected></option>' : '<option></option>')
+                  .attr('value', name).text(name));
+          }
+
+          var dataPrefix = '#{baseUrl}/data/models3d/' + assetGroupName;
+          var imageTemplates = {
+            'connectivity': dataPrefix + '/articulations/connectivity_graph_viz/${id}.png',
+            'parts': dataPrefix + '/articulations/part_renders/${id}/${partIndex}.png',
+            'articulations': dataPrefix + '/articulations/art_renders/${id}/${id}-${partIndex}-${artIndex}.gif'
+          };
+          var urlTemplates = {
+            'articulations':
+              (assetGroupName === 'rpmnet')?
+                dataPrefix + '/converted/${id}.json' :
+                dataPrefix + '/articulations/converted/${id}/${id}.articulations.json'
+          }
+          var annotationsViewer = new STK.GroupedAnnotationsViewer({
+            container: '#container',
+            loadingMessageSelector: '#loading',
+            task: 'motion-annotate',
+            annotateFromLatest: true,
+            previewImageIndex: 13,
+            viewerUrl: '#{baseUrl}/motion-viewer',
+            annotationsUrl: '#{baseUrl}/articulation-annotations/list',
+            annotationItemIdField: 'modelId',
+            assetGroup: assetGroups[assetGroupName],
+            groupBy: 'category',
+            ignoreGroupRegex: '__.*',
+            imageUrlTemplates: imageTemplates,
+            urlTemplates: urlTemplates,
+            hoverImageChoice: '#hoverImageChoice',
+            hoverImageDiv: '#hoverImageBar'
+          });
+
+          function choicesUpdated() {
+            var currurl = window.location.href.split('?')[0];
+            var assetParams = "assetGroup=" + assetGroupChoice.val();
+            var imageParams = 'image=' + mainImageChoice.val();
+            window.location.href = currurl + "?" + assetParams + "&" + imageParams;
+          }
+          assetGroupChoice.change(function(evt) {
+            choicesUpdated();
+          });
+          var mainImage = annotationsViewer.useImage || 'screenshot';
+          mainImageChoice.val(mainImage);
+          mainImageChoice.change(function(evt) {
+            choicesUpdated();
+          });
+
+          annotationsViewer.init();
+          window.app = annotationsViewer;  // For console debugging

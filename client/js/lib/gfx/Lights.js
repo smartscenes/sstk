@@ -1,11 +1,33 @@
 var Lights = {};
 
-Lights.getDefaultHemisphereLight = function(usePhysicalLights, lightsOn) {
+Object.defineProperty(THREE.Light.prototype, 'colorHex', {
+  get: function () { return this.color.getHex(); },
+  set: function (v) {
+    this.color.setHex(v);
+  }
+});
+
+Lights.setupLight = function(lightSpec, objectLoader) {
+  objectLoader = objectLoader || new THREE.ObjectLoader(THREE.DefaultLoadingManager);
+  var obj = objectLoader.parseObject(lightSpec);
+  if (obj instanceof THREE.Light) {
+    return obj;
+  } else {
+    throw 'Invalid light spec';
+  }
+};
+
+Lights.setupLights = function(lightSpecs, objectLoader) {
+  objectLoader = objectLoader || new THREE.ObjectLoader(THREE.DefaultLoadingManager);
+  return lightSpecs.map(x => Lights.setupLight(x, objectLoader));
+};
+
+Lights.getDefaultHemisphereLight = function(usePhysicalLights, otherLightsOn) {
   // There is actually three modes:
   //   usePhysicallyCorrectLights off
-  //   usePhysicallyCorrectLights without lights enabled
-  //   usePhysicallyCorrectLights with    lights enabled
-  var ambientIntensity = usePhysicalLights ? (lightsOn? 0.5 : 2.0) : 1.0;
+  //   usePhysicallyCorrectLights without other lights enabled  (other lights not enabled = hemisphere lights high)
+  //   usePhysicallyCorrectLights with    other lights enabled  (other lights enabled = hemisphere lights low)
+  var ambientIntensity = usePhysicalLights ? (otherLightsOn? 0.5 : 2.0) : 1.0;
   if (THREE.REVISION < 80) {
     ambientIntensity = 1.0;
   }
@@ -30,13 +52,16 @@ Lights.addSimple2LightSetup = function (scene, position, doShadowMap) {
   if (doShadowMap) {
     var light = Lights.createSpotLightShadowMapped(1000);
     light.position.copy(light0.position);
-    light.onlyShadow = true;
+    // light.onlyShadow = true;  // Removed https://github.com/mrdoob/three.js/issues/7825
     scene.add(light);
+    //var helper = new THREE.CameraHelper( light.shadow.camera );
+    //scene.add( helper );
   }
 
   scene.add(ambient);
   scene.add(light0);
   scene.add(light1);
+  return { ambient: ambient, directional: [light0, light1] };
 };
 
 Lights.createSpotLightShadowMapped = function (lightBoxSize) {
@@ -45,21 +70,21 @@ Lights.createSpotLightShadowMapped = function (lightBoxSize) {
 
   light.castShadow = true;
 
-  light.shadowCameraNear = 1;
-  light.shadowCameraFar = lightBoxSize;
-  light.shadowCameraRight = lightBoxSize;
-  light.shadowCameraLeft = -lightBoxSize;
-  light.shadowCameraTop = lightBoxSize;
-  light.shadowCameraBottom = -lightBoxSize;
-  light.shadowCameraFov = 50;
+  light.shadow.camera.near = 1;
+  light.shadow.camera.far = lightBoxSize;
+  light.shadow.camera.right = lightBoxSize;
+  light.shadow.camera.left = -lightBoxSize;
+  light.shadow.camera.top = lightBoxSize;
+  light.shadow.camera.bottom = -lightBoxSize;
+  light.shadow.camera.fov = 50;
 
-  light.shadowBias = 0.0001;
-  light.shadowDarkness = 0.5;
+  light.shadow.bias = 0.0001;
+  //light.shadowDarkness = 0.5; // Removed https://github.com/mrdoob/three.js/issues/8238
 
-  light.shadowMapWidth = 2048;
-  light.shadowMapHeight = 2048;
+  light.shadow.mapSize.width = 2048;
+  light.shadow.mapSize.height = 2048;
 
-  light.shadowCameraVisible = true;
+  //light.shadowCameraVisible = true; // Removed
 
   return light;
 };

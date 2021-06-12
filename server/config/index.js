@@ -3,8 +3,7 @@
 var config = exports;
 
 // Ports
-config.reverseProxyPort = process.env.REVERSE_PROXY_PORT || 8010;
-config.httpServerPort = process.env.HTTP_SERVER_PORT || 9010;
+config.httpServerPort = process.env.HTTP_SERVER_PORT || 8010;
 config.baseUrl = process.env.NODE_BASE_URL || '';
 config.defaultRoute = 'http://127.0.0.1:' + config.httpServerPort;
 

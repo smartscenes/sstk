@@ -2,6 +2,7 @@
 
 var Constants = require('Constants');
 var LocalFileLoader = require('io/LocalFileLoader');
+var IOUtil = require('io/IOUtil');
 
 function FileLoader(params) {
   params = params || {};
@@ -53,13 +54,17 @@ FileLoader.prototype.loadFromUrl = function (url, encoding, onLoad, onProgress, 
   var loader = new THREE.FileLoader(this.manager);
   //loader.setCrossOrigin(this.crossOrigin);
   if (encoding) {
-    if (encoding === 'json') {
+    if (encoding === 'json' || encoding === 'jsonl') {
       if (onLoad) {
         var oldOnLoad = onLoad;
         onLoad = function (text) {
           var parsed;
           try {
-            parsed = JSON.parse(text);
+            if (encoding === 'json') {
+              parsed = JSON.parse(text);
+            } else {
+              parsed = IOUtil.parseJsonl(text);
+            }
           } catch (err) {
             onError('Invalid json from ' + url);
             return;

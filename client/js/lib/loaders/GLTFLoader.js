@@ -6,6 +6,9 @@
  * @author Don McCurdy / https://www.donmccurdy.com
  */
 
+var ImageUtil = require('util/ImageUtil');
+var _ = require('util/util');
+
 THREE.GLTFLoader = ( function () {
 
 	function GLTFLoader( manager ) {
@@ -173,8 +176,6 @@ THREE.GLTFLoader = ( function () {
 				}
 
 			}
-
-      console.time('GLTFLoader.parse');
 
       // AXC: set options
       var options = {
@@ -775,6 +776,7 @@ THREE.GLTFLoader = ( function () {
 			 *
 			 * @param  {THREE.ShaderMaterial} source
 			 * @return {THREE.ShaderMaterial}
+			 * @private
 			 */
 			cloneMaterial: function ( source ) {
 
@@ -1548,6 +1550,7 @@ THREE.GLTFLoader = ( function () {
 		this.textureLoader.setCrossOrigin( this.options.crossOrigin );
 
     this.fileLoader = this.options.fileLoader;
+    this.manager = options.manager;
 
 	}
 
@@ -1574,6 +1577,8 @@ THREE.GLTFLoader = ( function () {
 			var scene = scenes[ json.scene || 0 ];
 			var animations = dependencies.animations || [];
 			var cameras = dependencies.cameras || [];
+
+			assignExtrasToUserData( scene, json );
 
 			onLoad( scene, scenes, cameras, animations, json );
 
@@ -2010,11 +2015,12 @@ THREE.GLTFLoader = ( function () {
 
     }
 
+    var manager = this.manager;
     return Promise.resolve( sourceURI ).then( function ( sourceURI ) {
 
       // Load Texture resource.
 
-      var loader = THREE.Loader.Handlers.get( sourceURI ) || textureLoader;
+      var loader = manager.getHandler( sourceURI ) || textureLoader;
 
       return new Promise( function ( resolve, reject ) {
 
@@ -2051,7 +2057,14 @@ THREE.GLTFLoader = ( function () {
 
       return texture;
 
-    } );
+    } ).then( function(texture) {
+      return  _.toPromise(function(cb) {
+        ImageUtil.ensurePowerOfTwo(texture.image, texture, cb);
+      }).then((image) => {
+        texture.image = image;
+        return texture;
+      });
+    });
   };
 
   GLTFParser.prototype.__loadTextureWeb = function ( textureIndex ) {
@@ -2096,11 +2109,12 @@ THREE.GLTFLoader = ( function () {
 
 		}
 
+		var manager = this.manager;
 		return Promise.resolve( sourceURI ).then( function ( sourceURI ) {
 
 			// Load Texture resource.
 
-			var loader = THREE.Loader.Handlers.get( sourceURI );
+			var loader = manager.getHandler( sourceURI );
 
 			if ( ! loader ) {
 
@@ -2357,7 +2371,7 @@ THREE.GLTFLoader = ( function () {
 			if ( ! threeAttributeName ) continue;
 			if ( threeAttributeName in geometry.attributes ) continue;
 
-			geometry.addAttribute( threeAttributeName, bufferAttribute );
+			geometry.setAttribute( threeAttributeName, bufferAttribute );
 
 		}
 
@@ -2480,7 +2494,7 @@ THREE.GLTFLoader = ( function () {
 					geometry.name = baseGeometry.name;
 					geometry.userData = baseGeometry.userData;
 
-					for ( var key in baseGeometry.attributes ) geometry.addAttribute( key, baseGeometry.attributes[ key ] );
+					for ( var key in baseGeometry.attributes ) geometry.setAttribute( key, baseGeometry.attributes[ key ] );
 					for ( var key in baseGeometry.morphAttributes ) geometry.morphAttributes[ key ] = baseGeometry.morphAttributes[ key ];
 
 					var indices = [];
@@ -2756,7 +2770,7 @@ THREE.GLTFLoader = ( function () {
 						if ( material.aoMap && geometry.attributes.uv2 === undefined && geometry.attributes.uv !== undefined ) {
 
 							//console.log( 'THREE.GLTFLoader: Duplicating UVs to support aoMap.' );
-							geometry.addAttribute( 'uv2', new THREE.BufferAttribute( geometry.attributes.uv.array, 2 ) );
+							geometry.setAttribute( 'uv2', new THREE.BufferAttribute( geometry.attributes.uv.array, 2 ) );
 
 						}
 
@@ -2815,7 +2829,7 @@ THREE.GLTFLoader = ( function () {
 
 		if ( cameraDef.type === 'perspective' ) {
 
-			camera = new THREE.PerspectiveCamera( THREE.Math.radToDeg( params.yfov ), params.aspectRatio || 1, params.znear || 1, params.zfar || 2e6 );
+			camera = new THREE.PerspectiveCamera( THREE.MathUtils.radToDeg( params.yfov ), params.aspectRatio || 1, params.znear || 1, params.zfar || 2e6 );
 
 		} else if ( cameraDef.type === 'orthographic' ) {
 
@@ -3090,7 +3104,7 @@ THREE.GLTFLoader = ( function () {
 
 				var matrix = new THREE.Matrix4();
 				matrix.fromArray( nodeDef.matrix );
-				node.applyMatrix( matrix );
+				node.applyMatrix4( matrix );
 
 			} else {
 

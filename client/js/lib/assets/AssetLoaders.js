@@ -25,7 +25,7 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('wall', 'wall', require('loaders/WallLoader'));
   assetManager.registerAssetLoader('voxel', '*', require('loaders/VoxelLoader'));
   assetManager.registerAssetLoader('navmesh', 'navmesh', require('loaders/NavMeshLoader'));
-  assetManager.registerAssetLoader('house', 'house', require('loaders/HouseLoader'));
+  assetManager.registerAssetLoader('house', 'house', require('loaders/HouseTxtLoader'));
   assetManager.registerAssetLoader('labelMapping', '*', require('util/LabelMapping').Loader);
   assetManager.registerAssetLoader('parts', 'obj', require('loaders/OBJPartLoader'));
   assetManager.registerAssetLoader('custom', '*', require('loaders/BasicLoader'));

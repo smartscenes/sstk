@@ -20,22 +20,35 @@ function SegmentHierarchyLabeler(params) {
 SegmentHierarchyLabeler.prototype = Object.create(MeshHierarchyLabeler.prototype);
 SegmentHierarchyLabeler.prototype.constructor = SegmentHierarchyLabeler;
 
+SegmentHierarchyLabeler.prototype.__segmentsUpdated = function(err, res) {
+  if (this.segments.segmentedObject3DHierarchical) {
+    this.meshHierarchy.setSegmented(this.segments.segmentedObject3DHierarchical);
+    this.maxHierarchyLevel = this.meshHierarchy.maxHierarchyLevel;
+    if (this.showNodeCallback) {
+      this.showNodeCallback(this.meshHierarchy.partsNode);
+    }
+  }
+
+  if (!err && this.onSegmentsLoaded) {
+    this.onSegmentsLoaded(this.segments);
+  }
+};
+
 SegmentHierarchyLabeler.prototype.setTarget = function(modelInstance) {
   MeshHierarchyLabeler.prototype.setTarget.call(this, modelInstance);
   this.segments.init(modelInstance);
-  this.segments.loadSegments(function (err, res) {
-    if (this.segments.segmentedObject3DHierarchical) {
-      this.meshHierarchy.setSegmented(this.segments.segmentedObject3DHierarchical);
-      this.maxHierarchyLevel = this.meshHierarchy.maxHierarchyLevel;
-      if (this.showNodeCallback) {
-        this.showNodeCallback(this.meshHierarchy.partsNode);
-      }
-    }
+  this.segments.ensureSegments((err, res) => this.__segmentsUpdated(err, res));
+};
 
-    if (!err && this.onSegmentsLoaded) {
-      this.onSegmentsLoaded(this.segments);
+SegmentHierarchyLabeler.prototype.applySegmentAnnotation = function(annotation, cb) {
+  this.segments.__setSegments((err, res) => {
+    this.segments.isCustomSegmentation = true;
+    this.segments.segmentsJson = annotation['segmentation'];
+    this.__segmentsUpdated(err, res);
+    if (cb) {
+      cb(err, res);
     }
-  }.bind(this));
+  }, 'segmentation', 'trimeshHier', annotation);
 };
 
 module.exports = SegmentHierarchyLabeler;

@@ -8,6 +8,7 @@ var LabelPainter = require('controls/LabelPainter');
 var MeshHelpers = require('geo/MeshHelpers');
 var Form = require('ui/Form');
 var UIUtil = require('ui/UIUtil');
+var FileUtil = require('io/FileUtil');
 var _ = require('util/util');
 //var bootbox = require('bootbox');
 
@@ -33,10 +34,13 @@ function BasePartAnnotatorFactory(baseClass) {
    * @param [params.clearAnnotationOptions] Configuration of what to do when annotator is ready
    * @param [params.clearAnnotationOptions.clearLabels=true] {boolean} Set clearLabels to true to clear any predefined labels
    * @param [params.linkWordNet] Whether we should allow user to link to WordNet synsets
+   * @param [params.labelPainter] {controls.LabelPainter} Instantiated LabelPainter to use
+   * @param [params.useLabelPointer] {boolean} Whether to create a LabelPointer or LabelPainter (if labelPainter not specified)
    * @param [params.obbsVisible=false] {boolean} To show obbs of labeled segment groups or not.
    * @param [params.allowPass=false] {boolean} Whether passing of this item is allowed
    * @param [params.allowHierarchy=false] {boolean} Whether grouping of labels into hierarchy is allowed
    * @param [params.expandObbAmount=0] {number} Number of virtual unit to expand obb by with labeling obb
+   * @param [params.taskMode] Annotator task mode (fixup, verify)
    * @constructor BasePartAnnotator
    */
   function BasePartAnnotator(params) {
@@ -84,6 +88,13 @@ function BasePartAnnotatorFactory(baseClass) {
           name: 'clear',
           click: this.checkedClearAnnotations.bind(this),
           shortcut: 'ctrl-shift-k'
+        },
+        {
+          name: 'toggleShowSelectedOnlyMode',
+          click: function() {
+            this.showSelectedOnlyMode = !this.showSelectedOnlyMode;
+          }.bind(this),
+          shortcut: 'ctrl-shift-t'
         },
         {
           name: 'pass',
@@ -157,7 +168,7 @@ function BasePartAnnotatorFactory(baseClass) {
       scope.onPartChanged(part);
     });
     this.painter.Subscribe('SelectPart', this, function(part) {
-      if (part && part.userData.labelInfo) {
+      if (part && part.usesrData.labelInfo) {
         scope.labelsPanel.selectLabel(part.userData.labelInfo);
       }
     });
@@ -186,6 +197,9 @@ function BasePartAnnotatorFactory(baseClass) {
     // Did we successfully submit our annotations (if not there will be prompt asking if we want to leave this interface)
     this.__annotationsSubmitted = false;
 
+    // mode to just show selected only
+    this.__showSelectedOnlyMode = false;
+
     // Debug OBBs
     this.obbsVisible = params.obbsVisible;
     this.debugOBBsNode = new THREE.Group();
@@ -197,14 +211,33 @@ function BasePartAnnotatorFactory(baseClass) {
   BasePartAnnotator.prototype = Object.create(baseClass.prototype);
   BasePartAnnotator.prototype.constructor = BasePartAnnotator;
 
+  Object.defineProperty(BasePartAnnotator.prototype, 'showSelectedOnlyMode', {
+    get: function () {return this.__showSelectedOnlyMode; },
+    set: function (v) {
+      this.__showSelectedOnlyMode = v;
+      if (this.__showSelectedOnlyMode) {
+        this.showSelectedOnlyWithUnknown();
+      } else {
+        this.showAll();
+      }
+    }
+  });
+
   Object.defineProperty(BasePartAnnotator.prototype, 'annotationMode', {
-    get: function () {return this.annotationModes[this.__annotationModeIndex]; }
+    get: function () {
+      return this.__annotationModeIndex >= 0?
+        this.annotationModes[this.__annotationModeIndex] : null; }
   });
 
   Object.defineProperty(BasePartAnnotator.prototype, 'annotationModeIndex', {
     get: function () {return this.__annotationModeIndex; },
     set: function (v) {
-      this.__enterAnnotationMode(v);
+      if (this.__annotationModeIndex !== v) {
+        if (this.__annotationModeIndex >= 0) {
+          this.__exitAnnotationMode(this.__annotationModeIndex);
+        }
+        this.__enterAnnotationMode(v);
+      }
     }
   });
 
@@ -216,16 +249,42 @@ function BasePartAnnotatorFactory(baseClass) {
   BasePartAnnotator.prototype.__enterAnnotationMode = function(index) {
     this.__annotationModeIndex = index;
     var mode = this.annotationMode;
+    console.log('Entering annotation mode: ' + mode);
     this.__showUIs(mode);
-    if (mode === 'label') {
-      // Show labels panel
-    } else if (mode === 'group') {
-      // Show hierarchy panel
-    } else if (mode === 'decompose') {
-      // Show decomposition panel
+    if (this.__uis[mode]) {
+      var ui = this.__uis[mode];
+      var controls = ui.controls;
+      if (controls) {
+        _.each(controls, function(c) {
+          c.enabled = true;
+        });
+      }
+      if (ui.enter) {
+        ui.enter();
+      }
     } else {
       this.showAlert('Unsupported annotation mode ' + mode, 'alert-warning');
     }
+  };
+
+  BasePartAnnotator.prototype.__exitAnnotationMode = function(index) {
+    var mode = this.annotationModes[index];
+    console.log('Exiting annotation mode: ' + mode);
+    this.__showUIs(null);
+    if (this.__uis[mode]) {
+      var ui = this.__uis[mode];
+      if (ui.exit) {
+        ui.exit();
+      }
+      var controls = ui.controls;
+      if (controls) {
+        _.each(controls, function(c) {
+          c.enabled = false;
+        });
+        console.log(controls);
+      }
+    }
+    this.__annotationModeIndex = -1;
   };
 
   BasePartAnnotator.prototype.setupDatGui = function () {
@@ -319,6 +378,9 @@ function BasePartAnnotatorFactory(baseClass) {
     if (this.obbsVisible) {
       this.showPartOBBs(labelInfos);
     }
+    if (this.showSelectedOnlyMode && this.showSelectedOnlyWithUnknown) {
+      this.showSelectedOnlyWithUnknown();
+    }
   };
 
   BasePartAnnotator.prototype.onRenameLabel = function (labelInfo) {
@@ -362,6 +424,46 @@ function BasePartAnnotatorFactory(baseClass) {
   BasePartAnnotator.prototype.annotate = function (debug) {
   };
 
+  BasePartAnnotator.prototype.getPartAnnotations = function() {
+    this.annotate();
+    return this.annotations;
+  };
+
+  BasePartAnnotator.prototype.saveAnnotations = function () {
+    // Save part annotations to file
+    var annotations = this.getPartAnnotations();
+    if (annotations.length === 0) {
+      UIUtil.showAlert('Please provide some part annotations before saving', 'alert-warning');
+      return;
+    }
+
+    this.timings.mark('annotationSave');
+    var filename = (this.itemId != null)? this.itemId + '.parts.json' : 'parts.json';
+    var data = this.getAnnotationsJson(annotations);
+    FileUtil.saveJson(data, filename);
+  };
+
+  BasePartAnnotator.prototype.__loadAnnotationsFromFile = function (data, options) {
+    console.log('Please implement support for loading annotations from file', data);
+  };
+
+  BasePartAnnotator.prototype.loadAnnotationsFromFile = function (options) {
+    FileUtil.readAsync(options.file || options.path, 'json', (err, data) => {
+      if (err) {
+        UIUtil.showAlert('Error loading part annotations');
+        console.error('Error loading part annotations', err);
+      } else {
+        this.__loadAnnotationsFromFile(data, options);
+      }
+    });
+  };
+
+  BasePartAnnotator.prototype.loadAnnotationsWithForm = function () {
+    UIUtil.popupFileInput(file => {
+      this.loadAnnotationsFromFile({ file: file });
+    });
+  };
+
   BasePartAnnotator.prototype.hasAnnotations = function () {
     this.annotate();
     return this.__hasAnnotations(this.annotations);
@@ -397,11 +499,17 @@ function BasePartAnnotatorFactory(baseClass) {
       return;
     }
 
-    var partAnnotations = this.annotations;
+    this.timings.mark('annotationSubmit');
+    var params = this.getAnnotationsJson(this.annotations, true);
+    this.__submitAnnotationData(params, this.itemId);
+  };
+
+  BasePartAnnotator.prototype.getAnnotationsJson = function(partAnnotations, includeScreenshot) {
     // Get part labels (in case user has added label)
     var partLabels = this.labeler.getLabels();
 
-    var screenshot = this.getImageData(this.screenshotMaxWidth, this.screenshotMaxHeight);
+    var screenshot = includeScreenshot?
+      this.getImageData(this.screenshotMaxWidth, this.screenshotMaxHeight) : undefined;
     var itemId = this.itemId;
     var params = {
       appId: this.appId,
@@ -420,7 +528,6 @@ function BasePartAnnotatorFactory(baseClass) {
     if (annStats) {
       data['stats'] = annStats;
     }
-    this.timings.mark('annotationSubmit');
     var timings = this.timings.toJson();
     if (timings) {
       data['timings'] = timings;
@@ -432,7 +539,7 @@ function BasePartAnnotatorFactory(baseClass) {
       data['form'] = this.form;
     }
     params['data'] = data;
-    this.__submitAnnotationData(params, itemId);
+    return params;
   };
 
   BasePartAnnotator.prototype.__submitAnnotationData = function (data, itemId) {
@@ -467,7 +574,7 @@ function BasePartAnnotatorFactory(baseClass) {
             // Delete label
             if (this.labeler.hasParts(labelInfo)) {
               // Hmm, some parts still have this label - weird
-              UIUtil.showAlert(null, 'Unable to remove all parts for label ' + labelInfo.name, 'alert-warning');
+              UIUtil.showAlert('Unable to remove all parts for label ' + labelInfo.name, 'alert-warning');
             } else {
               deleteLabelFn(labelInfo);
             }
@@ -502,6 +609,7 @@ function BasePartAnnotatorFactory(baseClass) {
     // Most basic auth ever
     if (this.userId && !this.userId.startsWith('USER@')) {
       cb({ username: this.userId });
+      return;
     }
     if (!this.auth) {
       var Auth = require('util/Auth');
@@ -525,15 +633,15 @@ function BasePartAnnotatorFactory(baseClass) {
       data: data,
       dataType: 'json',
       success: function (res) {
-        that.removeWaiting(waitingKey);
         //console.log(res);
         callback(null, res);
+        that.removeWaiting(waitingKey);
       },
       error: function (jqXHR, textStatus, errorThrown) {
-        that.removeWaiting(waitingKey);
         console.error('Error retrieving annotations for '  + params.modelId);
         console.log(errorThrown);
         callback('Error retrieving annotations for '  + params.modelId, null);
+        that.removeWaiting(waitingKey);
       }
     });
   };
@@ -565,7 +673,7 @@ function BasePartAnnotatorFactory(baseClass) {
       this.onEditOpDone('fill', { labelInfo: selected, fill: fill });
     } else {
       // Show alert...
-      UIUtil.showAlert(null, 'Please select labels with painted regions that gives a bounding box to fill', 'alert-info', 2000, '10pt').css('bottom', '5px');
+      UIUtil.showAlert('Please select labels with painted regions that gives a bounding box to fill', 'alert-info', 2000, '10pt').css('bottom', '5px');
     }
   };
 

@@ -1,9 +1,9 @@
 Server-side computing scripts
 =============================
 
-To run you need to have first built the STK client code (run `./build.sh` in the main scene-toolkit directory).
+To run, make sure that you have first built the STK client code (run `./build.sh` in the main scene-toolkit directory).
 
-Then, install all necessary dependencies by running `npm install`.  After that, the following script commands are available:
+After that, the following script commands are available:
 
 Use `--help` to get help for specific scripts.
 
@@ -11,7 +11,7 @@ See [`config`](config/README.md) for example configuration files and how to use 
 
 Rendering scripts:
 
-1. `./render  --id <id> --dir=<baseDir> [--source p5d|p5dScene] [--width w] [--height h]` - Renders model or scene using default cameras
+1. `./render  --id <id> --dir=<baseDir> [--source <source>] [--width w] [--height h]` - Renders model or scene using default cameras
     
     1. Render scenes colored by object category
         

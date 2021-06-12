@@ -30,12 +30,13 @@ MeshHierarchyLabeler.prototype.__findPart = function (event) {
 };
 
 MeshHierarchyLabeler.prototype.labelPart = function (part, labelInfo, opts) {
-  MeshLabeler.prototype.labelPart.call(this, part, labelInfo, opts);
   if (part.userData.level > 0) {
     for (var i = 0; i < part.children.length; i++) {
       var c = part.children[i];
       this.labelPart(c, labelInfo, opts);
     }
+  } else {
+    MeshLabeler.prototype.labelPart.call(this, part, labelInfo, opts);
   }
 };
 

@@ -94,12 +94,10 @@ THREE.OBJLoader.prototype = {
 				mtlLoader.load(mtlurl, function (materialsCreator) {
 					materialsCreator.preload();
 					scope.setMaterials(materialsCreator);
-					object = scope.parse(text);
-					onLoad(object);
+					scope.tryParse(text, onLoad, onError);
 				}, onProgress, onError);
 			} else {
-				object = scope.parse(text);
-				onLoad(object);
+				scope.tryParse(text, onLoad, onError);
 			}
 		}, onProgress, onError);
 	},
@@ -112,7 +110,7 @@ THREE.OBJLoader.prototype = {
 		loader.setPath( this.path );
 		loader.load( url, function ( text ) {
 
-			onLoad( scope.parse( text ) );
+			scope.tryParse(text, onLoad, onError);
 
 		}, onProgress, onError );
 
@@ -538,9 +536,21 @@ THREE.OBJLoader.prototype = {
 
 	},
 
-	parse: function ( text ) {
+	tryParse: function(text, onLoad, onError) {
+		console.time('OBJLoader');
+		var obj;
+		try {
+			obj = this.parse(text);
+		} catch (err) {
+			onError(err);
+			return;
+		} finally {
+			console.timeEnd('OBJLoader');
+		}
+		onLoad(obj);
+	},
 
-		console.time( 'OBJLoader' );
+	parse: function ( text ) {
 
 		var state = this._createParserState();
 
@@ -783,6 +793,7 @@ THREE.OBJLoader.prototype = {
 		var container = new THREE.Group();
 		container.materialLibraries = [].concat( state.materialLibraries );
 
+		var index = 0;
 		for ( var i = 0, l = state.objects.length; i < l; i ++ ) {
 
 			var object = state.objects[ i ];
@@ -797,11 +808,11 @@ THREE.OBJLoader.prototype = {
 
 			var buffergeometry = new THREE.BufferGeometry();
 
-			buffergeometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( geometry.vertices ), 3 ) );
+			buffergeometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array( geometry.vertices ), 3 ) );
 
 			if ( geometry.normals.length > 0 ) {
 
-				buffergeometry.addAttribute( 'normal', new THREE.BufferAttribute( new Float32Array( geometry.normals ), 3 ) );
+				buffergeometry.setAttribute( 'normal', new THREE.BufferAttribute( new Float32Array( geometry.normals ), 3 ) );
 
 			} else {
 
@@ -812,19 +823,19 @@ THREE.OBJLoader.prototype = {
 			if ( geometry.colors.length > 0 ) {
 
 				hasVertexColors = true;
-				buffergeometry.addAttribute( 'color', new THREE.Float32BufferAttribute( geometry.colors, 3 ) );
+				buffergeometry.setAttribute( 'color', new THREE.Float32BufferAttribute( geometry.colors, 3 ) );
 
 			}
 
 			if ( geometry.uvs.length > 0 ) {
 
-				buffergeometry.addAttribute( 'uv', new THREE.BufferAttribute( new Float32Array( geometry.uvs ), 2 ) );
+				buffergeometry.setAttribute( 'uv', new THREE.BufferAttribute( new Float32Array( geometry.uvs ), 2 ) );
 
 			}
 
 			// AXC: Add reference to original vertex positions
 			if (geometry.origVertIndices.length > 0) {
-				buffergeometry.addAttribute( 'vertIndices', new THREE.BufferAttribute( new Uint32Array( geometry.origVertIndices ), 1));
+				buffergeometry.setAttribute( 'vertIndices', new THREE.BufferAttribute( new Uint32Array( geometry.origVertIndices ), 1));
 			}
 
 			// Create materials
@@ -908,11 +919,14 @@ THREE.OBJLoader.prototype = {
 
 			mesh.name = object.name;
 
+			// AXC: Give this mesh an index and id
+			mesh.userData.index = index;
+			mesh.userData.id = object.name;
+			index++;
+
 			container.add( mesh );
 
 		}
-
-		console.timeEnd( 'OBJLoader' );
 
 		return container;
 

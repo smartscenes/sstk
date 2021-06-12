@@ -53,7 +53,8 @@ BasePartLabeler.prototype.updateLabels = function (labelInfos) {
 
 BasePartLabeler.prototype.getValidLabels = function() {
   if (this.labelInfos) {
-    return this.labelInfos.filter(function(x) { return x && !x.removed; });
+    var scope = this;
+    return this.labelInfos.filter(function(x) { return x && !x.removed && scope.hasParts(x); });
   }
 };
 

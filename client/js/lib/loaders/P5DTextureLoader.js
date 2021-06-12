@@ -151,7 +151,7 @@ TextureLoader.prototype.updateMaterial = function (meshMaterial, config, matInde
       delete meshMaterial.metal;
     }
     if (meshMaterial.shininess) {
-      meshMaterial.roughness = 1 - THREE.Math.clamp(meshMaterial.shininess / 200, 0, 1);
+      meshMaterial.roughness = 1 - THREE.MathUtils.clamp(meshMaterial.shininess / 200, 0, 1);
       delete meshMaterial.shininess;
     }
     delete meshMaterial.specular;

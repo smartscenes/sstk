@@ -9,6 +9,8 @@ var _ = require('util/util');
  * @param params.front {THREE.Vector3|string|number[]} Front direction for the architecture
  * @param [params.unit=0.01] {number} Unit in meters
  * @param [params.defaults] {{'Wall': { depth: number, extraHeight: number }}} Default values to use for different architectural elements
+ * @param [params.assetManager] {assets.AssetManager} AssetManager (used to fetch textures)
+ * @param [params.useDefaultMaterials] {boolean} Whether to use the default materials or the materials specified in this arch files
  * @memberOf geo
  * @constructor
  */
@@ -19,6 +21,9 @@ function ArchCreator(params) {
   this.left.crossVectors(this.up, this.front);
   this.unit = params.unit || 0.01;
   this.defaults = _.defaultsDeep(Object.create(null), params.defaults || {}, { 'Wall': { depth: 0.10 / this.unit, extraHeight: 0 }}); // in cm
+  this.useDefaultMaterials = params.useDefaultMaterials;
+  this.assetManager = params.assetManager;
+  this.coords = [0,2];  // 2D coordinates
 }
 
 Object.defineProperty(ArchCreator.prototype, 'wallDepth', {
@@ -31,14 +36,103 @@ Object.defineProperty(ArchCreator.prototype, 'wallExtraHeight', {
   set: function (v) { this.defaults.Wall.extraHeight = v; }
 });
 
+ArchCreator.getFilter = function(opts) {
+  return function(element) {
+    var include = true;
+    if (!opts.includeCeiling) {
+      include = include && (element.type !== 'Ceiling');
+    }
+    if (!opts.includeFloor) {
+      include = include && (element.type !== 'Floor');
+    }
+    if (!opts.includeWalls) {
+      include = include && (element.type !== 'Wall');
+    }
+    if (!include) {
+      return false;
+    }
+    if (opts.room != undefined && opts.level != undefined) {
+      return element.roomId === (opts.level + '_' + opts.room);
+    } else if (opts.level != undefined) {
+      return element.roomId && element.roomId.startsWith(opts.level + '_');
+    } else if (opts.archIds) {
+      return opts.archIds.indexOf(element.roomId) >= 0 || opts.archIds.indexOf(element.id) >= 0;
+    } else {
+      return true;
+    }
+  };
+};
+
+ArchCreator.prototype.__getMaterial = function (materialOptions, customMaterials) {
+  if (materialOptions.materialId != null) {
+    // TODO: Allow for a blend of material with material id with some custom settings
+    if (customMaterials != null) {
+      var material = customMaterials[materialOptions.materialId];
+      // console.log('got material', material);
+      return material;
+    }
+  }
+  if (materialOptions.diffuse != null || materialOptions.texture != null) {
+    // Old style textured material
+    return this.__getTexturedMaterial(materialOptions.diffuse, materialOptions.texture, materialOptions);
+  } else {
+    // More advanced materials
+    return this.assetManager.getMaterial(materialOptions);
+  }
+};
+
+ArchCreator.prototype.__getTexturedMaterial = function (color, texture, options) {
+  // Old style textured material
+  if (texture) {
+    var out = this.assetManager?
+      this.assetManager.getTexturedMaterial(this.defaults['textureSource'], texture, options) : null;
+    if (out) {
+      out.color = new THREE.Color(color || '#ffffff');
+      return out;
+    } else {
+      console.warn('Cannot get textured material for ' + texture);
+      return Object3DUtil.getMaterial(color);
+    }
+  } else {
+    return Object3DUtil.getMaterial(color);
+  }
+};
+
+ArchCreator.prototype.__getMaterials = function(w, customMaterials) {
+  var scope = this;
+  var materials = (!this.useDefaultMaterials && w.materials && w.materials.length)? w.materials :
+    _.get(this.defaults, w.type + '.materials');
+  // console.log("materials", materials);
+  return _.map(materials, function (m) {
+    return scope.__getMaterial(m, customMaterials);
+  });
+};
+
 /**
  * Create architecture
- * @param arch
+ * @param arch Json specifying the architecture (note that this is modified to include object3D associated with each element)
  * @param opts
  * @param [opts.filterElements] {function()}
+ * @param [opts.groupWalls] {boolean} Whether to group walls by room id (under `<roomId>w`)
+ * @param [opts.getMaterials] {function(geo.ArchElement): THREE.Material[]}
+ * @param [opts.groupRoomsToLevels] {boolean} Whether to group rooms into levels
  * @returns {{rooms, outside: Array, elementsById, holeToWalls}}
  */
 ArchCreator.prototype.createArch = function(arch, opts) {
+  var scope = this;
+  var customMaterials = null;
+  if (arch.materials && arch.textures && arch.images) {
+    var resourcePath = _.get(arch, ['defaults', 'texturePath']) || this.defaults.texturePath;
+    customMaterials = this.assetManager.loadMaterials(arch, { resourcePath: resourcePath });
+  }
+  if (opts.customMaterials) {
+    if (customMaterials) {
+      customMaterials = _.defaults(customMaterials, opts.customMaterials);
+    } else {
+      customMaterials = opts.customMaterials;
+    }
+  }
+  opts = _.defaults(Object.create(null), opts || {}, { getMaterials: function(x) { return scope.__getMaterials(x, customMaterials); } });
   var archElements = this.createArchElements(arch, opts);
   var elementsByRoom = _.groupBy(_.values(archElements), function(x) { return (x instanceof THREE.Object3D)? x.userData.roomId : x.roomId; });
   var rooms = {};
@@ -52,6 +146,9 @@ ArchCreator.prototype.createArch = function(arch, opts) {
       for (var i = 0; i < relements.length; i++) {
         if (!opts.filterElements || opts.filterElements(relements[i])) {
           room.add((relements[i] instanceof THREE.Object3D) ? relements[i] : relements[i].object3D);
+          if (room.userData.level == null && relements[i].level != null) {
+            room.userData.level = relements[i].level;
+          }
         }
       }
       rooms[roomId] = room;
@@ -69,9 +166,42 @@ ArchCreator.prototype.createArch = function(arch, opts) {
       });
     }
   });
-  return { rooms: rooms, outside: outsideElements, elementsById: archElements, holeToWalls: holeToWalls };
+  var res = { rooms: rooms, outside: outsideElements, elementsById: archElements, holeToWalls: holeToWalls };
+  if (opts.groupRoomsToLevels) {
+    res.levels = this.roomsToLevels(rooms);
+  }
+  return res;
 };
 
+ArchCreator.prototype.applyModification = function(arch, modifications) {
+  // TODO: handle modifications
+};
+
+ArchCreator.prototype.roomsToLevels = function(rooms) {
+  var regex = /^(\d+)_(\d+)$/;
+  var levels = [];
+  _.each(rooms, function (room, roomId) {
+    if (room.userData.level == null) {
+      var matched = regex.exec(roomId);
+      if (matched) {
+        room.userData.level = parseInt(matched[1]);
+      } else {
+        room.userData.level = 0;
+      }
+    }
+
+    var li = room.userData.level;
+    if (!levels[li]) {
+      var group = new THREE.Group();
+      group.name = 'Level#' + li;
+      group.userData.type = 'Level';
+      levels[li] = group;
+    }
+    var level = levels[li];
+    level.add(room);
+  });
+  return levels;
+};
 
 /**
  * Information about an architectural element.
@@ -127,13 +257,30 @@ ArchCreator.prototype.createArch = function(arch, opts) {
  */
 ArchCreator.prototype.createArchElements = function(arch, opts) {
   var oldDefaults = this.defaults;
+  var coord1 = this.coords[0];
+  var coord2 = this.coords[1];
   if (arch.defaults) {
     this.defaults = _.defaultsDeep({}, arch.defaults, oldDefaults);
+  }
+  function __ensureGroupedPoints(points) {
+    // Makes sure that points is a array of polygons
+    if (points && points.length) {
+      var pg = points[0];
+      if (pg.length) {
+        var p = pg[0];
+        // This should be an point (array of length 3)
+        // If it is a number, then let's puts points inside another array
+        if (typeof p === 'number') {
+          points = [points];
+        }
+      }
+    }
+    return points;
   }
   function __to2D(groupedPoints) {
     return _.map(groupedPoints, function(g) {
       return _.map(g, function(p) {
-        return new THREE.Vector2(p[0], p[2]);
+        return new THREE.Vector2(p[coord1], p[coord2]);
       });
     });
   }
@@ -159,10 +306,12 @@ ArchCreator.prototype.createArchElements = function(arch, opts) {
     var e = rest[i];
     var object3D;
     if (e.type === 'Ceiling') {
+      e.points = __ensureGroupedPoints(e.points);
       var depth = e.depth || _.get(this.defaults, e.type + '.depth');
       var mats = opts.getMaterials(e);
       object3D = this.makeCeiling(__to2D(e.points), depth, mats[0], 0);
     } else if (e.type === 'Floor' || e.type === 'Ground') {
+      e.points = __ensureGroupedPoints(e.points);
       var depth = e.depth || _.get(this.defaults, e.type + '.depth');
       var mats = opts.getMaterials(e);
       object3D = this.makeGround(__to2D(e.points), depth, mats[0], 0);
@@ -172,6 +321,9 @@ ArchCreator.prototype.createArchElements = function(arch, opts) {
       object3D.userData.id = e.id;
       object3D.userData.type = e.type;
       object3D.userData.roomId = e.roomId;
+      if (e.level != null) {
+        object3D.userData.level = e.level;
+      }
       if (e.offset) {
         object3D.position.set(e.offset[0], e.offset[1], e.offset[2]);
       }
@@ -256,11 +408,13 @@ ArchCreator.prototype.createWalls = function(walls, getWallPoints, getMaterials)
     return Object3DUtil.mergeHoles(holeBBoxes);
   }
 
+  var coord1 = this.coords[0];
+  var coord2 = this.coords[1];
   var wallObject3Ds = [];
   for (var iWall = 0; iWall < walls.length; iWall++) {
     var wall = walls[iWall];
     var wallPoints = getWallPoints(wall);
-    if (wallPoints[0][0] === wallPoints[1][0] && wallPoints[0][2] === wallPoints[1][2]) {
+    if (wallPoints[0][coord1] === wallPoints[1][coord1] && wallPoints[0][coord2] === wallPoints[1][coord2]) {
       // Not real wall, skip
       continue;
     }
@@ -281,6 +435,7 @@ ArchCreator.prototype.createWalls = function(walls, getWallPoints, getMaterials)
       up, wallHeight, wallExtraHeight, wallDepth, wall.mergedHoleBoxes, materials);
     Object3DUtil.traverseMeshes(mesh, false, function(w) {
       w.userData.type = w.name;
+      w.name = w.userData.type + '#' + wall.id;
       w.userData.id = wall.id; // Same id as actual wall (not cool)
       w.userData.roomId = roomId;
       w.userData.isEditable = false;
@@ -431,6 +586,80 @@ ArchCreator.prototype.getWallPoints = function(elements, swapWallPoints) {
     }
   }
   return { wallPoints: allWallPoints, groupedWalls: groupedWalls };
+};
+
+ArchCreator.prototype.toSceneState = function(json, arch, finalize) {
+  var SceneState = require('scene/SceneState');
+  var scene = new THREE.Scene();
+  var sceneState = new SceneState(scene, {up: json.up, front: json.front, unit: json.scaleToMeters});
+  //console.log(arch);
+  _.each(arch.levels, function(level, levelId) {
+    scene.add(level);
+  });
+  _.each(arch.rooms, function (room, roomId) {
+    sceneState.addExtraObject(room, true);
+  });
+  if (finalize) {
+    sceneState.finalizeScene();
+  }
+  return sceneState;
+};
+
+ArchCreator.DEFAULTS = {
+  up: new THREE.Vector3(0,1,0),
+  front: new THREE.Vector3(0,0,1),
+  unit: 1,
+  defaults: {
+    'Wall': {
+      depth: 0.1,
+      height: 2.7,
+      extraHeight: 0.035,
+      materials: [
+        {
+          "name": "inside",                          // Name of material ("inside" for inside wall)
+          "diffuse": "#ffffff"                       // Diffuse color in hex
+        },
+        {
+          "name": "outside",                         // Name of material ("outside" for outside wall)
+          "diffuse": "#ffffff"                       // Diffuse color in hex
+        }
+      ]
+    },
+    'Ceiling': {
+      depth: 0.05,
+      offset: 0.04,    // Bit offset above wall extraHeight
+      materials: [
+        {
+          "name": "surface",
+          "diffuse": "#ffffff"
+        }
+      ]
+    },
+    'Floor': {
+      depth: 0.05,
+      materials: [
+        {
+          "name": "surface",
+          "diffuse": "#ffffff"
+
+        }
+      ]
+    },
+    'Ground': {
+      depth: 0.08,
+      materials: [
+        {
+          "name": "surface",
+          "diffuse": "#ffffff"
+        }
+      ]
+    }
+  },
+  filter: {
+    includeCeiling: true,
+    includeFloor: true,
+    includeWalls: true
+  }
 };
 
 

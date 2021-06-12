@@ -100,10 +100,7 @@ AssetGroups.registerAssetGroup = function (assetGroup, opts) {
   }
   AssetGroups._assetGroupsByType[type].push(assetGroup);
   if (AssetGroups.defaultFormat) {
-    var format = AssetGroups.defaultFormat;
-    if (assetGroup.supportedFormats && assetGroup.supportedFormats.indexOf(format) >= 0) {
-      assetGroup.defaultFormat = format;
-    }
+    assetGroup.setDefaultFormat(AssetGroups.defaultFormat);
   }
 
   Constants.assetSources[type] = Constants.assetSources[type] || [];
@@ -180,7 +177,7 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
   var validAssetFields = ['texturePath', 'surfaces', 'prefetchModelInfo',
     'regions', 'video', 'trajectory', 'voxelsField',
     'voxels-surface', 'voxels-solid', 'voxels-labeled', 'voxels-color',
-    "part-annotations",
+    'part-annotations',
     'segment-annotations-raw', 'segment-annotations-clean'];
   if (options.assetFields) {
     validAssetFields = validAssetFields.concat(options.assetFields);
@@ -235,14 +232,14 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
 
         assetInfo.defaultMaterialType = meshMaterialsByName[defaultMaterialType];
         if (!assetInfo.defaultMaterialType) {
-          console.warn("Unknown material type: " + defaultMaterialType);
+          console.warn('Unknown material type: ' + defaultMaterialType);
         }
       } else {
         assetInfo.defaultMaterialType = defaultMaterialType;
       }
     }
     if (assetInfo.options && assetInfo.options.defaultMaterial !== undefined) {
-      if (typeof assetInfo.options.defaultMaterial === "boolean") {
+      if (typeof assetInfo.options.defaultMaterial === 'boolean') {
         assetInfo.options.defaultMaterial = Object3DUtil.getSimpleFalseColorMaterial(0);
       } else {
         // TODO: parse material
@@ -259,6 +256,7 @@ AssetGroups.__parseAssetMetadataOld = function (options) {
     name: options.source,
     type: options.assetType,
     supportedFormats: supportedFormats,
+    usesDeprecated: true,
     getImageUrl: function (id, i, metadata) {
       metadata = metadata || {};
       var screenShotPath = (screenShotPaths)? screenShotPaths[i] || screenShotPathsByName[i] : null;
@@ -346,7 +344,7 @@ function createAssetDbForAssetGroup(ag, config) {
           function(rec,vars) { return ag.__getInterpolatedAssetInfo(rec, info[idField], vars) });
       }
       return info;
-    }
+    };
   }
   return new AssetsDb({ assetIdField: idField, groupDataFn: groupDataFn,
     convertDataFn: convertDataFn, lazyConvertDataFn: lazyConvertDataFn });

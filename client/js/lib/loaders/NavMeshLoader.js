@@ -19,8 +19,8 @@ Mask.prototype.decode = function(v) {
 
 function NavMesh(opts) {
   _.extend(this, opts);
-  var nTileBits = Math.log2(THREE.Math.nextPowerOfTwo(this.maxTiles));
-  var nPolyBits = Math.log2(THREE.Math.nextPowerOfTwo(this.maxPolys));
+  var nTileBits = Math.log2(THREE.MathUtils.nextPowerOfTwo(this.maxTiles));
+  var nPolyBits = Math.log2(THREE.MathUtils.nextPowerOfTwo(this.maxPolys));
   // Only allow 31 salt bits, since the salt mask is calculated using 32bit uint and it will overflow.
   var nSaltBits = Math.min(31, 32 - nTileBits - nPolyBits);
 

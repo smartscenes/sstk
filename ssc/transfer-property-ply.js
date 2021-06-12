@@ -8,7 +8,7 @@ var STK = require('./stk-ssc');
 
 cmd
   .version('0.0.1')
-  .description('Transfers face annotation in ply directly onto vertex colors')
+  .description('Transfers face or vertex annotation in ply directly onto vertex colors')
   .option('--input <filename>', 'Input path')
   .option('--from <property_type>', 'Whether to transfer from vertex or face property (default=face)', 'vertex')
   .option('--property <name>', 'Name of property to transfer (default=segment_id)', 'segment_id')
@@ -56,10 +56,10 @@ function getColor(i) {
 
 function colorize_by_face(loadInfo, basename, incrBy, callback) {
   var customFaceAttributes = loadInfo.options.customFaceAttributes;
-  name_mappings = {
+  var name_mappings = {
     'segment_id': 'instances',
     'material_id': 'category'
-  }
+  };
   assetManager.getModelInstanceFromLoadModelInfo(loadInfo, function (mInst) {
     var obj = mInst.object3D;
     var worldToModelTransform = null;
@@ -86,10 +86,10 @@ function colorize_by_face(loadInfo, basename, incrBy, callback) {
 
 function colorize_by_vertex(loadInfo, basename, incrBy, callback) {
   var customAttributes = loadInfo.options.customVertexAttributes;
-  name_mappings = {
+  var name_mappings = {
     'segment_id': 'instances',
     'material_id': 'category'
-  }
+  };
   assetManager.getModelInstanceFromLoadModelInfo(loadInfo, function (mInst) {
     var obj = mInst.object3D;
     var worldToModelTransform = null;
@@ -123,7 +123,7 @@ function processFiles() {
     var basename = output_basename;
     if (basename) {
       // Specified output - append index
-      if (files.length > 0) {
+      if (files.length > 1) {
         basename = basename + '_' + index;
       }
       basename = outputDir? outputDir + '/' + basename : basename;

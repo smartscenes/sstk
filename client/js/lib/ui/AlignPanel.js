@@ -2,13 +2,16 @@
 
 var Object3DUtil = require('geo/Object3DUtil');
 var Constants = require('Constants');
+var PubSub = require('PubSub');
 
 function AlignPanel(params) {
+  PubSub.call(this);
   this.rotateXDeg = 90;
   this.rotateZDeg = 90;
   this.submitAlignmentUrl = Constants.baseUrl + '/submitAlignment';
   this.transformControls = null;
   this._useTransformControls = false;
+  this.keysEnabled = true;
 
   if (params) {
     this.container = params.container;
@@ -27,6 +30,9 @@ function AlignPanel(params) {
   }
   this.init();
 }
+
+AlignPanel.prototype = Object.create(PubSub.prototype);
+AlignPanel.prototype.constructor = AlignPanel;
 
 Object.defineProperty(AlignPanel.prototype, 'useTransformControls', {
   get: function () {return this._useTransformControls; },
@@ -69,6 +75,9 @@ AlignPanel.prototype.init = function () {
       this.rotateZ = Math.PI * this.rotateZDeg / 180.0;
     }.bind(this)
   );
+  // Hook up autoalign button
+  this.autoAlignButton = $('#autoAlignment');
+  this.autoAlignButton.click(this.axisAlign.bind(this, { checkAABB: true }));
   // Hook up submit button
   this.submitButton = $('#submitAlignment');
   this.submitButton.click(this.submit.bind(this));
@@ -135,6 +144,7 @@ AlignPanel.prototype.redisplay = function() {
 };
 
 AlignPanel.prototype.__keyHandler = function (event) {
+  if (!this.keysEnabled) { return; }
   if (event.target.type && (event.target.type === 'text')) { return; }
 
   // Handle keys for transform controls
@@ -148,7 +158,7 @@ AlignPanel.prototype.__keyHandler = function (event) {
 
     case 17: // Ctrl
       if (this.transformControls) {
-        this.transformControls.setRotationSnap(THREE.Math.degToRad(15));
+        this.transformControls.setRotationSnap(THREE.MathUtils.degToRad(15));
         return false;
       }
       break;
@@ -187,6 +197,16 @@ AlignPanel.prototype.updateUpFrontAxes = function (target) {
   this.targetFront = Object3DUtil.vectorToString(upFront.front);
   this.alignUpText.text(this.targetUp);
   this.alignFrontText.text(this.targetFront);
+  this.Publish('AlignmentUpdated', target);
+};
+
+AlignPanel.prototype.axisAlign = function(opts) {
+  if (this.target) {
+    var OBBFitter = require('geo/OBBFitter');
+    var obb = OBBFitter.fitOBB(this.target.object3D, opts);
+    this.target.alignObbUpFront(obb, Constants.worldUp, Constants.worldFront);
+    this.updateUpFrontAxes(this.target);
+  }
 };
 
 AlignPanel.prototype.next = function () {
@@ -213,6 +233,27 @@ AlignPanel.prototype.clear = function () {
   this.updateUpFrontAxes(target);
 };
 
+function getUpdateRecord(modelInst) {
+  if (modelInst.model.info.unit != null) {
+    var obj = modelInst.object3D.clone();
+    obj.position.set(0,0,0);
+    // NOTE: Assume that model is already scaled
+    var bbox = Object3DUtil.getBoundingBox(obj);
+    return {
+      'aligned.minPoint': bbox.min.toArray().join(','),
+      'aligned.maxPoint': bbox.max.toArray().join(','),
+      'aligned.dims': bbox.dimensions().toArray().join(',')
+    };
+  } else {
+    // Unset aligned info
+    return {
+      'aligned.minPoint': null,
+      'aligned.maxPoint': null,
+      'aligned.dims': null
+    };
+  }
+}
+
 AlignPanel.prototype.submit = function () {
   var target = this.target;
   if (!target) { return; }
@@ -224,11 +265,12 @@ AlignPanel.prototype.submit = function () {
     up: this.targetUp,
     front: this.targetFront,
     // userId: (window.globals)? window.globals.userId : "unknown",
-    updateMain: Constants.submitUpdateMain
+    updateMain: Constants.submitUpdateMain? getUpdateRecord(target) : null
   };
   if (!target.model.isIndexed()) {
     params.updateSourceId = true;
   }
+  // console.log(params);
   var alignData = jQuery.param(params);
   var inputs = this.submitButtons;
   inputs.prop('disabled', true);

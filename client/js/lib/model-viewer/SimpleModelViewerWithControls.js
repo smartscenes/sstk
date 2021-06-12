@@ -33,9 +33,11 @@ function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
       this.partsPanel = new PartsPanel({
         app: this,
         container: partsPanel,
-        filterEmptyGeometries: true,
-        showMultiMaterial: true,
-        collapseNestedPaths: true,
+        meshHierarchy: {
+          filterEmptyGeometries: true,
+          showMultiMaterial: true,
+          collapseNestedPaths: true
+        },
         getDebugNode: function () {
           return this.singleModelCanvas.debugNode;
         }.bind(this),

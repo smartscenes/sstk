@@ -16,6 +16,21 @@ _.gotoURL = function(url) {
 var Ajax = require('io/Ajax');
 _.mixin(Ajax);
 
+_.postJSON = function(url, data, opts) {
+  opts = _.defaults({
+    type: 'POST',
+    url: url,
+    contentType: 'application/json;charset=utf-8',
+    data: JSON.stringify(data)
+  }, opts);
+  _.ajax(opts);
+};
+
+_.toPromise = function(cbFn) {
+  return new Promise((resolve, reject) =>
+      cbFn((err, res) => { if (err) { reject(err); } else { resolve(res); } }));
+};
+
 var RNG = require('math/RNG');
 /** generate a random id of specified length */
 function generateRandomId(charCount, charSet) {
@@ -56,6 +71,29 @@ _.getEnumValue = function(v, name, values) {
   } else {
     return ev;
   }
+};
+
+_.isReversed = function(a1, a2) {
+  if (a1.length === a2.length) {
+    var matched = true;
+    for (var j = 0; j < a1.length; j++) {
+      if (a1[j] !== a2[a2.length - j - 1]) {
+        matched = false;
+        break;
+      }
+    }
+    return matched;
+  } else {
+    return false;
+  }
+};
+
+_.templatizeCollection = function(d) {
+  _.each(d, function (v, k) {
+    if (typeof (v) === 'string') {
+      d[k] = _.template(v);
+    }
+  });
 };
 
 /**
@@ -104,6 +142,24 @@ _.getDirname = function(str) {
   }
 };
 
+_.isUrl = function(str) {
+  if (typeof str === 'string') {
+    if (str.startsWith('http://') || str.startsWith('http://') || str.startsWith('file://')) {
+      return true;
+    }
+  }
+  return false;
+};
+
+_.isDataUrl = function(str) {
+  if (typeof str === 'string') {
+    if (str.startsWith('data:')) {
+      return true;
+    }
+  }
+  return false;
+};
+
 // Take a string and returns ascii char codes
 _.toCharCodes = function(s) {
   return _.map(s, function (x) {
@@ -119,15 +175,27 @@ _.strToInt32 = function(s) {
 
 _.getUrlParams = function () {
   var nestedParamRegex = /^(.+)\[(.+)\]$/;
-  var vars = {}, hash;
-  var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+  var vars = {};
+  var href = window.location.href;
+  if (href.endsWith('#')) {
+    href = href.substr(0, href.length-1);
+  }
+  var hashes = href.slice(href.indexOf('?') + 1).split('&');
   for(var i = 0; i < hashes.length; i++) {
-    hash = hashes[i].split('=');
+    var hash = hashes[i].split('=');
     var name = decodeURIComponent(hash[0]);
-    var value = decodeURIComponent(hash[1]);
-    var lowercase = value.toLowerCase();
-    if (lowercase === 'false') { value = false; }
-    else if (lowercase === 'true') { value = true; }
+    var value = (hash[1] != null)? decodeURIComponent(hash[1]) : null;
+    if (value == null) {
+      // Assume boolean, set to true
+      value = true;
+    } else {
+      var lowercase = value.toLowerCase();
+      if (lowercase === 'false') {
+        value = false;
+      } else if (lowercase === 'true') {
+        value = true;
+      }
+    }
     //vars.push(name);
     var m = name.match(nestedParamRegex);
     if (m) {
@@ -142,9 +210,13 @@ _.getUrlParams = function () {
   return vars;
 };
 
-_.getUrlParam = function (name, defaultValue) {
+_.getUrlParam = function (name, defaultValue, parseFn) {
   var v = _.getUrlParams()[name];
-  return (v != undefined)? v : defaultValue;
+  v = (v != undefined)? v : defaultValue;
+  if (parseFn) {
+    v = parseFn(v);
+  }
+  return v;
 };
 
 // Stuffs arguments into object
@@ -237,6 +309,15 @@ function snapTo(n, d) {
 }
 
 _.snapTo = snapTo;
+
+var EPSILON = 10e-10;
+function roundIfClose(v, epsilon) {
+  epsilon = epsilon || EPSILON;
+  var r = Math.round(v);
+  return (Math.abs(v-r) < epsilon)?  r:v;
+}
+
+_.roundIfClose = roundIfClose;
 
 /**
  * Invert map of arrays: `{ string: [k1, k2...], ...}  to { k1: string, k2: string,...}`
@@ -385,10 +466,38 @@ function safeDivide(n, d, defaultValue) {
 _.safeDivide = safeDivide;
 
 
-function parseBoolean(string) {
-  if (string) {
+function parseRegex(string) {
+  if (string != null && typeof(string) === 'string') {
+    return new RegExp(string);
+  } else if (string instanceof RegExp) {
+    return string;
+  }
+}
+_.parseRegex = parseRegex;
+
+function parseSortBy(string) {
+  if (string != null && typeof(string) === 'string') {
+    var lc = string.toLowerCase();
+    if (lc.endsWith(' asc') || lc.endsWith(' desc')) {
+      var i = string.lastIndexOf(' ');
+      var fieldname = string.substr(0, i).trim();
+      var order = lc.substr(i).trim();
+      return { fieldname: fieldname, order: order };
+    } else {
+      return { fieldname: string, order: 'asc' };
+    }
+  }
+}
+_.parseSortBy = parseSortBy;
+
+function parseBoolean(string, defaultValue) {
+  if (string == null || string === '') {
+    return defaultValue;
+  } else if (typeof(string) === 'string') {
     string = string.toLowerCase().trim();
     return (string === 'true' || string === 'yes' || string === '1');
+  } else if (typeof(string) === 'boolean') {
+    return string;
   } else {
     return false;
   }
@@ -396,11 +505,31 @@ function parseBoolean(string) {
 
 _.parseBoolean = parseBoolean;
 
+function parseRange(string) {
+  if (string != null && typeof(string) === 'string') {
+    var pieces = string.split('-');
+    return [parseFloat(pieces[0]), parseFloat(pieces[1])];
+  }
+}
+
+_.parseRange = parseRange;
+
+function parseIntRange(string) {
+  if (string != null && typeof(string) === 'string') {
+    var pieces = string.split('-');
+    return [parseInt(pieces[0]), parseInt(pieces[1])];
+  }
+}
+
+_.parseIntRange = parseIntRange;
+
 function parseList(string, delimiter) {
   delimiter = delimiter || ',';
-  if (string) {
+  if (string != null && typeof(string) === 'string') {
     var list = string.split(delimiter).map(function(x) { return x.trim(); });
     return list;
+  } else if (Array.isArray(string)) {
+    return string;
   }
 }
 
@@ -408,9 +537,11 @@ _.parseList = parseList;
 
 function parseVector(string, delimiter) {
   delimiter = delimiter || ',';
-  if (string) {
+  if (string != null && typeof(string) === 'string') {
     var list = string.split(delimiter).map(function(x) { return parseFloat(x.trim()); });
     return list;
+  } else if (Array.isArray(string)) {
+    return string;
   }
 }
 
@@ -422,17 +553,35 @@ _.cmd = {
   parseFloat: function(x, accum) { return parseFloat(x); },
   parseInt: function(x, accum) { return parseInt(x); },
   parseVector: function(x, accum) { return parseVector(x); },
+  parseRegex: function(x, accum) { return parseRegex(x); },
   collect: function(x, accum) {
     accum.push(x);
     return accum;
   }
 };
 
+_.getRange = function(v) {
+  if (typeof(v.range) === 'string') {
+    // console.log('got range', v.range);
+    v.range = _.parseRange(v.range);
+  }
+  var start = (typeof(v.range[0]) === 'string')? parseFloat(v.range[0]) : v.range[0];
+  var end = (typeof(v.range[1]) === 'string')? parseFloat(v.range[1]) : v.range[1];
+  //console.log('got start end', start, end, v.range);
+  return _.range(start, end, v.step);
+};
+
 _.replaceVars = function (str, vars) {
-  if (str && _.isString(str)) {
+  if (str && _.isString(str) && str.indexOf('${') >= 0) {
     for (var v in vars) {
       if (vars.hasOwnProperty(v)) {
-        str = _.replaceAll(str, '${' + v + '}', vars[v]);
+        var target = '${' + v + '}';
+        if (str.indexOf(target) >= 0) {
+          str = _.replaceAll(str, target, vars[v]);
+          if (str.indexOf('${') < 0) {
+            break;
+          }
+        }
       }
     }
   }
@@ -550,6 +699,49 @@ _.getPrefix = function(prefixLength, separator, id) {
     path = path + prefix.charAt(i) + separator;
   }
   return path;
+};
+
+_.toCondensedIndices = function(indices) {
+  // Takes an array of integers, sort them, and collapse ranges
+  var sorted = _.sortBy(indices);
+  var condensed = [];
+  if (indices.length) {
+    var last = indices[0];
+    var rangeStart = last;
+    for (var i = 1; i <= sorted.length; i++) {
+      var vi = sorted[i];
+      if (last + 1 === vi) {
+        // In the middle of a range
+      } else {
+        // Save away the last range (or single index)
+        if (last - rangeStart > 2) {
+          condensed.push([rangeStart, last+1]);
+        } else {
+          for (var j = rangeStart; j <= last; j++) {
+            condensed.push(j);
+          }
+        }
+        rangeStart = vi;
+      }
+      last = vi;
+    }
+  }
+  return condensed;
+};
+
+_.fromCondensedIndices = function(condensed) {
+  var indices = [];
+  for (var i = 0; i < condensed.length; i++) {
+    var v = condensed[i];
+    if (v.length) {
+      for (var j = v[0]; j < v[1]; j++) {
+        indices.push(j);
+      }
+    } else {
+      indices.push(v);
+    }
+  }
+  return indices;
 };
 
 // Lodash product/permutation (https://gist.github.com/wassname/a882ac3981c8e18d2556)

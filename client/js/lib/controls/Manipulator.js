@@ -2,17 +2,22 @@
 
 var Constants = require('Constants');
 var PubSub = require('PubSub');
-var Picker = require('controls/Picker');
 var HighlightControls = require('controls/HighlightControls');
 var UILog = require('editor/UILog');
-var MeshHelpers = require('geo/MeshHelpers');
 var Object3DUtil = require('geo/Object3DUtil');
-var ModelInstance = require('model/ModelInstance');
-var SceneState = require('scene/SceneState');
 
 /**
  * Controls for rotating and scaling an object
  * @param params
+ * @param params.scene {scene.SceneState} Scene to show manipulator in
+ * @param params.picker {controls.Picker} Picker to use
+ * @param params.container {jQuery} Container to for converting mouse coordinates into scene coordinates
+ * @param params.camera {THREE.Camera} Camera
+ * @param params.controls {{ enabled: boolean}} Controls to disable to manipulator is active
+ * @param params.uilog {editor.UILog}
+ * @param [params.useModelBase=false] {boolean}
+ * @param [params.allowRotation=true] {boolean}
+ * @param [params.allowScaling=true] {boolean}
  * @constructor
  * @memberOf controls
  */
@@ -156,7 +161,7 @@ Manipulator.prototype.addRotationCircle = function () {
   if (!this.allowRotation) return; // rotation not allowed
 
   var circleRad = this.getTileDimension(0.05*Constants.metersToVirtualUnit) / 2;
-  var circleGeo = new THREE.CircleGeometry(circleRad, 0.02*Constants.metersToVirtualUnit);
+  var circleGeo = new THREE.CircleGeometry(circleRad, 20);
   var material = new THREE.MeshBasicMaterial({
     map: this.rotationCircleTexture,
     //color: new THREE.Color("green"),
@@ -175,7 +180,8 @@ Manipulator.prototype.addRotationCircle = function () {
   circleMesh.position.copy(this.position);
   circleMesh.position.add(this.rotationCircleOffset); //so circle doesn't clash with other meshes under object
   circleMesh.updateMatrix();
-  circleMesh.userData = this;
+  circleMesh.userData.isManipulator = true;
+  circleMesh.userData.isRotationCircle = true;
 
   this.rotationCircle = circleMesh;
   this.scene.add(circleMesh);
@@ -212,7 +218,8 @@ Manipulator.prototype.addScaleTile = function () {
   planeMesh.position.copy(this.position);
   planeMesh.position.add(this.scaleTileOffset); //so tile doesn't clash with other meshes under object
   planeMesh.updateMatrix();
-  planeMesh.userData = this;
+  planeMesh.userData.isManipulator = true;
+  planeMesh.userData.isScaleTile = true;
 
   this.scene.pickables.push(planeMesh);
   this.scaleTile = planeMesh;
@@ -323,7 +330,7 @@ Manipulator.prototype.onMouseDown = function (event, intersected) {
       intersected = this.picker.getFirstIntersected(mouse.x, mouse.y, this.camera, pickables);
     }
     if (intersected) {
-      if (intersected.object.userData instanceof Manipulator) {
+      if (intersected.object.userData.isManipulator) {
         if (this.componentClicked !== intersected.object) {
           this.componentClicked = intersected.object;
           this.interaction =  this.modelInstance.getUILogInfo();
@@ -396,23 +403,24 @@ Manipulator.prototype.setVisible = function (flag) {
 };
 
 Manipulator.prototype.createHighlightControls = function () {
+  var scope = this;
   return new HighlightControls({
     container: this.container,
     picker: this.picker,
     camera: this.camera,
     scene: this.scene,
     acceptCallback: function (intersected) {
-      return intersected.object.userData instanceof Manipulator;
+      return intersected && intersected.object.userData.isManipulator;
     },
     highlightCallback: function (object3D, flag) {
       if (flag) {
-        if (object3D.geometry instanceof THREE.CircleGeometry) {
-          object3D.userData.highlightRotationCircle();
+        if (object3D.userData.isRotationCircle) {
+          scope.highlightRotationCircle();
         } else {
-          object3D.userData.highlightScaleTile();
+          scope.highlightScaleTile();
         }
       } else {
-        object3D.userData.revertMaterials();
+        scope.revertMaterials();
       }
     }
   });
@@ -521,10 +529,18 @@ Manipulator.prototype.__manipulationDone = function(event) {
   }
 };
 
+/**
+ * Attaches manipulator to model instance
+ * @param modelInstance {model/ModelInstance}
+ * @returns {boolean}
+ */
 Manipulator.prototype.attach = function (modelInstance) {
   return this.addManipulatorToScene(modelInstance);
 };
 
+/**
+ * Detaches manipulator from any selected objects
+ */
 Manipulator.prototype.detach = function () {
   if (this.axes) {
     this.axes.detach();
@@ -540,6 +556,14 @@ Manipulator.prototype.detach = function () {
   this.componentClicked = null;
 };
 
+
+/**
+ * Resets manipulator for a new scene
+ * @param params
+ * @param params.scene {scene.SceneState} Scene to show manipulator in
+ * @param params.camera {THREE.Camera} Camera
+ * @param params.controls {{ enabled: boolean}} Controls to disable to manipulator is active
+ */
 Manipulator.prototype.reset = function (params) {
   if (params) {
     this.camera = params.camera;

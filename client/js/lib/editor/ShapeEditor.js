@@ -499,7 +499,7 @@ PolygonEditor.prototype.addEndpoint = function (point) {
     this.__shape.moveTo(p.x, p.y);
   }
   if (this.currentSegment.length >= 3) {
-    var geometry = this.height? new THREE.ExtrudeGeometry(this.__shape, { amount: this.height }) : new THREE.ShapeGeometry(this.__shape);
+    var geometry = this.height? new THREE.ExtrudeGeometry(this.__shape, { depth: this.height }) : new THREE.ShapeGeometry(this.__shape);
     if (this.__mesh) {
       this.object.remove(this.__mesh);
       Object3DUtil.dispose(this.__mesh);
@@ -547,7 +547,7 @@ PolygonEditor.prototype.createObject = function (objData, opts) {
         shape.lineTo(p.x, p.y);
       }
     }
-    var geometry = height? new THREE.ExtrudeGeometry(shape, { amount: height }) : new THREE.ShapeGeometry(shape);
+    var geometry = height? new THREE.ExtrudeGeometry(shape, { depth: height }) : new THREE.ShapeGeometry(shape);
     var mesh = new THREE.Mesh(geometry, material);
     Object3DUtil.setMatrix(mesh, this.__transform);
     object.add(mesh);
@@ -644,10 +644,12 @@ BoxEditor.prototype.__onMouseDown = function (event) {
         // Just update object (we want to reuse this object for some reason...)
         this.box.update(this.min, this.max);
         if (this.boxwf) {
+          this.boxwf.setFromObject(this.box);
           this.boxwf.update();
         }
         if (this.boxwffat) {
-          this.boxwffat.update(this.boxwf);
+          this.boxwffat.setFromObject(this.boxwf);
+          this.boxwffat.update();
         }
       }
     }
@@ -670,10 +672,12 @@ BoxEditor.prototype.onMouseMove = function (event) {
       this.max.copy(this.start).max(this.end);
       this.box.update(this.min, this.max);
       if (this.boxwf) {
-        this.boxwf.update(this.box);
+        this.boxwf.setFromObject(this.box);
+        this.boxwf.update();
       }
       if (this.boxwffat) {
-        this.boxwffat.update(this.boxwf);
+        this.boxwffat.setFromObject(this.boxwf);
+        this.boxwffat.update();
       }
     }
   }

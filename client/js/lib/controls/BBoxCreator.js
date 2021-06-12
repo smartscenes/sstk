@@ -1,7 +1,3 @@
-/* BBoxCreator
-  Allows user to drag and drop a bounding box for a shape in the 3D depth-scan
-*/
-
 'use strict';
 
 var Object3DUtil = require('geo/Object3DUtil');
@@ -10,6 +6,18 @@ var Constants = require('Constants');
 var PubSub = require('PubSub');
 var MeshHelpers = require('geo/MeshHelpers');
 
+/**
+ * Controls that allows user to drag and drop to create a cuboid
+ * @param params
+ * @param.scene {THREE.Scene} Scene to which to add the new box
+ * @param.picker {controls.Picker}
+ * @param.camera {THREE.Camera}
+ * @param.controls {controls.CameraControls}
+ * @param.container Container in which the BBoxCreator will operate
+ * [@param.autoAdjustCamera] {boolean} Whether camera is auto adjusted when creating the box
+ * @constructor
+ * @memberOf controls
+ */
 function BBoxCreator(params) {
   PubSub.call(this);
 

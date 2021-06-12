@@ -69,6 +69,8 @@ var aliases = {
 
   // Three.js
   'three': 'vendor/three/three.min',
+  'three-convexgeo': 'vendor/three/geo/ConvexGeometry',
+  'three-convexhull': 'vendor/three/math/ConvexHull',
   'three-mirror': 'vendor/three/gfx/Mirror',
   'three-OBB': 'vendor/three/geo/OBB',
   'three-octree': 'vendor/three/geo/Octree',
@@ -109,7 +111,7 @@ for (var i = 0; i < _defaultAssets.length; i++) {
   var asset = _defaultAssets[i];
   if (typeof asset.metadata === 'string') {
     // Pull metadata
-    var filename = asset.metadata
+    var filename = asset.metadata;
     filename = filename.replace('${assetsDir}', '../server/static/');
     asset.metadataFilename = filename;
     asset.metadata = require(filename);
@@ -169,13 +171,16 @@ var webpackOptions = {
     'STK': './js/lib/STK',
     'STK-core': ['./js/lib/STK-core'],
     // modules
+    'articulationAnnotator': './js/apps/articulations/articulation-annotator',
+    'articulationGroupedViewer': './js/apps/articulations/articulation-annotator/GroupedAnnotationsViewer',
+    'articulationMultiModelView': './js/apps/articulations/multi-model-view',
     'modelScaler': './js/apps/model-scaler',
     'modelTools': './js/apps/model-tools',
     'partAnnotator': './js/apps/part-annotator',
     'scanNet': './js/apps/scan-net',
     'sceneViewer': './js/apps/scene-viewer',
     'taxonomyViewer': './js/apps/taxonomy-viewer',
-    'viz': './js/apps/viz'
+    'viz': './js/apps/viz',
   },
   output: {
     path: outpath,
@@ -195,7 +200,8 @@ var webpackOptions = {
     noParse: [/lazy/, /min\.js/]
   },
   node: {
-    setImmediate: false
+    setImmediate: false,
+    fs: 'empty',
   },
   plugins: plugins,
   externals: [{
@@ -215,7 +221,10 @@ var webpackOptions = {
       amd: 'three'
     },
     bootbox: 'var bootbox'
-  }]
+  }],
+  stats: {
+    colors: true
+  }
 };
 
 // if (process.env.STK === 'extDeps') {

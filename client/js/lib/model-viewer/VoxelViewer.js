@@ -211,7 +211,7 @@ VoxelViewer.prototype.nextSlice = function (inc, partControl) {
 };
 
 VoxelViewer.prototype.showAlert = function(message, style) {
-  UIUtil.showAlert(this.container, message, style || 'alert-danger');
+  UIUtil.showAlertWithPanel(this.container, message, style || 'alert-danger');
 };
 
 VoxelViewer.prototype.getSceneBoundingBox = function () {

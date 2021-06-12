@@ -6,13 +6,27 @@ var _ = require('lodash');
 var log = require('../lib/logger')('assets');
 
 var assetGroupsMain = require('../static/data/assets');
-var assetGroupsScans = require('../static/data/assets-scans');
+var assetGroupsExtra = require('../static/data/assets-extra');
 
 var config = require('../config');
 var web_vars = { baseUrl: config.baseUrl, assetsDir: config.baseUrl  + '/resources/' };            // Variable for accessing via web
 var fs_vars = { baseUrl: __dirname + '/../static/', assetsDir: __dirname + '/../static/' };        // Variables for accessing via file system
-var local_web_vars = { baseUrl: "http://localhost:" + config.reverseProxyPort, assetsDir: "http://localhost:" + config.reverseProxyPort + '/resources/'};
-var localBaseUrl = "http://localhost:" + config.reverseProxyPort;
+var port = config.httpServerPort;
+var local_web_vars = { baseUrl: 'http://localhost:' + port, assetsDir: 'http://localhost:' + port + '/resources/'};
+var localBaseUrl = 'http://localhost:' + port;
+
+_.parseBoolean = function(string, defaultValue) {
+  if (string == null || string === '') {
+    return defaultValue;
+  } else if (typeof(string) === 'string') {
+    string = string.toLowerCase().trim();
+    return (string === 'true' || string === 'yes' || string === '1');
+  } else if (typeof(string) === 'boolean') {
+    return string;
+  } else {
+    return false;
+  }
+};
 
 _.replaceAll = function (str, find, replacement){
   var u;
@@ -64,7 +78,7 @@ function findVars(obj, vars) {
     }
   }
   return vars;
-};
+}
 
 _.findVars = function (obj) {
   var vars = findVars(obj, new Set());
@@ -138,7 +152,7 @@ _.getPrefix = function(prefixLength, separator, id) {
   return path;
 };
 
-var assetGroupsAll = _.concat(assetGroupsMain, assetGroupsScans);
+var assetGroupsAll = _.concat(assetGroupsMain, assetGroupsExtra);
 _.each(assetGroupsAll, function(assetGroup) {
   if (assetGroup.metadata) {
     if (_.isString(assetGroup.metadata)) {
@@ -154,6 +168,13 @@ _.each(assetGroupsAll, function(assetGroup) {
       }
     }
   }
+  if (assetGroup.metadata && assetGroup.metadata.assetType) {
+    if (assetGroup.type == null) {
+      assetGroup.type = assetGroup.metadata.assetType;
+    } else if (assetGroup.type !== assetGroup.metadata.assetType) {
+      log.warn('Mismatch in asset type: expected ' + assetGroup.type + ', metadata ' + assetGroup.metadata.assetType);
+    }
+  }
   if (assetGroup.ids) {
     assetGroup.ids = _.replacePath(assetGroup.ids, local_web_vars);
   }
@@ -164,40 +185,29 @@ _.each(assetGroupsAll, function(assetGroup) {
 
 var assetGroupsByName = _.keyBy(assetGroupsAll, 'name');
 var solrUrls = {
-  "model": localBaseUrl + '/solr/models3d',
-  "scan": localBaseUrl + '/solr/models3d',
-  "room": localBaseUrl + '/solr/rooms',
-  "scene": localBaseUrl + '/solr/scenes',
-  "texture": localBaseUrl + '/solr/textures'
+  'model': config.defaultSolrUrl + '/models3d',
+  'scan': config.defaultSolrUrl + '/models3d',
+  'room': config.defaultSolrUrl + '/rooms',
+  'scene': config.defaultSolrUrl + '/scenes',
+  'texture': config.defaultSolrUrl + '/textures'
 };
 var solrQuerier = new SolrQuerier({ url: solrUrls['model'] + '/select' });
-
-function queryAssetInfo(solrUrl, id, cb) {
-  var params = {
-    q: 'fullId:' + id,
-    wt: 'json'
-  };
-  solrQuerier.url = solrUrl;
-  solrQuerier.queryDb(params, null,
-    function(result) {
-      if (result) {
-        result = JSON.parse(result);
-      }
-      if (result.response  && result.response.numFound > 0) {
-        cb(null, result.response.docs[0]);
-      } else {
-        cb("Asset " + id + " not found");
-      }
-    },
-    function(err) {
-      cb(err);
-    }
-  );
-}
 
 function getSearchUrl(assetType) {
   var solrUrl = solrUrls[assetType];
   return solrUrl? solrUrl + '/select' : null;
+}
+
+function getSolrUrl(assetGroupMetadata) {
+  var metadata = _.pick(assetGroupMetadata, ['solrUrl', 'assetType']);
+  metadata = interpolateAssetInfo(metadata, local_web_vars);
+  var url = metadata.solrUrl;
+  if (url) {
+    url = url + '/select';
+  } else {
+    url = getSearchUrl(metadata.assetType);
+  }
+  return url;
 }
 
 function getInterpolatedContext(assetGroupMetadata, interpolateOptions, defaultConstants) {
@@ -243,12 +253,12 @@ function getAssetInfo(assetGroupName, assetId, defaultConstants, cb) {
       var assetGroupMetadata = assetGroup.metadata;
       if (_.isPlainObject(assetGroupMetadata)) {
         // TODO: check if we have solr
-        var solrUrl = assetGroupMetadata.solrUrl || getSearchUrl(assetGroupMetadata.assetType);
+        var solrUrl = getSolrUrl(assetGroupMetadata);
         var fullId = assetGroupName + '.' + assetId;
         var defaultAssetInfo = { id: assetId, source: assetGroupName, fullId: fullId };
         if (solrUrl) {
           // Fetch info from solr about asset
-          queryAssetInfo(solrUrl, fullId, function(err, assetInfo) {
+          solrQuerier.queryAssetInfo(solrUrl, fullId, function(err, assetInfo) {
             try {
               var interpolated = interpolateAssetInfo(assetGroupMetadata, assetInfo || defaultAssetInfo, defaultConstants);
               cb(null, interpolated);
@@ -265,34 +275,52 @@ function getAssetInfo(assetGroupName, assetId, defaultConstants, cb) {
           }
         }
       } else {
-        cb("Cannot get asset data for " + assetGroupName);
+        cb('Cannot get asset data for ' + assetGroupName);
       }
     } else {
-      cb("No metadata for asset " + assetGroupName);
+      cb('No metadata for asset ' + assetGroupName);
     }
   } else {
-    cb("No asset matching name " + assetGroupName);
+    cb('No asset matching name ' + assetGroupName);
   }
 }
 
 function getAssetDownloadInfo(assetGroupName, assetId, datatype, format, defaultConstants, cb) {
   getAssetInfo(assetGroupName, assetId, defaultConstants, function(err, assetGroupMetadata) {
     if (assetGroupMetadata) {
-      var datatypeInfos = _.get(assetGroupMetadata, ["dataTypes", datatype]);
+      var datatypeInfos = _.get(assetGroupMetadata, ['dataTypes', datatype, 'data']);
       if (datatypeInfos) {
         var datatypeInfo = format? _.find(datatypeInfos, function(x) { return x.name === format; }) : datatypeInfos[0];
         if (datatypeInfo) {
           cb(null, datatypeInfo);
         } else {
-          cb("Unsupported format " + format + " for datatype " + datatype + " for asset " + assetGroupName);
+          cb('Unsupported format ' + format + ' for datatype ' + datatype + ' for asset ' + assetGroupName);
         }
       } else {
-        cb("Unsupported datatype " + datatype + " for asset " + assetGroupName);
+        cb('Unsupported datatype ' + datatype + ' for asset ' + assetGroupName);
       }
     } else {
       cb(err, null);
     }
   });
+}
+
+function getAssetGroups(opts) {
+  var assetGroups = assetGroupsAll;
+  if (_.parseBoolean(opts['hasSolr'], true)) {
+    assetGroups = _.filter(assetGroups, (g) => g.metadata && g.metadata.solrUrl);
+  }
+  if (opts['type']) {
+    assetGroups = _.filter(assetGroups, (g) => g.type === opts['type']);
+  }
+  var fields = ['name', 'type', 'requires'];
+  if (opts['include']) {
+    fields = _.uniq(_.concat(fields, opts['include'].split(',')));
+  }
+  assetGroups = _.map(assetGroups, (g) => {
+    return _.pick(g, fields);
+  });
+  return assetGroups;
 }
 
 module.exports = {
@@ -303,6 +331,20 @@ module.exports = {
     return assetGroupsAll;
   },
   registerRoutes: function(app) {
+    // app.get('/assets/debug', function(req, res, next) {
+    //   res.json(assetGroupsAll);
+    // });
+
+    app.get('/assets/groups', function(req, res, next) {
+      var assetGroups = getAssetGroups(req.query);
+      res.json(assetGroups);
+    });
+
+    app.get('/assets/groups/:type', function(req, res, next) {
+      var assetGroups = getAssetGroups(_.defaults(Object.create(null), req.params, req.query));
+      res.json(assetGroups);
+    });
+
     app.get('/assets/metadata/:name', function(req, res, next) {
       var name = req.params['name'];
       var assetGroup = assetGroupsByName[name];
@@ -318,10 +360,10 @@ module.exports = {
             res.json(assetGroup.metadata);
           }
         } else {
-          res.status(400).json({"code": 400, "status": "No asset metadata for " + name});
+          res.status(400).json({'code': 400, 'status': 'No asset metadata for ' + name});
         }
       } else {
-        res.status(400).json({"code": 400, "status": "No asset matching name " + name});
+        res.status(400).json({'code': 400, 'status': 'No asset matching name ' + name});
       }
     });
 
@@ -338,10 +380,28 @@ module.exports = {
             res.json(idsFile);
           }
         } else {
-          res.status(400).json({"code": 400, "status": "No asset ids for " + name});
+          var assetGroupMetadata = assetGroup.metadata;
+          if (_.isPlainObject(assetGroupMetadata)) {
+            // TODO: check if we have solr
+            var solrUrl = getSolrUrl(assetGroupMetadata);
+            if (solrUrl) {
+              var limit = req.query['rows']
+              solrQuerier.queryAssetIds(solrUrl, 'source:' + name, limit, function(err, assetIds) {
+                if (err) {
+                  res.status(400).json({'code': 400, 'status': 'Error getting ids for ' + name});
+                } else {
+                  res.json(assetIds);
+                }
+              });
+            } else {
+              res.status(400).json({'code': 400, 'status': 'No asset ids for ' + name});
+            }
+          } else {
+            res.status(400).json({'code': 400, 'status': 'No asset ids for ' + name});
+          }
         }
       } else {
-        res.status(400).json({"code": 400, "status": "No asset matching name " + name});
+        res.status(400).json({'code': 400, 'status': 'No asset matching name ' + name});
       }
     });
 
@@ -356,7 +416,7 @@ module.exports = {
           res.json(info);
         } else {
           log.warn('Error getting for info for asset ' + name, err);
-          res.status(400).json({"code": 400, "status": err || ("Error getting info for asset " + [name,id,datatype,format].join(' '))});
+          res.status(400).json({'code': 400, 'status': err || ('Error getting info for asset ' + [name,id,datatype,format].join(' '))});
         }
       });
     });
@@ -373,12 +433,12 @@ module.exports = {
             //res.redirect(info.path);
             req.pipe(request(info.path)).pipe(res);
           } else {
-            res.status(400).json({"code": 400, "status": "Error getting download path for asset " + [name,id,datatype,format].join(' ')});
+            res.status(400).json({'code': 400, 'status': 'Error getting download path for asset ' + [name,id,datatype,format].join(' ')});
           }
         } else {
           log.warn('Error getting download info for asset ' + [name,id,datatype,format].join(' '), err);
-          res.status(400).json({"code": 400,
-            "status": err || ("Error getting download info for asset " + [name,id,datatype,format].join(' '))});
+          res.status(400).json({'code': 400,
+            'status': err || ('Error getting download info for asset ' + [name,id,datatype,format].join(' '))});
         }
       });
     });
@@ -395,12 +455,12 @@ module.exports = {
             //res.redirect(info.path);
             req.pipe(request(info.path)).pipe(res);
           } else {
-            res.status(400).json({"code": 400, "status": "Error getting download path for asset " + [name,id,datatype,format].join(' ')});
+            res.status(400).json({'code': 400, 'status': 'Error getting download path for asset ' + [name,id,datatype,format].join(' ')});
           }
         } else {
           log.error('Error getting download info for asset ' + [name,id,datatype,format].join(' '),{ test: 'what'}, err);
-          res.status(400).json({"code": 400,
-            "status": err || ("Error getting download info for asset " + [name,id,datatype,format].join(' '))});
+          res.status(400).json({'code': 400,
+            'status': err || ('Error getting download info for asset ' + [name,id,datatype,format].join(' '))});
         }
       });
     });

@@ -37,9 +37,9 @@
     <ul>
       <li><a href="#tabs-1">Scenes</a></li>
       <li><a href="#tabs-2">Models</a></li>
-      <li><a href="#tabs-3">Scene Hierarchy</a></li>
-      <li><a href="#tabs-4">BVH</a></li>
-      <li><a href="#tabs-5">Scene Generator Config</a></li>
+      <!--<li><a href="#tabs-3">Scene Hierarchy</a></li>-->
+      <!--<li><a href="#tabs-4">BVH</a></li>-->
+      <!--<li><a href="#tabs-5">Scene Generator Config</a></li>-->
       <!--<li><a href="#tabs-6">Annotate</a></li>-->
     </ul>
     <div id="tabs-1">
@@ -95,6 +95,8 @@
   var canvas = document.getElementById('canvas');
   var sceneViewer = new STK.SceneViewer({
     container: canvas,
+    tabs: ['scenes', 'models'],
+    onTabsActivate: onResize,
     addGround: false,
     allowBBoxQuery: true,
     loadingIconUrl: STK.Constants.defaultLoadingIconUrl,
@@ -114,17 +116,6 @@
   });
   sceneViewer.modelSearchController.searchPanel.Subscribe('SearchSucceededPreparePanel', null, function() {
     $('#tabs').tabs({ active: 1 });
-  });
-  $('#tabs').bind('tabsactivate', function (event, ui) {
-    onResize();
-    switch (ui.newPanel.attr('id')) {
-      case 'tabs-1':
-        sceneViewer.sceneSearchController.onResize();
-        break;
-      case 'tabs-2':
-        sceneViewer.modelSearchController.onResize();
-        break;
-    }
   });
 
   // Make various components draggable

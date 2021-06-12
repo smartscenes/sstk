@@ -111,7 +111,7 @@ function LineSegmentDistanceSquared(line, segment, opts) {
     }
 
     // Account for numerical round-off errors.
-    if (sqrDist < 0.0) {
+    if (sqrDist < ZERO_TOLERANCE) {
       sqrDist = 0.0;
     }
 
@@ -326,7 +326,7 @@ function PointTriangleDistanceSquared(point, triangle, opts) {
     }
 
     // Account for numerical round-off error.
-    if (sqrDistance < 0.0) {
+    if (sqrDistance < ZERO_TOLERANCE) {
       sqrDistance = 0.0;
     }
 
@@ -385,11 +385,11 @@ function PointTriangleDistanceSquared(point, triangle, opts) {
 }
 
 function TrianglePointDistanceSquared(triangle, point, opts) {
-    var result = PointTriangleDistanceSquared(point, triangle, opts);
-    if (opts.all) {
-        swapFields(result, [['closestPoint0', 'closestPoint1']]);
-    }
-    return result;
+  var result = PointTriangleDistanceSquared(point, triangle, opts);
+  if (opts.all) {
+    swapFields(result, [['closestPoint0', 'closestPoint1']]);
+  }
+  return result;
 }
 
 function generateComplementBasis(u, v, w) {
@@ -448,7 +448,8 @@ function LineTriangleDistanceSquared(line, triangle, opts) {
     if (Math.abs(ndd) > ZERO_TOLERANCE) {
       // The line and triangle are not parallel, so the line intersects
       // the plane of the triangle.
-      var diff = line.origin - v1;
+      var diff = new THREE.Vector3();
+      diff.subVectors(line.origin, v1);
       var u = new THREE.Vector3();
       var v = new THREE.Vector3();
       generateComplementBasis(u, v, line.direction);
@@ -480,7 +481,7 @@ function LineTriangleDistanceSquared(line, triangle, opts) {
           closestPoint0.addScaledVector(line.direction, lineParameter);
           closestPoint1 = v1.clone();
           closestPoint1.addScaledVector(edge0, b1);
-          closestPoint1.addScaledVector(edge1, b0);
+          closestPoint1.addScaledVector(edge1, b2);
           return {
             distanceSq: 0.0,
             closestPoint0: closestPoint0,
@@ -517,9 +518,9 @@ function LineTriangleDistanceSquared(line, triangle, opts) {
 
           lineParameter = queryLS.lineParameter;
           var ratio = queryLS.segmentParameter / segment.extent;
-          triangleBary.set(i0, 0.5 * (1.0 - ratio));
-          triangleBary.set(i1, 1.0 - triangleBary.get(i0));
-          triangleBary.set(3 - i0 - i1, 0.0);
+          triangleBary.setComponent(i0, 0.5 * (1.0 - ratio));
+          triangleBary.setComponent(i1, 1.0 - triangleBary.getComponent(i0));
+          triangleBary.setComponent(3 - i0 - i1, 0.0);
         }
       }
       return {
@@ -535,8 +536,8 @@ function LineTriangleDistanceSquared(line, triangle, opts) {
 
         var segment = getEdgeSegment(triangle, i0, i1);
         var sqrDistTmp = LineSegmentDistanceSquared(line, segment, opts);
-        if (sqrDistTmp < sqrDist) {
-          sqrDist = sqrDistTmp;
+        if (sqrDistTmp.distanceSq < sqrDist) {
+          sqrDist = sqrDistTmp.distanceSq;
         }
       }
       return { distanceSq: sqrDist };
@@ -547,11 +548,11 @@ function LineTriangleDistanceSquared(line, triangle, opts) {
 }
 
 function TriangleLineDistanceSquared(triangle, line, opts) {
-    var result = LineTriangleDistanceSquared(line, triangle, opts);
-    if (opts.all) {
-        swapFields(result, [['closestPoint0', 'closestPoint1']]);
-    }
-    return result;
+  var result = LineTriangleDistanceSquared(line, triangle, opts);
+  if (opts.all) {
+    swapFields(result, [['closestPoint0', 'closestPoint1']]);
+  }
+  return result;
 }
 
 /**
@@ -614,11 +615,11 @@ function LineSegmentTriangleDistanceSquared(segment, triangle, opts) {
 }
 
 function TriangleLineSegmentDistanceSquared(triangle, segment, opts) {
-    var result = LineSegmentTriangleDistanceSquared(segment, triangle, opts);
-    if (opts.all) {
-        swapFields(result, [['closestPoint0', 'closestPoint1']]);
-    }
-    return result;
+  var result = LineSegmentTriangleDistanceSquared(segment, triangle, opts);
+  if (opts.all) {
+    swapFields(result, [['closestPoint0', 'closestPoint1']]);
+  }
+  return result;
 }
 
 
@@ -631,7 +632,9 @@ function getEdgeSegment(t, i0, i1) {
   d.subVectors(v1, v0);
   var extent = d.length();
   d.normalize();
-  return { origin: v0, direction: d, extent:  extent };
+  var origin = new THREE.Vector3();
+  origin.addVectors(v0,v1).multiplyScalar(0.5);
+  return { origin: origin, direction: d, extent:  0.5*extent };
 }
 
 /**
@@ -685,11 +688,13 @@ function TriangleTriangleDistanceSquared(triangle0, triangle1, opts) {
 
         sqrDist = sqrDistTmp;
 
-        var ratio = queryST.segmentParameter/edge.extent;
-        triangleBary0.set(i0, 0.5*(1.0 - ratio));
-        triangleBary0.set(i1, 1.0 - triangleBary0.get(i0));
-        triangleBary0.set(3-i0-i1, 0.0);
-        triangleBary1 = queryST.triangleBary;
+        if (opts && opts.all) {
+          var ratio = queryST.segmentParameter / edge.extent;
+          triangleBary0.setComponent(i0, 0.5 * (1.0 - ratio));
+          triangleBary0.setComponent(i1, 1.0 - triangleBary0.getComponent(i0));
+          triangleBary0.setComponent(3 - i0 - i1, 0.0);
+          triangleBary1 = queryST.triangleBary;
+        }
 
         if (sqrDist <= ZERO_TOLERANCE){
           return getResult(0.0);
@@ -703,7 +708,7 @@ function TriangleTriangleDistanceSquared(triangle0, triangle1, opts) {
       var i0 = (i1+2)%3;
       var edge = getEdgeSegment(t1, i0, i1);
 
-      var queryST = LineSegmentTriangleDistanceSquared(edge, triangle0, opts);
+      var queryST = LineSegmentTriangleDistanceSquared(edge, t0, opts);
       var sqrDistTmp = queryST.distanceSq;
       if (sqrDistTmp < sqrDist) {
         closestPoint0 = queryST.closestPoint1;
@@ -711,11 +716,13 @@ function TriangleTriangleDistanceSquared(triangle0, triangle1, opts) {
 
         sqrDist = sqrDistTmp;
 
-        var ratio = queryST.segmentParameter()/edge.extent;
-        triangleBary1.set(i0, 0.5*(1.0 - ratio));
-        triangleBary1.set(i1, 1.0 - triangleBary1.get(i0));
-        triangleBary1.set(3-i0-i1, 0.0);
-        triangleBary0 = queryST.triangleBary;
+        if (opts && opts.all) {
+          var ratio = queryST.segmentParameter / edge.extent;
+          triangleBary1.setComponent(i0, 0.5 * (1.0 - ratio));
+          triangleBary1.setComponent(i1, 1.0 - triangleBary1.getComponent(i0));
+          triangleBary1.setComponent(3 - i0 - i1, 0.0);
+          triangleBary0 = queryST.triangleBary;
+        }
 
         if (sqrDist <= ZERO_TOLERANCE) {
           return getResult(0.0);
@@ -751,6 +758,7 @@ function PointsPointsMinDistanceSquared(points1, points2, opts) {
         }
         if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
           if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+            result.upperDistanceSq = result.distanceSq;
             done = true;
           }
         }
@@ -793,11 +801,12 @@ function PointsPointsHausdorffDirectedDistanceSquared(points1, points2, opts) {
   for (var i = 0; i < points1.length && !done; i++) {
     var p1 = points1[i];
     var r = PointsPointsMinDistanceSquared([p1], points2, innerOpts);
-    if (!result || r.distanceSq < result.distanceSq) {
+    if (!result || r.distanceSq > result.distanceSq) {
       result = r;
       innerOpts.shortCircuit.minDistSq = result.distanceSq;
       if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
         if (result.distanceSq > opts.shortCircuit.maxDistSq) {
+          result.lowerDistanceSq = result.distanceSq;
           done = true;
         }
       }
@@ -820,7 +829,71 @@ function PointsPointsHausdorffDistanceSquared(points1, points2, opts) {
   }
 }
 
-function PointMeshDistanceSquared(point, mesh, opts) {
+function PointMeshDistanceSquaredBVH(point, mesh, opts) {
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+
+  var BVH = require('geo/BVH');
+  if (!mesh.bvh) {
+    //console.time('buildBVH.Mesh1');
+    mesh.bvh = BVH.buildFromTriangles(mesh, { maxObjects: 50 });
+    //console.timeEnd('buildBVH.Mesh1');
+  }
+
+  function bvhTriDistanceSq(point, bvh) {
+    return PointPartialMeshDistanceSquared(point, mesh, bvh.objects, opts);
+  }
+
+  function selectBetterResult(r1, r2) {
+    if (!r1) return r2;
+    else if (!r2) return r1;
+    if (r1.distanceSq <= r2.distanceSq) {
+      return r1;
+    } else if (r2.distanceSq <= r1.distanceSq) {
+      return r2;
+    } else if (r1.lowerDistanceSq <= r2.lowerDistanceSq) {
+      return r1;
+    } else {
+      return r2;
+    }
+  }
+  function bvhDistanceSq(point, bvh, bbcheckThreshold) {
+    var distToBBox = Math.max(bvh.bbox.distanceToPoint(point, 'clamped'), 0);
+    var distLowerSq = distToBBox*distToBBox;
+    if (distLowerSq <= bbcheckThreshold + ZERO_TOLERANCE) {
+      if (bvh.isLeaf) {
+        return bvhTriDistanceSq(point, bvh);
+      } else {
+        var dist1 = bvhDistanceSq(point, bvh.left, bbcheckThreshold);
+        if (dist1.distanceSq <= checkDistSqMin) {
+          return dist1;
+        }
+        bbcheckThreshold = Math.min(dist1.distanceSq, bbcheckThreshold);
+        var dist2 = bvhDistanceSq(point, bvh.right, bbcheckThreshold);
+        if (dist2.distanceSq <= checkDistSqMin) {
+          return dist2;
+        }
+        return selectBetterResult(dist1,dist2);
+      }
+    } else {
+      return {
+        distanceSq: Infinity,
+        lowerDistanceSq: distLowerSq
+      };
+    }
+  }
+  var result = bvhDistanceSq(point, mesh.bvh.root, checkDistSqMax);
+  return result;
+}
+
+
+function PointMeshDistanceSquaredSimple(point, mesh, opts) {
   var triAccessor = new TriangleAccessor(mesh);
   var nTris = triAccessor.numTriangles();
   var result;
@@ -834,6 +907,7 @@ function PointMeshDistanceSquared(point, mesh, opts) {
       result = r;
       if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
         if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+          result.upperDistanceSq = result.distanceSq;
           done = true;
         }
       }
@@ -846,6 +920,28 @@ function PointMeshDistanceSquared(point, mesh, opts) {
   }
   return result;
 }
+
+function PointMeshDistanceSquared(point, mesh, opts) {
+  if (opts.profile) {
+    console.time('PointMeshDistanceSquared');
+  }
+  var triAccessor = new TriangleAccessor(mesh);
+  var nTris = triAccessor.numTriangles();
+  var result;
+  if (nTris === 0) {
+    result ={ distanceSq: Infinity };
+  } else if (nTris < 1000) {
+    result = PointMeshDistanceSquaredSimple(point, mesh, opts);
+  } else {
+    result = PointMeshDistanceSquaredBVH(point, mesh, opts);
+  }
+
+  if (opts.profile) {
+    console.timeEnd('PointMeshDistanceSquared');
+  }
+  return result;
+}
+
 
 function PointPartialMeshDistanceSquared(point, mesh, faceIndices, opts) {
   var triAccessor = new TriangleAccessor(mesh);
@@ -861,6 +957,7 @@ function PointPartialMeshDistanceSquared(point, mesh, faceIndices, opts) {
       result = r;
       if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
         if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+          result.upperDistanceSq = result.distanceSq;
           done = true;
         }
       }
@@ -890,8 +987,7 @@ function PartialMeshPointDistanceSquared(mesh, point, opts) {
   return result;
 }
 
-function MeshMeshDistanceSquared(mesh1, mesh2, opts) {
-  // TODO: use BVH
+function MeshMeshDistanceSquaredSimple(mesh1, mesh2, opts) {
   var triAccessor1 = new TriangleAccessor(mesh1);
   var triAccessor2 = new TriangleAccessor(mesh2);
   var nTris1 = triAccessor1.numTriangles();
@@ -916,10 +1012,177 @@ function MeshMeshDistanceSquared(mesh1, mesh2, opts) {
           result.closestTriangle0 = savedTriangle1;
           result.closestTriangle1 = savedTriangle2;
         }
+        if (result.distanceSq <= ZERO_TOLERANCE) {
+          return result;
+        }
+        if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
+          if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+            result.upperDistanceSq = result.distanceSq;
+            return result;
+          }
+        }
       }
     }
   }
   return result;
+}
+
+function MeshMeshDistanceSquaredBVH(mesh1, mesh2, opts) {
+  var triAccessor1 = new TriangleAccessor(mesh1);
+  var triAccessor2 = new TriangleAccessor(mesh2);
+  if (triAccessor1.numTriangles() === 0 || triAccessor2.numTriangles() === 0) {
+    return { distanceSq: Infinity };
+  }
+
+  var BVH = require('geo/BVH');
+  if (!mesh1.bvh) {
+    //console.time('buildBVH.Mesh1');
+    mesh1.bvh = BVH.buildFromTriangles(mesh1, { maxObjects: 10 });
+    //console.timeEnd('buildBVH.Mesh1');
+  }
+  if (!mesh2.bvh) {
+    //console.time('buildBVH.Mesh2');
+    mesh2.bvh = BVH.buildFromTriangles(mesh2, { maxObjects: 10 });
+    //console.timeEnd('buildBVH.Mesh2');
+  }
+
+  var tmpTriangle1 = new THREE.Triangle();
+  var tmpTriangle2 = new THREE.Triangle();
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+  //var nTris1 = triAccessor1.numTriangles();
+  //var nTris2 = triAccessor2.numTriangles();
+  //console.log('compare ' + nTris1 + ' to ' + nTris2, checkDistSqMin, checkDistSqMax);
+
+  function bvhTriDistanceSq(bvh1, bvh2) {
+    var result;
+    var savedTriangle1 = new THREE.Triangle();
+    var savedTriangle2 = new THREE.Triangle();
+    for (var i = 0; i < bvh1.objects.length; i++) {
+      triAccessor1.getTriangle(bvh1.objects[i], tmpTriangle1, mesh1.matrixWorld);
+      for (var j = 0; j < bvh2.objects.length; j++) {
+        triAccessor2.getTriangle(bvh2.objects[j], tmpTriangle2, mesh2.matrixWorld);
+        var r = TriangleTriangleDistanceSquared(tmpTriangle1, tmpTriangle2, opts);
+        if (!result || r.distanceSq < result.distanceSq) {
+          result = r;
+          if (opts.all) {
+            savedTriangle1.copy(tmpTriangle1);
+            savedTriangle2.copy(tmpTriangle2);
+            result.closestFaceIndex0 = bvh1.objects[i];
+            result.closestFaceIndex1 = bvh2.objects[j];
+            result.closestTriangle0 = savedTriangle1;
+            result.closestTriangle1 = savedTriangle2;
+          }
+          if (result.distanceSq <= ZERO_TOLERANCE) {
+            return result;
+          }
+          if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
+            if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+              result.upperDistanceSq = result.distanceSq;
+              return result;
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  function selectBetterResult(r1, r2) {
+    if (!r1) return r2;
+    else if (!r2) return r1;
+    if (r1.distanceSq <= r2.distanceSq) {
+      return r1;
+    } else if (r2.distanceSq <= r1.distanceSq) {
+      return r2;
+    } else if (r1.lowerDistanceSq <= r2.lowerDistanceSq) {
+      return r1;
+    } else {
+      return r2;
+    }
+  }
+  function bvhDistanceSq(bvh1, bvh2, bbcheckThreshold) {
+    var distLower = bvh1.bbox.distanceTo(bvh2.bbox);
+    var distLowerSq = distLower*distLower;
+    if (distLowerSq <= bbcheckThreshold + ZERO_TOLERANCE) {
+      if (bvh1.isLeaf) {
+        if (bvh2.isLeaf) {
+          return bvhTriDistanceSq(bvh1, bvh2);
+        } else {
+          var dist1 = bvhDistanceSq(bvh1, bvh2.left, bbcheckThreshold);
+          if (dist1.distanceSq <= checkDistSqMin) {
+            return dist1;
+          }
+          bbcheckThreshold = Math.min(dist1.distanceSq, bbcheckThreshold);
+          var dist2 = bvhDistanceSq(bvh1, bvh2.right, bbcheckThreshold);
+          if (dist2.distanceSq <= checkDistSqMin) {
+            return dist2;
+          }
+          return selectBetterResult(dist1,dist2);
+        }
+      } else {
+        if (bvh2.isLeaf) {
+          var dist1 = bvhDistanceSq(bvh1.left, bvh2, bbcheckThreshold);
+          if (dist1.distanceSq <= checkDistSqMin) {
+            return dist1;
+          }
+          bbcheckThreshold = Math.min(dist1.distanceSq, bbcheckThreshold);
+          var dist2 = bvhDistanceSq(bvh1.right, bvh2, bbcheckThreshold);
+          if (dist2.distanceSq <= checkDistSqMin) {
+            return dist2;
+          }
+          return selectBetterResult(dist1,dist2);
+        } else {
+          var dist1 = bvhDistanceSq(bvh1.left, bvh2.left, bbcheckThreshold);
+          if (dist1.distanceSq <= checkDistSqMin) {
+            return dist1;
+          }
+          bbcheckThreshold = Math.min(dist1.distanceSq, bbcheckThreshold);
+          var dist2 = bvhDistanceSq(bvh1.left, bvh2.right, bbcheckThreshold);
+          if (dist2.distanceSq <= checkDistSqMin) {
+            return dist2;
+          }
+          var d = selectBetterResult(dist1, dist2);
+          bbcheckThreshold = Math.min(d.distanceSq, bbcheckThreshold);
+          var dist3 = bvhDistanceSq(bvh1.right, bvh2.left, bbcheckThreshold);
+          if (dist3.distanceSq <= checkDistSqMin) {
+            return dist3;
+          }
+          d = selectBetterResult(d, dist3);
+          bbcheckThreshold = Math.min(d.distanceSq, bbcheckThreshold);
+          var dist4 = bvhDistanceSq(bvh1.right, bvh2.right, bbcheckThreshold);
+          if (dist4.distanceSq <= checkDistSqMin) {
+            return dist4;
+          }
+          return selectBetterResult(d,dist4);
+        }
+      }
+    } else {
+      return {
+        distanceSq: Infinity,
+        lowerDistanceSq: distLowerSq
+      };
+    }
+  }
+  var result = bvhDistanceSq(mesh1.bvh.root, mesh2.bvh.root, checkDistSqMax);
+  return result;
+}
+
+function MeshMeshDistanceSquared(mesh1, mesh2, opts) {
+  if (opts.profile) {
+    console.time('MeshMeshDistanceSquared');
+  }
+  var r = MeshMeshDistanceSquaredBVH(mesh1, mesh2, opts);
+  if (opts.profile) {
+    console.timeEnd('MeshMeshDistanceSquared');
+  }
+  return r;
 }
 
 /**
@@ -930,6 +1193,8 @@ function MeshMeshDistanceSquared(mesh1, mesh2, opts) {
  * @param opts.shortCircuit {{maxDistSq: number}} Options for shortcircuiting the full distance computation
  * @param opts.sampler {{sampleMeshes: function(Array<THREE.Mesh|geo.PartialMesh>, int)}} Sampler for sampling meshes
  * @param opts.nsamples {int}: Number of samples to produce
+ * @param [opts.all] Whether all fields should be returned (otherwise, just return `distanceSq`).
+ * @param [opts.debug] Whether to output extra debug messages
  * @returns {*}
  * @constructor
  */
@@ -940,22 +1205,23 @@ function MeshMeshHausdorffDirectedDistanceSquared(mesh1, mesh2, opts) {
   var done = false;
   var savedPoint = new THREE.Vector3();
   GeometryUtil.forMeshVertices(mesh1, function (v) {
-      var r = PointMeshDistanceSquared(v, mesh2, innerOpts);
-      if (!result || r.distanceSq > result.distanceSq) {
-        result = r;
-        innerOpts.shortCircuit.minDistSq = result.distanceSq;
-        if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
-          if (result.distanceSq >= opts.shortCircuit.maxDistSq) {
-            done = true;
+        var r = PointMeshDistanceSquared(v, mesh2, innerOpts);
+        if (!result || r.distanceSq > result.distanceSq) {
+          result = r;
+          innerOpts.shortCircuit.minDistSq = result.distanceSq;
+          if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
+            if (result.distanceSq >= opts.shortCircuit.maxDistSq) {
+              result.lowerDistanceSq = result.distanceSq;
+              done = true;
+            }
+          }
+          if (opts.all) {
+            savedPoint.copy(result.closestPoint0);
+            result.closestPoint0 = savedPoint;
           }
         }
-        if (opts.all) {
-          savedPoint.copy(result.closestPoint0);
-          result.closestPoint0 = savedPoint;
-        }
-      }
-    },
-    null, function() { return done; }
+      },
+      null, function() { return done; }
   );
   // Sample more points on surfaces to test
   if (!done && opts.sampler && opts.nsamples) {
@@ -969,6 +1235,7 @@ function MeshMeshHausdorffDirectedDistanceSquared(mesh1, mesh2, opts) {
         innerOpts.shortCircuit.minDistSq = result.distanceSq;
         if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
           if (result.distanceSq >= opts.shortCircuit.maxDistSq) {
+            result.lowerDistanceSq = result.distanceSq;
             done = true;
           }
         }
@@ -987,9 +1254,22 @@ function MeshMeshHausdorffDirectedDistanceSquared(mesh1, mesh2, opts) {
   return result;
 }
 
+/**
+ * Computes the hausdorff distance
+ * @param mesh1 {THREE.Mesh}
+ * @param mesh2 {THREE.Mesh}
+ * @param opts
+ * @param opts.shortCircuit {{maxDistSq: number}} Options for shortcircuiting the full distance computation
+ * @param opts.sampler {{sampleMeshes: function(Array<THREE.Mesh|geo.PartialMesh>, int)}} Sampler for sampling meshes
+ * @param opts.nsamples {int}: Number of samples to produce
+ * @param [opts.all] Whether all fields should be returned (otherwise, just return `distanceSq`).
+ * @param [opts.debug] Whether to output extra debug messages
+ * @returns {*}
+ * @constructor
+ */
 function MeshMeshHausdorffDistanceSquared(mesh1, mesh2, opts) {
-  var r1 = MeshMeshHausdorffDistanceSquared(mesh1, mesh2, opts);
-  var r2 = MeshMeshHausdorffDistanceSquared(mesh2, mesh1, opts);
+  var r1 = MeshMeshHausdorffDirectedDistanceSquared(mesh1, mesh2, opts);
+  var r2 = MeshMeshHausdorffDirectedDistanceSquared(mesh2, mesh1, opts);
   if (r2.distanceSq > r1.distanceSq) {
     swapFields(r2, [['point0', 'point1'], ['faceIndex0', 'faceIndex1'],
       ['triangle0', 'triangle1'], ['triangleBary0', 'triangleBary1']]);
@@ -1010,7 +1290,7 @@ function PointMeshesDistanceSquared(point, meshes, opts) {
     if (result) {
       // check if this mesh is worth comparing against
       var bbox = Object3DUtil.getBoundingBox(mesh.mesh || mesh);
-      var distToBBox = bbox.distanceToPoint(point, 'signed');
+      var distToBBox = bbox.distanceToPoint(point, 'clamped');
       var distSqToBBox = distToBBox*distToBBox;
       if (distToBBox > 0 && distSqToBBox > result.distanceSq) {
         // mesh too far from point
@@ -1024,6 +1304,7 @@ function PointMeshesDistanceSquared(point, meshes, opts) {
         result = r;
         if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
           if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+            result.upperDistanceSq = result.distanceSq;
             done = true;
           }
         }
@@ -1037,6 +1318,7 @@ function PointMeshesDistanceSquared(point, meshes, opts) {
         result = r;
         if (opts.shortCircuit && opts.shortCircuit.minDistSq != undefined) {
           if (result.distanceSq <= opts.shortCircuit.minDistSq) {
+            result.upperDistanceSq = result.distanceSq;
             done = true;
           }
         }
@@ -1062,19 +1344,49 @@ function MeshesPointDistanceSquared(meshes, point, opts) {
   return result;
 }
 
+function PointObject3DDistanceSquared(object3D, point, opts) {
+  var filter = opts? opts.filter : null;
+  var meshes = filter? Object3DUtil.getFilteredMeshList(object3D, filter) : Object3DUtil.getMeshList(object3D);
+  return PointMeshesDistanceSquared(point, meshes, opts);
+}
+
+function Object3DPointDistanceSquared(object3D, point, opts) {
+  var filter = opts? opts.filter : null;
+  var meshes = filter? Object3DUtil.getFilteredMeshList(object3D, filter) : Object3DUtil.getMeshList(object3D);
+  return MeshesPointDistanceSquared(meshes, point, opts);
+}
+
 function MeshesMeshesDistanceSquared(meshes1, meshes2, opts) {
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+  var copts = _.clone(opts || {});
+  copts.shortCircuit = copts.shortCircuit || {};
+  copts.shortCircuit.maxDistSq = checkDistSqMax;
   var result;
   for (var i = 0; i < meshes1.length; i++) {
     var mesh1 = meshes1[i];
     for (var j = 0; j < meshes2.length; j++) {
-      var mesh2 = meshes2[i];
-      var r = MeshMeshDistanceSquared(mesh1, mesh2, opts);
+      var mesh2 = meshes2[j];
+
+      var r = MeshMeshDistanceSquared(mesh1, mesh2, copts);
       if (!result || r.distanceSq < result.distanceSq) {
         result = r;
         if (opts.all) {
           result.meshIndex1 = i;
           result.meshIndex2 = j;
         }
+
+        if (result.distanceSq < checkDistSqMin) {
+          result.upperDistanceSq = result.distanceSq;
+          return result;
+        }
+        copts.shortCircuit.maxDistSq = Math.min(result.distanceSq, copts.shortCircuit.maxDistSq)
       }
     }
   }
@@ -1104,23 +1416,24 @@ function MeshesMeshesHausdorffDirectedDistanceSquared(meshes1, meshes2, opts) {
     var mesh1 = meshes1[i];
     if (mesh1 instanceof THREE.Mesh) {
       GeometryUtil.forMeshVertices(mesh1, function (v) {
-          var r = PointMeshesDistanceSquared(v, meshes2, innerOpts);
-          if (!result || r.distanceSq > result.distanceSq) {
-            result = r;
-            innerOpts.shortCircuit.minDistSq = result.distanceSq;
-            if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
-              if (result.distanceSq > opts.shortCircuit.maxDistSq) {
-                done = true;
+            var r = PointMeshesDistanceSquared(v, meshes2, innerOpts);
+            if (!result || r.distanceSq > result.distanceSq) {
+              result = r;
+              innerOpts.shortCircuit.minDistSq = result.distanceSq;
+              if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
+                if (result.distanceSq > opts.shortCircuit.maxDistSq) {
+                  result.lowerDistanceSq = result.distanceSq;
+                  done = true;
+                }
+              }
+              if (opts.all) {
+                savedPoint.copy(result.closestPoint0);
+                result.closestPoint0 = savedPoint;
+                result.meshIndex0 = i;
               }
             }
-            if (opts.all) {
-              savedPoint.copy(result.closestPoint0);
-              result.closestPoint0 = savedPoint;
-              result.meshIndex0 = i;
-            }
-          }
-        },
-      null, function() { return done; });
+          },
+          null, function() { return done; });
     } else if (mesh1.mesh && mesh1.faceIndices) {
       var transform = mesh1.mesh.matrixWorld;
       var checkedIVerts = new Set();
@@ -1146,6 +1459,7 @@ function MeshesMeshesHausdorffDirectedDistanceSquared(meshes1, meshes2, opts) {
             // TODO: better name  for short circuit distance
             if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
               if (result.distanceSq > opts.shortCircuit.maxDistSq) {
+                result.lowerDistanceSq = result.distanceSq;
                 done = true;
               }
             }
@@ -1174,6 +1488,7 @@ function MeshesMeshesHausdorffDirectedDistanceSquared(meshes1, meshes2, opts) {
         innerOpts.shortCircuit.minDistSq = result.distanceSq;
         if (opts.shortCircuit && opts.shortCircuit.maxDistSq != undefined) {
           if (result.distanceSq >= opts.shortCircuit.maxDistSq) {
+            result.lowerDistanceSq = result.distanceSq;
             done = true;
           }
         }
@@ -1196,8 +1511,8 @@ function MeshesMeshesHausdorffDirectedDistanceSquared(meshes1, meshes2, opts) {
 }
 
 function MeshesMeshesHausdorffDistanceSquared(meshes1, meshes2, opts) {
-  var r1 = MeshesMeshesHausdorffDistanceSquared(meshes1, meshes2, opts);
-  var r2 = MeshesMeshesHausdorffDistanceSquared(meshes1, meshes2, opts);
+  var r1 = MeshesMeshesHausdorffDirectedDistanceSquared(meshes1, meshes2, opts);
+  var r2 = MeshesMeshesHausdorffDirectedDistanceSquared(meshes2, meshes1, opts);
   if (r2.distanceSq > r1.distanceSq) {
     swapFields(r2, [['point0', 'point1'], ['meshIndex0', 'meshIndex1'], ['faceIndex0', 'faceIndex1'],
       ['triangle0', 'triangle1'], ['triangleBary0', 'triangleBary1']]);
@@ -1207,8 +1522,211 @@ function MeshesMeshesHausdorffDistanceSquared(meshes1, meshes2, opts) {
   }
 }
 
+function Object3DObject3DMinDistanceSquaredSimple(obj1, obj2, opts) {
+  var meshes1 = Object3DUtil.getMeshList(obj1);
+  var meshes2 = Object3DUtil.getMeshList(obj2);
+  if (meshes1.length > 0 && meshes2.length > 0) {
+    return MeshesMeshesDistanceSquared(meshes1, meshes2, opts);
+  } else {
+    return { distanceSq: Infinity };
+  }
+}
+
+function MeshObject3DMinDistanceSquaredHelper(mesh, obj, opts) {
+  // console.log('check mesh object3d', mesh, obj);
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+
+  var bbox1 = Object3DUtil.getBoundingBox(mesh);
+  var bbox2 = Object3DUtil.getBoundingBox(obj);
+  var distLower = bbox1.distanceTo(bbox2);
+  var distLowerSq = distLower * distLower;
+
+  var result;
+  if (distLowerSq <= checkDistSqMax) {
+    if (obj instanceof THREE.Mesh) {
+      var r = MeshMeshDistanceSquared(mesh, obj, opts);
+      if (r && (!result || r.distanceSq < result.distanceSq)) {
+        result = r;
+        if (opts.all) {
+          result.meshId1 = mesh.id;
+          result.meshId2 = obj.id;
+        }
+        if (result.distanceSq < checkDistSqMin) {
+          result.upperDistanceSq = result.distanceSq;
+          return result;
+        }
+        opts.shortCircuit.maxDistSq = Math.min(result.distanceSq, opts.shortCircuit.maxDistSq);
+      }
+    }
+    for (var i = 0; i < obj.children.length; i++) {
+      var r = MeshObject3DMinDistanceSquaredHelper(mesh, obj.children[i], opts);
+      if (r && (!result || r.distanceSq < result.distanceSq)) {
+        result = r;
+
+        if (result.distanceSq < checkDistSqMin) {
+          result.upperDistanceSq = result.distanceSq;
+          return result;
+        }
+        opts.shortCircuit.maxDistSq = Math.min(result.distanceSq, opts.shortCircuit.maxDistSq);
+      }
+    }
+    return result;
+  } else {
+    return { distanceSq: Infinity,  lowerDistanceSq: distLowerSq };
+  }
+}
+
+function Object3DMeshMinDistanceSquaredHelper(obj, mesh, opts) {
+  // console.log('check object3d mesh', obj, mesh);
+  var r = MeshObject3DMinDistanceSquaredHelper(mesh, obj, opts);
+  if (r) {
+    swapFields(r, [['point0', 'point1'], ['meshId0', 'meshId1'], ['faceIndex0', 'faceIndex1'],
+      ['triangle0', 'triangle1'], ['triangleBary0', 'triangleBary1']]);
+  }
+  return r;
+}
+
+function MeshObject3DMinDistanceSquared(mesh, obj, opts) {
+  Object3DUtil.cacheWorldBoundingBoxes(obj);
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+  var copts = _.clone(opts || {});
+  copts.shortCircuit = copts.shortCircuit || {};
+  copts.shortCircuit.maxDistSq = checkDistSqMax;
+  copts.shortCircuit.minDistSq = checkDistSqMin;
+  return MeshObject3DMinDistanceSquaredHelper(mesh, obj, copts);
+}
+
+function Object3DMeshMinDistanceSquared(obj, mesh, opts) {
+  Object3DUtil.cacheWorldBoundingBoxes(obj);
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+  var copts = _.clone(opts || {});
+  copts.shortCircuit = copts.shortCircuit || {};
+  copts.shortCircuit.maxDistSq = checkDistSqMax;
+  copts.shortCircuit.minDistSq = checkDistSqMin;
+  return Object3DMeshMinDistanceSquaredHelper(obj, mesh, copts);
+}
+
+
+function Object3DObject3DMinDistanceSquaredHelper(obj1, obj2, opts) {
+  //console.log('check object3d object3d', obj1, obj2);
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+
+  var bbox1 = Object3DUtil.getBoundingBox(obj1);
+  var bbox2 = Object3DUtil.getBoundingBox(obj2);
+  var distLower = bbox1.distanceTo(bbox2);
+  var distLowerSq = distLower * distLower;
+
+  var result;
+  if (distLowerSq <= checkDistSqMax) {
+    if (obj1 instanceof THREE.Mesh) {
+      var r = MeshObject3DMinDistanceSquaredHelper(obj1, obj2, opts);
+      if (r && (!result || r.distanceSq < result.distanceSq)) {
+        result = r;
+
+        if (result.distanceSq < checkDistSqMin) {
+          result.upperDistanceSq = result.distanceSq;
+          return result;
+        }
+        opts.shortCircuit.maxDistSq = Math.min(result.distanceSq, opts.shortCircuit.maxDistSq);
+      }
+    } else if (obj2 instanceof THREE.Mesh) {
+      var r = Object3DMeshMinDistanceSquaredHelper(obj1, obj2, opts);
+      if (r && (!result || r.distanceSq < result.distanceSq)) {
+        result = r;
+
+        if (result.distanceSq < checkDistSqMin) {
+          result.upperDistanceSq = result.distanceSq;
+          return result;
+        }
+        opts.shortCircuit.maxDistSq = Math.min(result.distanceSq, opts.shortCircuit.maxDistSq);
+      }
+    }
+
+    // Check children
+    for (var i = 0; i < obj1.children.length; i++) {
+      for (var j = 0; j < obj2.children.length; j++) {
+        var r = Object3DObject3DMinDistanceSquaredHelper(obj1.children[i], obj2.children[j], opts);
+        if (r && (!result || r.distanceSq < result.distanceSq)) {
+          result = r;
+
+          if (result.distanceSq < checkDistSqMin) {
+            result.upperDistanceSq = result.distanceSq;
+            return result;
+          }
+          opts.shortCircuit.maxDistSq = Math.min(result.distanceSq, opts.shortCircuit.maxDistSq);
+        }
+      }
+    }
+    return result;
+  } else {
+    return { distanceSq: Infinity,  lowerDistanceSq: distLowerSq };
+  }
+}
+
+function Object3DObject3DMinDistanceSquared(obj1, obj2, opts) {
+  Object3DUtil.cacheWorldBoundingBoxes(obj1);
+  Object3DUtil.cacheWorldBoundingBoxes(obj2);
+  var checkDistSqMax = Infinity;
+  if (opts && opts.shortCircuit && opts.shortCircuit.maxDistSq) {
+    checkDistSqMax = opts.shortCircuit.maxDistSq;
+  }
+  var checkDistSqMin = ZERO_TOLERANCE;
+  if (opts && opts.shortCircuit && opts.shortCircuit.minDistSq) {
+    checkDistSqMin = opts.shortCircuit.minDistSq;
+  }
+  var copts = _.clone(opts || {});
+  copts.shortCircuit = copts.shortCircuit || {};
+  copts.shortCircuit.maxDistSq = checkDistSqMax;
+  copts.shortCircuit.minDistSq = checkDistSqMin;
+  return Object3DObject3DMinDistanceSquaredHelper(obj1, obj2, copts);
+}
+
+function BBoxBBoxDistanceSquared(bbox1, bbox2, opts) {
+  var dist = bbox1.distanceTo(bbox2);
+  return {
+    distanceSq: dist*dist
+  };
+}
+
+function ObbObbDistanceSquared(obb1, obb2, opts) {
+  var MeshHelpers = require('geo/MeshHelpers');
+  var mesh1 = new MeshHelpers.OBB(obb1, 'white');
+  var mesh2 = new MeshHelpers.OBB(obb2, 'white');
+  var dist = MeshMeshDistanceSquaredSimple(mesh1, mesh2, opts);
+  return dist;
+}
 
 var distanceFnMapping = {
+  'BBox-BBox': BBoxBBoxDistanceSquared,
+  'OBB-OBB': ObbObbDistanceSquared,
   'point-point': PointPointDistanceSquared,
   'point-line': null,
   'point-segment': null,
@@ -1237,10 +1755,16 @@ var distanceFnMapping = {
   'mesh-mesh': MeshMeshDistanceSquared,
   'point-meshes': PointMeshesDistanceSquared,
   'meshes-point': MeshesPointDistanceSquared,
-  'meshes-meshes': MeshesMeshesDistanceSquared
+  'meshes-meshes': MeshesMeshesDistanceSquared,
+  'point-object3d': PointObject3DDistanceSquared,
+  'object3d-point': Object3DPointDistanceSquared,
+  'mesh-object3d': MeshObject3DMinDistanceSquared,
+  'object3d-mesh': Object3DMeshMinDistanceSquared,
+  'object3d-object3d': Object3DObject3DMinDistanceSquared
 };
 
 function computeDistance(object1, object2, opts) {
+  opts = opts || {};
   function getType(obj) {
     if (Array.isArray(obj)) {
       var t = getType(obj[0]);
@@ -1251,9 +1775,18 @@ function computeDistance(object1, object2, opts) {
       }
       return t;
     }
-    if (obj.type) { return obj.type; }
+    if (obj instanceof THREE.Vector3) { return 'point'; }
     if (obj instanceof THREE.Triangle) { return 'triangle'; }
     if (obj instanceof THREE.Mesh) { return 'mesh'; }
+    if (obj instanceof THREE.Object3D) { return 'object3d'; }
+    if (obj.type) { return obj.type.toLowerCase(); }
+
+    var t = typeof obj;
+    if (t === 'object' && obj.constructor) {
+      return obj.constructor.name || t;
+    } else {
+      return t;
+    }
   }
   var type1 = getType(object1);
   var type2 = getType(object2);
@@ -1269,6 +1802,7 @@ module.exports = {
   PointPointDistanceSquared: PointPointDistanceSquared,
   PointTriangleDistanceSquared: PointTriangleDistanceSquared,
   PointMeshDistanceSquared: PointMeshDistanceSquared,
+  PointMeshesDistanceSquared: PointMeshesDistanceSquared,
   LineSegmentDistanceSquared: LineSegmentDistanceSquared,
   LineSegmentTriangleDistanceSquared: LineSegmentTriangleDistanceSquared,
   LineTriangleDistanceSquared: LineTriangleDistanceSquared,

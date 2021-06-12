@@ -3,13 +3,43 @@ var Colors = require('util/Colors');
 var ImageUtil = require('util/ImageUtil');
 var _ = require('util/util');
 
+Object.defineProperty(THREE.Material.prototype, 'colorHex', {
+  get: function () { return this.color.getHex(); },
+  set: function (v) {
+    this.color.setHex(v);
+  }
+});
+
 /**
  * Utilities for dealing with materials (operates only on materials/textures)
  * @module
  */
 var Materials = {};
 Materials.DefaultMaterialType = THREE.MeshPhysicalMaterial;
-Materials.DefaultMaterialSide = THREE.FrontSide;
+Materials.DefaultMaterialSide = THREE.DoubleSide;
+Materials.FalseMaterialType = THREE.MeshPhongMaterial;
+Materials.DefaultTextureEncoding = THREE.LinearEncoding;
+
+Materials.textureMapFields =
+  ['map', 'bumpMap', 'normalMap', 'specularMap', 'envMap', 'roughnessMap',
+  'alphaMap', 'aoMap', 'displacementMap', 'emissiveMap', 'lightMap', 'metalnessMap',
+  'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap', 'transmissionMap'];
+
+Materials.setDefaultMaterialType = function(defaultMatType, falseMatType) {
+  if (defaultMatType != null) {
+    if (typeof defaultMatType === 'string') {
+      defaultMatType = Materials.getMaterialType(defaultMatType);
+    }
+    Materials.DefaultMaterialType = defaultMatType;
+    THREE.Loader.DefaultMaterialType = new defaultMatType().type;
+  }
+  if (falseMatType != null) {
+    if (typeof falseMatType === 'string') {
+      falseMatType = Materials.getMaterialType(falseMatType);
+    }
+    Materials.FalseMaterialType = falseMatType;
+  }
+};
 
 /**
  * Helper to load image for a texture
@@ -55,15 +85,16 @@ Materials.loadTextureImage = loadTextureImage;
  * @param [opts.onError]
  * @param [opts.manager] {THREE.LoadingManager}
  * @param [opts.mapping]
+ * @param [opts.encoding]
  * @param [opts.isDataTexture]
  * @returns {THREE.Texture}
  */
 function loadTexture(opts) {
-  var mapping = opts.mapping;
   var url = opts.url;
+  var manager = opts.manager || THREE.DefaultLoadingManager;
 
   var texture;
-  var loader = THREE.Loader.Handlers.get( url );
+  var loader = manager.getHandler( url );
 
   if ( loader !== null ) {
     texture = loader.load( url, opts.onLoad );
@@ -81,12 +112,29 @@ function loadTexture(opts) {
     texture.magFilter = THREE.NearestFilter;
     //    texture.unpackAlignment = 1;
   }
-  if ( mapping !== undefined ) {
-    texture.mapping = mapping;
+  if ( opts.mapping !== undefined ) {
+    texture.mapping = opts.mapping;
   }
+  texture.encoding = opts.encoding || Materials.DefaultTextureEncoding;
   return texture;
 }
 Materials.loadTexture = loadTexture;
+
+function getCubeMapTexture(environment, pmremGenerator) {
+  const path = environment;
+  // no envmap
+  if ( ! path ) return Promise.resolve( { envMap: null } );
+  return new Promise( ( resolve, reject ) => {
+    new THREE.RGBELoader()
+      .setDataType( THREE.UnsignedByteType )
+      .load( path, ( texture ) => {
+        const envMap = pmremGenerator.fromEquirectangular( texture ).texture;
+        pmremGenerator.dispose();
+        resolve( { envMap } );
+      }, undefined, reject );
+  });
+}
+Materials.getCubeMapTexture = getCubeMapTexture;
 
 /**
  * Apply coloring to texture pixels (without changing alpha)
@@ -142,6 +190,11 @@ Materials.getBasicMaterial = function (color, alpha, materialSide) {
 };
 
 
+/**
+ * Transforms input into a material
+ * @param mat {THREE.Material|THREE.MultiMaterial|color}
+ * @returns {THREE.Material|THREE.MultiMaterial}
+ */
 Materials.toMaterial = function (mat) {
   if (mat instanceof THREE.Material || mat instanceof THREE.MultiMaterial) {
     return mat;
@@ -162,7 +215,7 @@ Materials.updateMaterialParams = function(materialType, p) {
   if (materialType === THREE.MeshStandardMaterial || materialType === THREE.MeshPhysicalMaterial) {
     var p2 = _.omit(p, ['specular', 'shininess']);
     if (p.shininess != undefined) {
-      p2.roughness = 1 - THREE.Math.clamp(p.shininess / 200, 0, 1);
+      p2.roughness = 1 - THREE.MathUtils.clamp(p.shininess / 200, 0, 1);
     }
     return p2;
   } else {
@@ -203,34 +256,84 @@ Materials.getStandardMaterial = function (color, alpha, materialSide) {
 
 Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
   var c = color;
-  if (!c) {
+  if (c == null) {
     c = Colors.createColor(id, palette || Constants.defaultPalette);
   } else if (!(c instanceof THREE.Color)) {
     c = Colors.toColor(c);
   }
 
-  var mat = Materials.getMaterial(c, 1, THREE.MeshPhongMaterial);
+  var mat = Materials.getMaterial(c, 1, Materials.FalseMaterialType);
   mat.name = 'color' + id;
   return mat;
 };
 
-
-Materials.setMaterialOpacity = function (material, opacity) {
-  if (Array.isArray(material)) {
-    for (var i = 0; i < material.length; i++) {
-      Materials.setMaterialOpacity(material[i], opacity);
+function __setMaterialArray(targetMaterials, sourceMaterials, targetMaterialIndex) {
+  if (targetMaterialIndex !== undefined) {
+    var i = targetMaterialIndex;
+    if (i < 0 || i >= targetMaterials.length) {
+      throw('Invalid materialIndex ' + targetMaterialIndex);
     }
-  } else if (material instanceof THREE.MultiMaterial) {
-    for (var i = 0; i < material.materials.length; i++) {
-      Materials.setMaterialOpacity(material.materials[i], opacity);
-    }
+    targetMaterials[i] = sourceMaterials.length? sourceMaterials[i] : sourceMaterials;
   } else {
-    material.opacity = opacity;
-    material.transparent = opacity < 1;
+    for (var i = 0; i < targetMaterials.length; i++) {
+      targetMaterials[i] = sourceMaterials.length? sourceMaterials[i] : sourceMaterials;
+    }
+  }
+}
+
+// Set the node material, keeping multimaterial
+Materials.setNodeMaterial = function(node, material, materialIndex) {
+  var materials = null;
+  if (material instanceof THREE.MultiMaterial) {
+    materials = material.materials;
+  } else if (Array.isArray(material)) {
+    materials = material;
+  }
+  try {
+    if (Array.isArray(node.material)) {
+      var oldMaterials = node.material;
+      node.material = [];
+      for (var i = 0; i < oldMaterials.length; i++) {
+        node.material[i] = oldMaterials[i];
+      }
+      __setMaterialArray(node.material, materials || material, materialIndex);
+    } else if (node.material instanceof THREE.MultiMaterial) {
+      node.material = node.material.clone();
+      __setMaterialArray(node.material.materials, materials || material, materialIndex);
+    } else {
+      node.material = material;
+    }
+    return true;
+  } catch (cerr) {
+    console.error('Error setting node material', cerr, node);
+    return false;
   }
 };
 
-Materials.createMaterial = function(params) {
+Materials.setMaterialOpacity = function (material, opacity) {
+  var materials = Materials.toMaterialArray(material);
+  for (var i = 0; i < materials.length; i++) {
+    var m = materials[i];
+    m.opacity = opacity;
+    m.transparent = opacity < 1;
+  }
+};
+
+Materials.createTexture = function(opts, textures) {
+  var texture = Materials.loadTexture({ url: opts.src || opts.url });
+  texture.name = opts.name;
+  texture.wrapS = (opts.wrapS != null) ? opts.wrapS : ((opts.wrap != null)? opts.wrap : THREE.RepeatWrapping);
+  texture.wrapT = (opts.wrapT != null) ? opts.wrapT : ((opts.wrap != null)? opts.wrap : THREE.RepeatWrapping);
+  if (opts.repeat) {
+    texture.repeat.copy(opts.repeat);
+  }
+  if (opts.anisotropy != null) {
+    texture.anisotropy = opts.anisotropy;
+  }
+  return texture;
+};
+
+Materials.createMaterial = function(params, textures) {
   // NOTE: Cannot have type set!!!
   var p = _.omit(params, ['type']);
   if (p.opacity < 1) {
@@ -247,20 +350,63 @@ Materials.createMaterial = function(params) {
       }
     }
   });
-  var maps = ['map', 'bumpMap', 'normalMap', 'specularMap', 'envMap'];
-  maps.forEach(function (m) {
-    if (p.hasOwnProperty(m)) {
-      var textureParams = p[m];
-      var texture = Materials.loadTexture({ url: textureParams.src });
-      texture.name = textureParams.name;
-      texture.wrapS = (textureParams.wrapS !== undefined) ? textureParams.wrapS : THREE.RepeatWrapping;
-      texture.wrapT = (textureParams.wrapT !== undefined) ? textureParams.wrapT : THREE.RepeatWrapping;
+  Materials.textureMapFields.forEach(function (m) {
+    if (p.hasOwnProperty(m) && p[m]) {
+      var texture = Materials.createTexture(p[m], textures);
       p[m] = texture;
     }
   });
 
   var materialType = Materials.getMaterialType(params.type);
-  return new materialType(p);
+  var material = new materialType(p);
+  if (params.name != null) {
+    material.name = params.name;
+  }
+  material.side = Materials.getMaterialSide(params.side, Materials.DefaultMaterialSide);
+  return material;
+};
+
+Materials.getMaterialSide = function(sidedness, defaultSide) {
+  if (sidedness === THREE.FrontSide || sidedness === THREE.BackSide || sidedness === THREE.DoubleSide) {
+    return sidedness;
+  } else if (typeof(sidedness) === 'string') {
+    sidedness = sidedness.toLowerCase();
+    if (sidedness === "front") {
+      return THREE.FrontSide;
+    } else if (sidedness === "back") {
+      return THREE.BackSide;
+    } else if (sidedness === "double") {
+      return THREE.DoubleSide;
+    } else {
+      console.warn('Unknown sidedness: ' + sidedness);
+    }
+  } else if (sidedness == undefined) {
+    // console.log('Unspecified sidedness')
+  } else {
+    console.warn('Invalid sidedness type:' + typeof(sidedness));
+  }
+  return defaultSide;
+};
+
+Materials.getCombineOperation = function(combine, defaultCombine) {
+  if (combine === THREE.MultiplyOperation || combine === THREE.MixOperation ||
+      combine === THREE.AddOperation) {
+    return combine;
+  } else if (typeof(combine) === 'string') {
+    combine = combine.toLowerCase();
+    if (combine === 'multiply') {
+      return THREE.MultiplyOperation;
+    } else if (combine === 'mix') {
+      return THREE.MixOperation;
+    } else if (combine === 'add') {
+      return THREE.AddOperation;
+    } else {
+      console.warn('Unknown combine operation:' + combine);
+    }
+  } else if (combine != null) {
+    console.warn('Invalid combine type:' + typeof(combine));
+  }
+  return defaultCombine;
 };
 
 Materials.getMaterialType = function(mtype) {
@@ -351,6 +497,36 @@ Materials.toMaterialArray = function(material) {
   } else {
     return [];
   }
+};
+
+Materials.getNumMaterials = function(material) {
+  if (material != null) {
+    if (material instanceof THREE.MultiMaterial) {
+      return material.materials.length;
+    } else if (Array.isArray(material)) {
+      return material.length;
+    } else {
+      return 1;
+    }
+  } else {
+    return 0;
+  }
+};
+
+/**
+ * Returns material of the intersected triangle
+ * @param intersected {Intersect}
+ */
+Materials.getMaterialAtIntersected = function(intersected) {
+  var material = intersected.object.material;
+  if (material instanceof THREE.MultiMaterial) {
+    material = material.materials;
+  }
+  if (Array.isArray(material)) {
+    var iFaceMaterial = intersected.face.materialIndex;
+    return material[iFaceMaterial];
+  }
+  return material;
 };
 
 module.exports = Materials;

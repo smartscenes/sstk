@@ -71,6 +71,9 @@ function AssetGroup(params) {
   // Extend this with default values and then whatever is specified in params
   // Anything specified in params will overwrite other values
   _.extend(this, defaults, params);
+  if (this.source == null) {
+    this.source = this.name;
+  }
   this.__normalizeData();
 
   // Set defaultFormat
@@ -86,11 +89,64 @@ function AssetGroup(params) {
   }
 }
 
+AssetGroup.prototype.isFormatSupported = function(format) {
+  //console.log('Check assetGroup formats', format, this.supportedFormats);
+  return (this.supportedFormats && this.supportedFormats.indexOf(format) >= 0);
+};
+
 AssetGroup.prototype.setDefaultFormat = function(format) {
-  if (this.supportedFormats && this.supportedFormats.indexOf(format) >= 0) {
+  if (this.isFormatSupported(format)) {
     this.defaultFormat = format;
+  } else {
+    if (this.defaultDataType != null) {
+      var f = this.defaultDataType + '-' + format;
+      if (this.isFormatSupported(f)) {
+        this.defaultFormat = f;
+        return;
+      }
+    }
+    console.log('Ignoring default format', format, ', supported formats ', this.supportedFormats);
   }
 };
+
+function __getVariants(d, variants, interpolateOptions, vars, varyingKey) {
+  variants = variants || [];
+  varyingKey = varyingKey || 'varying';
+  var varyingKeys = ['varying', 'subvarying'];
+  var varying = _.pick(d.variants, d.variants[varyingKey]);
+  varying = _.mapValues(varying, function(v, k) {
+    // NOTE: At this point item specific values are not ready...
+    if (_.isPlainObject(v)) {
+      if (v.range) {
+        v = _.interpolate(v, vars, interpolateOptions);
+        v = _.getRange(v);
+      }
+    }
+    return v;
+  });
+  var crossProd = _.product(varying);
+  var omitKeys = _.clone(varyingKeys);
+  for (var i = 0; i < varyingKeys.length; i++) {
+    omitKeys.push.apply(omitKeys, d.variants[varyingKeys[i]]);
+  }
+  var defaults = _.defaults(_.omit(d.variants, omitKeys), _.omit(d, ['variants']));
+  for (var i = 0; i < crossProd.length; i++) {
+    var variant = crossProd[i];
+    variant = _.cloneDeepWithReplaceVars(_.defaults(variant, defaults), variant, { optionalPrefix: interpolateOptions.variable });
+    //variant = _.interpolate(_.defaults(variant, defaults), variant, interpolateOptions);
+    variant.variantOf = d.name;
+    variants.push(variant);
+  }
+  return variants;
+}
+
+function __getAllVariants(hasVariants, interpolateOptions, vars, varyingKey) {
+  var variants = [];
+  _.each(hasVariants, function(d) {
+    __getVariants(d, variants, interpolateOptions, vars, varyingKey);
+  });
+  return variants;
+}
 
 // Takes the specified data and dataTypes and puts into normalized form
 // dataTypes: { type1: { data: [...], options ... } }
@@ -123,22 +179,12 @@ AssetGroup.prototype.__normalizeData = function() {
   // Handle variants
   var interpolateOptions = this.__interpolateOptions;
   _.each(this.dataTypes, function(dataTypeInfo, dataType) {
-    var hasVariants = _.filter(dataTypeInfo.data, function(d) { return d.variants; });
     var noVariants = _.filter(dataTypeInfo.data, function(d) { return !d.variants; });
-    var variants = [];
-    _.each(hasVariants, function(d) {
-      var crossProd = _.product(_.pick(d.variants, d.variants.varying));
-      var omitKeys = d.variants.varying.concat(['varying']);
-      var defaults = _.defaults(_.omit(d.variants, omitKeys), _.omit(d, ['variants']));
-      for (var i = 0; i < crossProd.length; i++) {
-        var variant = crossProd[i];
-        variant = _.cloneDeepWithReplaceVars(_.defaults(variant, defaults), variant, { optionalPrefix: interpolateOptions.variable });
-        //variant = _.interpolate(_.defaults(variant, defaults), variant, interpolateOptions);
-        variant.variantOf = d.name;
-        variants.push(variant);
-      }
-    });
-    dataTypeInfo.data = noVariants.concat(variants);
+    var hasVariants = _.filter(dataTypeInfo.data, function(d) { return d.variants; });
+    var hasVariantsDependent = _.filter(hasVariants, function(d) { return d.variants.isInstanceDependent; });
+    var hasVariantsNotDependent = _.filter(hasVariants, function(d) { return !d.variants.isInstanceDependent; });
+    var variants = __getAllVariants(hasVariantsNotDependent, interpolateOptions, {}, 'varying');
+    dataTypeInfo.data = noVariants.concat(variants).concat(hasVariantsDependent);
   });
 
   // Create data
@@ -177,8 +223,12 @@ AssetGroup.prototype.__getInterpolateContext = function() {
   return this.__interpolateContext;
 };
 
+AssetGroup.prototype.__getInterpolationVars = function(id, metadata) {
+  return _.defaults(Object.create(null), {id: id}, metadata, this.__getInterpolateContext());
+};
+
 AssetGroup.prototype.__getInterpolatedAssetInfo = function(obj, id, metadata) {
-  var vars = _.defaults(Object.create(null), {id: id}, metadata, this.__getInterpolateContext());
+  var vars = this.__getInterpolationVars(id, metadata);
   if (this.assetFields) {
     var assetFields = _.interpolate(this.assetFields, vars, this.__interpolateOptions);
     vars = _.extend(vars, assetFields);
@@ -187,7 +237,7 @@ AssetGroup.prototype.__getInterpolatedAssetInfo = function(obj, id, metadata) {
 };
 
 AssetGroup.prototype.__getAssetFields = function(id, metadata) {
-  var vars = _.defaults(Object.create(null), {id: id}, metadata, this.__getInterpolateContext());
+  var vars = this.__getInterpolationVars(id, metadata);
   if (this.assetFields) {
     var assetFields = _.interpolate(this.assetFields, vars, this.__interpolateOptions);
     if (_.isString(assetFields.imageCount)) {
@@ -197,10 +247,26 @@ AssetGroup.prototype.__getAssetFields = function(id, metadata) {
   }
 };
 
+function dataHasVariants(data) {
+  return  _.some(data, function(d, name) { return d.variants; });
+}
+
 AssetGroup.prototype.getDataInfo = function(id, metadata) {
   if (this.dataTypes) {
-    //console.log('vars', vars);
-    var dataTypes = this.__getInterpolatedAssetInfo(this.dataTypes, id, metadata);
+    var vars = this.__getInterpolationVars(id, metadata);
+    var interpolateOptions = this.__interpolateOptions;
+    // Handle variants
+    var dataTypes = this.dataTypes;
+    var hasVariants = _.some(dataTypes, function(dataTypesInfo, dataType) { return dataHasVariants(dataTypesInfo.data); });
+    if (hasVariants) {
+      dataTypes = _.mapValues(dataTypes, function(dataTypeInfo, dataType) {
+        var noVariants = _.filter(dataTypeInfo.data, function(d) { return !d.variants; });
+        var hasVariants = _.filter(dataTypeInfo.data, function(d) { return d.variants; });
+        var variants = __getAllVariants(hasVariants, interpolateOptions, vars, 'varying');
+        return { data: noVariants.concat(variants) };
+      });
+    }
+    dataTypes = this.__getInterpolatedAssetInfo(dataTypes, id, metadata);
     var data = _.flatMap(dataTypes, 'data');
     _.each(data, function(loadInfo) {
       // TODO: HACK!!! Make sure both path and file populated!!!
@@ -229,6 +295,10 @@ AssetGroup.prototype.__getInterpolatedField = function (id, metadata, path, fiel
   }
 };
 
+AssetGroup.prototype.hasAssetDataInfo = function(dataName) {
+  return this.dataByName[dataName] || this.dataByName[this.defaultDataType + '-' + dataName];
+};
+
 AssetGroup.prototype.__getBasicLoadInfo = function (id, dataName, metadata) {
   var d = this.dataByName[dataName] || this.dataByName[this.defaultDataType + '-' + dataName];
   if (d) {
@@ -253,10 +323,10 @@ AssetGroup.prototype.getLoadInfo = function (id, dataName, metadata) {
     dataName = this.defaultFormat;
   }
   var loadInfo = this.__getBasicLoadInfo(id, dataName, metadata);
-  //console.log('supportFormats', this.supportedFormats);
-  if (loadInfo && loadInfo.isSupported === false) {
+  // console.log('supportFormats', this.supportedFormats, dataName, this.defaultFormat);
+  if (loadInfo && loadInfo.isSupported === false && this.supportedFormats) {
     var mainSupportedFormat = this.supportedFormats[0];
-    if (this.supportedFormats.indexOf(dataName) < 0) {
+    if (!this.isFormatSupported(dataName)) {
       console.warn(dataName + ' not supported for ' + id + ', using ' + mainSupportedFormat + ' instead');
       dataName = mainSupportedFormat;
       loadInfo = this.__getBasicLoadInfo(id, dataName, metadata);
@@ -326,6 +396,14 @@ AssetGroup.prototype.getAllImageUrls = function (id, metadata) {
     var imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.originalImage.path');
     if (imagePath) { imgs.push(imagePath); }
   }
+  if (metadata) {
+    var moreImages = _.get(metadata, ['dataInfo', 'dataTypes', 'image', 'data']);
+    if (moreImages) {
+      // Filter out screenshot/originalImage (should already be covered)
+      moreImages = moreImages.filter(function(x) { return ['screenshot', 'originalImage'].indexOf(x.name) < 0; });
+      imgs.push.apply(imgs, moreImages.map(function(x) { return x.path; }));
+    }
+  }
 
   // Let's dedup too
   imgs = _.uniq(imgs);
@@ -351,13 +429,17 @@ AssetGroup.prototype.loadLightSpecs = function (callback) {
     });
 };
 
-AssetGroup.prototype.getImageUrl = function (id, i, metadata) {
+AssetGroup.prototype.getImageUrl = function (id, i, metadata, useThumbnail) {
   var index = (i !== undefined) ? i : this.defaultImageIndex;
   var imgCount = this.getImageCount(id, metadata);
-  if (index !== undefined && index >= 0 && index < imgCount) {
-    var imagePath = this.__getInterpolatedField(id, _.defaults({index: i}, metadata), 'dataByName.screenshot.path');
-    return imagePath ? imagePath : Constants.screenShotDir + this.type + 's/' + this.name + '/' + id + '/' + id + '-' + index + '.png';
-  } else if (i === Constants.AssetGroup.ROTATING_IMAGE_INDEX) {
+  var pathField = useThumbnail? 'thumbnail' : 'path';
+  if (index !== undefined && index >= 0 && imgCount > 0) {
+    if (index >= imgCount) {
+      index = imgCount - 1;
+    }
+    var imagePath = this.__getInterpolatedField(id, _.defaults({index: index}, metadata), 'dataByName.screenshot.' + pathField);
+    return imagePath;
+  } else if (index === Constants.AssetGroup.ROTATING_IMAGE_INDEX) {
     if (this.getRotatingImageUrl) {
       return this.getRotatingImageUrl(id);
     } else {
@@ -368,26 +450,47 @@ AssetGroup.prototype.getImageUrl = function (id, i, metadata) {
     }
   } else {
     if (typeof index === 'string') {
-      var imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.' + index + '.path');
+      var imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.' + index + '.' + pathField);
       if (imagePath) { return imagePath; }
     }
     if (this.getOriginalImageUrl) {
       return this.getOriginalImageUrl(id);
     } else {
-      var imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.originalImage.path');
-      return imagePath? imagePath : this.getDefaultImageUrl(id);
+      // Return originalImage or just screenshot
+      var imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.originalImage.' + pathField);
+      if (!imagePath && useThumbnail) {
+        imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.originalImage.path');
+      }
+      if (!imagePath) {
+        imagePath = this.__getInterpolatedField(id, metadata, 'dataByName.screenshot.' + pathField);
+      }
+      //console.log('got path', imagePath, pathField);
+      return imagePath ? imagePath : this.getDefaultImageUrl(id);
     }
   }
 };
 
 // Default implementation just returns getImageUrl
 AssetGroup.prototype.getImagePreviewUrl = function (id, i, metadata) {
-  var url = this.getImageUrl(id, i, metadata);
-  if (url && Constants.enableThumbnail && this.hasThumbnails) {
-    // check that this is a regular image that we generated (and will therefore have thumbnail)
-    var regex = /.+-[0-9]+\.png$/;
-    if (regex.test(url) || (metadata && metadata.hasThumbnail)) {
-      url = url.substr(0, url.lastIndexOf('.')) + Constants.thumbnailPostfix;
+  // Check if this assetGroup hasThumbnails and we want to use thumbnails for this assetGroup and specific asset
+  // update metadata with asset info for id
+  var url;
+  if (this.usesDeprecated) {
+    url = this.getImageUrl(id, i, metadata);
+    if (url && this.hasThumbnails) {
+      // check that this is a regular image that we generated (and will therefore have thumbnail)
+      var regex = /.+\.png$/;
+      if (regex.test(url)) {
+        url = url.substr(0, url.lastIndexOf('.')) + Constants.thumbnailPostfix;
+      }
+    }
+  } else {
+    metadata = _.defaults(Object.create(null), metadata || {}, this.__getAssetFields(id, metadata));
+    var useThumbnail = this.hasThumbnails && this.useThumbnails && (!metadata || metadata.hasThumbnail == null || metadata.hasThumbnail == true);
+    // console.log('useThumbnail', useThumbnail, metadata, this);
+    url = this.getImageUrl(id, i, metadata, useThumbnail);
+    if (!url && useThumbnail) {
+      url = this.getImageUrl(id, i, metadata);
     }
   }
   return url;
@@ -400,6 +503,9 @@ AssetGroup.prototype.setAssetDb = function(assetDb) {
 AssetGroup.prototype.getAssetInfo = function(assetId) {
   if (this.assetDb) {
     var assetInfo = this.assetDb.getAssetInfo(assetId);
+    if (!assetInfo) {
+      return;
+    }
     if (this.sounds && !assetInfo.sounds) {
       assetInfo.sounds = this.sounds.getModelSounds(assetInfo);
     }

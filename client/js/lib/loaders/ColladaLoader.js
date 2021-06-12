@@ -7,7 +7,7 @@
  * @memberOf loaders
  */
 
-THREE.ColladaLoader = function () {
+THREE.ColladaLoader = function (manager) {
 
 	var COLLADA = null;
 	var scene = null;
@@ -55,10 +55,13 @@ THREE.ColladaLoader = function () {
 		// For reflective or refractive materials we'll use this cubemap
 		defaultEnvMap: null,
 
+		// Manager (AXC)
+		manager: ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager,
+
 		// If we want to skip lines (AXC)
 		skipLines: false
 
-	};
+  };
 
 	var colladaUnit = 1.0;
 	var colladaUp = 'Y';
@@ -929,7 +932,7 @@ THREE.ColladaLoader = function () {
 
 									case 'revolute':
 
-										matrix.multiply( m1.makeRotationAxis( axis, THREE.Math.degToRad(value) ) );
+										matrix.multiply( m1.makeRotationAxis( axis, THREE.MathUtils.degToRad(value) ) );
 										break;
 
 									case 'prismatic':
@@ -1298,7 +1301,7 @@ THREE.ColladaLoader = function () {
 
 			var cam = new THREE.PerspectiveCamera(cparams.yfov, parseFloat(cparams.aspect_ratio),
 					parseFloat(cparams.znear), parseFloat(cparams.zfar));
-
+			cam.colladaId = "camera_" + i;
 			obj.add(cam);
 		}
 
@@ -2446,7 +2449,7 @@ THREE.ColladaLoader = function () {
 
 			case 'rotate':
 
-				this.angle = THREE.Math.degToRad( this.data[3] );
+				this.angle = THREE.MathUtils.degToRad( this.data[3] );
 
 			case 'translate':
 
@@ -2650,7 +2653,7 @@ THREE.ColladaLoader = function () {
 
 					case 'ANGLE':
 
-						this.angle = THREE.Math.degToRad( data );
+						this.angle = THREE.MathUtils.degToRad( data );
 						break;
 
 					default:
@@ -2658,7 +2661,7 @@ THREE.ColladaLoader = function () {
 						this.obj.x = data[ 0 ];
 						this.obj.y = data[ 1 ];
 						this.obj.z = data[ 2 ];
-						this.angle = THREE.Math.degToRad( data[ 3 ] );
+						this.angle = THREE.MathUtils.degToRad( data[ 3 ] );
 						break;
 
 				}
@@ -3823,7 +3826,7 @@ THREE.ColladaLoader = function () {
 										if (options.loadTextureCallback) {
 											texture = options.loadTextureCallback(baseUrl, image.init_from);
 										} else {
-											var loader = THREE.Loader.Handlers.get(url);
+											var loader = options.manager.getHandler(url);
 											if (loader !== null) {
 												texture = loader.load(url);
 											} else {

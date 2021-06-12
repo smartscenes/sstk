@@ -9,6 +9,7 @@ var _ = require('util/util');
  * @param options.fs File system to use for exporting (defaults to FileUtil)
  * @param [options.format='binary_little_endian'] {string} PLY file format.  Options are `ascii|binary_little_endian`.
  * @param [options.vertexAttributes=PLYExporter.VertexAttributes.rgbColor] {Object} Vertex attributes to export.
+ * @param [options.faceAttributes] {Object} Face attributes to export
  * @constructor
  * @memberOf exporters
  */
@@ -18,6 +19,7 @@ function PLYExporter(options) {
   //this.format = "ascii";
   this.format = options.format || 'binary_little_endian';
   this.vertexAttributes = options.vertexAttributes || [ PLYExporter.VertexAttributes.rgbColor ];
+  this.faceAttributes = options.faceAttributes;
   this.includeChildModelInstances = false;
 }
 
@@ -142,6 +144,60 @@ PLYExporter.TypeSizes = Object.freeze({
   'double': 8
 });
 
+// [{
+//   name: 'NYU40',
+//   stride: 1,
+//   properties: [{
+//     name: 'NYU40',
+//     type: 'uint8'
+//   },...]
+function __appendCustomAttributesToProps(props, customAttrs) {
+  if (customAttrs) {
+    for (var i = 0; i < customAttrs.length; i++) {
+      var attr = customAttrs[i];
+      for (var j = 0; j < attr.properties.length; j++) {
+        var prop = attr.properties[j];
+        props.push(prop);
+      }
+    }
+  }
+  return props;
+}
+
+function __estimatePropBytes(props, initialSize) {
+  var estSize = initialSize || 0;
+  for (var i = 0; i < props.length; i++) {
+    var prop = props[i];
+    if (prop.type.startsWith('list')) {
+      var pieces = prop.type.split(' ');
+      var elementType = pieces[2];
+      var lengthType = pieces[1];
+      var lengthSize = PLYExporter.TypeSizes[lengthType];
+      var elementSize = PLYExporter.TypeSizes[elementType];
+      if (lengthType && elementSize) {
+        prop.lengthSize = lengthSize;
+        prop.elementSize = elementSize;
+        if (prop.n != null) {
+          prop.size = lengthSize + prop.n * elementSize;
+          estSize += prop.size;
+        } else {
+          console.warn('No n for list ' + prop.name + ' of type ' + prop.type);
+        }
+      } else {
+        console.warn('No size for property ' + prop.name + ' of type ' + prop.type);
+      }
+    } else {
+      prop.size = PLYExporter.TypeSizes[prop.type];
+      if (prop.size) {
+        estSize += prop.size;
+      } else {
+        console.warn('No size for property ' + prop.name + ' of type ' + prop.type);
+      }
+    }
+  }
+  return estSize;
+}
+
 PLYExporter.prototype.__computeProperties = function(opts) {
   // Figure out vertex and face properties and vertex and face sizes (in bytes)
   var vertexProps = [
@@ -149,41 +205,27 @@ PLYExporter.prototype.__computeProperties = function(opts) {
     { name: 'y', type: 'float'},
     { name: 'z', type: 'float'}
   ];
-  if (opts.vertexAttributes) {
-    for (var i = 0; i < opts.vertexAttributes.length; i++) {
-      var attr = opts.vertexAttributes[i];
-      for (var j = 0; j < attr.properties.length; j++) {
-        var prop = attr.properties[j];
-        vertexProps.push(prop);
-      }
-    }
-  }
-  var vertSize = 0;
-  for (var i = 0; i < vertexProps.length; i++) {
-    var prop = vertexProps[i];
-    prop.size = PLYExporter.TypeSizes[prop.type];
-    if (prop.size) {
-      vertSize += prop.size;
-    } else {
-      console.warn('No size for property ' + prop.name + ' of type ' + prop.type);
-    }
-  }
+  __appendCustomAttributesToProps(vertexProps, opts.vertexAttributes);
   opts.vertexProperties = vertexProps;
-  opts.vertexSize = vertSize; // 3*4 bytes for position (float) + 3 bytes for (r,g,b)
-  var faceProps = [{name: 'vertex_indices', type: 'list uchar int'}];
+  opts.vertexSize = __estimatePropBytes(vertexProps, 0); // 3*4 bytes for position (float) + 3 bytes for (r,g,b)
+
+  var faceProps = [{name: 'vertex_indices', type: 'list uchar int', n: 3}];
+  __appendCustomAttributesToProps(faceProps, opts.faceAttributes);
   opts.faceProperties = faceProps;
-  opts.faceSize = 1 + 3*4; // 1 byte for face type, 3*4 (uint) bytes for vertex index
+  opts.faceSize = __estimatePropBytes(faceProps, 0);
+//  opts.faceSize = 1 + 3*4; // 1 byte for face type, 3*4 (uint) bytes for vertex index
+//  console.log('got vertexProps, faceProps', vertexProps, faceProps, opts.vertexSize, opts.faceSize);
 };
 
 PLYExporter.prototype.__getHeader = function(opts) {
-  var vertexProps = opts.vertexProperties.map(function(x) { return "property " + x.type + " " + x.name; });
-  var faceProps = opts.faceProperties.map(function(x) { return "property " + x.type + " " + x.name; });
-  var lines = ["ply", "format " + opts.format + " 1.0", "comment STK generated"]
-    .concat(["element vertex " + opts.nverts])
+  var vertexProps = opts.vertexProperties.map(function(x) { return 'property ' + x.type + ' ' + x.name; });
+  var faceProps = opts.faceProperties.map(function(x) { return 'property ' + x.type + ' ' + x.name; });
+  var lines = ['ply', 'format ' + opts.format + ' 1.0', 'comment STK generated']
+    .concat(['element vertex ' + opts.nverts])
     .concat(vertexProps)
-    .concat(["element face " + opts.nfaces])
+    .concat(['element face ' + opts.nfaces])
     .concat(faceProps)
-    .concat(["end_header"]);
+    .concat(['end_header']);
   return lines.join('\n') + '\n';
 };
 
@@ -196,7 +238,7 @@ PLYExporter.prototype.exportSampledPoints = function(points, opts) {
     }
     var nverts = points.length;
     var params = _.defaults({ vertexOffset: 0, nverts: nverts, nfaces: 0 }, opts,
-        { format: this.format, vertexAttributes: this.vertexAttributes });
+        { format: this.format, vertexAttributes: this.vertexAttributes, faceAttributes: this.faceAttributes });
     this.__computeProperties(params);
     var header = this.__getHeader(params);
     var data = this.__appendSampledPoints(points, params);
@@ -226,7 +268,7 @@ PLYExporter.prototype.exportMesh = function(mesh, opts) {
   var nverts = GeometryUtil.getGeometryVertexCount(mesh);
   var nfaces = GeometryUtil.getGeometryFaceCount(mesh);
   var params = _.defaults({ vertexOffset: 0, nverts: nverts, nfaces: nfaces }, opts,
-    { format: this.format, vertexAttributes: this.vertexAttributes });
+    { format: this.format, vertexAttributes: this.vertexAttributes, faceAttributes: this.faceAttributes });
   this.__computeProperties(params);
   var header = this.__getHeader(params);
   var data = this.__appendMesh(mesh, params);
@@ -255,8 +297,11 @@ __PlyAscii.prototype.getVertexData = function() {
 __PlyAscii.prototype.getFaceData = function() {
   return this.f.join('\n') + '\n';
 };
-__PlyAscii.prototype.appendFace = function(verts) {
+__PlyAscii.prototype.appendFace = function(verts, attrs) {
   var fs = verts.length + ' ' + verts.join(' ');
+  if (attrs.length) {
+    fs = fs + ' ' + attrs.join(' ');
+  }
   this.f.push(fs);
 };
 __PlyAscii.prototype.appendVertex = function(v) {
@@ -296,12 +341,18 @@ __PlyBinary.prototype.getVertexData = function() {
 __PlyBinary.prototype.getFaceData = function() {
   return this.f;
 };
-__PlyBinary.prototype.appendFace = function(verts) {
+__PlyBinary.prototype.appendFace = function(verts, attrs) {
   // Assumes 3 verts
   this.fdata.setUint8(this.foffset, 3); this.foffset++;
   this.fdata.setUint32(this.foffset, verts[0], this.isLittleEndian); this.foffset+=4;
   this.fdata.setUint32(this.foffset, verts[1], this.isLittleEndian); this.foffset+=4;
   this.fdata.setUint32(this.foffset, verts[2], this.isLittleEndian); this.foffset+=4;
+  var props = this.opts.faceProperties;
+  for (var i = 1; i < props.length; i++) {
+    var p = props[i];
+    var d = this.binaryWrite(this.fdata, attrs[i-1], this.foffset, p.type);
+    this.foffset += d;
+  }
 };
 __PlyBinary.prototype.appendVertex = function(v) {
   var props = this.opts.vertexProperties;
@@ -390,6 +441,24 @@ PLYExporter.prototype.__appendSampledPoints = function (sampledPoints, params, d
   return result;
 };
 
+function appendAttrs(row, attrvalues, attrspecs) {
+  if (attrvalues) {
+    for (var i = 0; i < attrvalues.length; i++) {
+      var attr = attrvalues[i];
+      var props = attrspecs[i].properties;
+      for (var j = 0; j < props.length; j++) {
+        var p = props[j];
+        if (p.convert) {
+          row.push(p.convert(attr));
+        } else {
+          row.push(_.isArray(attr)? attr[j] : attr);
+        }
+      }
+    }
+  }
+  return row;
+}
+
 PLYExporter.prototype.__appendMesh = function (mesh, params, data) {
   var vertexOffset = params.vertexOffset;
   //console.log('appendMesh', JSON.stringify(params));
@@ -402,34 +471,24 @@ PLYExporter.prototype.__appendMesh = function (mesh, params, data) {
     t.multiply(mesh.matrixWorld);
   }
   var vattrs = params.vertexAttributes;
-  GeometryUtil.forMeshVerticesWithTransform(mesh, function (v, attrs) {
+  GeometryUtil.forMeshVerticesWithTransform(mesh, function (v, attrvalues) {
     var row = [v.x, v.y, v.z];
-    if (attrs) {
-      for (var i = 0; i < attrs.length; i++) {
-        var attr = attrs[i];
-        var props = vattrs[i].properties;
-        for (var j = 0; j < props.length; j++) {
-          var p = props[j];
-          if (p.convert) {
-            row.push(p.convert(attr));
-          } else {
-            row.push(_.isArray(attr)? attr[j] : attr);
-          }
-        }
-      }
-    }
+    appendAttrs(row, attrvalues, vattrs);
     result.appendVertex(row);
   }, t, vattrs);
 
   var geometry = mesh.geometry;
   // Assumes faces are basically triangles
   //console.log(geometry);
-  GeometryUtil.forFaceVertexIndices(geometry, function(iface, verts) {
+  var fattrs = params.faceAttributes;
+  //console.log('faceAttributes', fattrs);
+  GeometryUtil.forFaceVertexIndices(geometry, function(iface, verts, attrvalues) {
     for (var i = 0; i < verts.length; i++) {
       verts[i] += vertexOffset;
     }
-    result.appendFace(verts);
-  });
+    var values = appendAttrs([], attrvalues, fattrs);
+    result.appendFace(verts, values);
+  }, fattrs);
   if (params) {
     params.vertexOffset = vertexOffset + GeometryUtil.getGeometryVertexCount(mesh.geometry);
   }
@@ -472,7 +531,7 @@ PLYExporter.prototype.export = function (objects, opts) {
   console.log('processing ' + objects.length + ' objects with total '
     + nverts + ' vertices, ' + nfaces + ' faces');
   var params = _.defaults({ vertexOffset: 0, nverts: nverts, nfaces: nfaces }, opts,
-    { format: this.format, vertexAttributes: this.vertexAttributes });
+    { format: this.format, vertexAttributes: this.vertexAttributes, faceAttributes: this.faceAttributes });
   this.__computeProperties(params);
   for (var i = 0; i < objects.length; i++) {
     console.log('appending object ' + i + '/' + objects.length);

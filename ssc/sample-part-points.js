@@ -12,9 +12,10 @@ cmd
   .option('--input <filename>', 'Input path')
   .option('--input_type <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
   .option('--id <id>', 'Model id [default: 26d98eed64a7f76318a93a45bf780820]', STK.util.cmd.parseList)
-  .option('--source <source>', 'Model source (p5d, 3dw, wss) [default: 3dw]', '3dw')
+  .option('--source <source>', 'Model source (3dw, wss) [default: 3dw]', '3dw')
   .option('--format <format>', 'Model format')
   .option('--samples <number>', 'Number of samples [default: 100000]', STK.util.cmd.parseInt, 100000)
+  .option('--opacity_threshold <number>', 'Opacity threshold', STK.util.cmd.parseFloat, -1)
   .option('--resolution <number>', 'Resolution for view rendering [default: 256]', STK.util.cmd.parseInt, 256)
   .option('--limit_to_visible [flag]', 'Limit to visible', STK.util.cmd.parseBoolean, false)
   .option('--ignore_redundant [flag]', 'Limit to non-redundant materials', STK.util.cmd.parseBoolean, false)
@@ -65,10 +66,7 @@ if (cmd.input) {
   inputs = argv.id ? argv.id : ['26d98eed64a7f76318a93a45bf780820'];
 }
 
-STK.assets.AssetGroups.registerDefaults();
-var assets = require('./data/assets.json');
-var assetsMap = _.keyBy(assets, 'name');
-STK.assets.registerCustomAssetGroupsSync(assetsMap, [argv.source]);
+STK.assets.registerAssetGroupsSync({ assetSources: [cmd.source] });
 if (argv.format) {
   STK.assets.AssetGroups.setDefaultFormat(argv.format);
 }
@@ -151,7 +149,7 @@ function samplePoints(modelObject3D, numSamples, opts) {
   }
   //console.log('before',flatSamples.length);
   flatSamples = _.filter(flatSamples, function (s) {
-      return s.opacity > 0;  // Ignore samples with zero opacity
+    return s.opacity > cmd.opacity_threshold;  // Ignore samples with zero opacity
   });
   //console.log('after',flatSamples.length);
   return flatSamples;

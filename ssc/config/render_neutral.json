@@ -1,0 +1,8 @@
+{
+  "use_lights": true,
+  "use_directional_lights": true,
+  "color_by": "color",
+  "color": "#fef9ed",
+  "use_ambient_occlusion": true,
+  "ambient_occlusion_type": "edl"
+}

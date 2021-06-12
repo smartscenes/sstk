@@ -6,11 +6,19 @@
 
 var SceneState = require('scene/SceneState');
 var SceneLoader = require('scene/SceneLoader');
+var ArchCreator = require('geo/ArchCreator');
 var _ = require('util/util');
 
 function SceneStateLoader(params) {
   SceneLoader.call(this, params);
   this.defaultSource = 'wss';
+  this.defaults = {}; // TODO: have some reasonable defaults
+
+  var archCreatorOptions = ArchCreator.DEFAULTS;
+  if (params.archOptions) {
+    archCreatorOptions = _.defaultsDeep(Object.create(null), params.archOptions, archCreatorOptions);
+  }
+  this.archCreator = new ArchCreator(_.defaults({ assetManager: this.assetManager }, archCreatorOptions));
 }
 
 SceneStateLoader.prototype = Object.create(SceneLoader.prototype);
@@ -27,6 +35,46 @@ SceneStateLoader.prototype.load = function (url, onLoad, onProgress, onError) {
   }, onProgress, onError);
 };
 
+SceneStateLoader.prototype.__loadArch = function(json, scene, customMaterials, callback) {
+  if (scene.arch) {
+    var scope = this;
+    if (scene.arch.ref != null && !scene.arch.elements) {
+      scope.assetManager.loadArch({ fullId: scene.arch.ref }, function(err, archRes) {
+        if (err) {
+          callback(err);
+        } else {
+          _.defaults(scene.arch, archRes.json);
+          if (scene.arch.modification) {
+            scope.archCreator.applyModification(archRes.arch, scene.arch.modification);
+          }
+          var ss = scope.archCreator.toSceneState(archRes.json, archRes.arch, false);
+          ss.arch = scene.arch;
+          callback(null, ss);
+        }
+      });
+    } else {
+      var filter = ArchCreator.getFilter({
+        includeCeiling: scope.includeCeiling,
+        includeFloor: scope.includeFloor,
+        includeWalls: scope.includeWalls,
+        room: scope.room,
+        level: scope.level,
+        archIds: scope.archIds
+      });
+      var arch = this.archCreator.createArch(scene.arch, {
+        filterElements: filter,
+        groupRoomsToLevels: true,
+        customMaterials: customMaterials
+      });
+      var ss = this.archCreator.toSceneState(json, arch, false);
+      ss.arch = scene.arch;
+      callback(null, ss);
+    }
+  } else {
+    callback(null, new SceneState(null, null));
+  }
+};
+
 SceneStateLoader.prototype.parse = function (json, callback, url) {
   // The json stores an array of models in the field scene.object
   // Each model has the following information
@@ -41,36 +89,49 @@ SceneStateLoader.prototype.parse = function (json, callback, url) {
     json = scene;  // Set json to be here so we can locates stuff later...
     scene = scene.scene;   // Sometimes double nesting!!! Ack!!! (happens with SceneStudio scene and ui_log)
   }
-  var models = scene.object;
 
-  var sceneResult = new SceneState(null, null);
-  sceneResult.modelInstancesMeta = models;
-  sceneResult.json = json;
-
-  if (scene.wrappedThreeObjects) {
-    var wrappedThreeObjects = scene.wrappedThreeObjects;
-
-    for (var i = 0; i < wrappedThreeObjects.length; i++) {
-      var objectLoader = new THREE.ObjectLoader();
-      var loadedObj3D = objectLoader.parse(wrappedThreeObjects[i].object3D);
-      sceneResult.addExtraObject(loadedObj3D);
-    }
+  var scope = this;
+  var customMaterials = null;
+  if (scene.materials && scene.textures && scene.images) {
+    var resourcePath = _.get(scene, ['defaults', 'texturePath']) || this.defaults.texturePath;
+    customMaterials = this.assetManager.loadMaterials(scene, { resourcePath: resourcePath });
   }
-
-  var wrappedCallback = function(sr) {
-    sr.updateState(json);
-    callback(sr);
-  };
-
-  if (models.length <= 0) {
-    wrappedCallback(sceneResult);
-  } else {
-    // Get all models at flat list for now!
-    for (var i = 0; i < models.length; i++) {
-      var m = models[i];
-      this.__loadModel(sceneResult, i, m.modelId, wrappedCallback);
+  this.__loadArch(json, scene, customMaterials, function(err, sceneResult) {
+    if (err) {
+      // TODO: propagate error
+      console.log('Error loading arch', err);
+      if (!sceneResult) {
+        sceneResult = new SceneState(null, null);
+      }
     }
-  }
+
+    // TODO: make it possible to apply custom materials on to individual objects/models
+    var models = scene.object;
+    sceneResult.modelInstancesMeta = models;
+    sceneResult.json = json;
+    sceneResult.assetTransforms = scene.assetTransforms;
+
+    var wrappedCallback = function (sr) {
+      // Load object3D.userData.id from instanceId
+      for (var i = 0; i < models.length; i++) {
+        let modelInstanceId = models[i].id;
+        if (sr.modelInstances[i] !== undefined){
+          sr.modelInstances[i].object3D.userData.id = modelInstanceId;  
+        }
+      }
+      sr.updateState(json);
+      callback(sr);
+    };
+
+    if (models.length <= 0) {
+      wrappedCallback(sceneResult);
+    } else {
+      // Get all models at flat list for now!
+      for (var i = 0; i < models.length; i++) {
+        scope.__loadModel(sceneResult, i, models[i].modelId, wrappedCallback);
+      }
+    }
+  });
 };
 
 // Exports

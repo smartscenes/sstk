@@ -7,7 +7,7 @@ var BasicLoader = require('loaders/BasicLoader');
  * @memberOf loaders
  */
 function ALNLoader(params) {
-  this.fs = params.fs;
+  BasicLoader.call(this, params);
 }
 
 ALNLoader.prototype = Object.create(BasicLoader.prototype);
@@ -28,7 +28,7 @@ ALNLoader.prototype.__parseMatrices = function(filename, data) {
   // 0
 
   // Format of file:
-  // number of aligment matrices
+  // number of alignment matrices
   // repeating
   //   Name of scene
   //   #
@@ -41,7 +41,7 @@ ALNLoader.prototype.__parseMatrices = function(filename, data) {
     var nmatrices = parseInt(lines[lineno++].trim());
     var matrices = [];
     for (var i = 0; i < nmatrices; i++) {
-      var filename = lines[lineno++].trim();
+      var filename0 = lines[lineno++].trim();
       var sep = lines[lineno++].trim();
       if (sep !== '#') {
         throw 'Unexpected line at ' + filename + ':' + lineno;
@@ -57,7 +57,7 @@ ALNLoader.prototype.__parseMatrices = function(filename, data) {
         r2[0], r2[1], r2[2], r2[3],
         r3[0], r3[1], r3[2], r3[3]
       );
-      matrices.push({ filename: filename, matrix: m });
+      matrices.push({ filename: filename0, matrix: m });
     }
     return matrices;
   }

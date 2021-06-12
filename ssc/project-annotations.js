@@ -16,7 +16,7 @@ cmd
   .option('--sourceSegmentType <type>', 'Source segmentation type to project', 'segment-annotations-raw')
   .option('--targetSegmentType <type>', 'Target segmentation type to project', 'surfaces-finest')
   .option('--max_dist <num>', 'Maximum distance when projecting annotations (default: 0.01)', STK.util.cmd.parseFloat, 1e-2)
-  .option('--splitTargetSegments [flag]', 'Whether the target segments should be split to accomodate source annotations', STK.util.cmd.parseBoolean, false)
+  .option('--splitTargetSegments [flag]', 'Whether the target segments should be split to accommodate source annotations', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 if (!cmd.source) {
@@ -42,7 +42,7 @@ shell.mkdir('-p', cmd.output_dir);
 
 STK.Constants.defaultPalette = STK.Colors.palettes.d3_unknown_category19p;
 var categoryColorIndex = (cmd.labels && cmd.labels !== 'none')?
-  STK.util.loadLabelColorIndex(argv.labels) : { 'unknown': 0 };
+  STK.util.loadLabelColorIndex(cmd.labels) : { 'unknown': 0 };
 var testOutput = true;
 var verbose = true;
 
@@ -218,8 +218,8 @@ function projectColors(srcMesh, tgtMesh, tgt2srcVtxMap, filename, callback) {
 
 function projectAnnotations (srcModelInst, tgtModelInst, outputDir, callback) {
   // Acquire vertex map from tgt to src
-  var srcMesh = STK.geo.Object3DUtil.getMeshes(srcModelInst.object3D).list[0];
-  var tgtMesh = STK.geo.Object3DUtil.getMeshes(tgtModelInst.object3D).list[0];
+  var srcMesh = STK.geo.Object3DUtil.getMeshList(srcModelInst.object3D)[0];
+  var tgtMesh = STK.geo.Object3DUtil.getMeshList(tgtModelInst.object3D)[0];
   console.log('Computing vertex mapping: ' + srcModelInst.model.getFullID() + ' -> ' + tgtModelInst.model.getFullID());
   var tgt2srcVtxMap;
 

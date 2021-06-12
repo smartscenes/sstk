@@ -63,6 +63,21 @@ function loadDelimited(file, opts, callback) {
 
 self.loadDelimited = loadDelimited;
 
+function readLines(filename, callback) {
+  readAsync(filename, 'utf8', function(err, data) {
+    var lines;
+    if (data) {
+      lines = data.split('\n').map(function (x) {
+        return x.trim();
+      }).filter(function (x) {
+        return x.length;
+      });
+    }
+    callback(err, lines);
+  });
+}
+
+self.readLines = readLines;
 
 /* File system utils */
 function __fsReadFileCallback(filename, successCallback, errorCallback, fs) {

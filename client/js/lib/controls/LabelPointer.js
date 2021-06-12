@@ -18,7 +18,7 @@ var MODE_PICK = 3;
  * @param [params.enabled=true]{boolean} Whether the painting controls is enabled
  * @param [params.showPaintLabel=true]{boolean} Whether to show a tooltip indicating the label that will be used for painting
  * @param [params.showHoverLabel=true]{boolean} Whether to show a tooltip indicating the label of the part hovered over
- * @param [params.restrictPaintToFirstSelectedObject=false]{boolean} In drag mode, whether to allow painting of same object as original selection
+ * @param [params.eraseMat]{THREE.Material} Material to use when label is erased
  * @constructor
  * @memberOf controls
  */
@@ -30,7 +30,6 @@ function LabelPointer(params) {
   this.enabled = (params.enabled != undefined) ? params.enabled : true;
   this.showPaintLabel = (params.showPaintLabel != undefined) ? params.showPaintLabel : true;
   this.showHoverLabel = (params.showHoverLabel != undefined) ? params.showHoverLabel : true;
-  this.restrictPaintToFirstSelectedObject = (params.restrictPaintToFirstSelectedObject != undefined) ? params.restrictPaintToFirstSelectedObject : false;
   this.tooltipContainer = $(params.tooltipContainer || '#main');
   this.eraseMat = params.eraseMat;
 

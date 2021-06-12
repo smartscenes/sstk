@@ -56,6 +56,7 @@ html(lang="en")
             <br/>
             | Front: <span id="alignFront"></span>
             <br/><br/>
+            input#autoAlignment(type="button", value="Align", title="Try to align model automatically")
             input#clearAlignment(type="button", value="Clear", title="Clear model alignment")
             input#resetAlignment(type="button", value="Reset", title="Revert to initial alignment")
             input#submitAlignment(type="button", value="Submit", title="Save alignment")
@@ -69,19 +70,11 @@ html(lang="en")
               label(for="labelType") Label
               select#labelType
 
-            p#hierarchyMaterialSelectDiv
-              label(for="hierarchyMaterial") Hierarchy Material
-              select#hierarchyMaterial
-              label(for="selectedMaterial") Selected Material
-              select#selectedMaterial
             p
+              #treePanelControls
               #treePanel
-            p
-              input(type="checkbox", id="keepSegmentColors")
-              label(for="keepSegmentColors") Keep segment colors
-            p#showSegmentOBBsDiv
-              input(type="checkbox", id="showSegmentOBBs")
-              label(for="showSegmentOBBs") Show segment OBBs
+              #treePanelButtons
+            p#showSegmentsDiv
             p#partsConfigControls
         #tabs-7
           #imagesPanel
@@ -91,6 +84,7 @@ html(lang="en")
                 input#resetAnnotations(type="button", value="Reset", title="Revert to initial model annotations")
                 input#previewAnnotations(type="button", value="Preview", title="Preview model annotations")
                 input#submitAnnotations(type="button", value="Submit", title="Save annotations")
+                input#scaleModel(type="button", value="Scale", title="Open scaling interface")
     #main
       #canvas
       #alert.alert(style="display:none")
@@ -142,23 +136,13 @@ html(lang="en")
         includeTestModels: true,
         showSearchSortOption: true,
         useNewImages: true,
+        partsPanel: {
+          useColorSequence: true
+        },
         tabs: ['models', 'images', 'align', 'textures', 'colors', 'parts', 'annotations']
       });
       modelViewer.launch();
 
-      tabsDiv.bind('tabsactivate', function (event, ui) {
-        switch (ui.newPanel.attr('id')) {
-          case 'tabs-1':
-            modelViewer.modelSearchController.onResize();
-            break;
-          case 'tabs-2':
-            modelViewer.textureSearchController.onResize();
-            break;
-          case 'tabs-7':
-            modelViewer.modelImagesPanel.onResize();
-            break;
-        }
-      });
       $('#instructions').hide();
       $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
       // Make various components draggable
@@ -166,4 +150,10 @@ html(lang="en")
       $('#customLoadingPanel').draggable();
       $('#instructionsPanel').draggable();
       $('#materialsPanel').draggable();
+      $('#scaleModel').click(function() {
+        var modelId = modelViewer.getTargetModelId();
+        if (modelId != null) {
+          window.open(`${STK.Constants.baseUrl}/model-scaler?modelId=${modelId}`);
+        }
+      });
       window.app = modelViewer;  // For console debugging

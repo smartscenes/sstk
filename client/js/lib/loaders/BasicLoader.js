@@ -12,7 +12,7 @@ function Loader(params) {
 }
 
 /**
- * Load and parses house file
+ * Load and parses file
  * @param file
  * @param callback {function(err, Object)}
  */
@@ -27,6 +27,7 @@ Loader.prototype.load = function(file, callback) {
         var parsed = scope.parse(filename, data);
         callback(null, parsed);
       } catch(e) {
+        console.error('Error parsing or calling callback for file', filename, e);
         callback(e);
       }
     }

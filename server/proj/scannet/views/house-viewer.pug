@@ -62,13 +62,6 @@ html(lang="en")
           labelsPanel: null
         }
       });
-      tabsDiv.bind('tabsactivate', function (event, ui) {
-        switch (ui.newPanel.attr('id')) {
-          case 'tabs-1':
-            scanAnnotator.modelSearchController.onResize();
-            break;
-        }
-      });
       $('#instructions').hide();
       $('#instructionsPanel').click(function () { $('#instructions').toggle(); });
       var mpBase = STK.Constants.assetsDir + 'data/matterport/matterport3d';

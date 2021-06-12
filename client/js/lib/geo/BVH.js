@@ -191,6 +191,50 @@ BVHNode.prototype.traverse = function (cbPre, cbPost, checkPre) {
   }
 };
 
+BVHNode.prototype.compute = function (accum, checkPre) {
+  if (checkPre) {
+    var traverseMore = checkPre(this);
+    if (!traverseMore) {
+      return; // Stop traversal
+    }
+  }
+  var rs = [];
+  if (this.left)  {
+    rs.push(this.left.compute(accum, checkPre));
+  }
+  if (this.right) {
+    rs.push(this.right.compute(accum, checkPre));
+  }
+  return accum(this, rs);
+};
+
+BVHNode.prototype.getTotalDepth = function() {
+  return this.compute(function(node, childValues) {
+    if (node.isLeaf) {
+      return 1;
+    } else {
+      return 1 + (childValues.length? _.max(childValues) : 0);
+    }
+  });
+};
+
+BVHNode.prototype.getNumLeaves = function() {
+  return this.compute(function(node, childValues) {
+    if (node.isLeaf) {
+      return 1;
+    } else {
+      return _.sum(childValues);
+    }
+  });
+};
+
+BVHNode.prototype.getNumNodes = function() {
+  return this.compute(function(node, childValues) {
+    return 1 + _.sum(childValues);
+  });
+};
+
+
 /**
  * Simple bounding volume hierarchy
  * @param objects
@@ -213,7 +257,7 @@ var BVH = function (objects, params) {
       if (x == null) {
         console.warn('Null object passed to BVH');
       }
-      return x;
+      return x != null;
     });
   }
   // Parse parameters
@@ -235,6 +279,8 @@ var BVH = function (objects, params) {
     } else {
       this.root = new BVHNode(objects, p);
     }
+  } else if (!objects || objects.length === 0) {
+    throw 'BVH requires some objects to be specified';
   } else {
     throw 'BVH requires objects = [THREE.Object3D] or getBoundingBox to be specified';
   }
@@ -539,6 +585,26 @@ BVH.prototype.getNodeArray = function () {
   return nodes;
 };
 
+BVH.prototype.getTotalDepth = function() {
+  return this.root.getTotalDepth();
+};
+
+BVH.prototype.getNumLeaves = function() {
+  return this.root.getNumLeaves();
+};
+
+BVH.prototype.getNumNodes = function() {
+  return this.root.getNumNodes();
+};
+
+BVH.prototype.getStats = function() {
+  return {
+    depth: this.getTotalDepth(),
+    nodes: this.getNumNodes(),
+    leaves: this.getNumLeaves()
+  }
+};
+
 BVH.prototype.getInternalNodes = function () {
   var nodes = [];
   this.root.traverse(function (node) {
@@ -559,14 +625,28 @@ BVH.prototype.getLeaves = function () {
   return nodes;
 };
 
+BVH.buildForChildObjects = function(object3D, opts) {
+  // Build bvh for object3D, while respecting children
+  object3D.traverse(function(node) {
+    if (node.children && node.children.length > 1) {
+      node.childrenBvh = new BVH(node.children, opts);
+    }
+  });
+};
 
-BVH.buildFromTriangles = function(mesh) {
+BVH.buildFromMeshes = function(object3D, opts) {
+  var meshes = Object3DUtil.getMeshList(object3D);
+  return new BVH(meshes, opts);
+};
+
+BVH.buildFromTriangles = function(mesh, opts) {
+  opts = opts || {};
   var nFaces = GeometryUtil.getGeometryFaceCount(mesh.geometry);
   var indices = _.range(nFaces);
   var v = new THREE.Vector3();
   mesh.updateMatrixWorld();
   var toWorld = mesh.matrixWorld;
-  var bvh = new BVH(indices, {
+  var bvh = new BVH(indices, _.defaults(opts, {
     splitStrategy: BVH.SplitStrategy.AXIS_MEDIAN,
     getBoundingBox: function(triIndices) {
       var bbox = new BBox();
@@ -581,8 +661,8 @@ BVH.buildFromTriangles = function(mesh) {
       return bbox;
     },
     maxDepth: 50, // Try not to have depth beyond 50
-    maxObjects: 500 // Can have up to 500 triangles in leaf
-  });
+    maxObjects: 50 // Can have up to 50 triangles in leaf
+  }));
   return bvh;
 };
 

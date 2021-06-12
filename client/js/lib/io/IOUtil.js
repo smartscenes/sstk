@@ -30,6 +30,33 @@ function parseDelimited(data, opts) {
 
 IOUtil.parseDelimited = parseDelimited;
 
+function parseJsonl(data, opts) {
+  opts = opts || {};
+  // Parses jsonl into array of json objects
+  var objects = [];
+  var startIndex = 0;
+  var endIndex = -1;
+  for (var i = 0; i < data.length; i++) {
+    if (data[i] === '\n' || data[i] === '\r') {
+      endIndex = i;
+      if (endIndex > startIndex) {
+        var str = data.substring(startIndex, endIndex);
+        str = str.trim();
+        if (str.length > 0) {
+          objects.push(JSON.parse(str));
+        }
+      }
+      startIndex = endIndex + 1;
+    }
+  }
+  if (opts.flatten) {
+    objects = _.flatten(objects);
+  }
+  return objects;
+}
+
+IOUtil.parseJsonl = parseJsonl;
+
 function indexLines(data, opts) {
   opts = opts || {};
   var lines = data.split('\n');
