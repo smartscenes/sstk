@@ -108,3 +108,5 @@ for (var i = 0; i < projects.length; i++) {
 app.listen(config.httpServerPort, function () {
   console.log('STK running on localhost:' + config.httpServerPort);
 });
+
+module.exports = app;
