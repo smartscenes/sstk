@@ -35,6 +35,7 @@ var _ = require('util/util');
  * @param [params.clearMaterial] {THREE.Material} Neutral material to use for clear material
  * @param [params.highlightMaterialSetting] {string} What setting ('highlight', 'original') to use for choosing highlight material
  * @param [params.highlightMaterial] {THREE.Material} Material to use to indicate highlighting
+ * @param [params.useSemanticMaterials] {boolean} Whether we allow the use of coloring meshes based on semantic labels / object instances
  * @param [params.onhoverCallback] {function(node, flag)} Function to call when a node is hovered over or dehovered
  * @param [params.onPartsNodeChanged] {function(oldNode, newNode)} Function call when the partNodes is completely changed
  * @param [params.getMeshId] {function(node,root)} Functions that returns the id of mesh
@@ -92,7 +93,7 @@ function MeshHierarchyPanel(params) {
   this.app = params.app;
   this.__annotationType = 'mesh_group';
   this.__annotatorInfo = new AnnotatorInfo(this.app, {
-    appId: this.app.appId,
+    appId: this.app? this.app.appId : 'MeshHierarchyPanel',
     type: this.__annotationType
   });
   this.onhoverCallback = params.onhoverCallback;
