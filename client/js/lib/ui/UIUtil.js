@@ -373,7 +373,7 @@ function createAlert(message, style, timeout, fontSize) {
 
 function __showAlert(parent, message, style, timeout, fontSize) {
   parent = parent || 'body';
-  var alertBox = createAlert(parent, message, style, timeout, fontSize);
+  var alertBox = createAlert(message, style, timeout, fontSize);
   alertBox.show();
   $(parent).append(alertBox);
   return alertBox;
