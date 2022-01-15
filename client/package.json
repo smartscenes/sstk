@@ -56,7 +56,7 @@
     "raw-loader": "^0.5.1",
     "rimraf": "^2.5.0",
     "script-loader": "^0.7.2",
-    "shelljs": "^0.7.0",
+    "shelljs": "^0.8.5",
     "transform-loader": "^0.2.4",
     "webpack": "^4.39.0",
     "xmlhttprequest": "^1.8.0",
