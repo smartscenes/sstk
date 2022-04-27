@@ -4,7 +4,7 @@
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "build/STK-core.bundle.js",
   "dependencies": {
-    "async": "^2.6.0",
+    "async": "^2.6.4",
     "backbone": "^1.3.3",
     "bootbox": "^4.4.0",
     "bootstrap-slider": "^6.1.7",
