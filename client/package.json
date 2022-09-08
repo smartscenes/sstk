@@ -20,7 +20,7 @@
     "hilbert": "^2.0.0",
     "jpicker": "git+https://github.com/stanford-gfx/jpicker.git",
     "jstat": "^1.7.1",
-    "jszip": "^2.6.1",
+    "jszip": "^2.7.0",
     "jszip-utils": "0.0.2",
     "keymage": "^1.1.3",
     "lodash": "^4.17.21",
