@@ -1,6 +1,6 @@
 {
   "name": "sstk-ssc",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "SmartScenes ToolKit Server-side Compute: tools for rendering and exporting 3D models and scenes",
   "main": "stk-ssc",
   "scripts": {
@@ -17,8 +17,8 @@
     "commander": "^2.9.0",
     "config": "^1.25.1",
     "deasync": "^0.1.10",
-    "get-pixels": "msavva/get-pixels",
-    "gl": "4.0.4",
+    "get-pixels": "https://github.com/msavva/get-pixels",
+    "gl": "https://github.com/3dlg-hcvc/headless-gl",
     "jsdom": "^9.12.0",
     "jquery-param": "^0.2.0",
     "najax": "^1.0.3",
@@ -27,12 +27,16 @@
     "papaparse": "^5.3.0",
     "pngjs": "^3.3.3",
     "seedrandom": "^2.4.3",
-    "shelljs": "^0.7.0",
-    "sharp": "^0.20.5",
-    "sstk-core": "^0.8.0",
+    "shelljs": "^0.8.4",
+    "sharp": "^0.27.2",
+    "sstk-core": "^0.9.0",
     "w3c-xmlhttprequest": "^2.1.2",
     "xmlhttprequest": "^1.8.0",
-    "heapdump": "^0.3.15"
+    "heapdump": "^0.3.15",
+    "@gltf-transform/core": "2.1.5",
+    "@gltf-transform/extensions": "2.1.5",
+    "@gltf-transform/functions": "2.1.5",
+    "meshoptimizer": "0.17.0"
   },
   "devDependencies": {
     "chai": "^4.3.4",

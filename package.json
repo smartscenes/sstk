@@ -1,15 +1,15 @@
 {
   "name": "sstk",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "stk-ssc",
   "dependencies": {
-    "lerna": "^4.0.0",
-    "shelljs": "^0.7.0"
+    "lerna": "^4.0.0"
   },
   "scripts": {
     "postinstall": "node getdata.js && npm run bootstrap",
     "bootstrap": "lerna bootstrap --hoist",
+    "rebuild-gl": "npm rebuild --build-from-source gl",
     "clean": "lerna clean",
     "ls": "lerna ls --graph",
     "test": "lerna run test"
