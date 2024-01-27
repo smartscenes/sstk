@@ -160,7 +160,8 @@ OBB.prototype.setFromSphere = function( sphere ) {
  * Computes the closest point inside the OBB to the given point.
  * 
  * @param {THREE.Vector3} point - The target point.
- * 
+ * @param [out] {THREE.Vector3} Optional result vector
+ *
  * @returns {THREE.Vector3} The closest point inside the OBB.
  */
 OBB.prototype.closestPoint = ( function() {
@@ -171,11 +172,12 @@ OBB.prototype.closestPoint = ( function() {
 	var yAxis = new THREE.Vector3();
 	var zAxis = new THREE.Vector3();
 
-	return function( point ) {
+	// AXC: Add out as optional parameter
+	return function( point, out ) {
 		
 		var index, value, axis = [];
 
-		var closesPoint = new THREE.Vector3();
+		var closesPoint = out || new THREE.Vector3();
 
 		// extract each axis
 		this.basis.extractBasis( xAxis, yAxis, zAxis );
@@ -611,7 +613,7 @@ OBB.prototype.intersectRay = ( function() {
 		transformationMatrix.setPosition( this.position );
 
 		rayLocal.copy( ray );
-		rayLocal.applyMatrix4( transformationMatrixInverse.getInverse( transformationMatrix ) );
+		rayLocal.applyMatrix4( transformationMatrixInverse.copy( transformationMatrix ).invert() );
 
 		// do ray <-> AABB intersection
 		intersection = rayLocal.intersectBox( aabb, new THREE.Vector3() );

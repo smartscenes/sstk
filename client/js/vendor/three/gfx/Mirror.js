@@ -84,12 +84,9 @@ THREE.Mirror = function ( renderer, camera, options ) {
 	if ( debugMode ) {
 
 		var arrow = new THREE.ArrowHelper( new THREE.Vector3( 0, 0, 1 ), new THREE.Vector3( 0, 0, 0 ), 10, 0xffff80 );
-		var planeGeometry = new THREE.Geometry();
-		planeGeometry.vertices.push( new THREE.Vector3( - 10, - 10, 0 ) );
-		planeGeometry.vertices.push( new THREE.Vector3( 10, - 10, 0 ) );
-		planeGeometry.vertices.push( new THREE.Vector3( 10, 10, 0 ) );
-		planeGeometry.vertices.push( new THREE.Vector3( - 10, 10, 0 ) );
-		planeGeometry.vertices.push( planeGeometry.vertices[ 0 ] );
+		var planeGeometry = new THREE.BufferGeometry();
+		var points = [ -10, -10, 0,    10, -10, 0,    10, 10, 0,    -10, 10, 0,    -10, -10, 0];
+		planeGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( points, 3 ) );
 		var plane = new THREE.Line( planeGeometry, new THREE.LineBasicMaterial( { color: 0xffff80 } ) );
 
 		this.add( arrow );
@@ -212,7 +209,7 @@ THREE.Mirror.prototype.updateTextureMatrix = function () {
 
 	this.mirrorCamera.updateProjectionMatrix();
 	this.mirrorCamera.updateMatrixWorld();
-	this.mirrorCamera.matrixWorldInverse.getInverse( this.mirrorCamera.matrixWorld );
+	this.mirrorCamera.matrixWorldInverse.copy( this.mirrorCamera.matrixWorld ).invert();
 
 	// Update the texture matrix
 	this.textureMatrix.set( 0.5, 0.0, 0.0, 0.5,

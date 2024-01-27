@@ -18,8 +18,6 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 	this.lookVertical = true;
 	this.autoForward = false;
 
-	this.activeLook = true;
-
 	this.heightSpeed = false;
 	this.heightCoef = 1.0;
 	this.heightMin = 0.0;
@@ -29,15 +27,12 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 	this.verticalMin = 0;
 	this.verticalMax = Math.PI;
 
+	// internals
+
 	this.autoSpeedFactor = 0.0;
 
 	this.mouseX = 0;
 	this.mouseY = 0;
-
-	this.lat = 0;
-	this.lon = 0;
-	this.phi = 0;
-	this.theta = 0;
 
 	this.moveForward = false;
 	this.moveBackward = false;
@@ -88,36 +83,14 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 		event.preventDefault();
 		event.stopPropagation();
 
-		// if ( this.activeLook ) {
-
-		// 	switch ( event.button ) {
-
-		// 		case 0: this.moveForward = true; break;
-		// 		case 2: this.moveBackward = true; break;
-
-		// 	}
-
-		// }
-
 		this.mouseDragOn = true;
-		this.prevMouseLoc = {"x":this.mouseX,"y":this.mouseY}
+		this.prevMouseLoc = {x: this.mouseX, y: this.mouseY}
 	};
 
 	this.onMouseUp = function ( event ) {
 
 		event.preventDefault();
 		event.stopPropagation();
-
-		// if ( this.activeLook ) {
-
-		// 	switch ( event.button ) {
-
-		// 		case 0: this.moveForward = false; break;
-		// 		case 2: this.moveBackward = false; break;
-
-		// 	}
-
-		// }
 
 		this.mouseDragOn = false;
 
@@ -157,7 +130,7 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 
 		//event.preventDefault();
 
-		switch ( event.keyCode ) {
+		switch (event.keyCode ) {
 
 			case 38: /*up*/
 			case 87: /*W*/ this.moveForward = true; break;
@@ -230,53 +203,13 @@ THREE.FirstPersonControlsClickDragRotation = function ( object, domElement ) {
 		if ( this.moveUp ) this.object.translateY( actualMoveSpeed );
 		if ( this.moveDown ) this.object.translateY( - actualMoveSpeed );
 
-		// var actualLookSpeed = delta * this.lookSpeed;
-
-		// if ( !this.activeLook ) {
-
-		// 	actualLookSpeed = 0;
-  //           // AXC: Skip code below if activelook is not set
-  //           return;
-		// }
-
-		// var verticalLookRatio = 1;
-
-		// if ( this.constrainVertical ) {
-
-		// 	verticalLookRatio = Math.PI / ( this.verticalMax - this.verticalMin );
-
-		// }
-
-		// this.lon += this.mouseX * actualLookSpeed;
-		// if( this.lookVertical ) this.lat -= this.mouseY * actualLookSpeed * verticalLookRatio;
-
-		// this.lat = Math.max( - 85, Math.min( 85, this.lat ) );
-		// this.phi = THREE.MathUtils.degToRad( 90 - this.lat );
-
-		// this.theta = THREE.MathUtils.degToRad( this.lon );
-
-		// if ( this.constrainVertical ) {
-
-		// 	this.phi = THREE.MathUtils.mapLinear( this.phi, 0, Math.PI, this.verticalMin, this.verticalMax );
-
-		// }
-
-		// var targetPosition = this.target,
-		// 	position = this.object.position;
-
-		// targetPosition.x = position.x + 100 * Math.sin( this.phi ) * Math.cos( this.theta );
-		// targetPosition.y = position.y + 100 * Math.cos( this.phi );
-		// targetPosition.z = position.z + 100 * Math.sin( this.phi ) * Math.sin( this.theta );
-
-		// this.object.lookAt( targetPosition );
-
 	};
 
 
 	this.domElement.addEventListener( 'contextmenu', function ( event ) { event.preventDefault(); }, false );
-	this.domElement.addEventListener( 'mousemove', bind( this, this.onMouseMove ), false );
-	this.domElement.addEventListener( 'mousedown', bind( this, this.onMouseDown ), false );
-	this.domElement.addEventListener( 'mouseup', bind( this, this.onMouseUp ), false );
+	this.domElement.addEventListener( 'pointermove', bind( this, this.onMouseMove ), false );
+	this.domElement.addEventListener( 'pointerdown', bind( this, this.onMouseDown ), false );
+	this.domElement.addEventListener( 'pointerup', bind( this, this.onMouseUp ), false );
 
 	window.addEventListener( 'keydown', bind( this, this.onKeyDown ), false );
 	window.addEventListener( 'keyup', bind( this, this.onKeyUp ), false );
