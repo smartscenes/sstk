@@ -1,6 +1,7 @@
 var Constants = require('Constants');
 var SolrQuerier = require('search/SolrQuerier');
 var _ = require('util/util');
+var async = require('async');
 
 /**
  * WordNet interface that uses Solr to query for WordNet items.
@@ -79,8 +80,18 @@ WordNet.prototype.synsets = function(query, callback) {
  * @param callback {nlp.WordNet.synsetsCallback} Callback function that provides the synsets matching the query
  */
 WordNet.prototype.lookupByField = function(fieldname, values, callback) {
-  var solrQuery = this.solrQuerier.getQuery(fieldname, values, 'quote');
-  this.query(solrQuery, callback);
+  if (values.length > SolrQuerier.MAX_BOOLEAN_CLAUSES) {
+    var batches = _.chunk(values, SolrQuerier.MAX_BOOLEAN_CLAUSES);
+    async.mapLimit(batches, 2, (batch, cb) => {
+      var batchSolrQuery = this.solrQuerier.getQuery(fieldname, batch, 'quote');
+      this.query(batchSolrQuery, cb);
+    }, function(err, res) {
+      callback(err, res? _.flatten(res) : null);
+    });
+  } else {
+    var solrQuery = this.solrQuerier.getQuery(fieldname, values, 'quote');
+    this.query(solrQuery, callback);
+  }
 };
 
 /**

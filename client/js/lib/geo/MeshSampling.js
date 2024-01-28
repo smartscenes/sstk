@@ -1,11 +1,8 @@
-'use strict';
-
-var Colors = require('util/Colors');
 var ConnectivityGraph = require('geo/ConnectivityGraph2');
 var Distances = require('geo/Distances');
 var GeometryUtil = require('geo/GeometryUtil');
+var MeshColors = require('geo/MeshColors');
 var TriangleAccessor = require('geo/TriangleAccessor');
-var MaterialHelper = require('gfx/MaterialHelper');
 var Object3DUtil = require('geo/Object3DUtil');
 var ViewUtils = require('gfx/ViewUtils');
 var RNG = require('math/RNG');
@@ -226,7 +223,7 @@ function computeMaterialScores(object3D, visible) {
     for (var i = 0; i < numTris; i++) {
       var face = T.get(i);
       var faceArea = GeometryUtil.triangleAreaWithTransform(face.va, face.vb, face.vc, m.matrixWorld);
-      var matIndex = face.materialIndex || 0;
+      var matIndex = (meshMaterials.length > 1)? (face.materialIndex || 0) : 0;
       var material = meshMaterials[matIndex];
       materialAreas[material.id] = (materialAreas[material.id] || 0) + faceArea;
       visibleMaterialCounts[material.id] = (visibleMaterialCounts[material.id] || 0) + (_.get(visible, [m.id, face.index]) || 0);
@@ -247,7 +244,7 @@ function computeMaterialScores(object3D, visible) {
 
 function getMaterialScore(materialScores, mesh, face) {
   var meshMaterials = (mesh.material instanceof THREE.MultiMaterial)?  mesh.material.materials : (Array.isArray(mesh.material)? mesh.material : [mesh.material]);
-  var matIndex = face.materialIndex || 0;
+  var matIndex = (meshMaterials.length > 1)? (face.materialIndex || 0) : 0;
   var material = meshMaterials[matIndex];
   return materialScores[material.id];
 }
@@ -427,7 +424,7 @@ MeshSampling.WeightFns = [
           if (!mesh.__cachedTargetVector) {
             mesh.updateMatrixWorld();
             var normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
-            var normalMatrixInverse = new THREE.Matrix3().getInverse(normalMatrix);
+            var normalMatrixInverse = new THREE.Matrix3().copy(normalMatrix).invert();
             mesh.__cachedTargetVector = targetNormal.clone().applyMatrix3(normalMatrixInverse).normalize();
           }
           var triNormal = GeometryUtil.triangleNormal(face.va, face.vb, face.vc);
@@ -674,7 +671,7 @@ function getMeshSurfaceSamples(mesh, numSamples, opts) {
   }
 
   if (!opts.skipUVColors) {
-    populateUVColors(mesh, result);
+    MeshColors.populateMeshSampleUVColors(mesh, result);
   }
   return result;
 }
@@ -731,82 +728,6 @@ function getMaterial(mesh, materialIndex) {
   return material;
 }
 
-/**
- * Populate each sample with color and opacity
- * @param mesh {THREE.Mesh}
- * @param samples {Array<{uv: THREE.Vector2, face: {materialIndex: int}>}
- * @private
- */
-function populateUVColors (mesh, samples) {
-  var texuv = new THREE.Vector2();
-  var warned = {};
-  for (var i = 0; i < samples.length; i++) {
-    var sample = samples[i];
-
-    var material = mesh.material;
-    if (Array.isArray(material)) {
-      var materialIndex = sample.face.materialIndex;
-      material = material[materialIndex];
-    } else if (material instanceof THREE.MultiMaterial) {
-      var materialIndex = sample.face.materialIndex;
-      material = material.materials[materialIndex];
-    }
-
-    if (material.transparent) {
-      sample.opacity = material.opacity;
-    } else {
-      sample.opacity = 1;
-    }
-
-    if (material.vertexColors === THREE.VertexColors) {
-      sample.color = sample.vertexColor;
-    }
-
-    var textureOpacity = 1;
-    if (material.map && sample.uv) {
-      if (!material.map.imageData) {
-        material.map.imageData = MaterialHelper.getImageData(material.map.image);
-      }
-      if (material.map.imageData) {
-        texuv.copy(sample.uv);
-        material.map.transformUv(texuv);
-        var pix = MaterialHelper.getPixelAtUV(material.map.imageData, texuv.x, texuv.y);
-        if (Colors.isValidColor(pix)) {
-          sample.color = new THREE.Color(pix.r / 255, pix.g / 255, pix.b / 255);  // overwrites color
-          // Handle alpha from transparent PNGs
-          textureOpacity = pix.a/255;
-        } else {
-          console.log('MeshSampling: Invalid color from material map', material.map, sample, texuv);
-        }
-      } else {
-        if (!warned[material.map.name]) {
-          console.warn('MeshSampling: Cannot get image data for texture', material.map.name);
-          warned[material.map.name] = 1;
-        }
-      }
-    }
-
-    if (textureOpacity < 1 && material.transparent) {
-      sample.opacity = textureOpacity;
-    }
-    if (material.color) {
-      if (!sample.color) {  // just copy material color
-        sample.color = material.color;
-      } else {
-        // TODO: Combine material.color with sampled texture color
-        if (textureOpacity < 1) {
-          // Handles when texture is a bit transparent
-          var matWeight = 1 - textureOpacity;
-          var sampleWeight = textureOpacity;
-          sample.color.setRGB(sample.color.r*sampleWeight + material.color.r*matWeight,
-            sample.color.g*sampleWeight + material.color.g*matWeight,
-            sample.color.b*sampleWeight + material.color.b*matWeight);
-        }
-      }
-    }
-  }
-}
-
 MeshSampling.getDefaultSampler = function(rng) {
   rng = rng || RNG.global;
   return {
@@ -823,6 +744,6 @@ MeshSampling.getDefaultSampler = function(rng) {
       return samples;
     }
   };
-}
+};
 
 module.exports = MeshSampling;

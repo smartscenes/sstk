@@ -1,5 +1,6 @@
 const Object3DUtil = require('geo/Object3DUtil');
 const MeshAnnotationStats = require('part-annotator/MeshAnnotationStats');
+const _ = require('util/util');
 
 class LabeledParts {
   constructor(segmentedMesh, annotation, originalObject3D) {

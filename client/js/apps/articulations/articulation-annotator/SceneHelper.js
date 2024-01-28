@@ -1,33 +1,34 @@
-'use strict';
-
 require('three-controls');
 
 const Constants = require('Constants');
-const ArticulationsConstants = require('./ArticulationsConstants');
-const ArticulationAnnotatorState = require('./ArticulationAnnotatorState');
-const AssetGroups = require('assets/AssetGroups');
+const ModelInfo = require('model/ModelInfo');
 const AssetManager = require('assets/AssetManager');
 const BasicSearchController = require('search/BasicSearchController');
 const Object3DUtil = require('geo/Object3DUtil');
 const OBBFitter = require('geo/OBBFitter');
 const GeometryUtil = require('geo/GeometryUtil');
+const PartVisualizer = require('./PartVisualizer');
 const PartsLoader = require('articulations/PartsLoader');
 const ViewGenerator = require('gfx/ViewGenerator');
 const UIUtil = require('ui/UIUtil');
 const async = require('async');
-const _ = require('util/util');
 
-const SCENE_BACKGROUND_COLOR = 0xefefef;
 PartsLoader.MESH_OPACITY = 1;
 
 class SceneHelper {
   constructor(params) {
     this.container = params.container;
-    this.domHelper = params.domHelper;
-    this.assetPaths = params.assetPaths;
     this.modelId = params.modelId;
-    this.timings = params.timings;
-    this.annotations = [];
+    this.labelParser = params.labelParser;
+    this.loadSave = params.loadSave;
+    this.colors = params.colors;
+    this.refitOBB = params.refitOBB;
+    this.partsField = params.partsField || 'articulation-parts';
+    this.__needOneMeshPerPart = false; // Used to be needed, now okay?
+    this.obbFitter = function(object3D) {
+      console.log('fit obb');
+      return OBBFitter.fitOBB(object3D, { constrainVertical: true });
+    };
   }
 
   /**
@@ -46,112 +47,85 @@ class SceneHelper {
     });
   }
 
-   __initScene(onReady) {
-    const loader = new PartsLoader({ assetManager: this.assetManager });
+  __loadModel(callback) {
+    const loader = new PartsLoader({ assetManager: this.assetManager, labelParser: this.labelParser, debug: true,
+      connectivityOpts: {
+        obbFitter: this.obbFitter, refitOBB: this.refitOBB
+      } });
+    const result = {};
     async.parallel([
-      cb => this.loadAnnotations((err, record) => {
+      // get asset information
+      // load articulation annotation
+      cb => this.loadSave.loadStartingAnnotations((err, record) => {
+        result.annotation = record;
         cb(null, record);
       }),
-      cb => loader.lookupPartsInfo(this.modelId, 'articulation-parts', (err, partsInfo) => {
+      cb => loader.lookupPartsInfo(this.modelId, this.partsField, (err, partsInfo) => {
         if (err) {
           cb(err);
         } else {
-          if (partsInfo && partsInfo['files'] && this.domHelper) {
-            this.domHelper.addConnectivityGraphViz(partsInfo['files']['connectivity_graph_viz']);
-          }
-          loader.loadPartsWithConnectivityGraph(this.modelId, partsInfo, { discardHierarchy: true }, cb);
+          loader.loadPartsWithConnectivityGraphById(this.modelId, { partsField: this.partsField, discardHierarchy: true },
+            (err, loadedPartsInfo) => {
+              result.partsInfo = loadedPartsInfo;
+              cb(err, loadedPartsInfo);
+          });
         }
       })
     ], (err, results) => {
+      callback(err, result);
+    });
+  }
+
+  __initScene(onReady) {
+    this.__loadModel((err, result) => {
       if (err) {
+        console.error(err);
         UIUtil.showAlertWithPanel(this.container, 'Error loading model', 'alert-danger', 0);
       } else {
-        //console.log(results);
-        const parts = results[1];
+        //console.log(result);
+        const partsInfo = result.partsInfo;
 
-        this.parts = parts.parts;
-        this.partsAnnId = parts.annId;
+        this.displayParts(partsInfo.parts, result.assetInfo);
+        const parts = partsInfo.parts.map(part => (part && part.object3D)? part : null );
+        const connectivityGraphViz = (partsInfo.metadata && partsInfo.metadata['files'])?
+          partsInfo.metadata['files']['connectivity_graph_viz'] : null;
 
-        this.displayParts();
-
-        const state = new ArticulationAnnotatorState({
+        onReady({
+          // scene information
           scene: this.scene,
-          partsAnnId: this.partsAnnId,
-          parts: this.parts,
-          annotations: this.annotations,
-          connectivityGraph: parts.connectivityGraph.connections,
+          partsAnnId: partsInfo.annId,
+          parts: parts,
+          assetSideness: this.assetManager.__getMaterialSide(this.assetInfo),
+          annotations: this.loadSave.annotations,
+          connectivityGraph: partsInfo.connectivityGraph,
+          connectivityGraphViz: connectivityGraphViz,
           object3D: this.object3D,
+          // camera and controls
+          controls: this.controls,
+          camera: this.camera,
+          renderer: this.renderer
         });
-
-        onReady(state, this.controls, this.camera, this.renderer);
       }
     });
   }
 
-  /**
-   * Loads any existing annotations from database
-   */
-  loadAnnotations(cb) {
-    $('#loading-current').html('articulation annotations');
-
-    $.ajax({
-      url: `${Constants.baseUrl}/articulation-annotations/load-annotations`,
-      method: 'GET',
-      data: {
-        modelId: this.modelId,
-      },
-      success: ((record) => {
-        if (record) {
-          this.setAnnotations(record);
-        }
-        cb(null, record);
-      }),
-      error: ((err) => {
-        console.warn("Error fetching annotations", err);
-        cb(err);
-      }),
-    });
-  }
-
-  setAnnotations(record) {
-    console.log(record);
-    if (record.notes != null && this.domHelper) {
-      this.domHelper.setNotes(record.notes);
-    }
-    let data = record.data;
-    let articulations = data.articulations || [];
-    let groupedArticulations = _.groupBy(articulations || [], 'pid');
-    _.each(groupedArticulations, (partArticulations, pid) => {
-      this.annotations[pid] = partArticulations;
-    });
-    this.timingHistory = data.timingHistory || [];
-    if (data.timings) {
-      this.timingHistory.push(data.timings);
-    }
-  }
-
-  /**
-   * Displays object (separated into parts), and links to sidebar.
-   */
-  displayParts() {
-    // Initialize scene, camera, etc.
-    this.setupScene();
-
-    // Align object3D so up is Y
-    const assetInfo = this.assetManager.getLoadModelInfo(null, this.modelId);
-    if (assetInfo != null) {
-      const front = AssetGroups.getDefaultFront(assetInfo);
-      const up = AssetGroups.getDefaultUp(assetInfo);
-      Object3DUtil.alignToUpFrontAxes(this.object3D, up, front, Constants.worldUp, Constants.worldFront);
-    }
+  addPartsToObject3D(object3D, parts, annotations, assetInfo) {
     // Store original color since mesh color will change depending on state
     // console.log('parts', this.parts);
-    this.parts.forEach(part => {
+    object3D.updateMatrixWorld();
+    const side = this.assetManager.__getMaterialSide(assetInfo);
+    const objectToWorld = object3D.matrixWorld.clone();
+    const worldToObject = objectToWorld.clone().invert();
+    parts.forEach(part => {
       if (part) {
         // Create a merged mesh, because the annotator can only handle meshes
         // Make sure children don't have other parts
-        if (!(part.object3D instanceof THREE.Mesh)) {
+        if (typeof(part.pid) === 'string') {
+          part.pid = parseInt(part.pid);
+        }
+        if (this.__needOneMeshPerPart && !(part.object3D instanceof THREE.Mesh)) {
           //part.object3D.children = part.object3D.children.filter(c => c.userData.pid == null);
+          // NOTE: this merge meshes doesn't work well now that we are using buffergeometry...
           part.object3D = GeometryUtil.mergeMeshes(part.object3D);
           if (part.object3D) {
             part.object3D.userData.pid = part.pid;
@@ -162,25 +136,40 @@ class SceneHelper {
           }
         }
         if (part.object3D) {
-          Object3DUtil.applyMaterial(part.object3D, Object3DUtil.getSimpleFalseColorMaterial(part.pid, ArticulationsConstants.INITIAL_COLOR));
-          part.originalColor = ArticulationsConstants.INITIAL_COLOR;
-          if (this.annotations[part.pid] && this.annotations[part.pid].length > 0) {
-            part.prevColor = ArticulationsConstants.ANNOTATED_PART_COLOR;
-          } else {
-            part.prevColor = ArticulationsConstants.INITIAL_COLOR;
-          }
+          PartVisualizer.initPartMaterials(part, part.object3D, this.colors.INITIAL_COLOR, side);
           if (!part.obb) {
-            part.obb = OBBFitter.fitOBB(part.object3D, { constrainVertical: false });
+            part.obbWorld = this.obbFitter(part.object3D);
+            part.obb = part.obbWorld.clone().applyMatrix4(worldToObject);
+          } else {
+            part.obbWorld = part.obb.clone().applyMatrix4(objectToWorld);
           }
-          this.object3D.add(part.object3D);
+          object3D.add(part.object3D);
         }
       }
     });
-    this.parts = this.parts.map(part => (part && part.object3D)? part : null );
-    if (this.domHelper) {
-      this.domHelper.addPartPills(this.parts, this.annotations);
+  }
+
+  /**
+   * Displays object (separated into parts), and links to sidebar.
+   */
+  displayParts(parts) {
+    // Initialize scene, camera, etc.
+    this.setupScene();
+
+    // Align object3D so up is Y
+    const assetInfo = this.assetManager.getLoadModelInfo(null, this.modelId);
+    if (assetInfo != null) {
+      const front = ModelInfo.getFront(assetInfo);
+      const up = ModelInfo.getUp(assetInfo);
+      const unit = ModelInfo.getUnit(assetInfo);
+      Constants.setVirtualUnit(unit);
+      Object3DUtil.alignToUpFrontAxes(this.object3D, up, front, Constants.worldUp, Constants.worldFront);
     }
+    const annotations = this.loadSave.getCheckedAnnotations(parts);
+    const object3D = this.object3D;
+    this.addPartsToObject3D(object3D, parts, annotations, assetInfo);
     this.resetSceneCamera();
+    this.assetInfo = assetInfo;
   }
 
   /**
@@ -190,14 +179,13 @@ class SceneHelper {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
 
-    this.renderer = new THREE.WebGLRenderer({antialias: true});
+    this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: true });
     this.container.appendChild(this.renderer.domElement);
     this.renderer.setSize(width, height);
 
     this.scene = new THREE.Scene();
     this.object3D = new THREE.Group();
     this.scene.add(this.object3D);
-    this.scene.background = new THREE.Color(SCENE_BACKGROUND_COLOR);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 1.0));
 
     this.camera = new THREE.PerspectiveCamera(75, width / height, .1, 1000);
@@ -222,26 +210,25 @@ class SceneHelper {
   }
 
   resetSceneCamera() {
-    let distanceScale = 1.2;
-    let bbox = Object3DUtil.getBoundingBox(this.object3D);
-    let centroid = bbox.centroid();
-    let viewGenerator = new ViewGenerator({camera: this.camera, cameraPositionStrategy: 'positionByDistance'});
-    let view = viewGenerator.getViewForBBox({
+    const distanceScale = 1.2;
+    const bbox = Object3DUtil.getBoundingBox(this.object3D);
+    const centroid = bbox.centroid();
+    const viewGenerator = new ViewGenerator({camera: this.camera, cameraPositionStrategy: 'positionByDistance'});
+    const view = viewGenerator.getViewForBBox({
       name: 'view',
       target: bbox,
       theta: Math.PI / 6,
       phi: 14 * Math.PI / 8,
       dists: distanceScale
     });
-    let position = Object3DUtil.toVector3(view.position);
-
+    const position = Object3DUtil.toVector3(view.position);
     position.y = 1.2;
-    this.controls.target.copy(centroid);
-    this.controls.update();
     this.camera.position.copy(position);
     this.camera.lookAt(centroid);
     this.camera.updateMatrix();
     this.camera.updateProjectionMatrix();
+    this.controls.target.copy(centroid);
+    this.controls.update();
   }
 }
 

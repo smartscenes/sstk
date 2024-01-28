@@ -4,9 +4,9 @@ function SemanticOBB(position, halfSizes, basis, label, symmetryType) {
   OBB.call(this, position, halfSizes, basis);
   this.label = label;
   this.symmetryType = symmetryType;
-  this.__frontIndex = null; // -1, 0, 1, 2, 3, 4, 5, 6
+  this.__frontIndex = undefined; // -1, 0, 1, 2, 3, 4, 5, 6
   this.__frontVector = new THREE.Vector3(); // Cached front vector
-  this.__upIndex = null; // -1, 0, 1, 2, 3, 4, 5, 6
+  this.__upIndex = undefined; // -1, 0, 1, 2, 3, 4, 5, 6
   this.__upVector = new THREE.Vector3(); // Cached up vector
 }
 
@@ -24,6 +24,22 @@ Object.defineProperty(SemanticOBB.prototype, 'orientation', {
 Object.defineProperty(SemanticOBB.prototype, 'hasFront', {
   get: function () {
     return (this.__frontIndex != null);
+  }
+});
+
+Object.defineProperty(SemanticOBB.prototype, 'isFrontNull', {
+  get: function () {
+    return (this.__frontIndex === null);
+  },
+  set: function(v) {
+    if (v) {
+      if (this.__frontIndex != null) {
+        this.__prevFrontIndex = this.__frontIndex;
+      }
+      this.__frontIndex = null;
+    } else if (this.__frontIndex === null) {
+      this.__frontIndex = this.__prevFrontIndex;
+    }
   }
 });
 
@@ -51,6 +67,22 @@ Object.defineProperty(SemanticOBB.prototype, 'frontIndex', {
 Object.defineProperty(SemanticOBB.prototype, 'hasUp', {
   get: function () {
     return (this.__upIndex != null);
+  }
+});
+
+Object.defineProperty(SemanticOBB.prototype, 'isUpNull', {
+  get: function () {
+    return (this.__upIndex === null);
+  },
+  set: function(v) {
+    if (v) {
+      if (this.__upIndex != null) {
+        this.__prevUpIndex = this.__upIndex;
+      }
+      this.__upIndex = null;
+    } else if (this.__upIndex === null) {
+      this.__upIndex = this.__prevUpIndex;
+    }
   }
 });
 
@@ -99,7 +131,15 @@ SemanticOBB.prototype.__updateDirVec = function(v, indexField, vecField) {
     this[indexField] = -1;
     this[vecField].copy(v);
   }
-  console.log('got dirvec', indexField, vecField, this[indexField], this[vecField]);
+  //console.log('got dirvec', indexField, vecField, this[indexField], this[vecField]);
+};
+
+SemanticOBB.prototype.__updateDir = function(v, setIndexField, setVecField) {
+  if (typeof(v) === 'number') {
+    this[setIndexField] = v;
+  } else {
+    this[setVecField] = v;
+  }
 };
 
 SemanticOBB.prototype.copy = function(obb) {
@@ -109,6 +149,27 @@ SemanticOBB.prototype.copy = function(obb) {
   this.__frontIndex = obb.__frontIndex;
   this.__frontVector.copy(obb.__frontVector);
   return this;
+};
+
+SemanticOBB.prototype.ensureUpFront = function(defaultUp, defaultFront, keepNull) {
+  this.ensureUp(defaultUp, keepNull);
+  this.ensureFront(defaultFront, keepNull);
+};
+
+SemanticOBB.prototype.ensureFront = function(defaultFront, keepNull) {
+  if (!this.hasFront) {
+    if (!keepNull || !this.isFrontNull) {
+      this.__updateDir(defaultFront || 0, 'frontIndex', 'front');
+    }
+  }
+};
+
+SemanticOBB.prototype.ensureUp = function(defaultUp, keepNull) {
+  if (!this.hasUp) {
+    if (!keepNull || !this.isUpNull) {
+      this.__updateDir(defaultUp || 0, 'upIndex', 'up');
+    }
+  }
 };
 
 SemanticOBB.prototype.toggleFront = function(inc) {
@@ -139,6 +200,9 @@ SemanticOBB.prototype.toJSON = function () {
   json.symmetryType = this.symmetryType;
   if (this.hasFront) {
     json.front = this.front.toArray();
+  }
+  if (this.hasUp) {
+    json.up = this.up.toArray();
   }
   return json;
 };

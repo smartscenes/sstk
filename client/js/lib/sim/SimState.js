@@ -53,7 +53,7 @@ SimState.prototype.clear = function() {
 SimState.prototype.reset = function (sceneState) {
   // Reset simulation state with new scene (new episode starting)
   this.sceneState = sceneState;
-  // TODO: convert from this.opts.scene.level to loaded level index for SUNCG scenes that can be loaded at one level at a time
+  // TODO: convert from this.opts.scene.level to loaded level index for scenes that can be loaded at one level at a time
   this.level = (this.opts.scene.level != undefined)? sceneState.getLevelByIndex(this.opts.scene.level): null;
 
   // set goal and start
@@ -78,7 +78,7 @@ SimState.prototype.reset = function (sceneState) {
   // compute world-to-scene transform
   this.sceneState.fullScene.updateMatrixWorld();
   var sceneTransformMatrixInverse = new THREE.Matrix4();
-  sceneTransformMatrixInverse.getInverse(sceneState.scene.matrixWorld);
+  sceneTransformMatrixInverse.copy(sceneState.scene.matrixWorld).invert();
   if (this.opts.unit) {
     var scaleBy = this.opts.unit ? (sceneState.info.defaultUnit / this.opts.unit) : 1.0;
     var scaleMat = new THREE.Matrix4();

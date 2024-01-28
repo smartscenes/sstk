@@ -1,6 +1,7 @@
 var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
 var ShapeGenerator = require('shape/ShapeGenerator');
+var _ = require('util/util');
 
 function CompositeShapeGenerator() {
   ShapeGenerator.call(this);
@@ -102,7 +103,16 @@ CompositeShapeGenerator.prototype.generateThickBox = function(opts, cb) {
   }
   var shapeOpts = _.pick(opts, ['name', 'transform', 'scale', 'scaleBy', 'position', 'rotation']);
   shapeOpts.parts = parts;
-  return this.generate(shapeOpts, cb);
+  return this.generate(shapeOpts, (err, obj) => {
+    if (obj && obj.userData) {
+      obj.userData.shape = 'thickBox';
+      obj.userData.shapeParameters = _.pick(opts, ['width', 'height', 'depth', 'thickness', 'gap', 'sides']);
+      obj.userData.shapeParameters.position = opts.position? opts.position.toArray() : undefined;
+      obj.userData.shapeParameters.rotation = opts.rotation? opts.rotation.toArray() : undefined;
+      // TODO: handle material / color
+    }
+    cb(err, obj);
+  });
 };
 
 /**
@@ -195,7 +205,29 @@ CompositeShapeGenerator.prototype.generateThickPolygonalPrism = function(opts, c
   }
   var shapeOpts = _.pick(opts, ['name', 'transform', 'scale', 'scaleBy', 'position', 'rotation']);
   shapeOpts.parts = parts;
-  return this.generate(shapeOpts, cb);
+  return this.generate(shapeOpts, (err, obj) => {
+    if (obj && obj.userData) {
+      obj.userData.shape = 'thickPolygonPrism';
+      obj.userData.shapeParameters = _.pick(opts, ['points', 'height', 'thickness', 'sides']);
+      obj.userData.shapeParameters.points = opts.points.map(p => p.toArray());
+      obj.userData.shapeParameters.position = opts.position? opts.position.toArray() : undefined;
+      obj.userData.shapeParameters.rotation = opts.rotation? opts.rotation.toArray() : undefined;
+      // TODO: handle material / color
+    }
+    cb(err, obj);
+  });
+};
+
+CompositeShapeGenerator.prototype.generate = function(opts, callback) {
+  if (opts.parameters) {
+    if (opts.shape === 'thickBox') {
+      return this.generateThickBox(opts.parameters, callback);
+    } else if (opts.shape === 'thickPolygonPrism') {
+      return this.generateThickPolygonalPrism(opts.parameters, callback);
+    }
+  } else {
+    return ShapeGenerator.prototype.generate.call(this, opts, callback);
+  }
 };
 
 module.exports = CompositeShapeGenerator;

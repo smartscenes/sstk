@@ -845,7 +845,7 @@ HouseJsonLoader.prototype.__parseArchLoad = function (json, context, callback) {
       texturePath: this.__scenesAssetGroup['texturesPath'],
       file: this.__scenesAssetGroup['roomFilesPath'] + context.sceneHash + '/' + modelId + '.obj',
       mtl: this.__scenesAssetGroup['roomFilesPath'] + context.sceneHash + '/' + modelId + '.mtl',
-      options: { useBuffers: true, preserveMeshes: false },
+      options: { },
       skipCache: true // Don't cache this
     },
     function (modelInstance) {

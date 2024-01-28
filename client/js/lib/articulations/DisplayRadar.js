@@ -1,4 +1,5 @@
 const MatrixUtil = require('math/MatrixUtil');
+const CircleOutlineGeometry = require('geo/CircleOutlineGeometry');
 
 class DisplayRadar {
 	/**
@@ -21,6 +22,7 @@ class DisplayRadar {
 		this.group.name = 'ArticulationRotationRadarGroup';  // Radar node + reference line
 		this.node = new THREE.Group();
 		this.node.name = 'ArticulationRotationRadar';  // Radar node
+		this.radarCircle = null;
 
 		this.__posAxis = new THREE.Vector3(0,0,1);
 		this.__radarAxis = new THREE.Vector3(1,0,0);
@@ -36,13 +38,10 @@ class DisplayRadar {
 		const geometry = new THREE.CircleGeometry(radarLength, 256,
 			this.articulation.rangeMin, this.articulation.rangeMax - this.articulation.rangeMin);
 
-		const outerGeometry = new THREE.CircleGeometry(lineLength, 512);
-		outerGeometry.vertices.shift();
+		const outerGeometry = new CircleOutlineGeometry(lineLength, 512);
 
-		const radarLineGeometry = new THREE.Geometry();
-		radarLineGeometry.vertices.push(
-			new THREE.Vector3(0, 0, 0),
-			new THREE.Vector3(1, 0, 0));
+		const radarLineGeometry = new THREE.BufferGeometry();
+		radarLineGeometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0,  1, 0, 0], 3));
 
 		const radarMaterial = new THREE.MeshBasicMaterial({
 			color: this.color,
@@ -61,6 +60,7 @@ class DisplayRadar {
 		const outerCircle = new THREE.LineLoop(outerGeometry, radarLineMaterial);
 		this.node.add(circle);
 		this.node.add(outerCircle);
+		this.radarCircle = circle; // intersect with outerCircle is a bit buggy
 
 		// Add currentLine
 		const currentLine = new THREE.Line(radarLineGeometry, new THREE.LineBasicMaterial({
@@ -84,14 +84,24 @@ class DisplayRadar {
 		initialLine.renderOrder = 10;
 		this.node.add(initialLine);
 
+		// console.log('got articulation', this.articulation);
 		if (this.articulation.ref != null) {
-			const m = MatrixUtil.getAlignmentMatrix(this.__posAxis, this.__radarAxis, this.articulation.axis, this.articulation.ref);
+			let refDir = this.articulation.ref;
+			const refOverlap = Math.abs(this.articulation.ref.dot(this.articulation.axis));
+			if (refOverlap >= 0.01) {
+				// not a true ref line
+				console.warn('reference and axis are not orthogonal', this.articulation.ref, this.articulation.axis);
+				refDir = this.articulation.ref.clone();
+				refDir.addScaledVector(this.articulation.axis, -1);
+				refDir.normalize();
+			}
+			const m = MatrixUtil.getAlignmentMatrix(this.__posAxis, this.__radarAxis, this.articulation.axis, refDir);
 			this.node.setRotationFromMatrix(m);
 
 			// Add ref line
 			const ref = this.articulation.ref.clone().multiplyScalar(lineLength);
-			const refLineGeometry = new THREE.Geometry();
-			refLineGeometry.vertices.push(new THREE.Vector3(0, 0, 0), ref);
+			const refLineGeometry = new THREE.BufferGeometry();
+			refLineGeometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0,  ref.x, ref.y, ref.z], 3));
 			const refLine = new THREE.Line(refLineGeometry, new THREE.LineBasicMaterial({
 				color: this.refLineColor, depthTest: true
 			}));
@@ -138,6 +148,18 @@ class DisplayRadar {
 		return out;
 	}
 
+	getRefAxisFromRadarCirclePoint(point, out) {
+		out = out || new THREE.Vector3();
+		// transform to node local coordinate frame
+		// compute what the reference axis should be based on the input point
+		out.copy(point);
+		this.node.worldToLocal(out);
+		out.subVectors(out, this.node.position);
+		out.normalize();
+		out.applyQuaternion(this.node.quaternion);
+		return out;
+	}
+
 	attach(parent) {
 		parent.add(this.group);
 	}
@@ -146,6 +168,14 @@ class DisplayRadar {
 		if (this.group.parent != null) {
 			this.group.parent.remove(this.group);
 		}
+	}
+
+	set visible(v) {
+		this.group.visible = v;
+	}
+
+	get visible() {
+		return this.group.visible;
 	}
 }
 

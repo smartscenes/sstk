@@ -4,7 +4,6 @@ var Constants = require('Constants');
 var Sounds = require('audio/Sounds');
 var Model = require('model/Model');
 var SceneState = require('scene/SceneState');
-var P5DTextureLoader = require('loaders/P5DTextureLoader');
 var LightsLoader = require('assets/LightsLoader');
 var Object3DLoader = require('loaders/Object3DLoader');
 var AssetGroups = require('assets/AssetGroups');
@@ -43,7 +42,6 @@ var _ = require('util/util');
  * @param [params.modelFilter=true] {function(model.ModelInfo): boolean} If true, model is loaded
  * @param [params.maxAnisotropy] {number}
  * @param [params.defaultSceneFormat='wss'] {string}
- * @param [params.useBuffers=false] {boolean}
  * @param [params.useColladaScale=null] {boolean} Whether to apply the unit found in Collada files.  If specified, will override `applyScale` in load model options
  * @param [params.convertUpAxis=null] {boolean} Whether to convert up axis of Collada files.  If specified, will override `convertUpAxis` in load model options
  * @param [params.supportArticulated=false] {boolean} Whether to load articulation information and split model into separate meshes for articulation
@@ -82,10 +80,6 @@ function AssetManager(params) {
 
   // Whether to automatically load a video (for p5d models with "video" texture)
   this.autoLoadVideo = false;
-
-  // Whether to use BufferGeometry or not (more efficient memory usage)
-  // Set to false if this causes problems
-  this.useBuffers = true;
 
   // What image to use for the preview (-1 for original image)
   this.previewImageIndex = -1;
@@ -130,7 +124,6 @@ function AssetManager(params) {
     if (params.autoScaleModels !== undefined) this.autoScaleModels = params.autoScaleModels;
     if (params.autoLoadVideo !== undefined) this.autoLoadVideo = params.autoLoadVideo;
     if (params.autoLoadLights !== undefined) this.autoLoadLights = params.autoLoadLights;
-    if (params.useBuffers !== undefined) this.useBuffers = params.useBuffers;
     if (params.includeModelInfo !== undefined) this.includeModelInfo = params.includeModelInfo;
     if (params.previewImageIndex !== undefined) this.previewImageIndex = params.previewImageIndex;
     if (params.useColladaScale !== undefined) this.useColladaScale = params.useColladaScale;
@@ -217,7 +210,8 @@ AssetManager.prototype.getColoredMaterial = function (colorname, hex, options) {
       side: side,
       name: name
     });
-  return new Materials.DefaultMaterialType(p);
+  var matType = options.type? Materials.getMaterialType(options.type) : Materials.DefaultMaterialType;
+  return new matType(p);
 };
 
 AssetManager.prototype.getMaterialDefaults = function() {
@@ -252,44 +246,19 @@ AssetManager.prototype.getTexturedMaterialFromUrl = function (name, url, options
   var texture = this.getTexture(url, options);
   var side = (options && options.side) ? options.side : THREE.FrontSide;
   var mname = (name !== undefined) ? name : null;
-  return new Materials.DefaultMaterialType({ map: texture, side: side, name: mname });
+  var matType = options.type? Materials.getMaterialType(options.type) : Materials.DefaultMaterialType;
+  return new matType({ map: texture, side: side, name: mname });
 };
 
 AssetManager.prototype.getTexturePath = function (source, id, metadata) {
   if (!metadata) {
     metadata = this.getAssetInfo(AssetManager.toFullId(source, id));
   }
-  var origExt;
-  if (id.endsWith('.jpg') || id.endsWith('.png')) {
-    origExt = _.getFileExtension(id);
-    id = id.substring(0, id.length - 4);
-  }
   var sid = AssetManager.toSourceId(source, id);
-  var ext = origExt || 'jpg';
-  // Get path
-  var path = sid.id + '.' + ext;
-  var isSpecial = false;
-  // Hack here for now
-  if (sid.source === 'p5d'  || sid.source === 'p5dTexture') {
-    var p5dLoader = new P5DTextureLoader();
-    var name = metadata? metadata.name : sid.id;
-    if (name.endsWith('.jpg') || name.endsWith('.png')) {
-      origExt = _.getFileExtension(name);
-      name = name.substring(0, name.length - 4);
-    }
-    path = p5dLoader.getTexturePath(name, origExt);
-    isSpecial = true;
-  }
 
   var assetGroup = AssetGroups.getAssetGroup(sid.source);
-  if (assetGroup && assetGroup.type === 'texture' && !isSpecial) {
+  if (assetGroup && assetGroup.type === 'texture') {
     return assetGroup.getImageUrl(sid.id, 'texture', metadata);
-  } else if (assetGroup && assetGroup.texturePath) {
-    var texturePath = assetGroup.texturePath;
-    if (!texturePath.endsWith('/')) {
-      texturePath = texturePath + '/';
-    }
-    return texturePath + path;
   } else {
     console.error('Unknown texture source: ' + sid.source);
   }
@@ -459,9 +428,6 @@ AssetManager.prototype.getLoadInfo = function (source, id, metadata) {
           // augment options
           if (!loadInfo.options) {
             loadInfo.options = {};
-          }
-          if (!loadInfo.options.hasOwnProperty('useBuffers')) {
-            loadInfo.options['useBuffers'] = this.useBuffers;
           }
           if (!loadInfo.options.hasOwnProperty('autoAlign')) {
             loadInfo.options['autoAlign'] = this.autoAlignModels;
@@ -794,10 +760,11 @@ AssetManager.prototype.addMaterialBinding = function(modelId, options) {
     var m = options.materials[i];
     var side = (m.side != undefined)? m.side : Materials.DefaultMaterialSide;
     if (!m.material) {
+      var matOpts = {side: side, type: m.type, encoding: m.encoding };
       if (m.textureId) {
-        m.material = this.getTexturedMaterial(undefined, m.textureId, {side: side});
+        m.material = this.getTexturedMaterial(undefined, m.textureId, matOpts);
       } else if (m.color != undefined) {
-        m.material = this.getColoredMaterial(m.name, m.color, {side: side});
+        m.material = this.getColoredMaterial(m.name, m.color, matOpts);
       }
     }
   }
@@ -904,15 +871,21 @@ AssetManager.prototype.__loadModelUncached = function (modelinfo, callback) {
 };
 
 AssetManager.prototype.__loadObject3D = function(modelinfo, onsuccess, onerror) {
-  if (this.supportArticulated && modelinfo.hasArticulations) {
+  if (this.supportArticulated) {
     var ArticulatedObjectLoader = require('articulations/ArticulatedObjectLoader');
     var articulatedLoader = new ArticulatedObjectLoader({ assetManager: this, mergeFixedParts: this.mergeFixedParts });
-    if (articulatedLoader.checkModelHasArticulatedMesh(modelinfo)) {
+    if (modelinfo.hasArticulations && articulatedLoader.checkModelHasArticulatedMesh(modelinfo)) {
       articulatedLoader.load(modelinfo, function(err, res) {
         if (err) { if (onerror) { onerror(err); }}
         else { if (onsuccess) { onsuccess(res); }}
       });
     } else {
+      var origOnsuccess = onsuccess;
+      onsuccess = function(object3D) {
+        var ArticulatedObject = require('articulations/ArticulatedObject');
+        var articulatedObject3D = ArticulatedObject.toArticulatedHierarchical(object3D);
+        origOnsuccess(articulatedObject3D || object3D);
+      };
       var obj3dLoader = new Object3DLoader(this);
       obj3dLoader.load(modelinfo, onsuccess, onerror);
     }
@@ -975,8 +948,14 @@ AssetManager.prototype.__updateMaterialOptions = function(modelInfo, options, de
 
 AssetManager.prototype.__loadArchWithFilename = function(info, callback, asScene) {
   var ArchLoader = require('loaders/ArchLoader');
+  var archOptions = info.archOptions || {};
   var archLoader = new ArchLoader({fs: Constants.sys.fs,
-    archOptions: { assetManager: this, filter: _.pick(info, this.__sceneLoadInfoFields)}});
+    archOptions: { assetManager: this, filter: _.pick(info, this.__sceneLoadInfoFields),
+      createGround: info.debugArch || archOptions.createGround,
+      skipWallCeilingProfile: info.debugArch || archOptions.skipWallCeilingProfile,
+      includeWallCeilingProfilePolys: info.debugArch || archOptions.includeWallCeilingProfilePolys,
+      skipWallHoleCutouts: info.debugArch || archOptions.skipWallHoleCutouts,
+      includeWallHoleBoundingBoxes: info.debugArch || archOptions.includeWallHoleBoundingBoxes }});
   var filename = info.file || info.path;
   archLoader.load(filename, function (err, res) {
     if (err) {
@@ -1644,6 +1623,8 @@ AssetManager.prototype.__registerCustomAssetGroups = function (options) {
           callback: function (err, res) {
             if (f.callback) {
               f.callback(err, res);
+            } else if (err) {
+              console.error('Error registering asset ' + f.name, err);
             }
             // Ignore errors (don't need all to load successfully)
             cb(null, res);
@@ -1707,6 +1688,24 @@ AssetManager.prototype.loadSoundSpecs = function(assetGroup, cb) {
   } else {
     cb(null, assetGroup.sounds);
   }
+};
+
+AssetManager.prototype.watchDynamicAssets = function(scope, dynArrayField) {
+  this.Subscribe('dynamicAssetLoaded', scope, function(d) {
+    //console.log('adding to dynamic assets', d);
+    scope[dynArrayField].push(d);
+  });
+  this.Subscribe('dynamicAssetUnloaded', scope, function(d) {
+    //console.log('removing from dynamic assets', d);
+    const index = scope[dynArrayField].indexOf(d);
+    if (index >= 0) {
+      scope[dynArrayField].splice(index, 1);
+    }
+  });
+};
+
+AssetManager.enableCompressedLoading = function(renderer) {
+  Object3DLoader.enableCompressedLoading(renderer);
 };
 
 module.exports = AssetManager;

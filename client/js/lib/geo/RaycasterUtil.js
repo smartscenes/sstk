@@ -29,13 +29,14 @@ __backfaceRaycaster.intersectBackFaces = true;
  * @param ignore {THREE.Object3D} Object to ignore
  * @param n {int} Number of intersects to return
  * @param renderer {THREE.Renderer}
+ * @param [allowAllModelInstances] {boolean} Whether any model instance is allowed as intersected object
  * @returns {Intersect[]}
  */
-self.getIntersectedForRay = function (raycaster, objects, ignore, n, renderer) {
+self.getIntersectedForRay = function (raycaster, objects, ignore, n, renderer, allowAllModelInstances) {
   var intersected = raycaster.intersectObjects(objects, true);
   intersected = self.filterClipped(intersected, renderer);
   self.sortIntersectionsByNormal(raycaster.ray, intersected);
-  return self.selectIntersectedObjects(intersected, objects, ignore, n);
+  return self.selectIntersectedObjects(intersected, objects, ignore, n, allowAllModelInstances);
 };
 
 /**
@@ -61,7 +62,25 @@ self.getIntersected = function(objects, opts) {
   rc.ray.direction.copy(opts.direction);
   rc.near = opts.near || 0;
   rc.far = opts.far || Infinity;
-  return self.getIntersectedForRay(rc, objects, opts.ignore, opts.n, opts.renderer);
+  return self.getIntersectedForRay(rc, objects, opts.ignore, opts.n, opts.renderer, opts.allowAllModelInstances);
+};
+
+self.getIntersectedForSamples = function(objects, sampler, nsamples, opts) {
+  var rc = opts.intersectBackFaces? __backfaceRaycaster : __raycaster;
+  rc.near = opts.near || 0;
+  rc.far = opts.far || Infinity;
+  var nIntersected = 0;
+  for (var i = 0; i < nsamples; i++) {
+    sampler.sample(rc.ray.origin, rc.ray.direction);
+    var intersected = self.getIntersectedForRay(rc, objects, opts.ignore, opts.n, opts.renderer, opts.allowAllModelInstances);
+    if (opts.callback) {
+      opts.callback(rc.ray, intersected);
+    }
+    if (intersected.length) {
+      nIntersected++;
+    }
+  }
+  return nIntersected;
 };
 
 self.sortIntersectionsByNormal = function(ray, intersections) {
@@ -93,6 +112,7 @@ self.sortIntersectionsByNormal = function(ray, intersections) {
  * @returns {Intersect[]}
  */
 self.selectIntersectedObjects = function (intersected, objects, ignore, n, allowAllModelInstances) {
+  var debug = false;
   var intersectedObjects = [];
   for (var i = 0; i < intersected.length; i++) {
     var c = intersected[i].object;
@@ -118,10 +138,17 @@ self.selectIntersectedObjects = function (intersected, objects, ignore, n, allow
       var ignoreObject = (ignore && Object3DUtil.isDescendantOf(o, ignore, true));
       if (!ignoreObject) {
         intersectedObjects.push(intersected[i]);
+      } else {
+        if (debug) {
+          console.log('ignore intersected object', intersected[i], ignoreObject);
+        }
       }
       // Reached limit of how many we wanted
       if (n && intersectedObjects.length > n) break;
     } else {
+      if (debug) {
+        console.log('ignore intersected', intersected[i]);
+      }
       //console.log('Cannot find parent for intersected child');
     }
   }
@@ -185,7 +212,7 @@ self.getIntersectedNormal = function() {
       } else if (mesh instanceof THREE.Line) {
 
       }
-     }
+    }
     return intersected.normal;
   };
 }();
@@ -300,7 +327,7 @@ self.raycastMeshTriangles = ( function () {
     ray.copy(raylocal);
     // if (raycasterIsWorld) {
     //   var matrixWorld = mesh.matrixWorld;
-    //   inverseMatrix.getInverse(matrixWorld);
+    //   inverseMatrix.copy(matrixWorld).invert();
     //   ray.applyMatrix4(inverseMatrix);
     // }
     //
@@ -322,7 +349,7 @@ self.raycastMeshTriangles = ( function () {
 
     var uvs, intersection;
 
-    if ( geometry instanceof THREE.BufferGeometry ) {
+    if ( geometry.isBufferGeometry ) {
 
       var a, b, c;
       var index = geometry.index;
@@ -380,84 +407,8 @@ self.raycastMeshTriangles = ( function () {
 
       }
 
-    } else if ( geometry instanceof THREE.Geometry ) {
-
-      var fvA, fvB, fvC;
-      var isFaceMaterial = material instanceof THREE.MeshFaceMaterial;
-      var materials = isFaceMaterial === true ? material.materials : null;
-
-      var vertices = geometry.vertices;
-      var faces = geometry.faces;
-      var faceVertexUvs = geometry.faceVertexUvs[ 0 ];
-      if ( faceVertexUvs.length > 0 ) uvs = faceVertexUvs;
-
-      for ( var ti = 0, l = triIndices.length; ti < l; ti ++ ) {
-        var f = triIndices[ti];
-
-        var face = faces[ f ];
-        var faceMaterial = isFaceMaterial === true ? materials[ face.materialIndex ] : material;
-
-        if ( faceMaterial === undefined ) continue;
-
-        fvA = vertices[ face.a ];
-        fvB = vertices[ face.b ];
-        fvC = vertices[ face.c ];
-
-        if ( faceMaterial.morphTargets === true ) {
-
-          var morphTargets = geometry.morphTargets;
-          var morphInfluences = mesh.morphTargetInfluences;
-
-          vA.set( 0, 0, 0 );
-          vB.set( 0, 0, 0 );
-          vC.set( 0, 0, 0 );
-
-          for ( var t = 0, tl = morphTargets.length; t < tl; t ++ ) {
-
-            var influence = morphInfluences[ t ];
-
-            if ( influence === 0 ) continue;
-
-            var targets = morphTargets[ t ].vertices;
-
-            vA.addScaledVector( tempA.subVectors( targets[ face.a ], fvA ), influence );
-            vB.addScaledVector( tempB.subVectors( targets[ face.b ], fvB ), influence );
-            vC.addScaledVector( tempC.subVectors( targets[ face.c ], fvC ), influence );
-
-          }
-
-          vA.add( fvA );
-          vB.add( fvB );
-          vC.add( fvC );
-
-          fvA = vA;
-          fvB = vB;
-          fvC = vC;
-
-        }
-
-        intersection = checkIntersection( mesh, raycaster, ray, fvA, fvB, fvC, intersectionPoint );
-
-        if ( intersection ) {
-          if ( uvs && uvs[ f ]) {  // NOTE(MS): This check avoids error due to sparse uvs
-
-            var uvs_f = uvs[ f ];
-            uvA.copy( uvs_f[ 0 ] );
-            uvB.copy( uvs_f[ 1 ] );
-            uvC.copy( uvs_f[ 2 ] );
-
-            intersection.uv = uvIntersection( intersectionPoint, fvA, fvB, fvC, uvA, uvB, uvC );
-
-          }
-
-          intersection.face = face;
-          intersection.faceIndex = f;
-          intersects.push( intersection );
-
-        }
-
-      }
-
+    } else {
+      console.warn('Unsupported geometry', geometry);
     }
 
   };

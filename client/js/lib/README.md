@@ -28,7 +28,7 @@ math - Basic math functions
 model - 3D model classes
 model-viewer - Model viewer
 nav - Navigation map
-nlp - NLP components (interface to CoreNLP and WordNet)
+nlp - NLP components (interface to WordNet)
 part-annotator - Base classes and components for the PartAnnotator
 parts - Part data structure
 query - Query UIs
@@ -37,6 +37,7 @@ scene-viewer - Scene Viewer
 search - Search modules (mostly interfacing with Solr)
 shape - Shape utilities (mostly generator for controlled generation of shapes)
 sim - Simulator
+ssg - Scene Grammar
 stats - Statistic utilties (not much there)
 taxonomy - Taxonomy Viewers (somewhat old)
 ui - Reusable UI Components (manipulating DOM elements)

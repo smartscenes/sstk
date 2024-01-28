@@ -26,6 +26,9 @@ function Renderer(opt) {
   this.useEDLShader = (opt.useEDLShader !== undefined) ? opt.useEDLShader : false;
   this.useAntialiasPass = (opt.useAntialiasPass !== undefined) ? opt.useAntialiasPass : false;
   this.pickOutlineColor = (opt.pickOutlineColor !== undefined) ? opt.pickOutlineColor : 0xffff00;
+  this.activeSupportOutlineColor = (opt.activeSupportOutlineColor !== undefined) ? opt.activeSupportOutlineColor : 0x00ff00;
+  this.archOutlineColor = (opt.archOutlineColor !== undefined) ? opt.archOutlineColor : 0xffa500;
+  this.selectedOutlines = opt.selectedOutlines;
   this.outlineHighlightedOnly = opt.outlineHighlightedOnly;
   this.outlineColor = (opt.outlineColor !== undefined) ? opt.outlineColor : 0x000000;
   this.useEffect = opt.useEffect || null;
@@ -52,6 +55,7 @@ function Renderer(opt) {
 
 Renderer.prototype.init = function (opt) {
   this.renderer = this.renderer || new THREE.WebGLRenderer({
+    canvas: opt.canvas,
     width: this.width,
     height: this.height,
     context: opt.context || null,
@@ -61,11 +65,8 @@ Renderer.prototype.init = function (opt) {
   });
   if (this.usePhysicalLights) {
     this.renderer.physicallyCorrectLights = true;
-    //this.renderer.toneMapping = THREE.ReinhardToneMapping;
-    this.renderer.toneMapping = THREE.Uncharted2ToneMapping;
-    Materials.DefaultTextureEncoding = THREE.GammaEncoding;
-    this.renderer.outputEncoding = THREE.GammaEncoding;
   }
+  this.renderer.outputEncoding = THREE.sRGBEncoding;
 
   this.isEncodedMode = opt.isEncodedMode;
   if (this.isEncodedMode) {
@@ -77,6 +78,7 @@ Renderer.prototype.init = function (opt) {
   }
   if (this.isOffscreen) {
     this.__rtTexture = new THREE.WebGLRenderTarget(this.width, this.height, {
+      stencilBuffer: true,
       minFilter: this.defaultMinFilter,
       magFilter: this.defaultMaxFilter,
       format: THREE.RGBAFormat
@@ -135,7 +137,7 @@ Renderer.prototype.init = function (opt) {
         ssao.params.saoScale = this.ambientOcclusionOptions.scale || 20000;  // TODO(MS): set this parameter more intelligently
         // ssao.params.saoScaleFixed = 0.03;
         // ssao.params.saoScale = ssao.params.saoScaleFixed*camera.far;  // TODO(MS): set this parameter more intelligently
-        console.log('set sao.params.soaScale to', ssao.params.saoScale, 'with camera far', camera.far );
+        console.log('set sao.params.soaScale to', ssao.params.saoScale, 'with camera far', camera.far);
       } else {
         console.warn('Unsupported ambientOcclusion configuration', this.ambientOcclusionOptions);
       }
@@ -146,32 +148,31 @@ Renderer.prototype.init = function (opt) {
     }
 
     if (this.useOutlineShader) {
-      var outline = new THREE.OutlinePass(new THREE.Vector2(this.width, this.height), scene, camera);
-      outline.edgeStrength = 100.0;
-      outline.edgeThickness = 1.0;
-      outline.visibleEdgeColor.set(this.pickOutlineColor);
-      outline.hiddenEdgeColor.set(this.pickOutlineColor);
-      // outline.clear = false;
-      this.outlinePass = outline;
-      // this.outlineMaskPass = new THREE.MaskPass(scene, camera);
-      // this.outlineMaskPass.inverse = true;
-      // var colorCorrection = new THREE.ShaderPass(THREE.ColorCorrectionShader);
-      // colorCorrection.uniforms.mulRGB.value = new THREE.Vector3(0, 0, 0);
-      // var clearMaskPass = new THREE.ClearMaskPass();
-      // var copyPass = new THREE.ShaderPass(THREE.CopyShader);
-
-      // this.composer.addPass(this.outlineMaskPass);
-      this.composer.addPass(outline);
-      // this.composer.addPass(colorCorrection);
-      // this.composer.addPass(clearMaskPass);
-      // this.composer.addPass(copyPass);
-
-      // var effectGrayScale = new THREE.ShaderPass( THREE.LuminosityShader );
-      // this.composer.addPass(effectGrayScale);
-      // effectSobel = new THREE.ShaderPass( THREE.SobelOperatorShader );
-      // effectSobel.uniforms.resolution.value.x = this.width;
-      // effectSobel.uniforms.resolution.value.y = this.height;
-      // this.composer.addPass(effectSobel);
+      var outlinePassesOpts = [
+        { name: 'visibleObjects', color: this.pickOutlineColor },
+        { name: 'pick', color: this.pickOutlineColor },
+        { name: 'arch', color: this.archOutlineColor },
+        { name: 'activeSupport', color: this.activeSupportOutlineColor },
+      ];
+      // TODO: rework outline parameters
+      if (this.outlineHighlightedOnly) {
+        outlinePassesOpts = outlinePassesOpts.filter(x => x.name === 'pick' || x.name === 'activeSupport');
+      } else if (this.selectedOutlines) {
+        outlinePassesOpts = outlinePassesOpts.filter(x => this.selectedOutlines.indexOf(x.name) >= 0);
+      } else {
+        outlinePassesOpts = outlinePassesOpts.filter(x => x.name === 'visibleObjects');
+      }
+      this.outlinePasses = outlinePassesOpts.map(opt => {
+        var outline = new THREE.OutlinePass(new THREE.Vector2(this.width, this.height), scene, camera);
+        outline.name = opt.name;
+        outline.edgeStrength = 100.0;
+        outline.edgeThickness = 1.0;
+        outline.visibleEdgeColor.set(opt.color);
+        outline.hiddenEdgeColor.set(opt.color);
+        // outline.clear = false;
+        this.composer.addPass(outline);
+        return outline;
+      });
     }
 
     if (this.useEDLShader) {
@@ -208,10 +209,10 @@ Renderer.prototype.init = function (opt) {
     }
     this.domElement = this.renderer.domElement;
     this.domElement.setAttribute('tabindex','1');
-    if (this.container) { this.container.appendChild(this.domElement); }
+    if (this.container && !opt.canvas) { this.container.appendChild(this.domElement); }
     // Grabs focus when mouse is over this element
-    this.domElement.addEventListener('mouseover', function () { this.domElement.focus(); }.bind(this),false);
-    this.domElement.addEventListener('mouseout', function () { this.domElement.blur(); }.bind(this),false);
+    this.domElement.addEventListener('pointerover', function () { this.domElement.focus(); }.bind(this),false);
+    this.domElement.addEventListener('pointerout', function () { this.domElement.blur(); }.bind(this),false);
   }
 };
 
@@ -276,7 +277,7 @@ Renderer.prototype.__flipY = function (p) {
 
 function copyPixels(source, target, flipY, bytesPerPixel) {
   bytesPerPixel = bytesPerPixel || 4;
-  // TODO: make more efficent
+  // TODO: make more efficient
   //console.log('copyPixels', _.omit(source, ['buffer']), _.omit(target, ['buffer']), flipY);
   var sourceNumElementPerRow = bytesPerPixel * source.fullWidth;
   var targetNumElementPerRow = bytesPerPixel * target.fullWidth;
@@ -310,7 +311,7 @@ function updateSAO(sao, scene, camera) {
   //console.log('set sao.params.soaScale to ', sao.params.saoScale, camera.far );
   sao.saoMaterial.uniforms[ 'cameraNear' ].value = camera.near;
   sao.saoMaterial.uniforms[ 'cameraFar' ].value = camera.far;
-  sao.saoMaterial.uniforms[ 'cameraInverseProjectionMatrix' ].value.getInverse(camera.projectionMatrix);
+  sao.saoMaterial.uniforms[ 'cameraInverseProjectionMatrix' ].value.copy(camera.projectionMatrix).invert();
   sao.saoMaterial.uniforms[ 'cameraProjectionMatrix' ].value = camera.projectionMatrix;
   sao.saoMaterial.defines[ 'PERSPECTIVE_CAMERA' ] = (camera.isPerspectiveCamera || camera.inPerspectiveMode) ? 1 : 0;
 }
@@ -322,7 +323,7 @@ function updateSSAO(ssao, scene, camera) {
   //console.log('set sao.params.soaScale to ', sao.params.saoScale, camera.far );
   ssao.ssaoMaterial.uniforms[ 'cameraNear' ].value = camera.near;
   ssao.ssaoMaterial.uniforms[ 'cameraFar' ].value = camera.far;
-  ssao.ssaoMaterial.uniforms[ 'cameraInverseProjectionMatrix' ].value.getInverse(camera.projectionMatrix);
+  ssao.ssaoMaterial.uniforms[ 'cameraInverseProjectionMatrix' ].value.copy(camera.projectionMatrix).invert();
   ssao.ssaoMaterial.uniforms[ 'cameraProjectionMatrix' ].value = camera.projectionMatrix;
   ssao.ssaoMaterial.defines[ 'PERSPECTIVE_CAMERA' ] = (camera.isPerspectiveCamera || camera.inPerspectiveMode) ? 1 : 0;
   //ssao.ssaoMaterial.uniforms[ 'minDistance' ].value = this.minDistance;
@@ -473,8 +474,8 @@ Renderer.prototype.__renderScene = function (scene, camera, opts) {
   var offsetX = opts.offsetX || 0;
   var offsetY = opts.offsetY || 0;
   var useComposer = false;
-  if ((this.useAmbientOcclusion && this.ssaoPass.enabled) ||
-      (this.useOutlineShader && this.outlinePass.enabled) ||
+  if ((this.useAmbientOcclusion && this.ssaoPass && this.ssaoPass.enabled) ||
+      (this.useOutlineShader && this.outlinePasses.length) ||
       (this.useEDLShader && this.edlPass.enabled) ||
       (this.useAntialiasPass  && ((!this.fxaaPass) ||
         (this.fxaaPass && this.fxaaPass.enabled)))) {
@@ -487,23 +488,43 @@ Renderer.prototype.__renderScene = function (scene, camera, opts) {
       updateAmbientOcclusion(this.ssaoPass, scene, camera);
     }
     if (this.useOutlineShader) {
-      this.outlinePass.renderScene = scene;
-      this.outlinePass.renderCamera = camera;
-      // this.outlineMaskPass.scene = scene;
-      // this.outlineMaskPass.camera = camera;
-      // Set meshes to be outlined
-      if (this.outlineHighlightedOnly) {
-        // Get the set of objects that should be selected or highlighted (check for isHighlighted option on object)
-        var highlightedObjects = Object3DUtil.findNodes(scene, function (n) {
-          return n.isHighlighted;
-        }, true);
-        this.outlinePass.selectedObjects = highlightedObjects;
-      } else {
-        var meshes = Object3DUtil.getVisibleMeshList(scene, true);
-        meshes = meshes.filter(function (m) {
-          return !m.name.startsWith('Wall') && !m.name.startsWith('Floor');
-        });
-        this.outlinePass.selectedObjects = meshes;
+      for (var i = 0; i < this.outlinePasses.length; i++) {
+        var outlinePass = this.outlinePasses[i];
+        if (outlinePass.enabled) {
+          outlinePass.renderScene = scene;
+          outlinePass.renderCamera = camera;
+          // Set meshes to be outlined
+          if (outlinePass.name === 'pick') {
+            // Get the set of objects that should be selected or highlighted (check for isHighlighted option on object)
+            var highlightedObjects = Object3DUtil.findTopMostNodes(scene, function (n) {
+              return n.isHighlighted;
+            }, true);
+            outlinePass.selectedObjects = highlightedObjects;
+          } else if (outlinePass.name === 'activeSupport') {
+            var highlightedObjects = Object3DUtil.findTopMostNodes(scene, function (n) {
+              return n.isActiveSupport;
+            }, true);
+            // make sure nested model instances are not selected
+            var selected = [];
+            _.forEach(highlightedObjects, object => {
+              Object3DUtil.getVisibleMeshList(object, false, selected);
+            });
+            outlinePass.selectedObjects = selected;
+          } else if (outlinePass.name === 'arch') {
+            var meshes = Object3DUtil.getVisibleMeshList(scene, true, null,
+              function (m) {
+//                return m.name.startsWith('Wall');
+                return m.userData.isArch || m.name.startsWith('Wall') || m.name.startsWith('Floor') || m.name.startsWith('Ceiling');
+              });
+            outlinePass.selectedObjects = meshes;
+          } else if (outlinePass.name === 'visibleObjects') {
+            var meshes = Object3DUtil.getVisibleMeshList(scene, true);
+            meshes = meshes.filter(function (m) {
+              return !m.userData.isArch && !m.name.startsWith('Wall') && !m.name.startsWith('Floor') && !m.name.startsWith('Ceiling');
+            });
+            outlinePass.selectedObjects = meshes;
+          }
+        }
       }
       // console.log(this.outlinePass.selectedObjects);
     }
@@ -537,6 +558,13 @@ Renderer.prototype.__renderScene = function (scene, camera, opts) {
       return pixels;
     }
   }
+};
+
+Renderer.prototype.getPmremGenerator = function() {
+  if (!this.__pmremGenerator) {
+    this.__pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+  }
+  return this.__pmremGenerator;
 };
 
 Renderer.prototype.__renderTiles = function (scene, camera, opts) {
@@ -652,8 +680,9 @@ Renderer.prototype.postprocessPixels = function(pixels, options, camera) {
   if (options.operation === 'unpackRGBAdepth') {
     pixels = ImageUtil.unpackRGBAdepth(pixels, camera, options.dataType, options.metersToUnit);
   } else if (options.operation === 'convert' && options.dataType == 'uint16') {
-    pixels = new Uint16Array(pixels.length/2);
-    ImageUtil.encodePixelsDirect16(pixels, new Uint8Array(pixels.buffer));
+    var newPixels = new Uint16Array(pixels.length / 2);
+    ImageUtil.encodePixelsDirect16(pixels, new Uint8Array(newPixels.buffer));
+    pixels = newPixels;
   } else if (options.operation === 'convert' && options.dataType == 'uint8') {
     pixels = ImageUtil.encodePixelsDirect8(pixels);
   }

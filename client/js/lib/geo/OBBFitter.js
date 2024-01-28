@@ -104,6 +104,8 @@ function fitPointsOBB(points, opts) {
   opts = opts || {};
   if (opts.basis) {
     return fitPointsWithBasis(points, opts.basis);
+  } else if (opts.pca) {
+    return findOBB3DUnconstrained_Points3D(points);
   } else {
     return __fitPointsOBB(points, opts);
   }
@@ -114,6 +116,9 @@ self.fitPointsOBB = fitPointsOBB;
 function fitMeshOBB(meshes, opts) {
   opts = opts || {};
   opts = _.defaults(opts, defaults);
+  if (!Array.isArray(meshes)) {
+    meshes = [meshes];
+  }
 
   var obb;
   var res2d = findOBB2D_Meshes(meshes, opts.upAxis);
@@ -282,7 +287,8 @@ function findOBB2D_Meshes(meshes, upAxis) {
   var xyArray = [];
   for (var i = 0; i < meshes.length; i++) {
     // NOTE: Assumes y up
-    GeometryUtil.forMeshVertices(meshes[i], function (p) {
+    var meshOrPartial = meshes[i];
+    GeometryUtil.forMeshOrPartialMeshVertices(meshOrPartial, function (p) {
       if (p[upAxis] < minV) { minV = p[upAxis]; }
       if (p[upAxis] > maxV) { maxV = p[upAxis]; }
       xyArray.push(otherAxes.map(function(a) { return p[a]; }));
@@ -450,7 +456,7 @@ function findOBB3DUnconstrained_Points3D(points) {
     require('three-convexhull');
     require('three-convexgeo');
 
-    var convex = THREE.ConvexBufferGeometry.fromPoints(points);
+    var convex = THREE.ConvexGeometry.fromPoints(points);
     var obb = findOBB3DUnconstrained_Geometry(convex);
     obb.convex = convex;
     return obb;
@@ -473,11 +479,16 @@ function findOBB3DUnconstrained_Points3D(points) {
 function getMeshPoints(meshes) {
   var points = [];
   for (var i = 0; i < meshes.length; i++) {
-    var mesh = meshes[i];
-    var nverts = GeometryUtil.getGeometryVertexCount(mesh.geometry);
-    for (var vi = 0; vi < nverts; vi++) {
-      var p = GeometryUtil.getGeometryVertex(mesh.geometry, vi, mesh.matrixWorld);
-      points.push(p);
+    var meshOrPartial = meshes[i];
+    if (meshOrPartial.mesh && meshOrPartial.faceIndices) {
+      GeometryUtil.getVerticesForTriIndices(meshOrPartial.mesh, meshOrPartial.faceIndices, points);
+    } else {
+      var mesh = meshOrPartial;
+      var nverts = GeometryUtil.getGeometryVertexCount(mesh.geometry);
+      for (var vi = 0; vi < nverts; vi++) {
+        var p = GeometryUtil.getGeometryVertex(mesh.geometry, vi, mesh.matrixWorld);
+        points.push(p);
+      }
     }
   }
   return points;

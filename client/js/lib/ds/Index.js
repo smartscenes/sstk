@@ -127,6 +127,9 @@ Index.prototype.parse = function(data, opts) {
     this.__idToIndex[d[idField]] = d[indexField];
     if (this.__metadataFields.length) {
       this.__indexToMetadata[d.index] = _.omit(d, [indexField, idField]);
+      if (opts.updateMetadataFn) {
+        opts.updateMetadataFn(this, this.__indexToMetadata[d.index]);
+      }
     }
   }
 };
@@ -146,10 +149,21 @@ Index.prototype.exportCsv = function(opts) {
 
   var scope = this;
   var header = _.concat(['index', 'label'], this.__metadataFields);
+  var includeColor = this.palette && (this.__metadataFields.indexOf('color') < 0);
+  if (includeColor) {
+    header.push('color');
+  }
   var labelsStr = header.map(function(x) { return _.escapeCsv(x); }).join(',') + '\n' + _.map(this.__objects, function(object,i) {
     var label = scope.__idFn(object);
     var metadata = scope.__indexToMetadata[i] || {};
     var row = _.concat([i, label], scope.__metadataFields.map(function(x) { return (metadata[x] != undefined)? metadata[x] : ''; }));
+    if (includeColor) {
+      var colorstr = scope.palette.colors[i];
+      if (colorstr instanceof THREE.Color) {
+        colorstr = '#' + colorstr.getHexString();
+      }
+      row.push(colorstr);
+    }
     return row.map(function(x) { return _.escapeCsv(x); }).join(',');
   }).join('\n');
   fs.fsWriteToFile(outfilename, labelsStr, function() {
@@ -162,6 +176,25 @@ Index.prototype.exportCsv = function(opts) {
   });
 };
 Index.prototype.export = Index.prototype.exportCsv;
+
+Index.prototype.colorToIndex = function(Colors) {
+  var hasPaletteColor = this.palette && (this.__metadataFields.indexOf('color') < 0);
+  var colorToIndexMap = {};  // map from rgba color to index
+  _.forEach(this.__objects, (object,i) => {
+    var color = this.metadata(i, 'color');
+    var usePaletteColor = color == null && hasPaletteColor;
+    if (usePaletteColor) {
+      color = this.palette.colors[i];
+      color = Colors.toColor(color);
+      var hexcolor = color.getHexString();
+      if (colorToIndexMap[hexcolor] != null) {
+        console.warn('Duplicate object to color', object, i, hexcolor);
+      }
+      colorToIndexMap[hexcolor] = i;
+    }
+  });
+  return colorToIndexMap;
+};
 
 Index.import = function(opts) {
   var index = new Index();

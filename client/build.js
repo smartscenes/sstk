@@ -3,7 +3,11 @@ var webpack = require('webpack');
 var webpackConfig = require('./webpack');
 var fs = require('fs');
 var rimraf = require('rimraf');
-var argv = require('optimist').argv;
+var cmd = require('commander')
+cmd.option('--out <out>', 'Build output', './build')
+  .option('--entry <entry>', 'Entry to build')
+  .parse(process.argv)
+var argv = cmd;
 
 function build() {
   if (process.env.NODE_ENV === 'prod') {
@@ -53,7 +57,7 @@ function build() {
 if (argv.entry) {
   build();
 } else {
-  var outpath = argv.out || './build';
+  var outpath = argv.out;
   rimraf(outpath, {
     disableGlob: true
   }, build);

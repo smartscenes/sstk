@@ -1,3 +1,5 @@
+var FileLoader = require('io/FileLoader');
+
 /**
  * Modified version of THREE.OBJMTLLoader from three.js
  * Loads a Wavefront .obj file with materials
@@ -65,52 +67,52 @@ Object.assign( THREE.OBJMTLLoader.prototype, THREE.EventDispatcher.prototype, {
 			}, onProgress, onError );
 		}
 
-			function loadObjWithMTLCallback() {
-				var hasMtl = false;
-				var object = null;
-				var materialsCreator = null;
-				function mtllibCallback(mtlfile) {
-					hasMtl = true;
-					mtlLoader.load(mtlLoader.baseUrl + mtlfile, function (materials) {
-						var mc = materials;
-						mc.preload();
-						if (object) {
-							applyMaterials(object, mc);
-							onLoad(object);
-						}
-						materialsCreator = mc;
-					}, onProgress, onError);
-				}
-				var loader = scope.getFileLoader();
-				//loader.setCrossOrigin(scope.crossOrigin);
-				loader.load(url, function (text) {
-					object = scope.parse(text, mtllibCallback, options);
-					if (hasMtl) {
-						if (materialsCreator) {
-							applyMaterials(object, materialsCreator);
-							onLoad(object);
-						}
-					} else {
+		function loadObjWithMTLCallback() {
+			var hasMtl = false;
+			var object = null;
+			var materialsCreator = null;
+			function mtllibCallback(mtlfile) {
+				hasMtl = true;
+				mtlLoader.load(mtlLoader.baseUrl + mtlfile, function (materials) {
+					var mc = materials;
+					mc.preload();
+					if (object) {
+						applyMaterials(object, mc);
 						onLoad(object);
 					}
+					materialsCreator = mc;
 				}, onProgress, onError);
 			}
+			var loader = scope.getFileLoader();
+			//loader.setCrossOrigin(scope.crossOrigin);
+			loader.load(url, function (text) {
+				object = scope.parse(text, mtllibCallback, options);
+				if (hasMtl) {
+					if (materialsCreator) {
+						applyMaterials(object, materialsCreator);
+						onLoad(object);
+					}
+				} else {
+					onLoad(object);
+				}
+			}, onProgress, onError);
+		}
 
-			if (mtlurl) {
-				mtlLoader.load(mtlurl, function (materials) {
-					var materialsCreator = materials;
-					materialsCreator.preload();
-					loadObj(materialsCreator);
-				}, onProgress, onError);
-			} else {
-				loadObjWithMTLCallback();
-			}
-
+		if (mtlurl) {
+			mtlLoader.load(mtlurl, function (materials) {
+				var materialsCreator = materials;
+				materialsCreator.preload();
+				loadObj(materialsCreator);
+			}, onProgress, onError);
+		} else {
+			loadObjWithMTLCallback();
+		}
 	},
 
 	// AXC: Custom file loader
 	getFileLoader: function() {
-		return new THREE.FileLoader(this.manager);
+		return new FileLoader({ manager: this.manager, defaultEncoding: 'utf8'});
+		//return new THREE.FileLoader(this.manager);
 	},
 
 	setCrossOrigin: function ( value ) {

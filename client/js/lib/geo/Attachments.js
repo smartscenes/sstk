@@ -212,7 +212,9 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
   // Raytrace out from candidate attachments
   var picker = new Picker();
   var raycaster = new THREE.Raycaster();
+  //raycaster.intersectBackFaces = true;
   var raycasterOpposite = new THREE.Raycaster();
+  //raycasterOpposite.intersectBackFaces = true;
   var best = null;
   var candidates = [];
   for (var i = 0; i < candidatesAttachments.length; i++) {
@@ -286,6 +288,8 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
       if (debug) {
         console.log('closest', childObjectId, closest, intersectedWithinThreshold);
       }
+      // Filter out anything that is intersected that is not a mesh
+      intersectedWithinThreshold = intersectedWithinThreshold.filter(x => x.descendant.isMesh);
       // Compute normSim
       var candidateNormOut = candidate.world.out.clone().negate();
       for (var j = 0; j < intersectedWithinThreshold.length; j++) {
@@ -293,7 +297,11 @@ function identifyAttachments(parents, modelInstWithCandidates, opts) {
         c.order = j;
         var norm = picker.getIntersectedNormal(c);
         if (c.normSim == undefined) {
-          c.normSim = candidateNormOut.dot(norm);
+          if (norm) {
+            c.normSim = candidateNormOut.dot(norm);
+          } else {
+            console.warn('Error getting normal from picker', c);
+          }
         }
       }
 

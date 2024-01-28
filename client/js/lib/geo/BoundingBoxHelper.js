@@ -9,7 +9,7 @@ var BoundingBoxHelper = function (object, materialOrColor) {
   this.box = new THREE.Box3();
 
   var material;
-  if (materialOrColor instanceof THREE.Material || materialOrColor instanceof THREE.MultiMaterial) {
+  if (materialOrColor && (materialOrColor.isMaterial || materialOrColor.isMultiMaterial)) {
     material = materialOrColor;
   } else if (materialOrColor instanceof THREE.Color) {
     material = new THREE.MeshBasicMaterial({ color: materialOrColor, wireframe: true });

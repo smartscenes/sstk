@@ -1,6 +1,8 @@
 'use strict';
 
+var BBoxUtil = require('geo/BBoxUtil');
 var GeometryUtil = require('geo/GeometryUtil');
+var Constants = require('Constants');
 var _ = require('util/util');
 
 // Patch THREE.Box2 with legacy function names
@@ -42,6 +44,7 @@ BBox.prototype.copy = function (bbox) {
   this.min.copy(bbox.min);
   this.max.copy(bbox.max);
   this.clearCache();
+  return bbox;
 };
 
 BBox.prototype.isFinite = function () {
@@ -106,23 +109,11 @@ BBox.prototype.includeLine = function (line, transform) {
   return this;
 };
 
-BBox.prototype.includeMesh = function (mesh, transform) {
-  var nFaces = GeometryUtil.getGeometryFaceCount(mesh.geometry);
-  if (nFaces > 0) {
-    var scope = this;
-    GeometryUtil.forMeshVertices(mesh, function (v) {
-        scope.__includePoint(v, transform);
-      }
-    );
-    // Three.js code to help compute bounding box
-    // Here for comparison, we shouldn't be slower
-    //var bboxHelper = new THREE.BoundingBoxHelper(mesh);
-    //bboxHelper.update();
-    //this.includeBBox(bboxHelper.box);
-    //        } else {
-    //            console.warn("Skipping mesh with no faces");
-    //            console.log(mesh);
-  }
+BBox.prototype.includeMesh = function (meshOrPartial, transform) {
+  // TODO: should we only include faces?
+  GeometryUtil.forMeshOrPartialMeshVertices(meshOrPartial, (v) => {
+    this.__includePoint(v, transform);
+  });
   this.clearCache();
   return this;
 };
@@ -235,6 +226,12 @@ BBox.prototype.contains = function (p) {
   }
 };
 
+/**
+ * Returns closest point in the BBox to point p
+ * @param p {THREE.Vector3} Point
+ * @param [out] {THREE.Vector3} Optional result vector
+ * @returns {THREE.Vector3}
+ */
 BBox.prototype.closestPoint = function (p, out) {
   var v = out || new THREE.Vector3();
   v.copy(p);
@@ -242,6 +239,12 @@ BBox.prototype.closestPoint = function (p, out) {
   return v;
 };
 
+/**
+ * Returns closest point on the BBox to point p
+ * @param p {THREE.Vector3} Point
+ * @param [out] {THREE.Vector3} Optional result vector
+ * @returns {THREE.Vector3}
+ */
 BBox.prototype.closestBoundaryPoint = function (p, out) {
   var v = this.closestPoint(p, out);
   var max = this.max, min = this.min;
@@ -255,21 +258,30 @@ BBox.prototype.closestBoundaryPoint = function (p, out) {
   return v;
 };
 
+/**
+ * Computes the distance to a point
+ * @param p {THREE.Vector3} Input point
+ * @param [opt] {string} What kind of distance to return ('clamped', 'signed', default)
+ * @returns {number|*}
+ */
 BBox.prototype.distanceToPoint = function (p, opt) {
   if (opt === 'clamped') {
+    // Returns 0 if inside the BBox
     return this.closestPoint(p).sub(p).length();
   } else if (opt === 'signed') {
+    // Returns negative distance to boundary if inside the BBox
     var d = this.closestBoundaryPoint(p).sub(p).length();
     if (this.contains(p)) {
       d = -d;
     }
     return d;
   } else {
+    // Returns positive distance to boundary
     return this.closestBoundaryPoint(p).sub(p).length();
   }
 };
 
-// Assymetric (i.e. forward / directed ) Hausdorff distance from this to bbox
+// Asymmetric (i.e. forward / directed ) Hausdorff distance from this to bbox
 BBox.prototype.hausdorffDistanceDirected = function (bbox, opt) {
   var corners = this.getCorners();
   var maxDist = -Infinity;
@@ -395,7 +407,15 @@ BBox.prototype.__includePoint = function (point, transform) {
   var p = point;
   if (transform) {
     p = point.clone();
-    p.applyMatrix4(transform);
+    if (transform.isMatrix4) {
+      p.applyMatrix4(transform);
+    } else if (transform.isMatrix3) {
+      p.applyMatrix3(transform);
+    } else if (transform.isQuaternion) {
+      p.applyQuaternion(transform);
+    } else {
+      throw 'Unsupported transform';
+    }
   }
 
   this.min.min(p);
@@ -429,20 +449,20 @@ BBox.prototype.toTransformedBBox = function (matrix) {
   return bbox;
 };
 
-BBox.prototype.scaleBy = function (scale) {
+BBox.prototype.scaleBy = function (scale, target) {
   var center = this.centroid();
   var extents = this.dimensions().multiplyScalar(scale * 0.5);
-  var bbox = new BBox();
+  var bbox = target || new BBox();
   bbox.fromCenterRadius(center.x, center.y, center.z, extents.x, extents.y, extents.z);
   return bbox;
 };
 
-BBox.prototype.expandBy = function (delta) {
+BBox.prototype.expandBy = function (delta, target) {
   var center = this.centroid();
   var extents = (delta instanceof THREE.Vector3)?
     this.dimensions().multiplyScalar(0.5).add(delta) :
     this.dimensions().multiplyScalar(0.5).addScalar(delta);
-  var bbox = new BBox();
+  var bbox = target || new BBox();
   bbox.fromCenterRadius(center.x, center.y, center.z, extents.x, extents.y, extents.z);
   return bbox;
 };
@@ -455,6 +475,11 @@ BBox.prototype.sample = function(rng, out) {
   var c = rng.random() * bbdims.z + this.min.z;
   out.set(a,b,c);
   return out;
+};
+
+BBox.prototype.sampleFace = function(faceIndex, out, rng) {
+  out = BBoxUtil.sampleFace(faceIndex, out, rng);
+  return this.getWorldPosition(out, out);
 };
 
 BBox.prototype.clearCache = function () {
@@ -555,7 +580,40 @@ BBox.prototype.getFaceCenters = function (force, copy) {
 
 BBox.prototype.getFaceDims = function () {
   var dims = this.dimensions();
-  return BBox.getFaceDims(dims);
+  return BBoxUtil.getFaceDims(dims);
+};
+
+BBox.prototype.getFaceNormalDims = function () {
+  var dims = this.dimensions();
+  return BBoxUtil.getFaceNormalDims(dims);
+};
+
+BBox.prototype.getFaceCorners = function (faceIndex) {
+  return BBoxUtil.getFaceCorners(this.getCorners(), faceIndex);
+};
+
+BBox.prototype.getFaceBBox = function (faceIndex, epsilon) {
+  console.log('got epsilon', epsilon);
+  var corners = this.getFaceCorners(faceIndex);
+  if (corners) {
+    if (epsilon == null) {
+      const dim = this.getFaceNormalDims()[faceIndex];
+      epsilon = dim*0.001;
+    }
+    const outNorm = BBoxUtil.OutNormals[faceIndex];
+    const inNorm = BBoxUtil.InNormals[faceIndex];
+    const bbox = new BBox();
+    const pt = new THREE.Vector3();
+    for (var i = 0; i < corners.length; i++) {
+      pt.copy(corners[i]);
+      pt.addScaledVector(outNorm, epsilon);
+      bbox.includePoint(pt);
+      pt.copy(corners[i]);
+      pt.addScaledVector(inNorm, epsilon);
+      bbox.includePoint(pt);
+    }
+    return bbox;
+  }
 };
 
 BBox.prototype.closestCorner = function (point) {
@@ -752,26 +810,48 @@ BBox.getJaccardOverlapRatio = function(bb1, bb2, opts) {
   return _.safeDivide(intersectValue, unionValue, 0);
 };
 
-BBox.getFaceDims = function(dims) {
-  var faceDims = [];
-  faceDims[0] = new THREE.Vector2(dims.y, dims.z);
-  faceDims[1] = faceDims[0];
-  faceDims[2] = new THREE.Vector2(dims.x, dims.z);
-  faceDims[3] = faceDims[2];
-  faceDims[4] = new THREE.Vector2(dims.x, dims.y);
-  faceDims[5] = faceDims[4];
-  return faceDims;
+/**
+ * Aspect ratio is two numbers: shortest/longest, shortest/middle
+ */
+BBox.prototype.aspectRatios = function() {
+  var dims = this.dimensions();
+  var short = Math.min(Math.min(dims.x, dims.y), dims.z);
+  var long = Math.max(Math.max(dims.x, dims.y), dims.z);
+  var mid;
+  if (dims.x != short && dims.x != long) {
+    mid = dims.x;
+  } else if (dims.y != short && dims.y != long) {
+    mid = dims.y;
+  } else {
+    mid = dims.z;
+  }
+  return new THREE.Vector2(short/long, short/mid);
 };
 
-// Vertices pointing toward the inside
-BBox.FACE_VERTS = [
-  [0, 2, 3, 1],      // -x
-  [4, 5, 7, 6],      // +x
-  [0, 1, 5, 4],      // -y
-  [2, 6, 7, 3],      // +y
-  [0, 4, 6, 2],      // -z
-  [1, 3, 7, 5],      // +z
-];
+Object.defineProperty(BBox.prototype, 'isPlane', {
+  get: function () {
+    // check if very shortest dimension is must smaller than the other two dimensions
+    var aspectRatios = this.aspectRatios();
+    return aspectRatios.x < 0.1 && aspectRatios.y < 0.1;
+  }
+});
+
+Object.defineProperty(BBox.prototype, 'dominantNormal', {
+  get: function () {
+    // check if very shortest dimension is must smaller than the other two dimensions
+    return this.minDimAxis();
+  }
+});
+
+BBox.prototype.isVerticalPlane = function(up) {
+  up = up || Constants.worldUp;
+  return this.isPlane && Math.abs(this.dominantNormal.dot(up)) < 0.05;
+};
+
+BBox.prototype.isHorizontalPlane = function(up) {
+  up = up || Constants.worldUp;
+  return this.isPlane && Math.abs(this.dominantNormal.dot(up)) >= 0.95;
+};
 
 
 // Exports

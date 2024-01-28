@@ -68,6 +68,18 @@ class Articulation {
         if (other.value != null) {
             this.value = other.value;
         }
+        this.motionStates = {};
+        if (other.motionStates) {
+            Object.assign(this.motionStates, other.motionStates);
+        }
+    }
+
+    proportionToValue(p) {
+        return p*this.rangeAmount + this.rangeMin;
+    }
+
+    valueToProportion(v) {
+        return (v - this.rangeMin)/this.rangeAmount;
     }
 
     clone() {
@@ -107,6 +119,34 @@ class Articulation {
 
     get isTranslation() {
         return this.type && this.type.toLowerCase() === Articulation.Type.TRANSLATION.toLowerCase();
+    }
+
+    get isRotation() {
+        return !this.isTranslation;
+    }
+
+    __valueToPercent(v) {
+        // convert a value to a percent
+        const r = this.rangeMax-this.rangeMin;
+        const p = 100*(v - this.rangeMin)/r;
+        return p;
+    }
+    setMotionStateValue(name, v) {
+        const p = this.__valueToPercent(v);
+        this.motionStates[name] = {
+            percent: p,
+            value: v
+        };
+    }
+
+    getMotionState(name) {
+        if (name === 'min') {
+            return { percent: 0, value: this.rangeMin };
+        } else if (name === 'max') {
+            return { percent: 100, value: this.rangeMax };
+        } else {
+            return this.motionStates[name];
+        }
     }
 
     applyMatrix(mat) {
@@ -174,6 +214,7 @@ class Articulation {
     }
 
     toJson() {
+        const hasMotionStates = Object.keys(this.motionStates).length > 0;
         return {
             pid: this.pid,      // partId
             type: this.type,
@@ -182,7 +223,8 @@ class Articulation {
             rangeMin: this.rangeMin,
             rangeMax: this.rangeMax,
             base: this.base,    // baseIds
-            defaultValue: this.defaultValue
+            defaultValue: this.defaultValue,
+            motionStates: hasMotionStates? this.motionStates : undefined
         };
     }
 
@@ -190,7 +232,6 @@ class Articulation {
 
 Articulation.Type = Object.freeze({
 	ROTATION: 'rotation',
-	HINGE_ROTATION: 'hinge_rotation',
 	TRANSLATION: 'translation',
 });
 

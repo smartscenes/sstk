@@ -47,7 +47,7 @@ function identifyVisibleTriangles(opts) {
   _.each(views, function(view) {
     //console.log('view', view);
     Camera.setView(camera, view);
-    offscreenPicker.updatePickables(camera, scene, visible);
+    offscreenPicker.updatePickables(camera, scene, visible, opts.getMeshId);
   });
   //console.log('visible', visible);
   return visible;

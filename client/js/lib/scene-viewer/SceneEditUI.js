@@ -15,6 +15,7 @@ var BBoxQueryTutorial = require('controls/BBoxQueryTutorial');
 var SceneViewerToolbar = require('scene-viewer/SceneViewerToolbar');
 var UndoStack = require('scene-viewer/SceneViewerUndoStack');
 var UILog = require('editor/UILog');
+var UIUtil = require('ui/UIUtil');
 var SearchController = require('search/SearchController');
 var SolrQuerySuggester = require('search/SolrQuerySuggester');
 var ModelSchema = require('model/ModelSchema');
@@ -313,7 +314,7 @@ function __wrappedEventListener(cb) {
 SceneEditUI.prototype.__setupEventListeners = function (domElement) {
   var scope = this;
   this.bindKeys(domElement);
-  domElement.addEventListener('mouseup', __wrappedEventListener(function (event) {
+  domElement.addEventListener('pointerup', __wrappedEventListener(function (event) {
       event.preventDefault();
       domElement.focus();
       if (event.which === Constants.LEFT_MOUSE_BTN) {
@@ -333,7 +334,7 @@ SceneEditUI.prototype.__setupEventListeners = function (domElement) {
     false
   );
 
-  domElement.addEventListener('mousedown', __wrappedEventListener(function (event) {
+  domElement.addEventListener('pointerdown', __wrappedEventListener(function (event) {
       domElement.focus();
       if (event.which === Constants.LEFT_MOUSE_BTN) {
         if (scope.editMode) {
@@ -349,10 +350,11 @@ SceneEditUI.prototype.__setupEventListeners = function (domElement) {
     false
   );
 
-  domElement.addEventListener('mousemove', __wrappedEventListener(function (event) {
+  domElement.addEventListener('pointermove', __wrappedEventListener(function (event) {
       event.preventDefault();
       domElement.focus();
-      if (event.which !== Constants.RIGHT_MOUSE_BTN) {
+      var rightMouseButtonPressed = UIUtil.isRightMouseButtonPressed(event);
+      if (!rightMouseButtonPressed) {
         if (scope.editMode) {
           if (scope.contextQueryIsEnabled && scope.contextQueryControls && event.shiftKey) {
             scope.container.style.cursor = scope.contextQueryControls.mouseMoveCursor;
@@ -367,7 +369,7 @@ SceneEditUI.prototype.__setupEventListeners = function (domElement) {
     false
   );
 
-  domElement.addEventListener('mouseleave', function (event) {
+  domElement.addEventListener('pointerleave', function (event) {
     if (scope.editMode) {
       scope.editControls.onMouseLeave(event);
     }
@@ -804,6 +806,18 @@ SceneEditUI.prototype.getClickedObject = function (event) {
 SceneEditUI.prototype.onEditOpInit = function (command, cmdParams) {
   this.setContextQueryActive(false);
   this.undoStack.prepareDeltaState(command, cmdParams);
+};
+
+SceneEditUI.prototype.onSelectedInstanceChanged = function (modelInstance) {
+  this.Publish('SelectedInstanceChanged', modelInstance);
+};
+
+SceneEditUI.prototype.onEditOpCancel = function (command, cmdParams) {
+  if (command === Constants.CMDTYPE.INSERT) {
+    var object = cmdParams.object;
+    var modelInstance = object? Object3DUtil.getModelInstance(object) : null;
+    this.Publish('ObjectInsertCancelled', modelInstance, { object3D: object, opType: command });
+  }
 };
 
 SceneEditUI.prototype.onEditOpDone = function (command, cmdParams) {

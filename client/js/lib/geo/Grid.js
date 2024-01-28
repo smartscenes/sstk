@@ -46,6 +46,23 @@ Grid.Types = Object.freeze({
   'float64': { bytes: 8, array: Float64Array }
 });
 
+Grid.prototype.__createVoxelBuffer = function(params) {
+  var nbytes = Math.ceil(this.sizeInBits / 8);
+  var arrayBuffer = params.data? params.data : new ArrayBuffer(nbytes);
+  if (!(arrayBuffer instanceof ArrayBuffer)) {
+    console.warn('Grid data not ArrayBuffer');
+  }
+  if (arrayBuffer.length < nbytes) {
+    console.warn('Grid data should be ' + nbytes + ' bytes, but only ' + arrayBuffer.length);
+  }
+  var typeInfo = Grid.Types[this.dataType];
+  if (typeInfo && typeInfo.array) {
+    return new typeInfo.array(arrayBuffer);
+  } else {
+    return new Uint8Array(arrayBuffer);
+  }
+};
+
 Grid.prototype.init = function (params) {
   if (params.dims) {
     this.__depth = params.dims[0];
@@ -59,20 +76,7 @@ Grid.prototype.init = function (params) {
   this.__size = this.__width * this.__height * this.__depth;
   this.labels = params.labels || [];
   this.voxelSize = 1;
-  var nbytes = Math.ceil(this.sizeInBits / 8);
-  var arrayBuffer = params.data? params.data : new ArrayBuffer(nbytes);
-  if (!(arrayBuffer instanceof ArrayBuffer)) {
-    console.warn('Grid data not ArrayBuffer');
-  }
-  if (arrayBuffer.length < nbytes) {
-    console.warn('Grid data should be ' + nbytes + ' bytes, but only ' + arrayBuffer.length);
-  }
-  var typeInfo = Grid.Types[this.dataType];
-  if (typeInfo && typeInfo.array) {
-    this.__voxelsBuffer = new typeInfo.array(arrayBuffer);
-  } else {
-    this.__voxelsBuffer = new Uint8Array(arrayBuffer);
-  }
+  this.__voxelsBuffer = this.__createVoxelBuffer(params);
 };
 
 /* Read only properties */
@@ -201,7 +205,7 @@ Grid.prototype.copyTransform = function(g, scaleFactor) {
     var S = new THREE.Matrix4();
     S.makeScale(scaleFactor, scaleFactor, scaleFactor);
     this.gridToWorld.multiply(S);
-    this.worldToGrid.getInverse(this.gridToWorld);
+    this.worldToGrid.copy(this.gridToWorld).invert();
     this.voxelSize *= scaleFactor;
   }
 };

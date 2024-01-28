@@ -125,6 +125,7 @@ ModelSchema.ShapeNetSynsetAttributeLink = {
     // Special fields
     wnhyperlemmas: 'wnhyperlemmas', //"ancestors.words",
     wnhypersynsets: 'wnhypersynsets', //"ancestors.synsetid"
+    wnhypersynsetkeys: 'wnhypersynsetkeys' //"ancestors.wn30synsetkey"
   }
 };
 

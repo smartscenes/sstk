@@ -1,19 +1,26 @@
 // Utility functions for working with the file system
 
-var FileSaver = require('file-saver');
-var _ = require('util/util');
+const FileSaver = require('file-saver');
+const _ = require('util/util');
 
-var self = {};
+const self = {};
 
 function saveText(string, filename) {
-  var blob = new Blob([string], {type: "text/plain;charset=utf-8"});
+  const blob = new Blob([string], {type: "text/plain;charset=utf-8"});
   FileSaver.saveAs(blob, filename);
 }
 
 self.saveText = saveText;
 
+function saveDelimited(records, filename, fields, delimiter) {
+  const text = records.map(r => fields.map(f => r[f] != null? r[f] : '').join(delimiter)).join('\n');
+  this.saveText(fields.join(delimiter) + '\n' + text, filename);
+}
+
+self.saveDelimited = saveDelimited;
+
 function saveJson(object, filename, replacer) {
-  var blob = new Blob([JSON.stringify(object, replacer)], {type: "text/plain;charset=utf-8"});
+  const blob = new Blob([JSON.stringify(object, replacer)], {type: "text/plain;charset=utf-8"});
   FileSaver.saveAs(blob, filename);
 }
 
@@ -35,9 +42,9 @@ self.saveCanvasImage = saveCanvasImage;
 
 /* Convenience function for loading files from anywhere! */
 function readAsync(uri, opts, cb) {
-  var encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
-  var FileLoader = require('io/FileLoader');
-  var fileLoader = new FileLoader();
+  const encoding = (opts == undefined || typeof opts === 'string') ? opts : opts.encoding;
+  const FileLoader = require('io/FileLoader');
+  const fileLoader = new FileLoader();
   fileLoader.load(uri, encoding, function(data) {
     cb(null, data);
   }, null, function(err) {
@@ -48,14 +55,14 @@ function readAsync(uri, opts, cb) {
 self.readAsync = readAsync;
 
 function loadDelimited(file, opts, callback) {
-  var IOUtil = require('io/IOUtil');
+  const IOUtil = require('io/IOUtil');
   // By default, we assume there is a header, don't want empty lines, and will do dynamicTyping
-  opts = _.defaults(Object.create(null), opts || { filename: file.name || file });
+  opts = _.defaults(Object.create(null), opts || {}, { filename: file.name || file });
   readAsync(file, 'utf8', function(err, data) {
     if (err) {
       callback(err);
     } else {
-      var parsed = IOUtil.parseDelimited(data, opts);
+      const parsed = IOUtil.parseDelimited(data, opts);
       callback(null, parsed);
     }
   });
@@ -65,7 +72,7 @@ self.loadDelimited = loadDelimited;
 
 function readLines(filename, callback) {
   readAsync(filename, 'utf8', function(err, data) {
-    var lines;
+    let lines;
     if (data) {
       lines = data.split('\n').map(function (x) {
         return x.trim();
@@ -80,24 +87,25 @@ function readLines(filename, callback) {
 self.readLines = readLines;
 
 /* File system utils */
+async function __fsGetFileAsync(filename, fs) {
+  const fileHandle = await fs.root.getFileHandle(filename, {});
+  return fileHandle.getFile();
+}
+
 function __fsReadFileCallback(filename, successCallback, errorCallback, fs) {
-  var errorHandler = function (e) {
+  const errorHandler = function (e) {
     console.error('Error reading file ' + filename);
     console.log(e);
     if (errorCallback) errorCallback();
   };
 
-  fs.root.getFile(filename, {}, function(fileEntry) {
-    // Get a File object representing the file,
-    // then use FileReader to read its contents.
-    fileEntry.file(function(file) {
-      successCallback(file);
-    }, errorHandler);
-  }, errorHandler);
+  __fsGetFileAsync(filename, fs)
+    .then((file) => { successCallback(file) } )
+    .catch(errorHandler);
 }
 
 function fsReadFile(filename, successCallback, errorCallback) {
-  var callback = __fsReadFileCallback.bind(null, filename, successCallback, errorCallback);
+  const callback = __fsReadFileCallback.bind(null, filename, successCallback, errorCallback);
   initFs(callback);
 }
 
@@ -111,71 +119,45 @@ function fsExportFile(fsFilename, finalFilename) {
 
 self.fsExportFile = fsExportFile;
 
-function __fsWriteToFileCallback(opts) {
-  var filename = opts.filename;
-  var content = opts.content;
-  var initialContent = opts.initialContent;
-  var append = opts.append;
-  var successCallback = opts.success;
-  var errorCallback = opts.error;
-  var fs = opts.fs;
+async function __fsWriteToFileAsync(opts) {
+  const filename = opts.filename;
+  const content = opts.content;
+  const initialContent = opts.initialContent;
+  const append = opts.append;
+  const fs = opts.fs;
 
-  var errorHandler = function (e) {
+  const fileHandle = await fs.root.getFileHandle(filename, { create: true })
+  console.log('Writing to file at ' + fileHandle.name + ', append=' + append + '.');
+  // Create a FileWriter object for our FileEntry (log.txt).
+  const fileWriter = await fileHandle.createWritable( {keepExistingData: append});
+  const offset = append? (await fileHandle.getFile()).size : 0;
+  // Create a new Blob and write it to filename.
+  let contents = [content];
+  if (initialContent && (!append || fileWriter.length === 0)) {
+    // There is some initial content that should go into the file
+    contents = [initialContent, content];
+  }
+  const blob = (typeof content === 'string')?
+    new Blob(contents, { type: 'text/plain;charset=utf-8' }) :
+    new Blob(contents, { type: 'application/binary' });
+
+  await fileWriter.write( { type: 'write', data: blob, position: offset });
+  await fileWriter.close();
+}
+
+function __fsWriteToFileCallback(opts) {
+  const filename = opts.filename;
+  const successCallback = opts.success;
+  const errorCallback = opts.error;
+  const errorHandler = function (e) {
     console.error('Error writing file ' + filename);
     console.log(e);
     if (errorCallback) errorCallback();
   };
 
-  fs.root.getFile(filename, { create: true }, function (fileEntry) {
-    console.log('Writing to file at ' + fileEntry.fullPath + ', append=' + append + '.');
-    // Create a FileWriter object for our FileEntry (log.txt).
-    fileEntry.createWriter(function (fileWriter) {
-      var truncating = false;
-      // Create a new Blob and write it to filename.
-      var contents = [content];
-      if (initialContent && (!append || fileWriter.length === 0)) {
-        // There is some initial content that should go into the file
-        contents = [initialContent, content];
-      }
-      var blob = (typeof content === 'string')?
-        new Blob(contents, { type: 'text/plain;charset=utf-8' }) :
-        new Blob(contents, { type: 'application/binary' });
-
-      fileWriter.onwriteend = function (e) {
-        if (truncating)  {
-          truncating = false;
-          fileWriter.write(blob);
-        } else {
-          console.log('Write completed.');
-          if (successCallback) successCallback();
-        }
-      };
-
-      fileWriter.onerror = function(e) {
-        console.log('Write failed: ' + e.toString());
-        if (errorCallback) errorCallback();
-      };
-
-      if (append) {
-        // Appending, go to correct place
-        console.log('Write to position ' + fileWriter.length + ' of ' + fileEntry.fullPath);
-        fileWriter.seek(fileWriter.length);
-        fileWriter.write(blob);
-      } else {
-        if (fileWriter.length > 0) {
-          // Not appending, lets truncates file to 0
-          console.log('Truncate file ' + fileEntry.fullPath );
-          truncating = true;
-          fileWriter.truncate(0);
-          // After truncate is successful - should get onwriteend callback...
-        } else {
-          fileWriter.write(blob);
-        }
-      }
-    }, errorHandler);
-
-  }, errorHandler);
-
+  __fsWriteToFileAsync(opts)
+    .then(() => successCallback())
+    .catch(errorHandler);
 }
 
 function fsWriteToFile(filename, content, successCallback, errorCallback) {
@@ -233,19 +215,15 @@ function writeToFile(filename, content, opts, callback) {
 self.writeToFile = writeToFile;
 
 function initFs(callback) {
-  // Uses HTML5 file system (see http://www.html5rocks.com/en/tutorials/file/filesystem/)
-  // Use the HTML5 Filesystem explorer for chrome to look at your file
-  var errorHandler = function (e) {
-    console.log('Error initializing FS!!!!');
-    console.log(e);
-  };
   console.log('Attempt to use FS!!!');
-  window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFileSystem;
-  window.webkitStorageInfo.requestQuota(window.PERSISTENT, 500*1024*1024, function(grantedBytes) {
-    window.requestFileSystem(window.PERSISTENT, grantedBytes, callback, errorHandler);
-  }, function (e) {
-    console.log('Error requesting quota!!!', e);
-  });
+  navigator.storage.getDirectory()
+    .then((handle) => {
+      callback({ root: handle });
+    })
+    .catch((error) => {
+      console.log('Error initializing FS!!!!');
+      console.log(error);
+    });
 }
 
 self.initFs = initFs;

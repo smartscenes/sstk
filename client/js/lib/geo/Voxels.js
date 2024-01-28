@@ -90,6 +90,11 @@ Voxels.prototype.getVoxelsPath = function (pathField) {
   return this.path;
 };
 
+Voxels.prototype.getLoadOptions = function(pathField) {
+  // special load options
+  return {};
+};
+
 Voxels.prototype.__loadVoxels = function (path, callback) {
   if (this.voxelMeshes) {
     // Already loaded...
@@ -104,7 +109,7 @@ Voxels.prototype.__loadVoxels = function (path, callback) {
 };
 
 Voxels.prototype.__loadVoxelsFromUrlOrFile = function (url, callback) {
-  var loader = new VoxelLoader();
+  var loader = new VoxelLoader(this.getLoadOptions());
   loader.load(url, function (err, grid) {
     if (grid) {
       console.time('updateVoxelGrid');
@@ -157,7 +162,7 @@ Voxels.prototype.__createVoxelMesh = function (grid, start, end, targetValue) {
   if (targetValue || grid.labels.length === 1) {
     material = this.material;
   } else {
-    material = new THREE.MeshPhongMaterial({ vertexColors: THREE.FaceColors, wireframe: false });
+    material = new THREE.MeshPhongMaterial({ vertexColors: true, wireframe: false });
   }
   var opts = this.__getVoxelMeshOptions();
   var voxelMesh = new VoxelMesh(voxelData, opts);

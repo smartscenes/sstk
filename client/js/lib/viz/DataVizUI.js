@@ -68,7 +68,6 @@ DataVizUI.prototype.initialize = function (params) {
   this.assetManager = new AssetManager({
     autoAlignModels: true,
     autoScaleModels: true,
-    useBuffers: true,
     previewImageIndex: 13
   });
   this.assetsDb = new AssetsDb({

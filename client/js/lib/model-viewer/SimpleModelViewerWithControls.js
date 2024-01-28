@@ -1,16 +1,31 @@
-'use strict';
+const SimpleModelViewer = require('model-viewer/SimpleModelViewer');
+const PartsPanel = require('ui/PartsPanel');
+const AnnotationsPanel = require('ui/AnnotationsPanel');
+const ImagesPanel = require('ui/ImagesPanel');
+const _ = require('util/util');
 
-define(['model-viewer/SimpleModelViewer', 'ui/PartsPanel', 'ui/AnnotationsPanel', 'ui/ImagesPanel'],
-function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
-
-  function SimpleModelViewerWithControls(container) {
-    SimpleModelViewer.call(this, container);
-    this.initPanels();
+class SimpleModelViewerWithControls extends SimpleModelViewer {
+  constructor(params) {
+    const defaults = {
+      partsPanel: '#partsPanel',
+      imagesPanel: '#imagesPanel',
+      annotationsPanel: {
+        container: '#annotationsPanel',
+        readOnlyAttributes: [
+          'fullId', 'name', 'description', 'tags', 'wnlemmas',
+          'category', 'color', 'material', 'shape', 'depicts',
+          'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject',
+          'hasMultipleObjects', 'isCollection', 'isContainerLike', 'weight',
+          'volume', 'solidVolume', 'surfaceVolume', 'staticFrictionForce'
+        /*, "aligned.dims" */]
+      }
+    };
+    // Note: _.defaultsDeep will copy all array values... not desirable
+    params = _.defaults(Object.create(null), params, defaults);
+    super(params);
   }
-  SimpleModelViewerWithControls.prototype = Object.create(SimpleModelViewer.prototype);
-  SimpleModelViewerWithControls.prototype.constructor = SimpleModelViewerWithControls;
 
-  SimpleModelViewerWithControls.prototype.onModelLoad = function (modelInstance) {
+  onModelLoad(modelInstance) {
     if (this.partsPanel) {
       this.partsPanel.setTarget(modelInstance);
     }
@@ -25,10 +40,10 @@ function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
         this.modelImagesPanel.setImageUrls('', []);
       }
     }
-  };
+  }
 
-  SimpleModelViewerWithControls.prototype.initPanels = function () {
-    var partsPanel = $('#partsPanel');
+  initPanels(params) {
+    const partsPanel = params.partsPanel? $(params.partsPanel) : null;
     if (partsPanel && partsPanel.length > 0) {
       this.partsPanel = new PartsPanel({
         app: this,
@@ -46,17 +61,10 @@ function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
         }.bind(this)
       });
     }
-    var annotationsPanel = $('#annotationsPanel');
+    const annotationsPanel = params.annotationsPanel? $(params.annotationsPanel.container) : null;
     if (annotationsPanel && annotationsPanel.length > 0) {
-      var modelAttributes = [ ];
-      var readOnlyAttributes = [
-        'fullId', 'name', 'description', 'tags', 'wnlemmas',
-        'category', 'color', 'material', 'shape', 'depicts',
-        'state', 'usedFor', 'foundIn', 'hasPart', 'attr', 'isSingleCleanObject',
-        'hasMultipleObjects', 'isCollection', 'isContainerLike', 'weight',
-        'volume', 'solidVolume', 'surfaceVolume', 'staticFrictionForce'
-        /*, "aligned.dims" */
-      ];
+      const modelAttributes = [];
+      const readOnlyAttributes = params.annotationsPanel.readOnlyAttributes;
       this.annotationsPanel = new AnnotationsPanel({
         container: annotationsPanel,
         hideEmptyFields: true,
@@ -66,19 +74,19 @@ function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
       });
     }
 
-    var imagesPanel = $('#imagesPanel');
+    const imagesPanel = params.imagesPanel? $(params.imagesPanel) : null;
     if (imagesPanel && imagesPanel.length > 0) {
       this.modelImagesPanel = new ImagesPanel({
         container: imagesPanel
       });
     }
-  };
+  }
 
-  SimpleModelViewerWithControls.prototype.keyHandler = function (event) {
-    if (SimpleModelViewer.prototype.keyHandler(event) === false) {
+  keyHandler(event) {
+    if (super.keyHandler(event) === false) {
       return false;
     }
-    var partOffset = null;
+    let partOffset = null;
     switch (event.which) {
       case 33:  // on page up code
         partOffset = +1;
@@ -95,8 +103,8 @@ function (SimpleModelViewer, PartsPanel, AnnotationsPanel, ImagesPanel) {
     } else {
       return true;
     }
-  };
+  }
+}
 
-  // Exports
-  return SimpleModelViewerWithControls;
-});
+// Exports
+module.exports = SimpleModelViewerWithControls;

@@ -5,6 +5,8 @@ var Object3DUtil = require('geo/Object3DUtil');
 var ViewGenerator = require('gfx/ViewGenerator');
 var Constants = require('Constants');
 require('three-controls');
+var EnhancedPointerLockControls = require('controls/cam/EnhancedPointerLockControls');
+var DragLookPointerControls = require('controls/cam/DragLookPointerControls');
 
 function CameraControls(params) {
   this.camera = params.camera;
@@ -24,6 +26,10 @@ function CameraControls(params) {
   this.movementSpeed = this.camera.far / 25;
   this.defaultDistanceScale = 1.0;
   this.cameraPositionStrategy = params.cameraPositionStrategy || 'positionToFit';
+
+  this.orbitStartCallback = params.orbitStartCallback;
+  this.orbitEndCallback = params.orbitEndCallback;
+  this.orbitDetails = null;
 }
 
 CameraControls.prototype = Object.create(ViewGenerator.prototype);
@@ -45,12 +51,13 @@ CameraControls.prototype.setControls = function () {
     this.orbitControls.enabled = false;
     this.orbitControls = null;
   }
+  var controlsEnabled = this.controlType !== 'none';
   if (this.controlType === 'trackballWithOrbit' ||
     this.controlType === 'trackballNoOrbit' ||
     this.controlType === 'trackball') {
-    var trackBallControls = this.getControls('trackball', true);
+    var trackBallControls = this.__getControls('trackball', true);
     var useOrbitControls = (this.controlType === 'trackballWithOrbit');
-    var orbitControls = this.getControls('orbit', useOrbitControls);
+    var orbitControls = this.__getControls('orbit', useOrbitControls);
     if (orbitControls) {
       orbitControls.enabled = !orbitControls;
       this.updateAutoRotate(orbitControls);
@@ -59,53 +66,73 @@ CameraControls.prototype.setControls = function () {
 
     if (useOrbitControls) this.orbitControls = orbitControls;
     this.controls = trackBallControls;
-    this.controls.enabled = true;
-  } else if (this.controlType === 'firstPerson') {
-    this.controls = this.getControls(this.controlType, true);
-    this.controls.enabled = true;
-    this.controls.movementSpeed = this.movementSpeed;
-  } else if (this.controlType === 'firstPersonClickDrag') {
-    this.controls = this.getControls(this.controlType, true);
-    this.controls.enabled = true;
-    this.controls.movementSpeed = this.movementSpeed;
-  } else if (this.controlType === 'pointerLock') {
-    // Not working
-    this.controls = this.getControls(this.controlType, true);
-    this.controls.enabled = true;
-  } else if (this.controlType === 'orbit' || this.controlType === 'orbitRightClick') {
-    this.controls = this.getControls(this.controlType, true);
-    this.controls.enabled = true;
+  } else if (this.controlType === 'orbit' || this.controlType === 'orbitRightClick' || this.controlType === 'orbitRightClickNoPanZoom') {
+    this.controls = this.__getControls(this.controlType, true);
     this.controls.userRotate = false;
     this.updateAutoRotate(this.controls);
     this.orbitControls = this.controls;
-  } else if (this.controlType === 'fly') {
-    // Not tested
-    this.controls = this.getControls(this.controlType, true);
-    this.controls.enabled = true;
-    this.controls.movementSpeed = this.movementSpeed * Constants.metersToVirtualUnit;
-    this.controls.movementSpeed = 0.005 * this.movementSpeed * Constants.metersToVirtualUnit;
   } else {
-    console.error('Invalid controlType: ' + this.controlType);
+    // Not tested
+    var controls = this.__getControls(this.controlType, true);
+    if (controls) {
+      this.controls = controls;
+    } else {
+      console.error('Invalid controlType: ' + this.controlType);
+    }
+  }
+
+  if (this.controls) {
+    this.controls.enabled = controlsEnabled;
+    this.__updateMovementSpeed();
   }
 
   if (oldControls) {
-    if (oldControls.target && this.controls.target) {
-      this.controls.target.copy(oldControls.target);
+    if (this.controls.target) {
+      if (oldControls.target) {
+        this.controls.target.copy(oldControls.target);
+      } else {
+        // guess some target based on the camera direction
+        var ray = new THREE.Ray(this.camera.position);
+        this.camera.getWorldDirection(ray.direction);
+        ray.closestPointToPoint(this.controls.target, this.controls.target);
+        if (this.controls.target.distanceToSquared(this.camera.position) < 0.0001) {
+          // make sure the target is sufficiently far
+          this.controls.target.copy(this.camera.position);
+          this.controls.target.add(ray.direction);
+        }
+      }
     }
   }
 };
 
 
-CameraControls.prototype.getControls = function (controlType, createControls) {
+CameraControls.prototype.__getControls = function (controlType, createControls) {
   var controls = this.allControls[controlType];
   if (!controls && createControls) {
-    controls = this.createControls(controlType);
+    controls = this.__createControls(controlType);
     if (controls) this.allControls[controlType] = controls;
   }
   return controls;
 };
 
-CameraControls.prototype.createControls = function (controlType) {
+CameraControls.prototype.__addOrbitControlListeners = function(controls) {
+  // TODO: shouldn't we also have listeners for other controls?
+  // TODO: there is also very limited information in the events
+  let scope = this;
+  controls.addEventListener('start', () => {
+    scope.orbitDetails = {startTime: new Date().getTime()};
+    if (scope.orbitStartCallback) {
+      scope.orbitStartCallback(scope.orbitDetails);
+    }
+  });
+  controls.addEventListener('end', () => {
+    if (scope.orbitEndCallback) {
+      scope.orbitEndCallback(scope.orbitDetails);
+    }
+  });
+};
+
+CameraControls.prototype.__createControls = function (controlType) {
   //console.log("Creating controller for control type " + controlType);
   var controls = null;
   if (controlType === 'trackball') {
@@ -132,24 +159,22 @@ CameraControls.prototype.createControls = function (controlType) {
   } else if (controlType === 'firstPerson') {
     controls = new THREE.FirstPersonControls(this.camera, this.container);
     controls.activeLook = false;
-    controls.movementSpeed = this.movementSpeed;
   } else if (controlType === 'firstPersonClickDrag') {
-    controls = new THREE.FirstPersonControlsClickDragRotation(this.camera, this.container);
-    controls.activeLook = false;
-    controls.movementSpeed = this.movementSpeed;
+    controls = new DragLookPointerControls(this.camera, this.container);
   } else if (controlType === 'pointerLock') {
-    // Not working
-    controls = new THREE.PointerLockControls(this.camera);
+    controls = new EnhancedPointerLockControls(this.camera, this.container);
+    controls.bindEvents(window);
   } else if (controlType === 'orbit') {
-    // Use orbit controls for the auto rotate
+    // Default orbit controls
     controls = new THREE.OrbitControls(this.camera, this.container);
     controls.enableKeys = false;
     controls.userRotate = false;
+    // Use orbit controls for the auto rotate
     this.updateAutoRotate(controls);
     controls.addEventListener('change', this.renderCallback);
+    this.__addOrbitControlListeners(controls);
   } else if (controlType === 'orbitRightClick') {
-    // Use orbit controls for the auto rotate
-
+    // Orbit controls with right click and ability to pan/zoom
     controls = new THREE.OrbitControls(this.camera, this.container);
     controls.mouseMappings = [
       { action: controls.actions.PAN,    button: THREE.MOUSE.RIGHT, keys: ['shiftKey'] },
@@ -159,7 +184,18 @@ CameraControls.prototype.createControls = function (controlType) {
     controls.enableKeys = false;
     controls.userRotate = false;
     this.updateAutoRotate(controls);
-    controls.addEventListener('change', this.renderCallback);
+    this.__addOrbitControlListeners(controls);
+  } else if (controlType === 'orbitRightClickNoPanZoom') {
+    // Orbit controls with right click and no ability to pan/zoom
+    controls = new THREE.OrbitControls(this.camera, this.container);
+    controls.mouseMappings = [
+      { action: controls.actions.ORBIT,  button: THREE.MOUSE.RIGHT }
+    ];
+    controls.enableKeys = false;
+    controls.userRotate = false;
+    controls.enableZoom = false;
+    this.updateAutoRotate(controls);
+    this.__addOrbitControlListeners(controls);
   } else if (controlType === 'fly') {
     controls = new THREE.FlyControls(this.camera, this.container);
   } else {
@@ -250,7 +286,7 @@ CameraControls.prototype.timedAutoRotate = function (totalMillis, speed, callbac
  * @param [options.phi] {number}
  * @param [options.fitRatio] {number}
  * @param [options.defaultPosition] {number}
- * @param [options.fov] {number} Vertical field of view (in radians)
+ * @param [options.fov] {number} Vertical field of view (in degrees)
  * @param [options.near] {number} Near in virtual units
  * @param [options.far] {number} Far in virtual units
  */
@@ -362,18 +398,21 @@ CameraControls.prototype.viewTarget = function (options) {
   this.camera.updateProjectionMatrix(target);
 };
 
+CameraControls.prototype.__updateMovementSpeed = function() {
+  // If first person camera set the movement to be somewhat reasonable based on camera far/near
+  if (this.controlType === 'firstPerson' || this.controlType === 'firstPersonClickDrag' || this.controlType === 'pointerLock') {
+    this.controls.movementSpeed = this.movementSpeed;
+  } else if (this.controlType === 'fly') {
+    this.controls.movementSpeed = this.movementSpeed * Constants.metersToVirtualUnit;
+    this.controls.rollSpeed = 0.005 * this.movementSpeed * Constants.metersToVirtualUnit;
+  }
+};
+
 CameraControls.prototype.__setControlsTarget = function (target) {
   if (this.controls) {
     if (target && this.controls.target) {
       this.controls.target.copy(target);
-      // If first person camera set the movement to be somewhat reasonable based on camera far/near
-      if (this.controlType === 'firstPerson' || this.controlType === 'firstPersonClickDrag') {
-        this.controls.movementSpeed = this.movementSpeed;
-      } else if (this.controlType === 'fly') {
-        this.controls.movementSpeed = this.movementSpeed * Constants.metersToVirtualUnit;
-        this.controls.rollSpeed = 0.005 * this.movementSpeed * Constants.metersToVirtualUnit;
-      } else if (this.controlType === 'pointerLock') {
-      }
+      this.__updateMovementSpeed();
     }
     this.controls.update();
   }
@@ -390,7 +429,8 @@ CameraControls.prototype.saveCameraState = function (clearCameraStates) {
 CameraControls.prototype.getCurrentCameraState = function () {
   var cameraState = {
     position: (this.camera.position) ? this.camera.position.clone() : undefined,
-    target: (this.controls.target) ? this.controls.target.clone() : undefined,
+    rotation: (this.camera.rotation) ? this.camera.rotation.clone() : undefined,
+    target: (this.controls && this.controls.target) ? this.controls.target.clone() : undefined,
     up: (this.camera.up) ? this.camera.up.clone() : undefined
   };
   if (this.camera instanceof THREE.CombinedCamera) {
@@ -407,16 +447,30 @@ CameraControls.prototype.restoreCameraState = function (state) {
   if (!state && this.cameraStates.length > 0) {
     state = this.cameraStates[this.cameraStates.length - 1];
   }
+  this.setCameraState(state);
+};
+
+CameraControls.prototype.setCameraState = function (state) {
   if (state) {
     if (state.position) {
       if (this.camera.position) this.camera.position.copy(state.position);
     }
-    if (state.up) {
-      if (this.camera.up) this.camera.up.copy(state.up);
+    const up = state.up;
+    if (up) {
+      if (this.camera.up) this.camera.up.copy(up);
     }
     if (state.target) {
       if (this.controls.target) this.controls.target.copy(state.target);
       this.camera.lookAt(state.target);
+    } else if (state.direction) {
+      const target = state.direction.clone().normalize();
+      target.add(this.camera.position);
+      if (this.controls.target) this.controls.target.copy(target);
+      this.camera.lookAt(target);
+    }
+    const fov = state.fov;
+    if (fov) {
+      this.camera.setFov(fov);
     }
     this.camera.updateMatrix();
     if (this.camera instanceof THREE.CombinedCamera) {

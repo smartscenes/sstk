@@ -7,7 +7,7 @@
   "eqnull": true,
   "forin":true,
   "freeze":true,
-  "globals": {"define":true, "THREE":true, "d3":true, "Physijs":true, "bootbox":true},
+  "globals": {"define":true, "THREE":true, "d3":true, "bootbox":true},
   "immed":true,
   "indent":2,
   "latedef":"nofunc",

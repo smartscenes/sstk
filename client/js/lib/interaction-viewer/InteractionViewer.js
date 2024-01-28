@@ -11,6 +11,8 @@ function InteractionViewer(params) {
   var defaults = {
     useDatGui: true,
     skeletonFile: Constants.assetsDir + '/data/pigraphs/skeleton.json',
+    autoAlignModels: false,
+    autoScaleModels: false,
     uihookups: _.keyBy([
       {
         name: 'saveImage',
@@ -48,11 +50,13 @@ InteractionViewer.prototype.__initAssets = function (options) {
   this.assetLoader = new AssetLoader();
   this.assetManager = new AssetManager({
     previewImageIndex: options.previewImageIndex,
-    autoScaleModels: false,
-    autoAlignModels: false
+    autoScaleModels: options.autoScaleModels,
+    autoAlignModels: options.autoAlignModels,
+    supportArticulated: true
   });
   this.searchController = new SearchController();
   this.assetManager.setSearchController(this.searchController);
+  this.assetManager.watchDynamicAssets(this, '_dynamicAssets');
 
   var scope = this;
   var p = new Promise(

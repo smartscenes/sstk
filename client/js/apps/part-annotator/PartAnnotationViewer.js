@@ -7,14 +7,12 @@ var _ = require('util/util');
 
 function PartAnnotationViewer(params) {
   this.urlParams = _.getUrlParams();
-  var useSegments = params.useSegments || this.urlParams['useSegments'];
-  var keepInstances = params.keepInstances || this.urlParams['keepInstances'];
-  params = _.defaultsDeep(Object.create(null), params, {
-    appId: 'PartAnnotationViewer.v2',
+  var selectedUrlParams = _.pick(this.urlParams, ['useSegments', 'segmentType', 'keepInstances']);
+  params = _.defaultsDeep(Object.create(null), selectedUrlParams, params, {
+    appId: 'PartAnnotationViewer.v2-20220901',
     addGround: true,
     retrieveAnnotationsUrl:  Constants.retrievePartAnnotationsURL,
-    useSegments: useSegments,
-    keepInstances: keepInstances,
+    segmentType: 'surfaces',
     labelsPanel: {
       allowMultiSelect: true,
       noTransparency: false,
@@ -22,6 +20,7 @@ function PartAnnotationViewer(params) {
     }
   });
   this.useSegments = params.useSegments;
+  this.segmentType = params.segmentType;
   this.keepInstances = params.keepInstances;
   PartViewer.call(this, params);
   this.retrieveAnnotationsUrl = params.retrieveAnnotationsUrl;
@@ -41,10 +40,10 @@ PartAnnotationViewer.prototype.createLabeler = function() {
   var scope = this;
   var labeler;
   if (this.useSegments) {
-    console.log('Use SegmentHierarchyLabeler');
-    var SegmentHierarchyLabeler = require('part-annotator/SegmentHierarchyLabeler');
-    labeler = new SegmentHierarchyLabeler({
-      segmentType: 'surfaces',
+    console.log('Use MeshSegmentHierarchyLabeler');
+    var MeshSegmentHierarchyLabeler = require('part-annotator/MeshSegmentHierarchyLabeler');
+    labeler = new MeshSegmentHierarchyLabeler({
+      segmentType: scope.segmentType,
       getMeshId: function(m) { return m.userData.id; },
       showNodeCallback: function (node) {
         scope.debugNode.add(node);
@@ -164,6 +163,11 @@ PartAnnotationViewer.prototype.retrieveAnnotations = function (params) {
 
 PartAnnotationViewer.prototype.setAnnotations = function (annotations) {
   this.rawAnnotations = annotations;
+  if (this.useSegments) {
+    for (let ann of annotations) {
+      ann.partId = ann.partId.map(x => (typeof x === 'string')? parseInt(x) : x);
+    }
+  }
   this.annotations = this.labeler.groupRawAnnotations({ annotations: annotations, keepInstances: this.keepInstances, keepLabelCounts: true });
 };
 

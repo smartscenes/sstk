@@ -1,12 +1,49 @@
+const AxisOptions = require('../AxisOptions');
+const RefAxisSelectWidget = require('./RefAxisSelectWidget');
+
 class AxisSelectionWidget {
-  constructor(selectElement, axisType) {
-    this.selectElement = selectElement;
+  /**
+   *
+   * @param selectElement {jquery} Element to which the axis selection widget will be created in
+   * @param axisType {string} Axis type (main|ref)
+   * @param filterAxisOptions {function} function to filter out inappropriate axis options
+   */
+  constructor(selectElement, axisType, filterAxisOptions) {
+    this.__selectElement = selectElement;
     this.axisType = axisType;
+    this.__filterAxisOptions = filterAxisOptions;
   }
 
-  setAxisOptions(axisOptions, axisIndex, addCustom = false, filter) {
+  __addAxisOption(selectElement, axisOption, index, isSelected) {
+    const selected = isSelected? "selected":"";
+    selectElement.append(`
+				<option value="${index}" ${selected}>${axisOption.label}: (
+					${axisOption.value.x.toFixed(5)},
+					${axisOption.value.y.toFixed(5)},
+					${axisOption.value.z.toFixed(5)})
+				</option>`);
+  }
+
+  __addCustomAxisOption(selectElement, axisOption, index, isSelected) {
+    const selected = isSelected? "selected":"";
+    const last = selectElement.find('option').last();
+    $(`<option value="${index}" ${selected}>${axisOption.label}: (
+					${axisOption.value.x.toFixed(5)},
+					${axisOption.value.y.toFixed(5)},
+					${axisOption.value.z.toFixed(5)})
+				</option>`).insertBefore(last);
+  }
+
+  /**
+   * Configure axis options
+   * @param axisOptions {AxisOption[]} Array of axis options
+   * @param axisIndex {int} selected axis index
+   * @param addCustom {boolean} whether to allow for custom axis selection
+   */
+  setAxisOptions(axisOptions, axisIndex, addCustom = false) {
     this.axisOptions = axisOptions;
-    const selectElement = this.selectElement;
+    const filter = this.__filterAxisOptions;
+    const selectElement = this.__selectElement;
     selectElement.empty();
     for (let i = 0; i < axisOptions.length; i++) {
       if (filter != null) {
@@ -15,25 +52,26 @@ class AxisSelectionWidget {
           continue;
         }
       }
-      let selected = (axisIndex === i)? "selected":"";
-      selectElement.append(`
-				<option value="${i}" ${selected}>${axisOptions[i].label}: (
-					${axisOptions[i].value.x.toFixed(5)},
-					${axisOptions[i].value.y.toFixed(5)},
-					${axisOptions[i].value.z.toFixed(5)})
-				</option>`);
+      const isSelected = (axisIndex === i);
+      this.__addAxisOption(selectElement, axisOptions[i], i, isSelected);
     }
     if (addCustom) {
-      this.__setButton = $('<button hidden>Set</button>');
-      this.__setButton.click(() => this.save());
-      this.__cancelButton = $('<button hidden>Cancel</button>');
-      this.__cancelButton.click(() => this.cancel());
-      this.__changeButton = $('<button hidden>Change</button>');
-      this.__changeButton.click(() => this.activateTransformControls());
+      if (!this.__setButton) {
+        this.__setButton = $('<button hidden>Set</button>');
+        this.__setButton.click(() => this.save());
+      }
+      if (!this.__cancelButton) {
+        this.__cancelButton = $('<button hidden>Cancel</button>');
+        this.__cancelButton.click(() => this.cancel());
+      }
+      if (!this.__changeButton) {
+        this.__changeButton = $('<button hidden>Change</button>');
+        this.__changeButton.click(() => this.activateCustomAxisSelection());
+      }
       selectElement.append('<option value="custom">Add custom</option>');
-      selectElement.parent().append(this.__changeButton);
-      selectElement.parent().append(this.__setButton);
-      selectElement.parent().append(this.__cancelButton);
+      this.__changeButton.insertAfter(selectElement);
+      this.__setButton.insertAfter(selectElement);
+      this.__cancelButton.insertAfter(selectElement);
       this.__updateButtonState(axisIndex);
     }
   }
@@ -54,10 +92,10 @@ class AxisSelectionWidget {
 
   change(callback) {
     this.__onChangeCallback = callback;
-    this.selectElement.change(event => {
+    this.__selectElement.change(event => {
       this.state.resetWidgets();
       if (event.target.value === 'custom') {
-        this.activateTransformControls();
+        this.activateCustomAxisSelection();
       } else {
         const index = parseInt(event.target.value);
         this.__updateButtonState(index);
@@ -68,6 +106,7 @@ class AxisSelectionWidget {
   }
 
   configure(app, state, articulation) {
+    // TODO: this weird dependency on the app, state is a bit strange
     this.app = app;
     this.state = state;
     this.articulation = articulation;
@@ -83,39 +122,66 @@ class AxisSelectionWidget {
     }
   }
 
-  activateTransformControls() {
-    if (this.state.activeWidget != this) {
-      this.__setButton.removeAttr('hidden');
-      this.__cancelButton.removeAttr('hidden');
-      this.__changeButton.attr('hidden', true);
+  activateCustomAxisSelection() {
+    const cbs = AxisSelectionWidget.AXIS_TYPE_CALLBACKS[this.axisType];
+    if (cbs && cbs.activateCustom) {
+      if (this.state.activeWidget != this) {
+        this.__setButton.removeAttr('hidden');
+        this.__cancelButton.removeAttr('hidden');
+        this.__changeButton.attr('hidden', true);
 
-      this.__defaultCameraControlMouseMappings = this.app.controls.mouseMappings;
-      this.app.controls.mouseMappings = [
-        { action: this.app.controls.actions.PAN,    button: THREE.MOUSE.RIGHT, keys: ['shiftKey'] },
-        { action: this.app.controls.actions.ORBIT,  button: THREE.MOUSE.RIGHT },
-        { action: this.app.controls.actions.ZOOM,   button: THREE.MOUSE.MIDDLE }
-      ];
+        this.__defaultCameraControlMouseMappings = this.app.controls.mouseMappings;
+        this.app.controls.mouseMappings = [
+          { action: this.app.controls.actions.PAN,    button: THREE.MOUSE.RIGHT, keys: ['shiftKey'] },
+          { action: this.app.controls.actions.ORBIT,  button: THREE.MOUSE.RIGHT },
+          { action: this.app.controls.actions.ZOOM,   button: THREE.MOUSE.MIDDLE }
+        ];
 
-      this.__oldArticulationAnimatorEnabled = this.app.articulationAnimator.enabled;
-      this.app.articulationAnimator.enabled = false;
-      this.app.articulationAnimator.setArticulationValue(this.state.activePart, this.articulation, this.articulation.defaultValue);
-      this.__axisInfo = this.getAxisInfo();
-      this.app.transformControls.attach(this.__axisInfo.node);
-      this.state.activeWidget = this;
+        this.__oldArticulationAnimatorEnabled = this.app.articulationAnimator.enabled;
+        this.app.articulationAnimator.enabled = false;
+        this.app.articulationAnimator.initArticulationValue(this.state.activePart, this.articulation, this.articulation.defaultValue);
+        this.__axisInfo = this.getAxisInfo();
+        this[cbs.activateCustom]();
+        this.state.activeWidget = this;
+      }
     }
   }
 
-  deactivateTransformControls() {
-    this.__setButton.attr('hidden', true);
-    this.__cancelButton.attr('hidden', true);
+  deactivateCustomAxisSelection() {
+    const cbs = AxisSelectionWidget.AXIS_TYPE_CALLBACKS[this.axisType];
+    if (cbs && cbs.deactivateCustom) {
+      this.__setButton.attr('hidden', true);
+      this.__cancelButton.attr('hidden', true);
 
+      this[cbs.deactivateCustom]();
+      if (this.state.activeWidget == this) {
+        this.state.activeWidget = null;
+        this.app.articulationAnimator.enabled = this.__oldArticulationAnimatorEnabled;
+        this.app.controls.mouseMappings = this.__defaultCameraControlMouseMappings;
+        delete this.__defaultCameraControlMouseMappings;
+        delete this.__oldArticulationAnimatorEnabled;
+      }
+    }
+  }
+
+  __activateTransformControls() {
+    this.app.transformControls.attach(this.__axisInfo.node);
+  }
+
+  __deactivateTransformControls() {
     this.app.transformControls.detach();
-    if (this.state.activeWidget == this) {
-      this.state.activeWidget = null;
-      this.app.articulationAnimator.enabled = this.__oldArticulationAnimatorEnabled;
-      this.app.controls.mouseMappings = this.__defaultCameraControlMouseMappings;
-      delete this.__defaultCameraControlMouseMappings;
-      delete this.__oldArticulationAnimatorEnabled;
+  }
+
+  __activateSelectRef() {
+    if (!this.__refAxisSelectWidget) {
+      this.__refAxisSelectWidget = new RefAxisSelectWidget(this.app.camera, this.app.container);
+    }
+    this.__refAxisSelectWidget.attach(this.state.displayRadar);
+  }
+
+  __deactivateSelectRef() {
+    if (this.__refAxisSelectWidget) {
+      this.__refAxisSelectWidget.detach();
     }
   }
 
@@ -124,22 +190,36 @@ class AxisSelectionWidget {
       this.__onChangeCallback(this.__axisInfo.index);
       this.__axisInfo = null;
     }
-    this.deactivateTransformControls();
+    this.deactivateCustomAxisSelection();
   }
 
   save() {
     if (this.__axisInfo != null) {
       if (this.__changeAxisIndex == null) {
-        const res = this.state.addCustomAxisOption(this.__axisInfo.axis.clone(), true);
+        const res = AxisOptions.addCustomAxisOption(this.axisOptions, AxisOptions.customAxisOptions, this.__axisInfo.axis.clone());
+        this.__addCustomAxisOption(this.__selectElement, res.option, res.index, true);
+        // console.log('add new custom axis', res, );
         this.__onChangeCallback(res.index);
       } else {
-        this.state.setCustomAxis(this.__changeAxisIndex, this.__axisInfo.axis);
+        // console.log('update custom axis', this.__changeAxisIndex);
+        AxisOptions.setCustomAxis(this.axisOptions, this.__changeAxisIndex, this.__axisInfo.axis);
         this.__onChangeCallback(this.__changeAxisIndex);
         this.__changeAxisIndex = null;
       }
     }
-    this.deactivateTransformControls();
+    this.deactivateCustomAxisSelection();
   }
 }
+
+AxisSelectionWidget.AXIS_TYPE_CALLBACKS = {
+  'main': {
+    activateCustom: '__activateTransformControls',
+    deactivateCustom: '__deactivateTransformControls'
+  },
+  'ref': {
+    activateCustom: '__activateSelectRef',
+    deactivateCustom: '__deactivateSelectRef'
+  }
+};
 
 module.exports = AxisSelectionWidget;

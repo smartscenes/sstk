@@ -2,6 +2,7 @@
 
 var Constants = require('Constants');
 var Object3DUtil = require('geo/Object3DUtil');
+var SegmentationUtil = require('geo/seg/SegmentationUtil');
 var RaycasterUtil = require('geo/RaycasterUtil');
 var Attachments = require('geo/Attachments');
 var SceneUtil = require('scene/SceneUtil');
@@ -47,8 +48,10 @@ SceneState.getArchType = function(sceneinfo) {
 };
 
 SceneState.prototype.init = function (scene, info) {
+  this.type = 'SceneState';
   this.info = info;
   this.lights = [];
+  this.extraDebugNodes = {};
   this.extraObjects = [];   // Extra objects that are not models but do something in the scene
   this.selectedObjects = [];
   this.modelInstancesMeta = [];
@@ -74,6 +77,7 @@ SceneState.prototype.init = function (scene, info) {
 Object.defineProperty(SceneState.prototype, 'maskObjectAssignments', {
   get: function () { return this.json? this.json.maskObjectAssignments : null; }
 });
+
 
 SceneState.prototype.addDefaultLights = function (sceneBBox, cameraPos, intensity) {
   var lights = this.lights;
@@ -588,10 +592,11 @@ SceneState.prototype.finalizeScene = function () {
   wrappedScene.add(this.scene);
   this.extraObjectNode = new THREE.Group();
   this.extraObjectNode.name = "extraObjects";
-  this.extraObjectNode.applyMatrix4(this.scene.matrix);
+  //this.extraObjectNode.applyMatrix4(this.scene.matrix);
+  this.scene.add(this.extraObjectNode);
   this.debugNode = new THREE.Group();
   this.debugNode.name = 'debugNode';
-  wrappedScene.add(this.extraObjectNode);
+  //wrappedScene.add(this.extraObjectNode);
   wrappedScene.add(this.debugNode);
 
   if (this.info && this.info.rootObjectIndex != undefined) {
@@ -868,11 +873,16 @@ SceneState.prototype.removeSelected = function () {
   return removed;
 };
 
+SceneState.prototype.removeModelInstances = function (modelInsts) {
+  var indices = modelInsts.map(x => this.modelInstances.indexOf(x));
+  return this.removeObjects(indices);
+};
+
 /**
  * Removes objects from the scene.  Selected objects are automatically updated to not include removed objects
  * unless `skipSelectedUpdated` is true.
  * @param indices {int[]} Indices of model instances to remove
- * @param skipSelectedUpdate {boolean} Whether to skip updating of selected objecs.
+ * @param skipSelectedUpdate {boolean} Whether to skip updating of selected objects.
  * @returns {model.ModelInstance[]} List of removed model instances
  */
 SceneState.prototype.removeObjects = function (indices, skipSelectedUpdate) {
@@ -914,6 +924,22 @@ SceneState.prototype.removeObjects = function (indices, skipSelectedUpdate) {
   return removed;
 };
 
+/**
+ * Check if the specified object is a model instance in the scene
+ * @param object {ModelInstance|THREE.Object3D}
+ * @returns {boolean}
+ */
+SceneState.prototype.hasObject = function(object) {
+  if (!object) {
+    return false;
+  }
+  if (object.type === 'ModelInstance') {
+    return this.modelInstances.indexOf(object) >= 0;
+  } else {
+    var mInst = Object3DUtil.getModelInstance(object);
+    return this.modelInstances.indexOf(mInst) >= 0;
+  }
+};
 
 /**
  * Add a modelInstance to the SceneState
@@ -937,6 +963,7 @@ SceneState.prototype.pasteObject = function (rootObject, modelInstances) {
   Object3DUtil.attachToParent(rootObject, this.scene);
   for (var i = 0; i < modelInstances.length; i++) {
     var modelInstance = modelInstances[i];
+    modelInstance.object3D.userData.id = modelInstance.object3D.userData.id + "_copy" + Math.random().toString(36).substring(7);
     this.modelInstances.push(modelInstance);
 
     //this.setObjectFlags(modelInstance);
@@ -954,7 +981,7 @@ SceneState.prototype.setObjectFlags = function (modelInstance) {
       // Set depthWrite to false so the other objects always appear on top
       //Object3DUtil.setDepthWrite(modelInstance.object3D, false);
       // Make the object not pickable, selectable, and not a support object
-      modelInstance.object3D.userData.isPickable = modelInstance.object3D.userData.isPickable ||false;
+      modelInstance.object3D.userData.isPickable = modelInstance.object3D.userData.isPickable || false;
       modelInstance.object3D.userData.isSelectable = modelInstance.object3D.userData.isSelectable || false;
       modelInstance.object3D.userData.isEditable = modelInstance.object3D.userData.isSelectable;
       modelInstance.object3D.userData.isSupportObject = modelInstance.object3D.userData.isSupportObject || false;
@@ -1117,7 +1144,7 @@ SceneState.prototype.createGhostSceneWithParts = function (objectParts) {
         }
       }
       var mat = Object3DUtil.getSimpleFalseColorMaterial(iPart, color);
-      var segments = Object3DUtil.remeshObject(obj, objPart.segment);
+      var segments = SegmentationUtil.remeshObjectUsingMeshTriSegments(obj, objPart.segment);
       Object3DUtil.setMaterial(segments, mat);
       this.ghostScene.add(segments);
     }
@@ -1140,20 +1167,24 @@ SceneState.prototype.compactify = function () {
   this.populateSelectables();
 };
 
+function _addObject3DToArray(targetArray, obj, flag, checkDescendantFlags) {
+  if (obj.userData[flag] !== false) {
+    targetArray.push(obj);
+  } else if (checkDescendantFlags) {
+    var matchingNodes = Object3DUtil.findNodes(obj, x => x.userData[flag]);
+    // console.log('matchingNodes', flag, matchingNodes);
+    if (matchingNodes.length) {
+      targetArray.push.apply(targetArray, matchingNodes);
+    }
+  }
+}
+
 // Private helper function to addObject3D
-SceneState.prototype._addObject3DToFullScene = function (obj) {
-  if (obj.userData.isPickable !== false) {
-    this.fullScene.pickables.push(obj);
-  }
-  if (obj.userData.isSelectable !== false) {
-    this.fullScene.selectables.push(obj);
-  }
-  if (obj.userData.isEditable !== false) {
-    this.fullScene.editables.push(obj);
-  }
-  if (obj.userData.isSupportObject !== false) {
-    this.fullScene.supportObjects.push(obj);
-  }
+SceneState.prototype._addObject3DToFullScene = function (obj, checkDescendantFlags) {
+  _addObject3DToArray(this.fullScene.pickables, obj, 'isPickable', checkDescendantFlags);
+  _addObject3DToArray(this.fullScene.selectables, obj, 'isSelectable', checkDescendantFlags);
+  _addObject3DToArray(this.fullScene.editables, obj, 'isEditable', checkDescendantFlags);
+  _addObject3DToArray(this.fullScene.supportObjects, obj, 'isSupportObject', checkDescendantFlags);
   this.__onObjectAdded(obj);
 };
 
@@ -1173,16 +1204,16 @@ SceneState.prototype._removeObject3DFromFullScene = function (obj) {
   this.__onObjectRemoved(obj);
 };
 
-SceneState.prototype.addExtraObject = function (obj, keepParent) {
+SceneState.prototype.addExtraObject = function (obj, keepParent, checkDescendantFlags) {
   // Extra objects
   if (!keepParent) {
     var matInv = new THREE.Matrix4();
-    matInv.getInverse(this.extraObjectNode.matrix);
+    matInv.copy(this.extraObjectNode.matrix).invert();
     obj.applyMatrix4(matInv);
     this.extraObjectNode.add(obj);
   }
   this.extraObjects.push(obj);
-  this._addObject3DToFullScene(obj);
+  this._addObject3DToFullScene(obj, checkDescendantFlags);
 };
 
 SceneState.prototype.removeExtraObject = function (obj) {
@@ -1191,6 +1222,23 @@ SceneState.prototype.removeExtraObject = function (obj) {
   }
   _.pull(this.extraObjects, obj);
   this._removeObject3DFromFullScene(obj);
+};
+
+SceneState.prototype.clearExtraDebugNodes = function() {
+  _.each(this.extraDebugNodes, (node,name) => {
+    this.setExtraDebugNode(name, null);
+  });
+};
+
+SceneState.prototype.setExtraDebugNode = function(name, node) {
+  if (this.extraDebugNodes[name] && node !== this.extraDebugNodes[name]) {
+    this.debugNode.remove(this.extraDebugNodes[name]);
+    Object3DUtil.dispose(this.extraDebugNodes[name]);
+  }
+  if (node) {
+    this.debugNode.add(node);
+  }
+  this.extraDebugNodes[name] = node;
 };
 
 SceneState.prototype.populateSelectables = function () {
@@ -1211,7 +1259,7 @@ SceneState.prototype.populateSelectables = function () {
     function (o) { return o && o.userData.isSupportObject !== false; }
   );
 
-  this.extraObjects.forEach(this._addObject3DToFullScene.bind(this));
+  this.extraObjects.forEach((obj3D) => this._addObject3DToFullScene(obj3D, true));
 };
 
 SceneState.prototype.setCurrentCamera = function (camera) {
@@ -1226,19 +1274,23 @@ SceneState.prototype.setCurrentCameraControls = function (cameraControls, setCam
 SceneState.prototype.applyCameraState = function (setCameraTo) {
   if (setCameraTo) {
     var currentCam = this.getCameraJson(this.json, setCameraTo);
-    if (currentCam && this.currentCameraControls) {
-      var sceneToWorld = this.getSceneToWorldMatrix();
-      // Convert to world orientation
-      var scale = this.getVirtualUnit();
-      currentCam = this.transformCameraState(currentCam, sceneToWorld, scale);
-      this.currentCameraControls.restoreCameraState(currentCam);
-      return true;
-    }
+    return this.useCameraState(currentCam);
+  }
+};
+
+SceneState.prototype.useCameraState = function (camState) {
+  if (camState && this.currentCameraControls) {
+    var sceneToWorld = this.getSceneToWorldAlignmentMatrix();
+    // Convert to world orientation
+    var scale = this.getVirtualUnit();
+    camState = this.transformCameraState(camState, sceneToWorld, scale);
+    this.currentCameraControls.setCameraState(camState);
+    return true;
   }
 };
 
 SceneState.prototype.convertCameraConfig = function (cameraConfig) {
-  var sceneToWorld = this.getSceneToWorldMatrix();
+  var sceneToWorld = this.getSceneToWorldAlignmentMatrix();
   // Convert to world orientation
   var scale = this.getVirtualUnit();
   console.log('scale', scale);
@@ -1250,12 +1302,12 @@ SceneState.prototype.updateState = function (json) {
   // Set selected models
   this.json = json;
   if (json.selected) {
-    this.selectedObjects = json.selected.map(function (selection) {
+    this.selectedObjects = json.selected.map((selection) => {
       var i = selection.objectIndex;
       console.log('is selected: ' + i);
       this.modelInstances[i].object3D.userData.isSelected = true;
       return this.modelInstances[i].object3D;
-    }.bind(this));
+    });
   }
   // Set current camera
   this.applyCameraState('current');
@@ -1309,12 +1361,18 @@ SceneState.prototype.getSelectedModelIndices = function () {
   return sceneSelections;
 };
 
-SceneState.prototype.getWorldToSceneMatrix = function () {
+SceneState.prototype.getWorldToSceneAlignmentMatrix = function () {
   return Object3DUtil.getAlignmentMatrix(Constants.worldUp, Constants.worldFront, this.getUp(), this.getFront());
 };
 
-SceneState.prototype.getSceneToWorldMatrix = function () {
+SceneState.prototype.getSceneToWorldAlignmentMatrix = function () {
   return Object3DUtil.getAlignmentMatrix(this.getUp(), this.getFront(), Constants.worldUp, Constants.worldFront);
+};
+
+SceneState.prototype.getWorldToSceneMatrix = function(out) {
+  out = out || new THREE.Matrix4();
+  out.copy(this.scene.matrixWorld).invert();
+  return out;
 };
 
 SceneState.prototype.transformCameraState = function (camState, matrix, scale) {
@@ -1505,33 +1563,47 @@ SceneState.prototype.toJson = function (includeUserData, includeSemanticOBBs) {
   this.assignObjectIndices();
   // Populate a scene state
   var sceneObjects = [];
-  var sceneTransformMatrixInverse = new THREE.Matrix4();
-  sceneTransformMatrixInverse.getInverse(this.scene.matrixWorld);
+  var sceneTransformMatrixInverse = this.getWorldToSceneMatrix();
   var assetSources = [];
   for (var i = 0; i < this.modelInstances.length; i++) {
     var modelInstance = this.modelInstances[i];
     var modelObject = modelInstance.getObject3D('Model');
     modelObject.updateMatrixWorld();
     var normModelToScene = new THREE.Matrix4();
-    modelInstance.getNormalizedModelToWorld(normModelToScene);
-    normModelToScene.multiplyMatrices(sceneTransformMatrixInverse, normModelToScene);
+    var hasNormModel = false;
+    try {
+      modelInstance.getNormalizedModelToWorld(normModelToScene);
+      normModelToScene.multiplyMatrices(sceneTransformMatrixInverse, normModelToScene);
+      hasNormModel = true;
+    } catch (err) {
+      console.error('Error getting normalized coordinates for ' + modelInstance.model.getFullID(), err);
+    }
     var origModelToScene = new THREE.Matrix4();
     modelInstance.getOriginalModelToWorld(origModelToScene);
     origModelToScene.multiplyMatrices(sceneTransformMatrixInverse, origModelToScene);
     var transform = Object3DUtil.matrix4ToProto(origModelToScene);
-    var parentIndex = (modelInstance.object3D.parent) ? modelInstance.object3D.parent.index : -1;
+    var parentId;
+    var parentIndex;
+    if (modelInstance.object3D.parent != null) {
+      const parentObject3D = modelInstance.getParentObject3D()
+      if (parentObject3D) {
+        parentId = parentObject3D.userData.id;
+        parentIndex = parentObject3D.index;
+      }
+    }
     if (parentIndex === undefined || parentIndex === null) {
       parentIndex = -1;
     }
     var sceneObject = {
+      id: modelInstance.object3D.userData.id,
       modelId: modelInstance.model.getFullID(),
       index: modelInstance.object3D.index,
       parentIndex: parentIndex,
+      parentId: parentId,
       transform: transform,
-      id: modelInstance.object3D.userData.id,
       //          objectDescIndex: -1
     };
-    if (includeSemanticOBBs) {
+    if (includeSemanticOBBs && hasNormModel) {
       sceneObject.obb = modelInstance.getSemanticOBB(normModelToScene).toJSON();
     }
     var modelSource = modelInstance.model.getAssetSource();
@@ -1566,7 +1638,7 @@ SceneState.prototype.toJson = function (includeUserData, includeSemanticOBBs) {
     // Set viewer coordinate frame
     var currentCameraState = this.currentCameraControls.getCurrentCameraState();
     // Convert to scene orientation
-    var worldToScene = this.getWorldToSceneMatrix();
+    var worldToScene = this.getWorldToSceneAlignmentMatrix();
     var scale = 1.0 / this.getVirtualUnit();
     currentCameraState = this.transformCameraState(currentCameraState, worldToScene, scale);
     currentCameraState['name'] = 'current';
@@ -1638,7 +1710,17 @@ SceneState.prototype.getModelObject3Ds = function() {
 };
 
 SceneState.prototype.getWalls = function() {
-  return _.filter(this.extraObjects, function(x) { return x.userData.type === 'Wall'; });
+  var archObject3Ds = this.getArchObject3Ds();
+  return _.filter(archObject3Ds, function(x) { return x.userData.type === 'Wall'; });
+};
+
+SceneState.prototype.getArchObject3Ds = function() {
+  if (this.__archObject3Ds == null) {
+    this.__archObject3Ds = Object3DUtil.findNodes(this.scene, function (node) {
+      return node.userData.isArch;
+    });
+  }
+  return this.__archObject3Ds;
 };
 
 SceneState.prototype.populateMeshUserData = function(fieldName, objectIndex) {
@@ -1736,6 +1818,24 @@ SceneState.prototype.setVisible = function(flag, filter, recursive) {
   for (var i = 0; i < matching.length; i++) {
     Object3DUtil.setVisible(matching[i], flag, recursive);
   }
+};
+
+/**
+ * Returns a list of parent objects in this scene
+ */
+SceneState.prototype.getParentObjects = function() {
+  var parents = _.map(this.modelInstances, (mInst) => mInst.getParentObject3D());
+  parents = _.filter(_.uniq(parents), (parent) => parent != null);
+  return parents;
+};
+
+/**
+ * Returns a list of parent regions in this scene
+ */
+SceneState.prototype.getParentRegions = function() {
+  var regions = _.map(this.modelInstances, (mInst) => mInst.getParentRegion());
+  regions = _.filter(_.uniq(regions), (region) => region != null);
+  return regions;
 };
 
 /**
@@ -1838,6 +1938,7 @@ SceneState.prototype.getIntersectedGroundAt = function(position, level, distThre
 };
 
 SceneState.prototype.getRoomSurfaces = function(room, separateWallSurfaces) {
+  console.warn('Surfaces may not be meshes')
   var surfaceTypes = ['Ceiling', 'Floor', 'Ground'];
   if (separateWallSurfaces) {
     surfaceTypes.push('WallInside');
@@ -1892,7 +1993,6 @@ SceneState.prototype.getFloorHeight = function (room, defaultFloorHeight) {
     }
   }
 };
-
 
 // Exports
 module.exports = SceneState;

@@ -1,5 +1,6 @@
 const Tree = require('ds/Tree');
 const Object3DUtil = require('geo/Object3DUtil');
+const _ = require('util/util');
 
 class PartHierarchy extends Tree {
   constructor(root) {

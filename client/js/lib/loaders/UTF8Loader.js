@@ -28,9 +28,9 @@ THREE.UTF8Loader.prototype.getFileLoader = function(responseType) {
  *                   materialBase: Base url from which to load referenced textures
  */
 THREE.UTF8Loader.prototype.load = function ( jsonUrl, callback, onerror, options ) {
-    this.downloadModelJson( jsonUrl, function(err, res) {
-    	if (err) { onerror(err); } else { callback(res); }
-    }, options );
+	this.downloadModelJson( jsonUrl, function(err, res) {
+		if (err) { onerror(err); } else { callback(res); }
+	}, options );
 };
 
 // BufferGeometryCreator
@@ -49,8 +49,6 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 	var uvs = new Float32Array( ntris * 3 * 2 );
 
 	var i, j, offset;
-	var x, y, z;
-	var u, v;
 
 	var end = attribArray.length;
 	var stride = 8;
@@ -62,13 +60,9 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 
 	for ( i = offset; i < end; i += stride ) {
 
-		x = attribArray[ i ];
-		y = attribArray[ i + 1 ];
-		z = attribArray[ i + 2 ];
-
-		positions[ j ++ ] = x;
-		positions[ j ++ ] = y;
-		positions[ j ++ ] = z;
+		positions[ j ++ ] = attribArray[ i ];
+		positions[ j ++ ] = attribArray[ i + 1 ];
+		positions[ j ++ ] = attribArray[ i + 2 ];
 
 	}
 
@@ -79,11 +73,8 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 
 	for ( i = offset; i < end; i += stride ) {
 
-		u = attribArray[ i ];
-		v = attribArray[ i + 1 ];
-
-		uvs[ j ++ ] = u;
-		uvs[ j ++ ] = v;
+		uvs[ j ++ ] = attribArray[ i ];
+		uvs[ j ++ ] = attribArray[ i + 1 ];
 
 	}
 
@@ -94,13 +85,9 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 
 	for ( i = offset; i < end; i += stride ) {
 
-		x = attribArray[ i ];
-		y = attribArray[ i + 1 ];
-		z = attribArray[ i + 2 ];
-
-		normals[ j ++ ] = x;
-		normals[ j ++ ] = y;
-		normals[ j ++ ] = z;
+		normals[ j ++ ] = attribArray[ i ];
+		normals[ j ++ ] = attribArray[ i + 1 ];
+		normals[ j ++ ] = attribArray[ i + 2 ];
 
 	}
 
@@ -109,7 +96,7 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 	geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
 	geometry.setAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
 
-  geometry.groups.push( { start: 0, count: indices.length, index: 0 } );
+	geometry.groups.push( { start: 0, count: indices.length, index: 0 } );
 
 	geometry.computeBoundingSphere();
 
@@ -117,165 +104,6 @@ THREE.UTF8Loader.BufferGeometryCreator.prototype.create = function ( attribArray
 
 };
 
-// GeometryCreator
-
-THREE.UTF8Loader.GeometryCreator = function () {
-};
-
-THREE.UTF8Loader.GeometryCreator.prototype = {
-
-    create: function ( attribArray, indexArray ) {
-
-        var geometry = new THREE.Geometry();
-
-        this.init_vertices( geometry, attribArray, 8, 0 );
-
-        var uvs = this.init_uvs( attribArray, 8, 3 );
-        var normals = this.init_normals( attribArray, 8, 5 );
-
-        this.init_faces( geometry, normals, uvs, indexArray );
-
-        geometry.computeFaceNormals();
-        geometry.computeVertexNormals();
-
-        return geometry;
-
-    },
-
-    init_vertices: function ( scope, data, stride, offset ) {
-
-        var i, x, y, z;
-        var end = data.length;
-
-        for( i = offset; i < end; i += stride ) {
-
-            x = data[ i ];
-            y = data[ i + 1 ];
-            z = data[ i + 2 ];
-
-            this.addVertex( scope, x, y, z );
-
-        }
-
-    },
-
-    init_normals: function( data, stride, offset ) {
-
-        var normals = [];
-
-        var i, x, y, z;
-        var end = data.length;
-
-        for( i = offset; i < end; i += stride ) {
-
-            // Assumes already normalized to <-1,1> (unlike previous version of UTF8Loader)
-
-            x = data[ i ];
-            y = data[ i + 1 ];
-            z = data[ i + 2 ];
-
-            normals.push( x, y, z );
-
-        }
-
-        return normals;
-
-    },
-
-    init_uvs: function( data, stride, offset ) {
-
-        var uvs = [];
-
-        var i, u, v;
-        var end = data.length;
-
-        for( i = offset; i < end; i += stride ) {
-
-            // Assumes uvs are already normalized (unlike previous version of UTF8Loader)
-            // uvs can be negative, need to set wrap for texture map later on ...
-
-            u = data[ i ];
-            v = data[ i + 1 ];
-
-            uvs.push( u, v );
-        }
-
-        return uvs;
-
-    },
-
-    init_faces: function( scope, normals, uvs, indices ) {
-
-        var i,
-            a, b, c,
-            u1, v1, u2, v2, u3, v3;
-
-        var end = indices.length;
-
-        var m = 0; // all faces defaulting to material 0
-
-        for( i = 0; i < end; i += 3 ) {
-
-            a = indices[ i ];
-            b = indices[ i + 1 ];
-            c = indices[ i + 2 ];
-
-            this.f3n( scope, normals, a, b, c, m, a, b, c );
-
-            u1 = uvs[ a * 2 ];
-            v1 = uvs[ a * 2 + 1 ];
-
-            u2 = uvs[ b * 2 ];
-            v2 = uvs[ b * 2 + 1 ];
-
-            u3 = uvs[ c * 2 ];
-            v3 = uvs[ c * 2 + 1 ];
-
-            this.uv3( scope.faceVertexUvs[ 0 ], u1, v1, u2, v2, u3, v3 );
-
-        }
-
-    },
-
-    addVertex: function ( scope, x, y, z ) {
-
-        scope.vertices.push( new THREE.Vector3( x, y, z ) );
-
-    },
-
-    f3n: function( scope, normals, a, b, c, mi, nai, nbi, nci ) {
-
-        var nax = normals[ nai * 3 ],
-            nay = normals[ nai * 3 + 1 ],
-            naz = normals[ nai * 3 + 2 ],
-
-            nbx = normals[ nbi * 3 ],
-            nby = normals[ nbi * 3 + 1 ],
-            nbz = normals[ nbi * 3 + 2 ],
-
-            ncx = normals[ nci * 3 ],
-            ncy = normals[ nci * 3 + 1 ],
-            ncz = normals[ nci * 3 + 2 ];
-
-        var na = new THREE.Vector3( nax, nay, naz ),
-            nb = new THREE.Vector3( nbx, nby, nbz ),
-            nc = new THREE.Vector3( ncx, ncy, ncz );
-
-        scope.faces.push( new THREE.Face3( a, b, c, [ na, nb, nc ], null, mi ) );
-
-    },
-
-    uv3: function ( where, u1, v1, u2, v2, u3, v3 ) {
-
-        var uv = [];
-        uv.push( new THREE.Vector2( u1, v1 ) );
-        uv.push( new THREE.Vector2( u2, v2 ) );
-        uv.push( new THREE.Vector2( u3, v3 ) );
-        where.push( uv );
-
-    }
-
-};
 
 // UTF-8 decoder from webgl-loader (r100)
 // http://code.google.com/p/webgl-loader/
@@ -302,18 +130,18 @@ THREE.UTF8Loader.GeometryCreator.prototype = {
 
 var DEFAULT_DECODE_PARAMS = {
 
-    decodeOffsets: [ -4095, -4095, -4095, 0, 0, -511, -511, -511 ],
-    decodeScales: [ 1 / 8191, 1 / 8191, 1 / 8191, 1 / 1023, 1 / 1023, 1 / 1023, 1 / 1023, 1 / 1023 ]
+	decodeOffsets: [ -4095, -4095, -4095, 0, 0, -511, -511, -511 ],
+	decodeScales: [ 1 / 8191, 1 / 8191, 1 / 8191, 1 / 1023, 1 / 1023, 1 / 1023, 1 / 1023, 1 / 1023 ]
 
-    // TODO: normal decoding? (see walt.js)
-    // needs to know: input, output (from vertex format!)
-    //
-    // Should split attrib/index.
-    // 1) Decode position and non-normal attributes.
-    // 2) Decode indices, computing normals
-    // 3) Maybe normalize normals? Only necessary for refinement, or fixed?
-    // 4) Maybe refine normals? Should this be part of regular refinement?
-    // 5) Morphing
+	// TODO: normal decoding? (see walt.js)
+	// needs to know: input, output (from vertex format!)
+	//
+	// Should split attrib/index.
+	// 1) Decode position and non-normal attributes.
+	// 2) Decode indices, computing normals
+	// 3) Maybe normalize normals? Only necessary for refinement, or fixed?
+	// 4) Maybe refine normals? Should this be part of regular refinement?
+	// 5) Morphing
 
 };
 
@@ -352,7 +180,7 @@ UTF8Decoder.prototype.__decompressIndices = function( str, inputStart, numIndice
 };
 
 UTF8Decoder.prototype.__decompressAABBs = function ( str, inputStart, numBBoxen,
-                                                           decodeOffsets, decodeScales ) {
+																										 decodeOffsets, decodeScales ) {
 	var numFloats = 6 * numBBoxen;
 
 	var inputEnd = inputStart + numFloats;
@@ -392,7 +220,7 @@ UTF8Decoder.prototype.decompressMesh =  function ( str, meshParams, decodeParams
 	var attribStart = meshParams.attribRange[0];
 	var numVerts = meshParams.attribRange[1];
 
-    // Decode attributes.
+	// Decode attributes.
 
 	var inputOffset = attribStart;
 	var attribsOut = new Float32Array( stride * numVerts );
@@ -404,8 +232,8 @@ UTF8Decoder.prototype.decompressMesh =  function ( str, meshParams, decodeParams
 		if ( decodeScale ) {
 			// Assume if decodeScale is never set, simply ignore the attribute.
 			this.__decompressAttribsInner( str, inputOffset, end,
-                attribsOut, j, stride,
-                decodeOffsets[j], decodeScale );
+				attribsOut, j, stride,
+				decodeOffsets[j], decodeScale );
 		}
 
 		inputOffset = end;
@@ -437,8 +265,8 @@ UTF8Decoder.prototype.__copyAttrib = function ( stride, attribsOutFixed, lastAtt
 };
 
 UTF8Decoder.prototype.__decodeAttrib2 = function ( str, stride, decodeOffsets, decodeScales, deltaStart,
-                                                        numVerts, attribsOut, attribsOutFixed, lastAttrib,
-                                                        index ) {
+																									 numVerts, attribsOut, attribsOutFixed, lastAttrib,
+																									 index ) {
 	for ( var j = 0; j < 5; j ++ ) {
 
 		var code = str.charCodeAt( deltaStart + numVerts * j + index );
@@ -563,9 +391,9 @@ UTF8Decoder.prototype.decompressMesh2 = function( str, meshParams, decodeParams,
 					var deltaCode = str.charCodeAt( deltaStart + numVerts * j + highest );
 
 					var prediction = ((deltaCode >> 1) ^ (-(deltaCode & 1))) +
-                        attribsOutFixed[stride * i0 + j] +
-                        attribsOutFixed[stride * i1 + j] -
-                        attribsOutFixed[stride * i2 + j];
+						attribsOutFixed[stride * i0 + j] +
+						attribsOutFixed[stride * i1 + j] -
+						attribsOutFixed[stride * i2 + j];
 
 					lastAttrib[j] = prediction;
 
@@ -589,8 +417,8 @@ UTF8Decoder.prototype.decompressMesh2 = function( str, meshParams, decodeParams,
 
 			if ( code === max_backref ) {
 				this.__decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
-                    numVerts, attribsOut, attribsOutFixed, lastAttrib,
-                    highest ++ );
+					numVerts, attribsOut, attribsOutFixed, lastAttrib,
+					highest ++ );
 			} else {
 				this.__copyAttrib(stride, attribsOutFixed, lastAttrib, index0);
 			}
@@ -602,8 +430,8 @@ UTF8Decoder.prototype.decompressMesh2 = function( str, meshParams, decodeParams,
 
 			if ( code === 0 ) {
 				this.__decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
-                    numVerts, attribsOut, attribsOutFixed, lastAttrib,
-                    highest ++ );
+					numVerts, attribsOut, attribsOutFixed, lastAttrib,
+					highest ++ );
 			} else {
 				this.__copyAttrib( stride, attribsOutFixed, lastAttrib, index1 );
 			}
@@ -620,8 +448,8 @@ UTF8Decoder.prototype.decompressMesh2 = function( str, meshParams, decodeParams,
 				}
 
 				this.__decodeAttrib2( str, stride, decodeOffsets, decodeScales, deltaStart,
-                    numVerts, attribsOut, attribsOutFixed, lastAttrib,
-                    highest ++ );
+					numVerts, attribsOut, attribsOutFixed, lastAttrib,
+					highest ++ );
 			} else {
 				this.__copyAttrib( stride, attribsOutFixed, lastAttrib, index2 );
 			}
@@ -683,7 +511,7 @@ UTF8Decoder.prototype.decodeMesh = function(encodedMesh, name, meshEntry, callba
 // Supporting THREE UTF8Loader functions
 
 THREE.UTF8Loader.prototype.__downloadMesh = function ( path, name, meshEntry, decodeParams, callback) {
-	var loader = this.getFileLoader('utf8');
+	var loader = this.getFileLoader('text');
 	loader.load(path, function ( text ) {
 		var decoder = new UTF8Decoder(decodeParams);
 		decoder.decodeMesh(text, name, meshEntry, callback);
@@ -727,14 +555,13 @@ THREE.UTF8Loader.prototype.__createMeshCallback = function( materialBaseUrl, loa
 	materialCreator.preload();
 
 	// Create callback for creating mesh parts
-	var geometryCreator = new THREE.UTF8Loader.GeometryCreator();
-	var bufferGeometryCreator = new THREE.UTF8Loader.BufferGeometryCreator();
+	var geometryCreator = new THREE.UTF8Loader.BufferGeometryCreator();
 
 	var meshCallback = function(err, name, idx, attribArray, indexArray, bboxen, meshParams ) {
 		if (err) {
 			nErrUrls++;
 			errors[name] = err;
- 		} else {
+		} else {
 			// Got ourselves a new mesh
 
 			// name identifies this part of the model (url)
@@ -744,15 +571,7 @@ THREE.UTF8Loader.prototype.__createMeshCallback = function( materialBaseUrl, loa
 			// bboxen defines the bounding box
 			// meshParams contains the material info
 
-			// TODO: Always use buffer geometry
-			var useBuffers = (loadModelInfo.options && loadModelInfo.options.useBuffers !== undefined) ? loadModelInfo.options.useBuffers : true;
-			var geometry;
-			if (useBuffers) {
-				geometry = bufferGeometryCreator.create(attribArray, indexArray);
-			} else {
-				geometry = geometryCreator.create(attribArray, indexArray);
-			}
-
+			var geometry = geometryCreator.create(attribArray, indexArray);
 			var material = materialCreator.create(meshParams.material);
 
 			var mesh = new THREE.Mesh(geometry, material);
@@ -801,15 +620,15 @@ THREE.UTF8Loader.prototype.__parseModelJson = function(urlBase, loaded, options)
 
 	if ( options && options.geometryBase ) {
 		geometryBase = options.geometryBase;
-		if ( geometryBase.charAt( geometryBase.length - 1 ) !== "/" ) {
-			geometryBase = geometryBase + "/";
+		if ( geometryBase.charAt( geometryBase.length - 1 ) !== '/' ) {
+			geometryBase = geometryBase + '/';
 		}
 	}
 
 	if ( options && options.materialBase ) {
 		materialBase = options.materialBase;
-		if ( materialBase.charAt( materialBase.length - 1 ) !== "/" ) {
-			materialBase = materialBase  + "/";
+		if ( materialBase.charAt( materialBase.length - 1 ) !== '/' ) {
+			materialBase = materialBase  + '/';
 		}
 	}
 
@@ -820,7 +639,7 @@ THREE.UTF8Loader.prototype.downloadModelJson = function ( jsonUrl, callback, opt
 	var scope = this;
 	var loader = this.getFileLoader('json');
 	loader.load(jsonUrl, function (data) {
-		var urlBase = jsonUrl.substr( 0, jsonUrl.lastIndexOf( "/" ) + 1 );
+		var urlBase = jsonUrl.substring( 0, jsonUrl.lastIndexOf( '/' ) + 1 );
 		var res = scope.__parseModelJson(urlBase, data, options);
 		scope.__downloadModelMeshes(res.geometryBase, res.materialBase, data, callback);
 	}, null, function(err) {

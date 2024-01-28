@@ -12,7 +12,7 @@ function PartAnnotationsViewer(params) {
   this.editUrl = this.baseUrl + '/annotations/edit';
   this.previewUrl = this.baseUrl + '/annotations/preview';
   this.jsonUrl = this.baseUrl + '/annotations/get';
-  this.partsUrl = this.baseUrl + '/query?qt=parts';
+  this.partsUrl = this.baseUrl + '/part-annotations/query';
 }
 
 PartAnnotationsViewer.prototype.__onLoadIds = function(file) {
@@ -219,19 +219,34 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
         .submit();
     });
 
-    buttons.push({ extend: "edit",   editor: editor });
+    buttons.push({ extend: "edit", editor: editor });
   }
 
-  function getViewUrl(ann) {
-    if (ann.task === 'segment-p5d') {
-      return scope.viewUrl + '?annotationId=' + ann.id + '&modelId=' + ann.itemId + '&useSegments&keepInstances';
-    } else {
-      return scope.viewUrl + '?annotationId=' + ann.id + '&modelId=' + ann.itemId;
+  function getSegmentType(ann) {
+    if (ann.data) {
+      return ann.data.metadata? ann.data.metadata.segmentType : undefined;
     }
   }
 
+  function getViewUrl(ann) {
+    var url = scope.viewUrl + '?annotationId=' + ann.id + '&modelId=' + ann.itemId + '&useDatGui';
+    var segmentType = getSegmentType(ann);
+    if ((ann.task != null && ann.task.startsWith('segment')) || segmentType != null) {
+       url = url + '&useSegments&keepInstances';
+       if (segmentType != null) {
+         url = url + '&segmentType=' + segmentType;
+       }
+    }
+    return url;
+  }
+
   function getFixupParams(ann, startFrom) {
-    var params = { startFrom: startFrom, modelId: ann.itemId, task: ann.task, taskMode: 'fixup', condition: ann.condition, linkWordNet: true };
+    var params = { startFrom: startFrom, modelId: ann.itemId, task: ann.task, taskMode: 'fixup', condition: ann.condition,
+      linkWordNet: true, useDatGui: true };
+    var segmentType = getSegmentType(ann);
+    if (ann.data) {
+      params['segmentType'] = segmentType;
+    }
     return params;
   }
 
@@ -262,7 +277,7 @@ PartAnnotationsViewer.prototype.createAnnotationsTable = function(params) {
   }
 
   function createPartsLink(ann, label, extraParams) {
-    var url = scope.partsUrl + '&annId=' + ann.id + '&modelId=' + ann.itemId;
+    var url = scope.partsUrl + '?annId=' + ann.id + '&modelId=' + ann.itemId;
     if (extraParams) {
       url += ('&' + $.param(extraParams));
     }

@@ -2,6 +2,23 @@ var Constants = require('Constants');
 var Colors = require('util/Colors');
 var ImageUtil = require('util/ImageUtil');
 var _ = require('util/util');
+require('vendor/three/environments/RoomEnvironment'); // for neutral envmap
+
+// AXC: Legacy three MultiMaterial that we haven't quite eliminated
+var __warnedMultiMaterial = false;
+THREE.MultiMaterial = function( materials = [] ) {
+  if (!__warnedMultiMaterial) {
+    console.warn( 'THREE.MultiMaterial has been removed. Use an Array instead.' );
+    __warnedMultiMaterial = true;
+  }
+  materials.isMultiMaterial = true;
+  materials.materials = materials;
+  materials.clone = function () {
+    return materials.slice();
+  };
+
+  return materials;
+};
 
 Object.defineProperty(THREE.Material.prototype, 'colorHex', {
   get: function () { return this.color.getHex(); },
@@ -19,6 +36,7 @@ Materials.DefaultMaterialType = THREE.MeshPhysicalMaterial;
 Materials.DefaultMaterialSide = THREE.DoubleSide;
 Materials.FalseMaterialType = THREE.MeshPhongMaterial;
 Materials.DefaultTextureEncoding = THREE.LinearEncoding;
+//Materials.DefaultTextureEncoding = THREE.sRGBEncoding;
 
 Materials.textureMapFields =
   ['map', 'bumpMap', 'normalMap', 'specularMap', 'envMap', 'roughnessMap',
@@ -120,21 +138,60 @@ function loadTexture(opts) {
 }
 Materials.loadTexture = loadTexture;
 
-function getCubeMapTexture(environment, pmremGenerator) {
-  const path = environment;
+function getNeutralEnvMap(pmremGenerator) {
+  pmremGenerator.compileEquirectangularShader();
+  const scene = new THREE.RoomEnvironment();
+  scene.rotateY(Math.PI);
+  const envMap = pmremGenerator.fromScene(scene).texture;
+  return new Promise( ( resolve, reject ) => {
+    resolve( { envMap: envMap } );
+  });
+}
+Materials.getNeutralEnvMap = getNeutralEnvMap;
+
+function getEquirectangularEnvMap(path, pmremGenerator) {
   // no envmap
   if ( ! path ) return Promise.resolve( { envMap: null } );
+  pmremGenerator.compileEquirectangularShader();
   return new Promise( ( resolve, reject ) => {
     new THREE.RGBELoader()
-      .setDataType( THREE.UnsignedByteType )
       .load( path, ( texture ) => {
         const envMap = pmremGenerator.fromEquirectangular( texture ).texture;
-        pmremGenerator.dispose();
-        resolve( { envMap } );
+        resolve( { envMap: envMap } );
       }, undefined, reject );
   });
 }
-Materials.getCubeMapTexture = getCubeMapTexture;
+Materials.getEquirectangularEnvMap = getEquirectangularEnvMap;
+
+function getCubeMapEnvMap(paths, pmremGenerator) {
+  // no envmap
+  if ( ! paths ) return Promise.resolve( { envMap: null } );
+  let loader;
+  if (paths[0].endsWith('.hdr')) {
+    loader = new THREE.HDRCubeTextureLoader();
+  } else {
+    loader = new THREE.CubeTextureLoader();
+  }
+  pmremGenerator.compileCubemapShader();
+  return new Promise( ( resolve, reject ) => {
+    loader.load( paths, ( texture ) => {
+        const envMap = pmremGenerator.fromCubemap( texture ).texture;
+        resolve( { envMap: envMap } );
+      }, undefined, reject );
+  });
+}
+Materials.getCubeMapEnvMap = getCubeMapEnvMap;
+
+function getEnvMap(options, pmremGenerator) {
+  if (options.type === 'cubemap') {
+    return Materials.getCubeMapEnvMap(options.paths, pmremGenerator);
+  } else if (options.type === 'equirectangular') {
+    return Materials.getEquirectangularEnvMap(options.path, pmremGenerator);
+  } else {
+    return Materials.getNeutralEnvMap(pmremGenerator);
+  }
+}
+Materials.getEnvMap = getEnvMap;
 
 /**
  * Apply coloring to texture pixels (without changing alpha)
@@ -175,8 +232,13 @@ Materials.createMultiMaterial = function(materials) {
   return materials;
 };
 
+Materials.isMaterial = function(mat) {
+  // Note: instanceof THREE.MultiMaterial no longer work, should update all code that uses it
+  return (mat && (mat.isMaterial || mat.isMultiMaterial));
+};
+
 Materials.getBasicMaterial = function (color, alpha, materialSide) {
-  if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
+  if (Materials.isMaterial(color)) {
     return color;
   }
   if (materialSide == null) {
@@ -196,7 +258,7 @@ Materials.getBasicMaterial = function (color, alpha, materialSide) {
  * @returns {THREE.Material|THREE.MultiMaterial}
  */
 Materials.toMaterial = function (mat) {
-  if (mat instanceof THREE.Material || mat instanceof THREE.MultiMaterial) {
+  if (Materials.isMaterial(mat)) {
     return mat;
   } else {
     var color = mat || 'gray';
@@ -224,7 +286,7 @@ Materials.updateMaterialParams = function(materialType, p) {
 };
 
 Materials.getMaterial = function (color, alpha, materialType, materialSide) {
-  if (color instanceof THREE.Material || color instanceof THREE.MultiMaterial) {
+  if (Materials.isMaterial(color)) {
     return color;
   }
   materialType = materialType || Materials.DefaultMaterialType;
@@ -254,7 +316,7 @@ Materials.getStandardMaterial = function (color, alpha, materialSide) {
   return Materials.getMaterial(color, alpha, Materials.DefaultMaterialType, materialSide);
 };
 
-Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
+Materials.getSimpleFalseColorMaterial = function (id, color, palette, materialSide) {
   var c = color;
   if (c == null) {
     c = Colors.createColor(id, palette || Constants.defaultPalette);
@@ -262,7 +324,7 @@ Materials.getSimpleFalseColorMaterial = function (id, color, palette) {
     c = Colors.toColor(c);
   }
 
-  var mat = Materials.getMaterial(c, 1, Materials.FalseMaterialType);
+  var mat = Materials.getMaterial(c, 1, Materials.FalseMaterialType, materialSide);
   mat.name = 'color' + id;
   return mat;
 };
@@ -316,11 +378,37 @@ Materials.setMaterialOpacity = function (material, opacity) {
     var m = materials[i];
     m.opacity = opacity;
     m.transparent = opacity < 1;
+    m.needsUpdate = true;
+  }
+};
+
+Materials.setMaterialSide = function (material, side) {
+  var materials = Materials.toMaterialArray(material);
+  for (var i = 0; i < materials.length; i++) {
+    var m = materials[i];
+    m.side = side;
+    m.needsUpdate = true;
+  }
+};
+
+Materials.setTextureProperty = function (material, propName, propValue) {
+  var materials = Materials.toMaterialArray(material);
+  for (var i = 0; i < materials.length; i++) {
+    var m = materials[i];
+    if (m.map) {
+      m.map[propName] = propValue;
+    }
+    if (m.emissiveMap) {
+      m.emissiveMap[propName] = propValue;
+    }
+    if (m.map || m.emissiveMap) {
+      m.needsUpdate = true;
+    }
   }
 };
 
 Materials.createTexture = function(opts, textures) {
-  var texture = Materials.loadTexture({ url: opts.src || opts.url });
+  var texture = Materials.loadTexture({ url: opts.src || opts.url, encoding: opts.encoding });
   texture.name = opts.name;
   texture.wrapS = (opts.wrapS != null) ? opts.wrapS : ((opts.wrap != null)? opts.wrap : THREE.RepeatWrapping);
   texture.wrapT = (opts.wrapT != null) ? opts.wrapT : ((opts.wrap != null)? opts.wrap : THREE.RepeatWrapping);
@@ -527,6 +615,57 @@ Materials.getMaterialAtIntersected = function(intersected) {
     return material[iFaceMaterial];
   }
   return material;
+};
+
+Materials.getMaterialWithRepeat = function(material, repeatX, repeatY, clone) {
+  if (material) {
+    var textureMapFields = Materials.textureMapFields.filter(field => material[field] && material[field].repeat);
+    if (textureMapFields.length) {
+      var mat = clone? material.clone() : material;
+      for (var i = 0; i < textureMapFields.length; i++) {
+        var field = textureMapFields[i];
+        if (clone) {
+          mat[field] = mat[field].clone();
+          mat[field].needsUpdate = true;
+        }
+        mat[field].repeat.set(repeatX, repeatY);
+      }
+      return mat;
+    } else {
+      return material;
+    }
+  }
+};
+
+function isMaterialExactlySame(mat1, mat2) {
+  return mat1.uuid === mat2.uuid;
+}
+
+function isMaterialSame(mat1, mat2) {
+  if (mat1.uuid === mat2.uuid) {
+    return true;
+  }
+  const matJson1 = _.omit(mat1.toJSON(), ['uuid']);
+  const matJson2 = _.omit(mat2.toJSON(), ['uuid']);
+  return _.isEqual(matJson1, matJson2);
+}
+
+Materials.isMaterialsSame = function(mat1, mat2, exactMatch) {
+  var mats1 = Materials.toMaterialArray(mat1);
+  var mats2 = Materials.toMaterialArray(mat2);
+  var isSame = exactMatch? isMaterialExactlySame : isMaterialSame;
+  if (mats1.length === mats2.length) {
+    // TODO: order materials
+    for (let i = 0; i < mats1.length; i++) {
+      // console.log('check material ${i} ${exactMatch}')
+      if (!isSame(mats1[i], mats2[i])) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    return false;
+  }
 };
 
 module.exports = Materials;

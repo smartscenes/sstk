@@ -1,34 +1,202 @@
-'use strict';
-
 const Constants = require('Constants');
 const DomHelper = require('./DomHelper');
 const ArticulationsConstants = require('./ArticulationsConstants');
 const ArticulationAnnotatorState = require('./ArticulationAnnotatorState');
 const ArticulationAnimator = require('./ArticulationAnimator');
+const ArticulatedObject = require('articulations/ArticulatedObject');
+const ExportArticulatedObject3DForm = require('ui/modal/ExportArticulatedObject3DForm');
+const PartGeomsGen = require('parts/PartGeomsGen');
 const Object3DUtil = require('geo/Object3DUtil');
 const SceneHelper = require('./SceneHelper');
+const PartVisualizer = require('./PartVisualizer');
+const AnnotationLoadSave = require('./AnnotationLoadSave');
+const CanvasUtil = require('ui/CanvasUtil');
+const FileUtil = require('io/FileUtil');
 const Timings = require('util/Timings');
 const UIUtil = require('ui/UIUtil');
+const dat = require('ui/datGui');
+const _ = require('util/util');
 
 const ArticulationTypes = ArticulationAnnotatorState.ArticulationTypes;
+
+class PartState {
+	// part state used by the annotator
+	// selected = active part that is being edited
+	// isConnected = part that is connected / attached to the active/selected part
+	// isBase = part that is considered a base part of the active/selected part
+	// isCandidate = part that is an candidate base/attached part
+	// hovered = part is being hovered over
+
+	constructor() {
+		this.hovered = false;
+		this.selected = false;
+		this.isConnected = false;
+		this.isBase = false;
+		this.isCandidate = false;
+	}
+
+	clear() {
+		this.selected = false;
+		this.isConnected = false;
+		this.isBase = false;
+		this.isCandidate = false;
+	}
+}
 
 class ArticulationAnnotator {
 	constructor(params) {
 		this.container = params.container;
-		this.appId = "ArtAnn.v3-20200511";
+		this.appId = "ArtAnn.v4-20231120";
 		this.url = new URL(window.location.href);
 		this.modelId = this.url.searchParams.get('modelId');
+		this.labelType = this.url.searchParams.get('labelType');
+		this.useDatGui = _.parseBoolean(this.url.searchParams.get('useDatGui'), false);
 		this.timings = new Timings();
-		this.mouse = {};
+		this.mouse = null;
 		this.active = false;
 		this.playing = false;
 
+		// Option flags
+		this.refitOBB = this.url.searchParams.get('refitOBB');
+		// Experimental features
+		this.allowSelectAttached = params.allowSelectAttached; // Allow specification of what part is attached
+		this.allowAddGeometry = _.parseBoolean(this.url.searchParams.get('allowAddGeometry'), params.allowAddGeometry);       // Allow geometry to be added
+
+		// Whether to show textured or untextured
+		this.__useTextured = false;
+		// Whether to use annotation colors
+		this.__useAnnotationColors = true;
+		// Whether to use double sided materials
+		this.__useDoubleSided = false;
+		// Whether to show part obbs (local) - for debugging
+		this.__showLocalPartObbs = false;
+		// Whether to show part obbs (world) - for debugging
+		this.__showWorldPartObbs = false;
+
+		this.__motionStates = ['closed'];
 		this.domHelper = new DomHelper({
 			container: this.container,
-			articulationTypes: ArticulationAnnotatorState.ArticulationTypes
+			articulationTypes: ['translation', 'rotation'],
+			motionStates: this.__motionStates,
+			groupParts: this.isLabelTypeObjectPart,
+			allowAddGeometry: this.allowAddGeometry,
+			allowSelectAttached: this.allowSelectAttached
 		});
 
+		// what annotation to start from
+		let startFrom = this.url.searchParams.get('articulateFrom');
+		if (startFrom == null) {
+			startFrom = 'latest';
+		}
+		this.loadSave = new AnnotationLoadSave({
+			appId: this.appId,
+			modelId: this.modelId,
+			domHelper: this.domHelper,
+			startFrom: startFrom,
+			loadAnnotationsUrl: `${Constants.baseUrl}/articulation-annotations/load-annotations`,
+			submitAnnotationsUrl: `${Constants.baseUrl}/articulation-annotations/submit-annotations`,
+			timings: this.timings,
+			enforceArticulations: params.enforceArticulations,
+			message: (message, style) => this.alert(message, style),
+			alert: (message) => bootbox.alert(message),
+			confirm: (message, cb) => bootbox.confirm(message, cb)
+		});
+
+		this.setupDatGui();
 		this.loadScene();
+	}
+
+	get isLabelTypeObjectPart() {
+		return this.labelType === 'object-part';
+	}
+
+	get useDoubleSided() {
+		return this.__useDoubleSided;
+	}
+
+	set useDoubleSided(flag) {
+		this.__useDoubleSided = flag;
+		if (this.partVisualizer) {
+			if (flag) {
+				this.partVisualizer.setMaterialSide(THREE.DoubleSide);
+			} else {
+				this.partVisualizer.setMaterialSide(THREE.FrontSide);
+			}
+		}
+	}
+
+	get useTextured() {
+		return this.__useTextured;
+	}
+
+	set useTextured(flag) {
+		this.__useTextured = flag;
+		if (flag) {
+			this.restoreMaterial('texturedMaterial');
+		} else {
+			this.restoreMaterial('coloredMaterial');
+		}
+	}
+
+	get useAnnotationColors() {
+		return this.__useAnnotationColors;
+	}
+
+	set useAnnotationColors(flag) {
+		this.__useAnnotationColors = flag;
+	}
+
+	get showLocalPartObbs() {
+		return this.__showLocalPartObbs;
+	}
+
+	set showLocalPartObbs(flag) {
+		this.__showLocalPartObbs = flag;
+		if (this.partVisualizer) {
+			if (flag) {
+				this.partVisualizer.showPartObbs(false);
+			} else {
+				this.partVisualizer.hidePartObbs(false);
+			}
+		}
+	}
+
+	get showWorldPartObbs() {
+		return this.__showWorldPartObbs;
+	}
+
+	set showWorldPartObbs(flag) {
+		this.__showWorldPartObbs = flag;
+		if (this.partVisualizer) {
+			if (flag) {
+				this.partVisualizer.showPartObbs(true);
+			} else {
+				this.partVisualizer.hidePartObbs(true);
+			}
+		}
+	}
+
+	setupDatGui() {
+		if (this.useDatGui) {
+			// Set up dat gui;
+			const gui = new dat.GUI();
+			gui.close();
+
+			this.datgui = gui;
+			const appIdGui = this.datgui.add(this, 'appId');
+			$(appIdGui.domElement).find('input').prop('readonly', true);
+			this.datgui.add(ArticulationsConstants, 'PART_OPACITY', 0, 1).name('part opacity');
+			this.datgui.add(ArticulationsConstants, 'ACTIVE_PART_OPACITY', 0, 1).name('selected part opacity');
+			this.datgui.add(this, 'useTextured').name('textured').listen();
+			this.datgui.add(this, 'useAnnotationColors').name('colors').listen();
+			this.datgui.add(this, 'useDoubleSided').name('double-side').listen();
+			this.datgui.add(this, 'showLocalPartObbs').name('local-obbs').listen();
+			this.datgui.add(this, 'showWorldPartObbs').name('world-obbs').listen();
+			this.datgui.add(this, 'checkClearAnnotations').name('Clear Annotations');
+			this.datgui.add(this, 'exportAnnotations').name('Export annotations');
+			this.datgui.add(this, 'importAnnotations').name('Import annotations');
+			this.datgui.add(this, 'exportMesh').name('Export mesh');
+		}
 	}
 
 	/**
@@ -39,26 +207,24 @@ class ArticulationAnnotator {
 	 * displays axis.
 	 *
 	 * @param part {parts.Part}
+	 */
+	addArticulation(part) {
+		this.pauseArticulationAnimation();
+		this.active = true;
+		this.domHelper.partsSelectionUI.setPartTagSelected(part.pid, true);
+		this.annotateArticulationType(part, null);
+	}
+
+	/**
+	 * Called when articulation dialog and articulation type is changed
+	 *
+	 * @param part {parts.Part}
 	 * @param articulationType {string}
 	 * @param suggest {boolean}
 	 */
-	label(part, articulationType, suggest=true) {
-		this.active = true;
-		this.pauseArticulationAnimation();
+	annotateArticulationType(part, articulationType, suggest=true) {
 		this.state.initAnnotation(part, articulationType, suggest);
-		this.domHelper.setPartTagSelected(part.pid, true);
-
-		const candidateBaseParts = this.state.getCandidateBaseParts(part);
-		this.colorConnectedParts(part, candidateBaseParts);
-		this.displayEditArticulationDialog(part, candidateBaseParts, articulationType);
-
-		if (articulationType === ArticulationTypes.TRANSLATION) {
-			this.setTranslationDisplay(part, candidateBaseParts)
-		} else if (articulationType === ArticulationTypes.ROTATION) {
-			this.setRotationDisplay(part, candidateBaseParts, "central");
-		} else if (articulationType === ArticulationTypes.HINGE_ROTATION) {
-			this.setRotationDisplay(part, candidateBaseParts, "hinge");
-		}
+		this.editArticulationType(part, articulationType, null);
 	}
 
 	/**
@@ -68,25 +234,14 @@ class ArticulationAnnotator {
 	 * @param annotation {Object}
 	 * @param ind {number}
 	 */
-	edit(part, annotation, ind) {
+	editArticulation(part, annotation, ind) {
 		this.pauseArticulationAnimation();
 		this.active = true;
-		this.state.setActive(part, annotation, ind, false);
-		this.domHelper.setPartTagSelected(part.pid, true);
-
-		const children = this.state.getConnectedParts();
-		this.colorConnectedParts(part, children);
+		this.domHelper.partsSelectionUI.setPartTagSelected(part.pid, true);
+		this.state.setActive(part, annotation, ind);
 
 		// Shows annotation wizard on left side of screen
-		this.displayEditArticulationDialog(part, children, annotation.type);
-
-		if (annotation.type === ArticulationTypes.TRANSLATION) {
-			this.setTranslationDisplay(part, children, false);
-			this.displayTranslationAxisOptions();
-		} else {
-			this.setRotationDisplay(part, children, annotation.type === ArticulationTypes.ROTATION ? 'central' : 'hinge', false);
-			this.displayRotationAxisOptions(annotation.type === ArticulationTypes.ROTATION ? 'central' : 'hinge', false);
-		}
+		this.editArticulationType(part, annotation.type, annotation);
 	}
 
 	/**
@@ -97,9 +252,14 @@ class ArticulationAnnotator {
 	 */
 	playArticulationAnimation(part, annotation, ind) {
 		this.pauseArticulationAnimation();
+		this.articulationAnimator.isPlaying = true;
 		this.playing = true;
 		annotation.needsReview = false;
-		this.domHelper.showPauseButton(ind);
+		if (ind != null) {
+			this.domHelper.showPauseButton(ind);
+		}
+		// Note: playArticulationAnimation and annotate doesn't interact nicely
+		// This will make the part be the active part for annotation
 		this.state.setActive(part, annotation);
 	}
 
@@ -112,6 +272,8 @@ class ArticulationAnnotator {
 		for (let ind of inds) {
 			this.domHelper.showPlayButton(ind);
 		}
+		// Note: playArticulationAnimation and annotate doesn't interact nicely
+		// This will clear the annotation state...
 		this.state.resetState();
 	}
 
@@ -122,53 +284,192 @@ class ArticulationAnnotator {
 		return this.state.annotations[pid] || [];
 	}
 
+	/* Add part geometry */
+
+	isAddPartGeometryAllowed(part) {
+		// use the part label to determine whether add geometry is allowed
+		return part.label !== 'unknown';
+	}
+
+	showPartGeometryUI(part) {
+		this.object3D.updateMatrixWorld();
+		this.domHelper.partGeomUI = this.domHelper.createPartGeomUI(part, this.object3D, 1);
+		let oldUseTextured;
+		this.domHelper.partGeomUI.Subscribe('preGenerateGeometry', this, (part) => {
+			oldUseTextured = this.useTextured;
+			this.useTextured = true;
+		});
+		this.domHelper.partGeomUI.Subscribe('postGenerateGeometry', this, (part, geom) => {
+			if (geom) {
+				PartVisualizer.initPartMaterials(part, geom.object3D, ArticulationsConstants.INITIAL_COLOR, this.assetSideness);
+			}
+			this.useTextured = oldUseTextured;
+		});
+		this.domHelper.partGeomUI.Subscribe('close', this, () => {
+			this.domHelper.partGeomUI = null;
+			$(window).off('keyup');
+		});
+		$(window).off('keyup');
+		$(window).keyup((event) => {
+			if (event.key === 'Escape') {
+				if (this.domHelper.partGeomUI) {
+					this.domHelper.partGeomUI.close();
+				}
+			}
+		});
+
+		return this.domHelper.partGeomUI;
+	}
+
+	ensurePartGeometry(part) {
+		if (part.geoms && part.geoms.length) {
+			// Okay
+		} else {
+			const ui = this.showPartGeometryUI(part);
+			ui.getAddBtn().click();
+			ui.close();
+		}
+	}
+
+	__restorePartsGeometry(parts, callback) {
+		const oldUseTextured = this.useTextured;
+		this.useTextured = true;
+		PartGeomsGen.generateGeometries(PartGeomsGen.getShapeGenerator(), this.object3D, parts, false,
+			(err, res) => {
+				for (let part of parts) {
+					if (part && part.geoms) {
+						for (let geom of part.geoms) {
+							PartVisualizer.initPartMaterials(part, geom.object3D, ArticulationsConstants.INITIAL_COLOR, this.assetSideness);
+						}
+					}
+				}
+
+				this.useTextured = oldUseTextured;
+				callback(err, res);
+			});
+	}
+
+	/* Color parts */
 
 	/**
-	 * Colors connected parts when annotating/animating part (and highlights said part).
+	 * Color part
+	 * @param part {parts.Part}
+	 * @param color Color to apply to the part
+	 * @param opacity opacity to apply to the part
+	 */
+	colorPart(part, color, opacity = 1) {
+		this.partVisualizer.colorPart(part, color, opacity);
+	}
+
+	colorPartByState(part) {
+		const ps = part.state;
+		if (this.__useAnnotationColors) {
+			if (ps.hovered) {
+				this.colorPart(part, ArticulationsConstants.ONHOVER_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+			} else if (ps.selected) {
+				this.colorPart(part, ArticulationsConstants.ACTIVE_PART_COLOR, ArticulationsConstants.ACTIVE_PART_OPACITY);
+			} else if (ps.isBase) {
+				this.colorPart(part, ArticulationsConstants.BASE_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+			} else if (ps.isConnected) {
+				this.colorPart(part, ArticulationsConstants.CONNECTED_COLOR, ArticulationsConstants.PART_OPACITY);
+			} else if (ps.isCandidate) {
+				this.colorPart(part, ArticulationsConstants.CANDIDATE_COLOR, ArticulationsConstants.PART_OPACITY);
+			} else {
+				const anns = this.getAnnotations(part.pid);
+				if (anns.length > 0) {
+					if (anns.filter(ann => ann.needsReview).length > 0) {
+						this.colorPart(part, ArticulationsConstants.AUTO_ANNOTATED_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+					} else {
+						this.colorPart(part, ArticulationsConstants.ANNOTATED_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+					}
+				} else {
+					this.colorPart(part, ArticulationsConstants.INITIAL_COLOR, ArticulationsConstants.PART_OPACITY);
+				}
+			}
+		} else {
+			if (ps.hovered) {
+				this.colorPart(part, ArticulationsConstants.ONHOVER_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+			} else {
+				if (this.useTextured) {
+					this.restoreColor(part, ArticulationsConstants.PART_OPACITY);
+				} else {
+					this.colorPart(part, ArticulationsConstants.INITIAL_COLOR, ArticulationsConstants.PART_OPACITY);
+				}
+			}
+		}
+	}
+
+	updatePartColors(parts) {
+		parts.forEach((p) => this.colorPartByState(p));
+	}
+
+	restorePartMaterial(part, matName) {
+		this.partVisualizer.restorePartMaterial(part, matName, this.__useDoubleSided);
+	}
+
+	restoreMaterial(matName) {
+		this.partVisualizer.restoreMaterial(matName);
+	}
+
+	restoreColor(opacity) {
+		this.partVisualizer.restoreColor(opacity);
+	}
+
+	/* Function for editing and display articulation wizard */
+
+	/**
+	 * Start editing articulation for articulationType
 	 *
 	 * @param part {parts.Part}
-	 * @param children {Array<parts.Part>}
+	 * @param articulationType {string}
+	 * @param annotation {Object}
 	 */
-	colorConnectedParts(part, children) {
-		this.state.colorPart(part, ArticulationsConstants.ACTIVE_PART_COLOR, ArticulationsConstants.ACTIVE_PART_OPACITY);
-		children.forEach(child => {
-			this.state.colorPart(child, ArticulationsConstants.CONNECTED_COLOR, ArticulationsConstants.PART_OPACITY);
-			child.connected = true;
-		});
+	editArticulationType(part, articulationType, annotation) {
+		this.displayEditArticulationDialog(part, this.state.candidateParts, articulationType,
+			this.state.hasCurrentAnnotation? 'Edit' : 'Add');
+
+		// update state
+		const resetBaseOptions = annotation == null; // reset if we don't have an existing annotation
+		this.state.setArticulationType(articulationType, resetBaseOptions);
+		this.displayBaseOptions(part);
+
+		// Make sure UI is updated
+		if (articulationType === ArticulationTypes.TRANSLATION) {
+			this.domHelper.editArticulationUI.displayTranslationBaseOptions();
+			if (!resetBaseOptions) {
+				this.displayTranslationAxisOptions();
+			}
+		} else if (articulationType === ArticulationTypes.ROTATION) {
+			this.domHelper.editArticulationUI.displayRotationBaseOptions();
+			if (!resetBaseOptions) {
+				this.displayRotationAxisOptions(false);
+			}
+		}
 	}
 
 	/**
-	 * Displays annotation wizard for part (base options displayed after user chooses
+	 * Create annotation wizard for part (base options displayed after user chooses
 	 * annotation type).
 	 *
 	 * @param part {parts.Part}
 	 * @param children {Array<parts.Part>}
+	 * @param type {string} Articulation type
+	 * @param tag {string} String to display in the dialog ('Add' or 'Edit')
 	 */
-	displayEditArticulationDialog(part, children, type) {
-		this.domHelper.displayAnnotationWizard(part, children, type);
+	displayEditArticulationDialog(part, children, type, tag) {
+		this.domHelper.displayAnnotationWizard(part, children, type, tag);
 
-		this.domHelper.getHingeRotationOption().change((event) => {
-			if (event.target.value === "on") {
-				this.label(part, ArticulationTypes.HINGE_ROTATION);
-			}
+		// bind events
+		this.domHelper.editArticulationUI.onArticulationTypeChanged((articulationType) => {
+			this.annotateArticulationType(part, articulationType, articulationType === ArticulationTypes.TRANSLATION);
 		});
 
-		this.domHelper.getCentralRotationOption().change((event) => {
-			if (event.target.value === "on") {
-				this.label(part, ArticulationTypes.ROTATION);
-			}
+		this.domHelper.editArticulationUI.onSave(() => {
+			this.saveAnnotation(part);
 		});
 
-		this.domHelper.getTranslationOption().change((event) => {
-			this.label(part, ArticulationTypes.TRANSLATION, true);
-		});
-
-		this.domHelper.getSaveAnnotationButton().click(() => {
-			this.saveAnnotation(part, children)
-		});
-
-		this.domHelper.getCancelAnnotationButton().click(() => {
-			this.cancelAnnotation(part, children)
+		this.domHelper.editArticulationUI.onCancel(() => {
+			this.cancelAnnotation(part);
 		});
 
 	  $(window).off('keyup');
@@ -178,7 +479,11 @@ class ArticulationAnnotator {
 					if (this.state.activeWidget) {
 						this.state.activeWidget.cancel();
 					} else {
-						this.cancelAnnotation(part, children);
+						if (this.domHelper.editArticulationUI.activeWidget) {
+							this.domHelper.editArticulationUI.activeWidget.cancel();
+						} else {
+							this.cancelAnnotation(part);
+						}
 					}
 				}
 
@@ -186,29 +491,15 @@ class ArticulationAnnotator {
 					if (this.state.activeWidget) {
 						this.state.activeWidget.save();
 					} else {
-						this.saveAnnotation(part, children);
+						if (this.domHelper.editArticulationUI.activeWidget) {
+							this.domHelper.editArticulationUI.activeWidget.save();
+						} else {
+							this.saveAnnotation(part);
+						}
 					}
 				}
 			}
 		});
-	}
-
-	setRotationDisplay(part, children, type, resetbase=true) {
-		this.state.setRotationState(part, children, type, resetbase);
-		this.displayBaseOptions(part, children);
-		this.domHelper.displayRotationBaseOptions(type);
-
-		this.state.displayRadar.update();
-		this.state.displayAxis.update();
-	}
-
-	setTranslationDisplay(part, children, resetbase=true) {
-		this.state.setTranslationState(part, children, resetbase);
-		this.displayBaseOptions(part, children);
-		this.domHelper.displayTranslationBaseOptions();
-
-		this.state.displayRadar.clear();
-		this.state.displayAxis.update();
 	}
 
 	/**
@@ -216,49 +507,67 @@ class ArticulationAnnotator {
 	 * type (i.e. rotation/translation).
 	 *
 	 * @param part {parts.Part}
-	 * @param children {Array<parts.Part>}
 	 */
-	displayBaseOptions(part, children) {
-		this.domHelper.displayBaseOptions(children, this.state.baseParts.map(part => part.pid));
+	displayBaseOptions(part) {
+		// console.log('baseOptions', this.state.candidateParts, this.state.basePids, this.state.attachedPids);
+		this.domHelper.editArticulationUI.displayBaseOptions(this.state.candidateParts, this.state.basePids, this.state.attachedPids);
 
-		this.domHelper.getTranslationBaseOptions().change((event) => {
-			const selectedPart = this.parts[event.target.id];
-			if (event.target.checked) {
-				this.state.setTranslationBasePart(part, selectedPart);
-				this.displayTranslationAxisOptions();
-			} else {
-				this.state.removeBasePart(part, selectedPart);
-
-				if ($('.translation .child:checked').length == 0) {
-					$(".translation-axis.antn-dialog-base-selector").addClass("hidden");
-			    }
+		this.domHelper.editArticulationUI.onBaseChanged((articulationType, pids, isBase, isAttached) => {
+			// console.log('onBaseChanged', part, pids, isBase, isAttached);
+			if (!Array.isArray(pids)) {
+				pids = [pids];
 			}
-		});
-
-		this.domHelper.getRotationBaseOptions().change((event) => {
-			const selectedPart = this.parts[event.target.id];
-			if (event.target.checked) {
-				this.state.setRotationBasePart(part, selectedPart);
-				this.displayRotationAxisOptions(event.target.name);
-			} else {
-				this.state.removeBasePart(part, selectedPart);
-			}
-			if ($('.rotation .child:checked').length === 0) {
-				$('.rotation-axis.antn-dialog-base-selector').addClass('hidden');
-			}
-		});
-
-		this.domHelper.getBaseOptions().mouseenter((event) => {
-			const p = this.parts[event.target.id];
-			this.state.colorPart(p, ArticulationsConstants.BASE_PART_COLOR, ArticulationsConstants.PART_OPACITY);
-
-			$(event.target).mouseleave((ev) => {
-				const selectedPart = this.parts[ev.target.id];
-				if (!selectedPart.isBasePart) {
-					this.state.colorPart(selectedPart, ArticulationsConstants.CONNECTED_COLOR, ArticulationsConstants.PART_OPACITY);
-				}
+			const selectedParts = pids.map(pid => this.parts[pid]);
+			const isConnected = isBase || isAttached;
+			selectedParts.forEach((selectedPart,i) => {
+				// Make sure connectivity for part is updated
+				this.state.setConnectivity(this.state.activePart, selectedPart, isConnected);
+				selectedPart.state.isConnected = isConnected;
+				// Note: selectedPart color is updated either in addBaseParts or removeBaseParts
 			});
-		});
+			if (isBase) {
+				this.state.addBaseParts(part, selectedParts);
+				if (this.state.baseParts.length) {
+					if (articulationType === ArticulationTypes.TRANSLATION) {
+						this.displayTranslationAxisOptions();
+					} else {
+						this.displayRotationAxisOptions(true);  // Check this
+					}
+				}
+			} else {
+				this.state.removeBaseParts(part, selectedParts);
+				if (this.state.baseParts.length === 0) {
+					this.domHelper.editArticulationUI.hideAxisOptions();
+				}
+			}
+		}, true);
+
+		this.domHelper.editArticulationUI.onBaseHover((articulationType, pid, hover) => {
+			const p = this.parts[pid];
+			if (p) {
+				if (hover) {
+					this.colorPart(p, ArticulationsConstants.BASE_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+				} else {
+					this.colorPartByState(p);
+				}
+			}
+		}, true);
+	}
+
+	onUpdateMotionStates(targetMotionStates, rangeWidget, motionStateWidgets) {
+		for (let motionState of this.__motionStates) {
+			const widget = motionStateWidgets[motionState];
+			const v = widget.value;
+			this.onUpdateMotionState(targetMotionStates, rangeWidget, motionState, v);
+		}
+	}
+
+	onUpdateMotionState(targetMotionStates, rangeWidget, motionState, value) {
+		//console.log('update motionState', motionState, value);
+		targetMotionStates[motionState] = {
+			percent: value,
+			value: rangeWidget.rangePercentToValue(value)
+		};
 	}
 
 	/**
@@ -267,8 +576,13 @@ class ArticulationAnnotator {
 	displayTranslationAxisOptions() {
 		this.state.setTranslationAxisOptions();
 		this.state.displayAxis.update(true, this.state.getAxisLength());
-		const widgets = this.domHelper.displayTranslationAxisOptions(this.state.fullAxisOptions, this.state.axisIndex,
-			this.state.translation.rangeMin, this.state.translation.rangeMax);
+		const widgets = this.domHelper.editArticulationUI.displayTranslationAxisOptions(
+			this.state.fullAxisOptions, this.state.axisIndex, this.state.translation);
+
+		this.articulationAnimator.isPlaying = true;
+		if (widgets.animateArticulationWidget) {
+			this.articulationAnimator.bindPlayWidget(widgets.animateArticulationWidget);
+		}
 
 		widgets.axisSelectionWidget.configure(this, this.state, this.state.translation);
 		widgets.axisSelectionWidget.change(axisIndex => {
@@ -283,16 +597,22 @@ class ArticulationAnnotator {
 		const onTranslationAxisSliderComplete = (rangeMin, rangeMax) => {
 			this.state.translation.rangeMin = rangeMin;
 			this.state.translation.rangeMax = rangeMax;
+			this.onUpdateMotionStates(this.state.translation.motionStates, widgets.rangeWidget, widgets.motionStateWidgets);
 			this.state.updateTranslationRange();
 		};
 
 		widgets.rangeWidget.change(onTranslationAxisSliderChange, onTranslationAxisSliderComplete);
+		for (let motionState of this.__motionStates) {
+			const widget = widgets.motionStateWidgets[motionState];
+			widget.change(null, (value) =>
+				this.onUpdateMotionState(this.state.translation.motionStates, widgets.rangeWidget, motionState, value));
+		}
 	}
 
 	/**
 	 * Displays menu for choosing rotation axis + double slider for specifying range.
 	 */
-	displayRotationAxisOptions(type, reset=true) {
+	displayRotationAxisOptions(reset=true) {
 		if (reset) {
 			this.state.resetRotationAxisOptions();
 		}
@@ -301,86 +621,78 @@ class ArticulationAnnotator {
 		// with the guides being out of sync)
 		this.state.setEdge(this.state.edge);
 
-		const pivotOptions = this.state.getRotationPivotOptions(type);
-		const widgets = this.domHelper.displayRotationAxisOptions(type,
+		const pivotOptions = this.state.getRotationPivotOptions();
+		const widgets = this.domHelper.editArticulationUI.displayRotationAxisOptions(
 			this.state.fullAxisOptions, this.state.axisIndex, this.state.refAxisIndex,
-			pivotOptions, this.state.rotation.rangeMin, this.state.rotation.rangeMax, this.state.edge);
+			pivotOptions, this.state.rotation);
+
+		this.articulationAnimator.isPlaying = true;
+		if (widgets.animateArticulationWidget) {
+			this.articulationAnimator.bindPlayWidget(widgets.animateArticulationWidget);
+		}
 
 		widgets.axisSelectionWidget.configure(this, this.state, this.state.rotation);
 		widgets.axisSelectionWidget.change(axisIndex => {
 			this.state.updateRotationAxis(axisIndex);
-			widgets.refAxisSelectionWidget.setAxisOptions(this.state.fullAxisOptions, this.state.refAxisIndex, false, (opt, index) => {
-				return index !== this.state.axisIndex;
-			});
+			widgets.refAxisSelectionWidget.setAxisOptions(this.state.fullAxisOptions, this.state.refAxisIndex, true);
 		});
 		widgets.refAxisSelectionWidget.configure(this, this.state, this.state.rotation);
+		widgets.refAxisSelectionWidget.setAxisOptions(this.state.fullAxisOptions, this.state.refAxisIndex, true);
 		widgets.refAxisSelectionWidget.change(axisIndex => {
 			this.state.updateReferenceAxis(axisIndex);
 		});
 
-		this.domHelper.onEdgeSelect(val => this.state.setEdge(val));
-		this.domHelper.onLeftRightAxisChange(val => this.state.rotationPivotLeftRight = val);
-		this.domHelper.onUpDownAxisChange(val => this.state.rotationPivotUpDown = val);
-		this.domHelper.onForwardBackAxisChange(val => this.state.rotationPivotFrontBack = val);
+		this.domHelper.editArticulationUI.onEdgeSelect(val => this.state.setEdge(val));
+		this.domHelper.editArticulationUI.onLeftRightAxisPivotChange(val => this.state.rotationPivotLeftRight = val);
+		this.domHelper.editArticulationUI.onUpDownAxisPivotChange(val => this.state.rotationPivotUpDown = val);
+		this.domHelper.editArticulationUI.onForwardBackAxisPivotChange(val => this.state.rotationPivotFrontBack = val);
 
+		const valueTransform = widgets.rangeWidget.valueTranform? widgets.rangeWidget.valueTranform : (x) => x;
 		const onRotationAxisSliderChange = (rangeMin, rangeMax) => {
 			this.state.resetPartRotation();
 
-			this.state.rotation.rangeMin = -((100 - rangeMin)/100) * Math.PI;
-			this.state.rotation.rangeMax = ((rangeMax - 100)/100) * Math.PI;
-
+			this.state.rotation.rangeMin = valueTransform(rangeMin);
+			this.state.rotation.rangeMax = valueTransform(rangeMax);
+			this.onUpdateMotionStates(this.state.rotation.motionStates, widgets.rangeWidget, widgets.motionStateWidgets);
 			this.state.displayAxis.update();
 			this.state.displayRadar.update();
 		};
 
 		widgets.rangeWidget.change(onRotationAxisSliderChange);
+		for (let motionState of this.__motionStates) {
+			const widget = widgets.motionStateWidgets[motionState];
+			widget.change(null, (value) =>
+				this.onUpdateMotionState(this.state.rotation.motionStates, widgets.rangeWidget, motionState, value));
+		}
 	}
 
-	saveAnnotation(part, children) {
+	saveAnnotation(part) {
 		if (this.state.baseParts.length) {
 			const annotation = this.state.storeAnnotations(part);
-
 			if (this.domHelper.autoSuggestOn()) {
 				const siblings = this.state.storeSuggestions(annotation, part);
-
-				siblings.forEach(sibpart => {
-					sibpart.prevColor = ArticulationsConstants.AUTO_ANNOTATED_PART_COLOR;
-					this.state.colorPart(sibpart, ArticulationsConstants.AUTO_ANNOTATED_PART_COLOR, ArticulationsConstants.PART_OPACITY);
-				});
-
-				this.domHelper.updatePartTags(part.pid, siblings.map(sibpart => sibpart.pid));
+				this.updatePartColors(siblings);
+				this.domHelper.partsSelectionUI.setPartTagAnnotated(part.pid, siblings.map(sibpart => sibpart.pid));
 			} else {
-				this.domHelper.updatePartTags(part.pid);
+				this.domHelper.partsSelectionUI.setPartTagAnnotated(part.pid);
 			}
 
-			part.labeled = true;
-			part.prevColor = ArticulationsConstants.ANNOTATED_PART_COLOR;
-
-			children.forEach((child) => {
-				this.state.colorPartRestore(child);
-				child.connected = false;
-			});
-
-			this.state.resetState();
-
-			this.active = false;
-
-			this.domHelper.hideAnnotationWizard();
-
-			this.updateSidebar(part.pid);
-			$(window).off('keyup');
+			this.closeAnnotationWizard(part);
 		} else {
 			alert('Annotation incomplete.');
 		}
 	}
 
-	cancelAnnotation(part, children) {
+	cancelAnnotation(part) {
+		this.closeAnnotationWizard(part);
+	}
+
+	closeAnnotationWizard(part) {
 		this.active = false;
 		this.state.resetState();
 
 		this.domHelper.hideAnnotationWizard();
 		this.updateSidebar(part.pid);
-
 		$(window).off('keyup');
 	}
 
@@ -391,35 +703,19 @@ class ArticulationAnnotator {
 	 * @param pid {number} Part ID
 	 */
 	setActivePart(pid) {
-		this.domHelper.setPartTagSelected(pid);
-
-		if (this.parts[pid].prevColor === ArticulationsConstants.AUTO_ANNOTATED_PART_COLOR) {
-			this.parts[pid].prevColor = ArticulationsConstants.ANNOTATED_PART_COLOR;
-		}
+		this.domHelper.partsSelectionUI.setPartTagSelected(pid);
 
 		if (this.playing) {
-			this.cancelAnnotation(this.state.activePart, this.state.getConnectedParts());
+			this.cancelAnnotation(this.state.activePart);
 			this.state.setActive(this.parts[pid]);
 
-			if (this.state.annotations[pid] && this.state.annotations[pid].length) {
-				this.playArticulationAnimation(this.parts[pid], this.state.annotations[pid][0]);
+			const partAnns = this.getAnnotations(pid);
+			if (partAnns.length) {
+				this.playArticulationAnimation(this.parts[pid], partAnns[0], 0);
 			}
 		} else {
-			this.state.setActive(this.parts[pid])
+			this.state.setActive(this.parts[pid]);
 		}
-
-		// Reset part colors
-		this.parts.forEach(part => {
-			if (part) {
-				this.state.colorPartRestore(part);
-				part.selected = false;
-				part.connected = false;
-			}
-		});
-
-		// Highlight selected part
-		this.state.colorPart(this.parts[pid], ArticulationsConstants.ACTIVE_PART_COLOR, ArticulationsConstants.ACTIVE_PART_OPACITY);
-		this.parts[pid].selected = true;
 
 		this.updateSidebar(pid);
 	}
@@ -428,39 +724,79 @@ class ArticulationAnnotator {
 		// Setup general HTML
 		this.displayMain();
 
-		let helper = new SceneHelper({
+		const helper = new SceneHelper({
 			container: this.container,
-			domHelper: this.domHelper,
 			modelId: this.modelId,
-			timings: this.timings
+			labelParser: this.isLabelTypeObjectPart? 'ObjectPartLabelParser' : null,
+			loadSave: this.loadSave,
+			refitOBB: this.refitOBB,
+			colors: ArticulationsConstants
 		});
+		const useSameObjectInst = this.isLabelTypeObjectPart && this.allowSelectAttached;
+		this.domHelper.showLoadingMessage('scene and annotations');
 		helper.initScene(
-			(state, controls, camera, renderer) => {
-			this.domHelper.clearLoadingDialog();
+			(setup) => {
+			this.partVisualizer = new PartVisualizer(setup.scene, setup.object3D, setup.parts);
+			const state = new ArticulationAnnotatorState({
+				scene: setup.scene,
+				partsAnnId: setup.partsAnnId,
+				parts: setup.parts,
+				vizNode: this.partVisualizer.vizNode,
+				annotations: setup.annotations,
+				connectivityGraph: setup.connectivityGraph,
+				object3D: setup.object3D,
+				editUI: this.domHelper.editArticulationUI,
+				candidateBasePartsOpts: {
+					useSameObjectInst: useSameObjectInst,
+					allowConnected: true,
+					allowAnyPart: !useSameObjectInst
+				},
+				onPartUpdated: (part) => {
+ 				  this.colorPartByState(part);
+				}
+			});
 
+			this.state = state;
 			this.parts = state.parts;
 			this.scene = state.scene;
-			this.camera = camera;
-			this.controls = controls;
+			this.camera = setup.camera;
+			this.controls = setup.controls;
 			this.object3D = state.object3D;
-			this.renderer = renderer;
+			this.object3D.name = this.modelId;
+			this.renderer = setup.renderer;
 			this.state = state;
-			this.timingHistory = helper.timingHistory;
+			this.assetSideness = setup.assetSideness;
+			this.useDoubleSided = setup.assetSideness === THREE.DoubleSide;
+			this.parts.forEach(part => part.state = new PartState());
+			this.loadSave.updateState(state);
+			if (this.allowAddGeometry) {
+				// TODO: wait for this
+				this.__restorePartsGeometry(this.parts, () => {});
+			}
 
-			// Add transform controls
+			if (setup.connectivityGraphViz) {
+				this.domHelper.addConnectivityGraphViz(setup.connectivityGraphViz);
+			} else if (setup.connectivityGraph) {
+				this.domHelper.addConnectivityGraphViz(setup.connectivityGraph);
+			}
+			this.domHelper.createPartsSelectionUI(this.parts, this.state.annotations);
+			this.domHelper.clearLoadingDialog();
+
+				// Add transform controls
   		this.createTransformControls();
 			// Enable highlighting and setting parts active
 			this.bindPartSelectionEvents();
 			this.bindWindowKeydownEvents();
 
 			// Renders sidebar initialized to view annotations for first part
-			this.setActivePart(1);
+			const firstPid = this.domHelper.partsSelectionUI.getFirstPid();
+			this.setActivePart(firstPid);
 
 			// Everything ready/loaded now, animate scene!
 			this.animateScene();
 
 			this.hasChanges = true;  // TODO: Track whether there is actually changes or not
-									 //       Set to true after some UI, set to false after submit
+									 						 //       Set to true after some UI, set to false after submit
 			window.addEventListener("beforeunload", (event) => {
 				if (this.hasChanges) {
 					event.returnValue = ''; // NOTE: Can't set custom message because bad people abused this to run scams
@@ -483,8 +819,6 @@ class ArticulationAnnotator {
 					this.state.displayRadar.getRefAxisFromMainAxis(this.state.refAxis);
 					this.state.displayRadar.update();
 				}
-			} else if (this.transformControls.object === this.state.displayRadar.refLine) {
-				// refline is being updated
 			}
 			this.renderer.render(this.scene, this.camera);
 		});
@@ -512,48 +846,61 @@ class ArticulationAnnotator {
 		return null;
 	}
 
+	getImageData(maxWidth, maxHeight) {
+		this.renderer.render(this.scene, this.camera);
+		const dataUrl = CanvasUtil.getTrimmedCanvasDataUrl(this.renderer.domElement, maxWidth, maxHeight);
+		return dataUrl;
+	};
+
+	saveImage(maxWidth, maxHeight) {
+		// NOTE: This may crash if dataUrl is too long...
+		const dataUrl = this.getImageData(maxWidth, maxHeight);
+		const blob = CanvasUtil.dataUrlToBlob(dataUrl);
+		this.__savedImageCount = this.__savedImageCount || 0;
+		FileUtil.saveBlob(blob, this.modelId + '_image_' + this.__savedImageCount + '.png');
+		this.__savedImageCount++;
+	};
+
 	bindPartSelectionEvents() {
 		// Highlight part in scene when hovering over part-tag in sidebar
-		this.domHelper.getPartTags().mouseenter((event) => {
-			if (!this.active) {
-				const ind = event.target.id;
-				const targetPart = this.parts[ind];
-				targetPart.hovered = true;
-				this.state.colorPart(targetPart, ArticulationsConstants.ONHOVER_PART_COLOR, ArticulationsConstants.PART_OPACITY);
-
-				$(`#${ind}`).mouseleave((event) => {
-					targetPart.hovered = false;
-					this.parts.forEach(part => {
-						if (part) {
-							if (!part.selected && !part.connected) {
-								this.state.colorPartRestore(part);
-							} else if (part.selected) {
-								this.state.colorPart(part, ArticulationsConstants.ACTIVE_PART_COLOR, ArticulationsConstants.ACTIVE_PART_OPACITY);
-							}
-						}
-					});
-				});
+		this.domHelper.partsSelectionUI.bindEvents(this);
+		this.domHelper.partsSelectionUI.Subscribe('hover', this, (pid, targetPart, isHovered) => {
+			if (isHovered) {
+				if (!this.active) {
+					targetPart.state.hovered = true;
+					this.colorPartByState(targetPart);
+				}
+			} else {
+				targetPart.state.hovered = false;
+				this.colorPartByState(targetPart);
 			}
 		});
 
-		this.domHelper.getPartTags().click((event) => {
+		this.domHelper.partsSelectionUI.Subscribe('select', this, (pid, targetPart) => {
 			if (!this.active) {
-				this.setActivePart(event.target.id);
+				this.setActivePart(pid);
 			} else {
-				alert("Cannot select new part while current part is being annotated.");
+				this.alert('Cannot select new part while current part is being annotated.', 'alert-warning');
 			}
 		});
 
 		// Update mouse for ray intersecting
-		$(document).mousemove((event) => {
+		$(this.container).mousemove((event) => {
 			const rect = this.container.getBoundingClientRect();
-			this.mouse.x = ((event.clientX - rect.left)/this.container.clientWidth) * 2 - 1;
-			this.mouse.y = -((event.clientY - rect.top)/this.container.clientHeight) * 2 + 1;
+			if (!this.mouse) {
+				this.mouse = {};
+			}
+			this.mouse.x = ((event.clientX - rect.left)/rect.width) * 2 - 1;
+			this.mouse.y = -((event.clientY - rect.top)/rect.height) * 2 + 1;
+		});
+
+		$(this.container).mouseleave((event) => {
+			this.mouse = null;
 		});
 
 		// Enable selecting part when clicking on mesh
-		$(document).click((event) => {
-			if (!this.active) {
+		$(this.container).click((event) => {
+			if (!this.active && this.mouse) {
 				const intersected = this.getIntersectedPart(this.mouse);
 			  	if (intersected) {
 				  	this.setActivePart(intersected.pid);
@@ -565,52 +912,80 @@ class ArticulationAnnotator {
 	bindWindowKeydownEvents() {
 		$(window).keydown((event) => {
 			if (!this.preventKeyShortcuts) {
-				if (this.state.activePart) {
+				if (this.state.activePart && !this.domHelper.editArticulationUI.activeWidget) {
+					if (event.key === 'f') {
+						this.domHelper.partsSelectionUI.setPartGroup(this.state.activePart, 'fixed');
+					}
+
+					if (event.key === 'm') {
+						this.domHelper.partsSelectionUI.setPartGroup(this.state.activePart, 'moveable');
+					}
+
 					if (event.key === 'a') {
-						this.label(this.state.activePart);
+						this.addArticulation(this.state.activePart);
+					}
+
+					if (this.allowAddGeometry) {
+						if (event.key === 'g') {
+							if (this.isAddPartGeometryAllowed(this.state.activePart)) {
+								if (this.playing) {
+									this.alert('Stopping animation to generate geometry', 'alert-warning');
+									this.pauseArticulationAnimation();
+								}
+								if (event.ctrlKey) {
+									this.showPartGeometryUI(this.state.activePart);
+								} else {
+									this.ensurePartGeometry(this.state.activePart);
+								}
+							}
+						}
 					}
 
 					if (event.key === 'p') {
-						const annotation = this.state.annotations[this.state.activePart.pid];
-						if (annotation) {
+						const annotations = this.getAnnotations(this.state.activePart.pid);
+						if (annotations) {
 							if (this.playing) {
 								this.pauseArticulationAnimation();
-							} else {
-								this.playArticulationAnimation(this.state.activePart, annotation[0], 0);
+							} else if (annotations.length) {
+								this.playArticulationAnimation(this.state.activePart, annotations[0], 0);
 							}
 						}
 					}
 
 					if (event.key === 'e') {
-						const annotation = this.state.annotations[this.state.activePart.pid];
-						if (annotation) {
+						const annotations = this.getAnnotations(this.state.activePart.pid);
+						if (annotations && annotations.length) {
 							if (!this.active) {
-								this.edit(this.state.activePart, annotation[0], 0);
+								this.editArticulation(this.state.activePart, annotations[0], 0);
 							}
 						}
 					}
 
 					if (event.key === 't') {
-						const basePartCandidates = this.state.getCandidateBaseParts();
-						this.displayEditArticulationDialog(this.state.activePart, basePartCandidates, ArticulationTypes.TRANSLATION);
-						this.setTranslationDisplay(this.state.activePart, basePartCandidates);
+						this.editArticulationType(this.state.activePart, ArticulationTypes.TRANSLATION);
 					}
 
 					if (event.key === 'r') {
-						const basePartCandidates = this.state.getCandidateBaseParts();
-						this.displayEditArticulationDialog(this.state.activePart, basePartCandidates, ArticulationTypes.ROTATION);
-						this.setRotationDisplay(this.state.activePart, basePartCandidates, 'central');
-					}
-
-					if (event.key === 'h') {
-						const basePartCandidates = this.state.getCandidateBaseParts();
-						this.displayEditArticulationDialog(this.state.activePart, basePartCandidates, ArticulationTypes.HINGE_ROTATION);
-						this.setRotationDisplay(this.state.activePart, basePartCandidates, 'hinge');
+						this.editArticulationType(this.state.activePart, ArticulationTypes.ROTATION);
 					}
 
 					if (event.key === 'c') {
 						this.state.toggleFixedPartsVisibility();
 					}
+				}
+
+				// shortcut keys that work any time
+				if (event.key === 'o') {
+					this.useTextured = !this.useTextured;
+				}
+
+				if (event.key === 'i' && event.ctrlKey) {
+					this.saveImage();
+				}
+
+				if (event.key === 'd') {
+					this.domHelper.showPartHierarchy(this.object3D);
+					this.domHelper.showCurrentConnectivityViz(this.state.currentConnectivityGraph);
 				}
 			}
 		});
@@ -618,31 +993,31 @@ class ArticulationAnnotator {
 
 	updateSidebar(pid) {
 		const part = this.parts[pid];
-		const annotations = this.state.annotations[pid];
+		const annotations = this.getAnnotations(pid);
 
 		this.__selectedPid = pid;
 		this.domHelper.displaySidebar(pid, this.parts, annotations, this.playing);
 
 		if (annotations) {
 			annotations.forEach((annotation, ind) => {
-				this.domHelper.getPlayButton(ind).click(() => {
+				const playArticulationUI = this.domHelper.playArticulationUIs[ind];
+				playArticulationUI.Subscribe('play', this, (art, artInd) => {
 					this.playArticulationAnimation(part, annotation, ind);
 				});
 
-				this.domHelper.getPauseButton(ind).click(() => {
+				playArticulationUI.Subscribe('pause', this, (art, artInd) => {
 					this.pauseArticulationAnimation(ind);
 				});
 
-				this.domHelper.getEditButton(ind).click(() => {
-					this.edit(part, annotation, ind);
+				playArticulationUI.Subscribe('edit', this, (art, artInd) => {
+					this.editArticulation(part, annotation, ind);
 				});
 
-				this.domHelper.getDeleteButton(ind).click(() => {
+				playArticulationUI.Subscribe('delete', this, (art, artInd) => {
 					this.state.deleteAnnotation(part, ind);
 
 					if (!annotations || !annotations.length) {
-						this.domHelper.unsetAnnotation(pid);
-						part.prevColor = part.originalColor;
+						this.domHelper.partsSelectionUI.unsetPartTagAnnotated(pid);
 					}
 
 					this.updateSidebar(part.pid);
@@ -650,8 +1025,8 @@ class ArticulationAnnotator {
 			});
 		}
 
-		this.domHelper.getAddArticulationButton().click(() => {
-			this.label(this.parts[pid]);
+		this.domHelper.sidebar.addArticulationButton.click(() => {
+			this.addArticulation(this.parts[pid]);
 		});
 
 	}
@@ -662,16 +1037,14 @@ class ArticulationAnnotator {
 		this.domHelper.getSubmitTextArea().focus(() => this.preventKeyShortcuts = true);
 		this.domHelper.getSubmitTextArea().focusout(() => this.preventKeyShortcuts = false);
 
- 		this.domHelper.getSubmitButton().click(() => {
-			this.authenticate(() => {
-				this.submitAnnotations(this.domHelper.getNotes());
-			});
-		});
+ 		this.domHelper.getSubmitButton().click(() => { this.submitAnnotations() });
 	}
 
 	animateScene() {
 		this.articulationAnimator = new ArticulationAnimator({
-			state: this.state
+			state: this.state,
+			isPlaying: true,
+			playWidget: this.domHelper.editArticulationUI.animateArticulationWidget
 		});
 		const animate = () => {
 			requestAnimationFrame(animate);
@@ -682,23 +1055,17 @@ class ArticulationAnnotator {
 			this.controls.update();
 			if (!this.active) {
 				// Reset highlighting
-				this.parts.forEach(part => {
-					if (part) {
-						if (part.connected) {
-							this.state.colorPart(part, ArticulationsConstants.CONNECTED_COLOR, ArticulationsConstants.PART_OPACITY);
-						} else if (!part.selected && !part.hovered) {
-							this.state.colorPartRestore(part);
-						}
-					}
-				});
+				this.updatePartColors(this.parts);
 
 				// Highlight intersected part
-				const intersected = this.getIntersectedPart(this.mouse);
-				if (intersected) {
-					if (intersected.selected) {
-						this.state.colorPart(intersected, ArticulationsConstants.ACTIVE_PART_COLOR, ArticulationsConstants.ACTIVE_PART_OPACITY);
-					} else {
-						this.state.colorPart(intersected, ArticulationsConstants.ONHOVER_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+				if (this.mouse) {
+					const intersected = this.getIntersectedPart(this.mouse);
+					if (intersected) {
+						if (intersected.state.selected) {
+							this.colorPart(intersected, ArticulationsConstants.ACTIVE_PART_COLOR, ArticulationsConstants.ACTIVE_PART_OPACITY);
+						} else {
+							this.colorPart(intersected, ArticulationsConstants.ONHOVER_PART_COLOR, ArticulationsConstants.PART_OPACITY);
+						}
 					}
 				}
 			}
@@ -709,67 +1076,79 @@ class ArticulationAnnotator {
 		animate();
 	}
 
-	submitAnnotations(notes) {
-		const annotations = this.state.annotations;
-		// TODO: Account for alignment
-		let articulations = [];
-		for (let i = 0; i < annotations.length; i++) {
-			if (annotations[i] && annotations[i].length) {
-				let isReady = true;
-				annotations[i].forEach((ann) => isReady &= !ann.needsReview);
+	alert(message, style) {
+		UIUtil.showOverlayAlert(this.container,message, style);
+	}
 
-				if (!isReady) {
-					alert("Please review all annotations before submitting.");
-					return;
+	submitAnnotations() {
+		this.loadSave.submitAnnotations(this.state);
+	}
+
+	checkClearAnnotations() {
+		const nAnns = this.state.getTotalAnnotationsCount();
+		bootbox.confirm("This will clear all " + nAnns + " annotation.  Are you sure you want to continue?", (res) => {
+			if (res) {
+				this.state.deleteAllAnnotations();
+				this.domHelper.partsSelectionUI.clearAllPartTagAnnotated();
+				if (this.__selectedPid) {
+					this.updateSidebar(this.__selectedPid);
 				}
-
-				articulations.push.apply(articulations, annotations[i]);
 			}
-		}
-		this.timings.mark('annotationSubmit');
-
-		const data = {
-			appId: this.appId,
-			workerId: this.userId,
-			modelId: this.modelId,
-			annotation: {
-				partsAnnId: this.state.partsAnnId,
-				articulations: articulations,
-				notes: notes,
-				timings: this.timings.toJson(),
-				timingHistory: this.timingHistory
-			}
-		};
-		$.ajax({
-			url: `${Constants.baseUrl}/articulation-annotations/submit-annotations`,
-			method: 'POST',
-			contentType: 'application/json;charset=utf-8',
-			data: JSON.stringify(data),
-			success: ((msg) => {
-				console.log("Annotations saved.");
-				UIUtil.showOverlayAlert(this.container, "Annotations saved", 'alert-success');
-			}),
-			error: ((err) => {
-				console.error("There was an error saving annotations.", err);
-				UIUtil.showOverlayAlert(this.container, "Error saving annotations");
-			})
 		});
 	}
 
-	authenticate(cb) {
-		// Most basic auth ever
-		if (this.userId && !this.userId.startsWith('USER@')) {
-			cb({ username: this.userId });
-			return;
+	importAnnotations() {
+		if (!this.active) {
+			if (this.playing) {
+				this.pauseArticulationAnimation();
+			}
+			this.loadSave.importAnnotations((err, res) => {
+				this.state.resetState();
+				this.loadSave.updateState(this.state);
+				this.domHelper.partsSelectionUI.updatePartTags(this.state.annotations);
+				const firstPid = this.domHelper.partsSelectionUI.getFirstPid();
+				this.setActivePart(firstPid);
+				// Update part geometry
+				if (this.allowAddGeometry) {
+					this.__restorePartsGeometry(this.parts, () => {});
+				}
+			});
+		} else {
+			this.alert('Cannot import annotations when part is being annotated', 'alert-warning');
 		}
-		if (!this.auth) {
-			const Auth = require('util/Auth');
-			this.auth = new Auth();
-		}
-		this.auth.authenticate(function(user) {
-			this.userId = user.username;
-			cb(user);
-		}.bind(this));
+	}
+
+	exportAnnotations() {
+		this.loadSave.exportAnnotations(this.state);
+	}
+
+	getArticulatedObject3DOrScene(useTextured) {
+		const saved = { useTextured: this.useTextured, useDoubleSided: this.useDoubleSided };
+		// make sure we save the textured/double-sided version
+		this.useTextured = useTextured;
+		this.useDoubleSided = true;
+		const articulated = this.state.getArticulatedScene();
+		// restore settings
+		this.useTextured = saved.useTextured;
+		this.useDoubleSided = saved.useDoubleSided;
+		// populated user data and return
+		ArticulatedObject.populateArticulationUserData(articulated);
+		return articulated;
+	}
+
+	exportMesh() {
+		this.__exportObject3DForm = this.__exportObject3DForm || new ExportArticulatedObject3DForm({
+			export: (initialTarget, exporter, exportOpts) => {
+				const useTextured = this.__exportObject3DForm.__config.useTextured;
+				const target = this.getArticulatedObject3DOrScene(useTextured);
+				if (exportOpts.name == null) {
+					exportOpts.name = this.modelId;
+				}
+				exporter.export(target, exportOpts);
+		  },
+			warn: (msg) => { this.alert(msg, 'alert-warning'); }
+		});
+		this.__exportObject3DForm.show(null);
 	}
 }
 

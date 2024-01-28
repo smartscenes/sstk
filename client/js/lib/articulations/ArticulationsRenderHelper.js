@@ -7,7 +7,7 @@ const ArticulatedObject = require('articulations/ArticulatedObject');
 const DisplayAxis = require('articulations/DisplayAxis');
 const DisplayRadar = require('articulations/DisplayRadar');
 const PartsLoader = require('articulations/PartsLoader');
-const AssetGroups = require('assets/AssetGroups');
+const ModelInfo = require('model/ModelInfo');
 const Colors = require('util/Colors');
 const GeometryUtil = require('geo/GeometryUtil');
 const Object3DUtil = require('geo/Object3DUtil');
@@ -15,6 +15,28 @@ const SceneSetupHelper = require('gfx/SceneSetupHelper');
 const SceneState = require('scene/SceneState');
 const _ = require('util/util');
 
+/**
+ * Utilities for rendering articulations
+ * @constructor
+ * @param params Configuration parameters
+ * @param [params.assetManager] {assets.AssetManager} Asset manager for loading assets
+ * @param [params.renderer] {gfx.Renderer} Renderer
+ * @param [params.showAxisRadar] {boolean} Whether to show the axis and radar for the moving part
+ * @param [params.staticColor] {THREE.Color|string} What color to use for static parts
+ *       Use 'neutral' (default) for neutral coloring, 'original' for original textures.
+ * @param [params.staticOpacity] {float} Number between 0 and 1 specifying opacity of static part (default is fully opaque)
+ * @param [params.baseOpacity] {float} Number between 0 and 1 specifying opacity of base part (default is same as staticOpacity)
+ * @param [params.movingPartColor] {THREE.Color|string} What color to use for main moving part
+ *       Use 'highlight' (default) to use the highlightColor
+ * @param [params.attachedMovingPartColor] {THREE.Color|string} What color to use for parts attached to moving part
+ *       Use 'faded_highlight' (default) to use a lighter version of the highlightColor
+ * @param [params.basePartColor] {THREE.Color|string} What color to use for the base part
+ *       Use 'basepart_highlight' (default) to use a different color to highlight the base partr
+ * @param [params.neutralColor] {THREE.Color|string} Controls color used for neutral coloring (default is light gray)
+ * @param [params.highlightColor] {THREE.Color|string} Controls highlighted part coloring (default is green)
+ * @param [params.basepart_highlight] {THREE.Color|string} Controls highlighted part coloring for base parts (default is purple)
+ * @param [params.backgroundColor] {THREE.Color|string} Specify to have a background color (default is none - transparent)
+ **/
 class ArticulationsRenderHelper {
   constructor(params) {
     this.__fs = params.fs || Constants.sys.fs;
@@ -24,7 +46,6 @@ class ArticulationsRenderHelper {
     this.useDirectionalLights = params.useDirectionalLights;
     this.useLights = params.useLights;
     this.usePhysicalLights = params.usePhysicalLights;
-    this.backgroundColor = params.backgroundColor;
     this.minIterations = params.minIterations || 10;
     this.maxIterations = params.maxIterations || 20;
     this.defaultTilt = 30;
@@ -71,29 +92,22 @@ class ArticulationsRenderHelper {
   renderJointsForId(modelId, joints, options, callback) {
     const partsField = options.partsField || 'articulation-parts';
     const partsLoader = new PartsLoader({ assetManager: this.assetManager });
-    partsLoader.lookupPartsInfo(modelId, partsField, (err, partsInfo) => {
+    partsLoader.loadPartsWithConnectivityGraphById(modelId, { partsField: partsField, discardHierarchy: true }, (err, partData) => {
       if (err) {
-        console.error('Error locating ' + partsField + ' for ' + modelId, err);
+        console.error(`Error loading parts fullId=${modelId}`, err);
         callback(err);
       } else {
-        partsLoader.loadPartsWithConnectivityGraph(modelId, partsInfo, { discardHierarchy: true }, (err, partData) => {
-          if (err) {
-            console.error(`Error loading parts fullId=${modelId}`, err);
-            callback(err);
-          } else {
-            // Setup the scene and render
-            const scope = this;
-            function render() {
-              scope.setupRenderJointsWithConnectivity(modelId, partData.connectivityGraph, joints, options, callback);
-            }
+        // Setup the scene and render
+        const scope = this;
+        function render() {
+          scope.setupRenderJointsWithConnectivity(modelId, partData.connectivityGraph, joints, options, callback);
+        }
 
-            if (options.waitImagesLoaded) {
-              options.waitImagesLoaded(render);
-            } else {
-              render();
-            }
-          }
-        });
+        if (options.waitImagesLoaded) {
+          options.waitImagesLoaded(render);
+        } else {
+          render();
+        }
       }
     });
   }
@@ -165,29 +179,22 @@ class ArticulationsRenderHelper {
   renderProposedArticulationsForId(modelId, articulations, options, callback) {
     const partsField = options.partsField || 'articulation-parts';
     const partsLoader = new PartsLoader({ assetManager: this.assetManager });
-    partsLoader.lookupPartsInfo(modelId, partsField, (err, partsInfo) => {
+    partsLoader.loadPartsWithConnectivityGraphById(modelId, { partsField: partsField, discardHierarchy: true }, (err, partData) => {
       if (err) {
-        console.error('Error locating ' + partsField + ' for ' + modelId, err);
+        console.error(`Error loading parts fullId=${modelId}`, err);
         callback(err);
       } else {
-        partsLoader.loadPartsWithConnectivityGraph(modelId, partsInfo, { discardHierarchy: true }, (err, partData) => {
-          if (err) {
-            console.error(`Error loading parts fullId=${modelId}`, err);
-            callback(err);
-          } else {
-            // Setup the scene and render
-            const scope = this;
-            function render() {
-              scope.setupRenderProposedArticulationsWithConnectivity(modelId, partData.connectivityGraph, articulations, options, callback);
-            }
+        // Setup the scene and render
+        const scope = this;
+        function render() {
+          scope.setupRenderProposedArticulationsWithConnectivity(modelId, partData.connectivityGraph, articulations, options, callback);
+        }
 
-            if (options.waitImagesLoaded) {
-              options.waitImagesLoaded(render);
-            } else {
-              render();
-            }
-          }
-        });
+        if (options.waitImagesLoaded) {
+          options.waitImagesLoaded(render);
+        } else {
+          render();
+        }
       }
     });
   }
@@ -211,8 +218,8 @@ class ArticulationsRenderHelper {
     scene.add(objectNode);
     const assetInfo = this.assetManager.getLoadModelInfo(null, modelId);
     if (assetInfo != null) {
-      const front = AssetGroups.getDefaultFront(assetInfo);
-      const up = AssetGroups.getDefaultUp(assetInfo);
+      const front = ModelInfo.getFront(assetInfo);
+      const up = ModelInfo.getUp(assetInfo);
       Object3DUtil.alignToUpFrontAxes(objectNode, up, front, Constants.worldUp, Constants.worldFront);
     }
     scene.updateMatrixWorld();
@@ -580,11 +587,11 @@ class ArticulationsRenderHelper {
     }
   }
 
-  applyPartColorings(articulatedObject, articulationState, resetFlag) {
-    if (resetFlag) {
+  applyPartColorings(articulatedObject, articulationState, resetObjectColors, skipStaticPartMaterials) {
+    if (resetObjectColors) {
       this.resetObject3DColor(articulatedObject);
     }
-    if (this.staticPartMaterial) {
+    if (this.staticPartMaterial && !skipStaticPartMaterials) {
       this.setMaterial(articulatedObject, this.staticPartMaterial, this.staticPartOpacity);
     }
     if (this.staticColor !== this.attachedMovingPartColor) {
@@ -594,37 +601,13 @@ class ArticulationsRenderHelper {
       this.colorObject3D(articulationState.part.object3D, this.movingPartColor, this.movingPartMaterial);
     }
     if (this.basePartColor !== this.staticColor) {
-      for (let baseId of articulationState.part.baseIds) {
-        const baseObject = articulatedObject.parts[baseId].object3D;
-        this.colorObject3D(baseObject, this.basePartColor, this.basePartMaterial, this.basePartOpacity);
-      }
-    }
-  }
-
-  applyMultiplePartColorings(articulatedObject, articulationState, resetFlag) {
-    if (resetFlag) {
-      this.resetObject3DColor(articulatedObject);
-    }
-    if (this.staticPartMaterial && resetFlag) {
-      this.setMaterial(articulatedObject, this.staticPartMaterial, this.staticPartOpacity);
-    }
-
-    if (this.staticColor !== this.attachedMovingPartColor) {
-      this.colorObject3D(articulationState.articulatedNode, this.attachedMovingPartColor, this.attachedMovingPartMaterial);
-    }
-    if (this.movingPartColor !== this.attachedMovingPartColor) {
-      this.colorObject3D(articulationState.part.object3D, this.movingPartColor, this.movingPartMaterial);
-    }
-  
-    if (this.basePartColor !== this.staticColor) {
-      for (let baseId of articulationState.part.baseIds) {
+      if (articulationState.part.baseIds) {
         for (let baseId of articulationState.part.baseIds) {
           const baseObject = articulatedObject.parts[baseId].object3D;
           this.colorObject3D(baseObject, this.basePartColor, this.basePartMaterial, this.basePartOpacity);
         }
       }
     }
-
   }
 
   colorObject3D(object3D, colorMode, material, opacity) {

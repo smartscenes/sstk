@@ -5,7 +5,7 @@ var Colors = require('util/Colors');
 var Constants = require('Constants');
 var MatrixUtil = require('math/MatrixUtil');
 var GeometryUtil = require('geo/GeometryUtil');
-var Lights = require('gfx/Lights');
+var BBoxUtil = require('geo/BBoxUtil');
 var Materials = require('materials/Materials');
 var RNG = require('math/RNG');
 var _ = require('util/util');
@@ -15,40 +15,9 @@ Object3DUtil.MaterialsAll = 1;
 Object3DUtil.MaterialsCompatible = 2;
 Object3DUtil.MaterialsAllNonRecursive = 3;
 
-Object3DUtil.OutNormals = Object.freeze([
-  new THREE.Vector3(-1, 0, 0),
-  new THREE.Vector3(+1, 0, 0),
-  new THREE.Vector3(0, -1, 0),
-  new THREE.Vector3(0, +1, 0),
-  new THREE.Vector3(0, 0, -1),
-  new THREE.Vector3(0, 0, +1)
-]);
-Object3DUtil.InNormals = Object.freeze([
-  new THREE.Vector3(+1, 0, 0),
-  new THREE.Vector3(-1, 0, 0),
-  new THREE.Vector3(0, +1, 0),
-  new THREE.Vector3(0, -1, 0),
-  new THREE.Vector3(0, 0, +1),
-  new THREE.Vector3(0, 0, -1)
-]);
-Object3DUtil.FaceCenters01 = Object.freeze([
-  new THREE.Vector3(0.0, 0.5, 0.5),
-  new THREE.Vector3(1.0, 0.5, 0.5),
-  new THREE.Vector3(0.5, 0.0, 0.5),
-  new THREE.Vector3(0.5, 1.0, 0.5),
-  new THREE.Vector3(0.5, 0.5, 0.0),
-  new THREE.Vector3(0.5, 0.5, 1.0)
-]);
-Object3DUtil.OppositeFaces = Object.freeze([1,0,3,2,5,4]);
-// Rotation
-Object3DUtil.PlaneToFaceRotationParams = Object.freeze([
-  { axis: new THREE.Vector3(0, 1, 0), angle: Math.PI / 2 },
-  { axis: new THREE.Vector3(0, 1, 0), angle: Math.PI / 2 },
-  { axis: new THREE.Vector3(1, 0, 0), angle: Math.PI / 2 },
-  { axis: new THREE.Vector3(1, 0, 0), angle: Math.PI / 2 },
-  null,  // { axis: new THREE.Vector3(0,0,1), angle: 0 },
-  null   //{ axis: new THREE.Vector3(0,0,1), angle: 0 }
-]);
+Object3DUtil.OutNormals = BBoxUtil.OutNormals;
+Object3DUtil.InNormals = BBoxUtil.InNormals;
+Object3DUtil.FaceCenters01 = BBoxUtil.FaceCenters01;
 
 Object3DUtil.setMaterial = function (object3D, materialOrMaterialFn, materialsToSet, saveOldMaterial, filterMeshFn) {
   if (!materialsToSet) {
@@ -88,7 +57,7 @@ Object3DUtil.setMaterial = function (object3D, materialOrMaterialFn, materialsTo
           m.color = material;
           node.material = m;
         } else {
-          node.material = material;
+          node.material = material.clone(); // material is cloned so rlsd architecture toggle can independently set the opacity.
         }
       } else {
         skippedMeshes++;
@@ -138,15 +107,22 @@ Object3DUtil.setOpacity = function (object3D, opacity) {
   });
 };
 
-Object3DUtil.setDoubleSided = function (object3D) {
+Object3DUtil.setMaterialSide = function (object3D, side) {
   object3D.traverse(function (node) {
     if (node.material) {
-      node.material.side = THREE.DoubleSide;
-      if (node.material.materials) {
-        for (var iMat = 0; iMat < node.material.materials.length; iMat++) {
-          node.material.materials[iMat].side = THREE.DoubleSide;
-        }
-      }
+      Materials.setMaterialSide(node.material, side);
+    }
+  });
+};
+
+Object3DUtil.setDoubleSided = function (object3D) {
+  Object3DUtil.setMaterialSide(object3D, THREE.DoubleSide);
+};
+
+Object3DUtil.setTextureProperty = function (object3D, propName, propValue) {
+  object3D.traverse(function (node) {
+    if (node.material) {
+      Materials.setTextureProperty(node.material, propName, propValue);
     }
   });
 };
@@ -307,7 +283,10 @@ Object3DUtil.applyIndexedMaterials = function (object3D, nonrecursive) {
     nonrecursive);
 };
 
-Object3DUtil.highlightMeshes = function (object3D, meshIndices, material, useIndexedMaterial) {
+Object3DUtil.highlightMeshes = function (object3D, meshIndices, material, useIndexedMaterial, useOutlineHighlight, indexField) {
+  if (indexField == null) {
+    indexField = 'index';
+  }
   function getMaterial(i, mesh) {
     if (mesh.userData.isAxis  || mesh.userData.isOrientationArrow) {
       if (mesh.axisMaterial) {
@@ -325,15 +304,26 @@ Object3DUtil.highlightMeshes = function (object3D, meshIndices, material, useInd
 
   return Object3DUtil.applyMaterials(object3D,
     function (mesh) {
+      if (useOutlineHighlight) {
+        mesh.isHighlighted = false;
+      }
       if (meshIndices.length) {
         for (var j = 0; j < meshIndices.length; j++) {
-          if (mesh.userData.index === meshIndices[j]) {
-            return getMaterial(mesh.userData.index, mesh);
+          if (mesh.userData[indexField] === meshIndices[j]) {
+            if (useOutlineHighlight) {
+              mesh.isHighlighted = true;
+            }
+            // console.log('highlight mesh', mesh);
+            return getMaterial(mesh.userData[indexField], mesh);
           }
         }
         return Object3DUtil.ClearMat;
-      } else if (mesh.userData.index === meshIndices) {
-        return getMaterial(mesh.userData.index, mesh);
+      } else if (mesh.userData[indexField] === meshIndices) {
+        if (useOutlineHighlight) {
+          mesh.isHighlighted = true;
+        }
+        // console.log('highlight mesh', mesh);
+        return getMaterial(mesh.userData[indexField], mesh);
       } else {
         return Object3DUtil.ClearMat;
       }
@@ -388,12 +378,15 @@ Object3DUtil.applyMaterial = function (object3D, materialOrFn, nonrecursive, kee
     nonrecursive, keepMultiMaterial);
 };
 
-Object3DUtil.saveMaterials = function(object3D, nonrecursive) {
+Object3DUtil.saveMaterials = function(object3D, nonrecursive, matField) {
+  if (matField == null) {
+    matField = 'origMaterial';
+  }
   Object3DUtil.traverseMeshes(object3D,
     nonrecursive,
     function (node) {
       node.cachedData = node.cachedData || {};
-      node.cachedData.origMaterial = node.material;
+      node.cachedData[matField] = node.material;
     });
 };
 
@@ -483,14 +476,14 @@ Object3DUtil.detachFromParent = function (object3D, scene) {
     object3D.parent.remove(object3D);
 
     var objMinv = new THREE.Matrix4();
-    objMinv.getInverse(object3D.matrix);
+    objMinv.copy(object3D.matrix).invert();
     var matrix = new THREE.Matrix4();
     matrix.multiplyMatrices(objWorldTransform, objMinv);
 
     // Add to scene...
     if (scene) {
       var sceneMinv = new THREE.Matrix4();
-      sceneMinv.getInverse(scene.matrixWorld);
+      sceneMinv.copy(scene.matrixWorld).invert();
       matrix.multiplyMatrices(sceneMinv, matrix);
       object3D.applyMatrix4(matrix);
       object3D.matrixWorldNeedsUpdate = true;
@@ -509,9 +502,9 @@ Object3DUtil.attachToParent = function (object3D, parent, scene) {
     var objWorldTransform = new THREE.Matrix4();
     objWorldTransform.copy(object3D.matrixWorld);
     var parentMinv = new THREE.Matrix4();
-    parentMinv.getInverse(parent.matrixWorld);
+    parentMinv.copy(parent.matrixWorld).invert();
     var objMinv = new THREE.Matrix4();
-    objMinv.getInverse(object3D.matrix);
+    objMinv.copy(object3D.matrix).invert();
 
     var matrix = new THREE.Matrix4();
     matrix.multiplyMatrices(parentMinv, objWorldTransform);
@@ -547,7 +540,7 @@ Object3DUtil.setReceiveShadow = function (object3D, flag) {
 Object3DUtil.computeVertexMeanLocal = function (root, transform) {
   root.updateMatrixWorld();
   var modelInverse = new THREE.Matrix4();
-  modelInverse.getInverse(root.matrixWorld);
+  modelInverse.copy(root.matrixWorld).invert();
   if (transform) {
     var m = new THREE.Matrix4();
     m.multiplyMatrices(transform, modelInverse);
@@ -628,7 +621,7 @@ Object3DUtil.__getOrientedBoundingBox = function (root, opts, force) {
 Object3DUtil.computeBoundingBoxLocal = function (root, transform) {
   root.updateMatrixWorld();
   var modelInverse = new THREE.Matrix4();
-  modelInverse.getInverse(root.matrixWorld);
+  modelInverse.copy(root.matrixWorld).invert();
   if (transform) {
     var m = new THREE.Matrix4();
     m.multiplyMatrices(transform, modelInverse);
@@ -771,6 +764,7 @@ Object3DUtil.removeEmptyGeometries = function(root, options) {
   });
 
   Object3DUtil.computeNodeStatistics(root, options.splitOnMaterial);
+  var allRemoved = [];
   Object3DUtil.traverse(root, function(node) {
     return node.userData.nfaces > 0;
   }, function(node) {
@@ -785,9 +779,11 @@ Object3DUtil.removeEmptyGeometries = function(root, options) {
     for (var i = 0; i < removeList.length; i++) {
       console.log('Removing node ' + removeList[i].id);
       node.remove(removeList[i]);
+      allRemoved.push(removeList[i]);
     }
   });
   Object3DUtil.clearCache(root);
+  return allRemoved;
 };
 
 Object3DUtil.collapseNestedPaths = function(root, options) {
@@ -812,7 +808,7 @@ Object3DUtil.collapseNestedPaths = function(root, options) {
       }
       Object3DUtil.setMatrix(finalNode, finalTransform);
       // Figure out name
-      var labels = _.map(collapseNodes, function(n) { return n.name || (n.userData && n.userData.id) || ("node" + n.index); });
+      var labels = _.map(collapseNodes, function(n) { return n.name || (n.userData && n.userData.id != null) || ("node" + n.index); });
       finalNode.name = labels.join('/');
       // Replace current node with this node
       if (node.parent) {
@@ -941,7 +937,7 @@ Object3DUtil.getObjUpFrontAxes = function (rotation, targetUp, targetFront, epsi
     m.makeRotationFromQuaternion(rotation);
   }
   var mInv = new THREE.Matrix4();
-  mInv.getInverse(m);
+  mInv.copy(m).invert();
   var objM = new THREE.Matrix4();
   objM.multiplyMatrices(mInv, targetM);
   var up = new THREE.Vector3();
@@ -987,6 +983,13 @@ Object3DUtil.getRotationForOrientingBBFace = function (unorientedBbFaceIndex, ta
   return r;
 };
 
+Object3DUtil.clearPositionRotation = function(object3D) {
+  object3D.rotation.set(0, 0, 0);
+  object3D.position.set(0, 0, 0);
+  object3D.updateMatrix();
+  Object3DUtil.clearCache(object3D);
+};
+
 Object3DUtil.clearTransform = function(object3D) {
   object3D.rotation.set(0, 0, 0);
   object3D.scale.set(1, 1, 1);
@@ -1012,7 +1015,7 @@ Object3DUtil.normalize = function (object3D, alignmentMatrix, scaleVector) {
   if (object3D.parent) {
     object3D.parent.updateMatrixWorld();
     parentMatrixWorldInv = new THREE.Matrix4();
-    parentMatrixWorldInv.getInverse(object3D.parent.matrixWorld);
+    parentMatrixWorldInv.copy(object3D.parent.matrixWorld).invert();
   }
 
   if (scaleVector) {
@@ -1044,7 +1047,7 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
   //         =>           = T1 * T2 * (T2')^-1 * Tc'
   //         =>   Tc' = T2' * (T2)^-1 * Tc
   var oldModelBaseMatrixInv = new THREE.Matrix4();
-  oldModelBaseMatrixInv.getInverse(child.matrix);
+  oldModelBaseMatrixInv.copy(child.matrix).invert();
 
   var matrix = new THREE.Matrix4();
   matrix.multiplyMatrices(parent.matrix, child.matrix);
@@ -1054,10 +1057,10 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
     var worldBB = Object3DUtil.computeBoundingBox(child);
     var wp = worldBB.getWorldPosition(p);
     var pm = new THREE.Matrix4();
-    pm.getInverse(child.matrixWorld);
+    pm.copy(child.matrixWorld).invert();
     var cp = wp.applyMatrix4(pm);
 
-    Object3DUtil.clearTransform(child);
+    Object3DUtil.clearPositionRotation(child);
     child.position.set(-cp.x, -cp.y, -cp.z);
     child.updateMatrix();
   } else if (pointCoordFrame === 'parentBB') {
@@ -1067,7 +1070,7 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
     var modelBB = Object3DUtil.computeBoundingBoxLocal(child, rot);
     var cp = modelBB.getWorldPosition(p);
 
-    Object3DUtil.clearTransform(child);
+    Object3DUtil.clearPositionRotation(child);
     child.quaternion.copy(parent.quaternion);
     child.position.set(-cp.x, -cp.y, -cp.z);
     child.updateMatrix();
@@ -1075,7 +1078,7 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
     var modelBB = Object3DUtil.computeBoundingBoxLocal(child);
     var cp = modelBB.getWorldPosition(p);
 
-    Object3DUtil.clearTransform(child);
+    Object3DUtil.clearPositionRotation(child);
     child.position.set(-cp.x, -cp.y, -cp.z);
     child.updateMatrix();
   } else {
@@ -1092,10 +1095,12 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
 
   // Convert this.modelBaseObject3D to use the specified attachmentPoint
   var modelBaseObject3DInv = new THREE.Matrix4();
-  modelBaseObject3DInv.getInverse(child.matrix);
+  modelBaseObject3DInv.copy(child.matrix).invert();
   matrix.multiply(modelBaseObject3DInv);
 
-  Object3DUtil.setMatrix(parent, matrix);
+  //console.log('scale before', parent.scale.clone(), child.scale.clone());
+  Object3DUtil.setMatrix(parent, matrix, true);
+  //console.log('scale after', parent.scale.clone(), child.scale.clone());
   child.userData['attachmentPoint'] = p;
   child.userData['attachmentPointCoordFrame'] = pointCoordFrame;
 
@@ -1112,9 +1117,16 @@ Object3DUtil.setChildAttachmentPoint = function (parent, child, p, pointCoordFra
   //parent.updateMatrixWorld();
 };
 
-Object3DUtil.setMatrix = function (obj, matrix) {
+Object3DUtil.setMatrix = function (obj, matrix, keepScale) {
   obj.matrix.copy(matrix);
-  obj.matrix.decompose(obj.position, obj.quaternion, obj.scale);
+  // Sometime the decomposition would cause the scale to be changed
+  if (keepScale) {
+    var tmpScale = new THREE.Vector3();
+    obj.matrix.decompose(obj.position, obj.quaternion, tmpScale);
+    obj.updateMatrix();
+  } else {
+    obj.matrix.decompose(obj.position, obj.quaternion, obj.scale);
+  }
   obj.matrixWorldNeedsUpdate = true;  // make sure matrixWorldNeedsUpdate is set
   Object3DUtil.clearCache(obj);
 };
@@ -1172,6 +1184,7 @@ Object3DUtil.getReflectionMatrix = function(component, matrix) {
  * @param [opts.removeEmptyGeometries] {boolean} Whether to remove empty geometries
  * @param [opts.toGeometry] {boolean} Ensure that all geometries are of type THREE.Geometry
  * @param [opts.toNonindexed] {boolean} Ensure that all buffer geometries are nonindexed
+ * @param [opts.toIndexed] {boolean} Ensure that all buffer geometries are indexed
  * @param [opts.debug] {boolean} Whether to output debug log messages
  * @param [opts.bbox] {BBox} Precomputed bounding box information for the object
  * @param [opts.bboxes] {BBox[]} Array of bboxes sizes that is updated (for debugging)
@@ -1207,7 +1220,7 @@ Object3DUtil.normalizeGeometry = function(object3D, opts) {
     }
   } else if (opts.toNonindexed) {
     if (opts.debug) {
-      console.time('toGeometry');
+      console.time('toNonIndexed');
     }
     Object3DUtil.traverseMeshes(object3D, false, function (m) {
       m.geometry = GeometryUtil.toNonIndexed(m.geometry);
@@ -1215,6 +1228,18 @@ Object3DUtil.normalizeGeometry = function(object3D, opts) {
     });
     if (opts.debug) {
       console.timeEnd('toNonIndexed');
+    }
+  } else if (opts.toIndexed) {
+    if (opts.debug) {
+      console.time('toIndexed');
+    }
+    Object3DUtil.traverseMeshes(object3D, false, function (m) {
+      if (m.geometry.isBufferGeometry) {
+        m.geometry = GeometryUtil.toIndexedBufferGeometry(m.geometry);
+      }
+    });
+    if (opts.debug) {
+      console.timeEnd('toIndexed');
     }
   }
   return { bbox: bbox, bbdims: bbdims };
@@ -1268,7 +1293,8 @@ Object3DUtil.applyTransforms = function(object3D, opts) {
   return {
     hasTransforms: hasTransforms,
     bbdims: bbdims,
-    bbox: bbox
+    bbox: bbox,
+    matrix: object3D.matrixWorld.toArray()
   };
 };
 
@@ -1316,7 +1342,7 @@ Object3DUtil.rotateObject3DAboutAxis = function() {
       var base = bb.getWorldPosition(stationaryBbBoxPoint);
       Object3DUtil.placeObject3D(obj, origin, stationaryBbBoxPoint);
 
-      var qwi = obj.getWorldQuaternion(q).inverse();
+      var qwi = obj.getWorldQuaternion(q).invert();
       v.copy(axis);
       var localAxis = v.applyQuaternion(qwi);
       q.setFromAxisAngle(localAxis, delta);
@@ -1344,7 +1370,7 @@ Object3DUtil.rotateObject3DAboutAxisSimple = function() {
       //console.time('rotateObject3DAboutAxisSimple');
       var localAxis = axis;
       if (isWorld) {
-          var qwi = obj.getWorldQuaternion(q).inverse();
+          var qwi = obj.getWorldQuaternion(q).invert();
           v.copy(axis);
           localAxis = v.applyQuaternion(qwi);
       }
@@ -1648,13 +1674,11 @@ Object3DUtil.makeGrid = function (width, height, numHGridLines, numVGridLines, f
 
   var epsilon = 2;
 
-  var geometryH = new THREE.Geometry();
-  geometryH.vertices.push(new THREE.Vector3(MIN_X, MAX_Y, epsilon));
-  geometryH.vertices.push(new THREE.Vector3(MAX_X, MAX_Y, epsilon));
+  var geometryH = new THREE.BufferGeometry();
+  geometryH.setAttribute( 'position', new THREE.Float32BufferAttribute( [MIN_X, MAX_Y, epsilon, MAX_X, MAX_Y, epsilon], 3 ) );
 
-  var geometryV = new THREE.Geometry();
-  geometryV.vertices.push(new THREE.Vector3(MIN_X, MIN_Y, epsilon));
-  geometryV.vertices.push(new THREE.Vector3(MIN_X, MAX_Y, epsilon));
+  var geometryV = new THREE.BufferGeometry();
+  geometryV.setAttribute( 'position', new THREE.Float32BufferAttribute( [MIN_X, MIN_Y, epsilon, MIN_X, MAX_Y, epsilon], 3 ) );
 
   var lineMat = new THREE.LineBasicMaterial({
     color: 0xa0a0a0,
@@ -1698,23 +1722,18 @@ Object3DUtil.makeAxes = function (axisLength) {
 
   var axes = new THREE.Object3D();
 
-  //Shorten the vertex function
-  function v(x, y, z) {
-    return new THREE.Vector3(x, y, z);
-  }
-
-  //Create axis (point1, point2, colour)
-  function createAxis(p1, p2, color) {
-    var line, lineGeometry = new THREE.Geometry(),
-      lineMat = new THREE.LineBasicMaterial({color: color, linewidth: 10});
-    lineGeometry.vertices.push(p1, p2);
-    line = new THREE.Line(lineGeometry, lineMat);
+  //Create axis ([p1x, p1y, p1z, p2x, p2y, p2z], colour)
+  function createAxis(points, color) {
+    var lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute(points, 3 ) );
+    var lineMat = new THREE.LineBasicMaterial({color: color, linewidth: 10});
+    var line = new THREE.Line(lineGeometry, lineMat);
     axes.add(line);
   }
 
-  createAxis(v(0, 0, 0), v(axisLength, 0, 0), 0xFF0000);
-  createAxis(v(0, 0, 0), v(0, axisLength, 0), 0x00FF00);
-  createAxis(v(0, 0, 0), v(0, 0, axisLength), 0x0000FF);
+  createAxis([0, 0, 0, axisLength, 0, 0], 0xFF0000);
+  createAxis([0, 0, 0, 0, axisLength, 0], 0x00FF00);
+  createAxis([0, 0, 0, 0, 0, axisLength], 0x0000FF);
 
   return axes;
 };
@@ -1722,7 +1741,6 @@ Object3DUtil.makeAxes = function (axisLength) {
 Object3DUtil.makeGround = function (width, height, color) {
   var geometry = new THREE.PlaneBufferGeometry(width, height);
   //geometry.verticesArray = geometry.attributes['position'].array;
-  geometry.computeFaceNormals();
   var planeMaterial = new THREE.MeshBasicMaterial({ color: color || 0xffffff });
   //planeMaterial.ambient = planeMaterial.color;
   //planeMaterial.side = THREE.DoubleSide;
@@ -1740,7 +1758,6 @@ Object3DUtil.makeGround = function (width, height, color) {
 
 Object3DUtil.makePickingPlane = function (width, height) {
   var geometry = new THREE.PlaneBufferGeometry(width, height);
-  geometry.computeFaceNormals();
   var planeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, visible: false });
   var ground = new THREE.Mesh(geometry, planeMaterial);
   ground.name = 'PickingPlane';
@@ -1794,12 +1811,12 @@ Object3DUtil.getMaterial = function (mat) {
   return Materials.toMaterial(mat);
 };
 
-Object3DUtil.getStandardMaterial = function (color, alpha) {
-  return Materials.getStandardMaterial(color, alpha);
+Object3DUtil.getStandardMaterial = function (color, alpha, side) {
+  return Materials.getStandardMaterial(color, alpha, side);
 };
 
-Object3DUtil.getSimpleFalseColorMaterial = function (id, color, palette) {
-  return Materials.getSimpleFalseColorMaterial(id, color, palette);
+Object3DUtil.getSimpleFalseColorMaterial = function (id, color, palette, side) {
+  return Materials.getSimpleFalseColorMaterial(id, color, palette, side);
 };
 
 Object3DUtil.getTotalDims = function (models) {
@@ -2025,7 +2042,7 @@ Object3DUtil.toBox2 = function(b) {
     if (b instanceof THREE.Box2) {
       return b;
     } else if (b.min && b.max) {
-      return new BBox(Object3DUtil.toVector3(b.min), Object3DUtil.toVector3(b.max));
+      return new BBox(Object3DUtil.toVector2(b.min), Object3DUtil.toVector2(b.max));
     } else {
       console.error('Cannot convert object to Box2', b);
       return null;
@@ -2039,7 +2056,7 @@ Object3DUtil.toBox3 = function(b) {
     if (b instanceof THREE.Box3) {
       return b;
     } else if (b.min && b.max) {
-      return new BBox(Object3DUtil.toVector2(b.min), Object3DUtil.toVector2(b.max));
+      return new BBox(Object3DUtil.toVector3(b.min), Object3DUtil.toVector3(b.max));
     } else {
       console.error('Cannot convert object to Box3', b);
       return null;
@@ -2445,29 +2462,18 @@ Object3DUtil.dispose = function(parentObject) {
       }
 
       if (node.material) {
+        var materials = Array.isArray(node.material)? node.material: [node.material];
+        materials.forEach(function (mat, idx) {
+          // dispose of material textures
+          if (mat.map) mat.map.dispose();
+          if (mat.lightMap) mat.lightMap.dispose();
+          if (mat.bumpMap) mat.bumpMap.dispose();
+          if (mat.normalMap) mat.normalMap.dispose();
+          if (mat.specularMap) mat.specularMap.dispose();
+          if (mat.envMap) mat.envMap.dispose();
 
-        if (Array.isArray(node.material)) {
-          node.material.forEach(function (mtrl, idx) {
-            if (mtrl.map) mtrl.map.dispose();
-            if (mtrl.lightMap) mtrl.lightMap.dispose();
-            if (mtrl.bumpMap) mtrl.bumpMap.dispose();
-            if (mtrl.normalMap) mtrl.normalMap.dispose();
-            if (mtrl.specularMap) mtrl.specularMap.dispose();
-            if (mtrl.envMap) mtrl.envMap.dispose();
-
-            mtrl.dispose();    // disposes any programs associated with the material
-          });
-        }
-        else if (node.material) {
-          if (node.material.map) node.material.map.dispose();
-          if (node.material.lightMap) node.material.lightMap.dispose();
-          if (node.material.bumpMap) node.material.bumpMap.dispose();
-          if (node.material.normalMap) node.material.normalMap.dispose();
-          if (node.material.specularMap) node.material.specularMap.dispose();
-          if (node.material.envMap) node.material.envMap.dispose();
-
-          node.material.dispose();   // disposes any programs associated with the material
-        }
+          mat.dispose();    // disposes any programs associated with the material
+        });
       }
     }
   });
@@ -2508,10 +2514,13 @@ Object3DUtil.traverseAncestors = function(object3D, callback) {
   }
 };
 
-Object3DUtil.findFirstAncestor = function(object3D, filter, includeSelf) {
+Object3DUtil.findFirstAncestor = function(object3D, filter, includeSelf, stopFunc) {
   var node = includeSelf? object3D : object3D.parent;
   var n = includeSelf? 0 : 1;
   while (node != null) {
+    if (stopFunc && stopFunc(node)) {
+      break;
+    }
     var matched = filter(node);
     if (matched) {
       return { ancestor: node, pathLength: n };
@@ -2591,8 +2600,12 @@ Object3DUtil.getMinimalSpanningNodes = function(nodes) {
   return spanning;
 };
 
+Object3DUtil.filterVisible = function(objects3Ds) {
+  return objects3Ds.filter(object3D => Object3DUtil.isVisible(object3D));
+};
+
 // Find nodes that returns true for the given filter
-Object3DUtil.findNodes = function(object3D, filter, visibleOnly) {
+Object3DUtil.findNodes = function(object3D, filter, visibleOnly, limit) {
   var nodes = [];
   if (visibleOnly && !object3D.visible) {
     return nodes;
@@ -2607,7 +2620,7 @@ Object3DUtil.findNodes = function(object3D, filter, visibleOnly) {
       if (visibleOnly) {
         return node.visible;
       } else {
-        return true;
+        return (limit != null)? nodes.length < limit : true;
       }
   });
   return nodes;
@@ -2615,7 +2628,7 @@ Object3DUtil.findNodes = function(object3D, filter, visibleOnly) {
 
 Object3DUtil.findNode = function(object3D, filter, visibleOnly) {
   // Finds and returns first node satisfying filter
-  var nodes = Object3DUtil.findNodes(object3D, filter, visibleOnly);
+  var nodes = Object3DUtil.findNodes(object3D, filter, visibleOnly, 1);
   if (nodes.length) {
     return nodes[0];
   }
@@ -2911,43 +2924,40 @@ Object3DUtil.getFilteredMeshList = function (object, filter, meshes) {
   return meshes;
 };
 
-Object3DUtil.getVisibleMeshList = function (object, recursive, meshes) {
+Object3DUtil.getVisibleMeshList = function (object, recursive, meshes, filter) {
   meshes = meshes || [];
   Object3DUtil.traverseVisibleMeshes(
     object,
     !recursive,
     function (mesh) {
-      meshes.push(mesh);
+      if (!filter || filter(mesh)) {
+        meshes.push(mesh);
+      }
     }
   );
   return meshes;
 };
 
-Object3DUtil.findClosestBBFaceByOutNormal = function (outNorm, threshold) {
-  if (threshold === undefined) {
-    threshold = 0.99;
-  }
-  for (var i = 0; i < Object3DUtil.OutNormals.length; i++) {
-    var norm = Object3DUtil.OutNormals[i];
-    if (outNorm.dot(norm) >= threshold) {
-      return i;
+Object3DUtil.findClosestVector = function (query, candidates, threshold) {
+  var maxIndex = -1;
+  var maxDot = -1;
+  for (var i = 0; i < candidates.length; i++) {
+    var norm = candidates[i];
+    var dot = query.dot(norm);
+    if (dot >= maxDot && (threshold == null || dot >= threshold)) {
+      maxDot = dot;
+      maxIndex = i;
     }
   }
-  return -1;
+  return maxIndex;
 };
 
-Object3DUtil.findClosestBBFaceByInNormal = function (inNorm) {
-  var maxFaceIndex = -1;
-  var maxDot = -1;
-  for (var i = 0; i < Object3DUtil.InNormals.length; i++) {
-    var norm = Object3DUtil.InNormals[i];
-    var dot = inNorm.dot(norm);
-    if (dot >= maxDot) {
-      maxDot = dot;
-      maxFaceIndex = i;
-    }
-  }
-  return maxFaceIndex;
+Object3DUtil.findClosestBBFaceByOutNormal = function (outNorm, threshold) {
+  return Object3DUtil.findClosestVector(outNorm, Object3DUtil.OutNormals, threshold);
+};
+
+Object3DUtil.findClosestBBFaceByInNormal = function (inNorm, threshold) {
+  return Object3DUtil.findClosestVector(inNorm, Object3DUtil.InNormals, threshold);
 };
 
 Object3DUtil.findNodesToExtract = function(root, nodeIds) {
@@ -2993,6 +3003,15 @@ Object3DUtil.extractNodes = function(root, operation, nodeIds) {
   }
 };
 
+Object3DUtil.ensureVertexColors = function(object3D, toNonindexed) {
+  Object3DUtil.traverseMeshes(object3D, false, function (m) {
+    if (toNonindexed) {
+      m.geometry = GeometryUtil.toNonIndexed(m.geometry);
+    }
+    GeometryUtil.ensureVertexColors(m.geometry);
+  });
+};
+
 Object3DUtil.ensureVertexColorsSamePerTri = function(object3D) {
   Object3DUtil.traverseMeshes(object3D, false, function (m) {
     m.geometry = GeometryUtil.toNonIndexed(m.geometry);
@@ -3000,234 +3019,22 @@ Object3DUtil.ensureVertexColorsSamePerTri = function(object3D) {
   });
 };
 
-// segments is a array of segments
-//  Each segment can have one of the following formats:
-//   a. array of meshTri: [...]
-//   b. object with field meshTri: { meshTri: array of meshTri }
-//   c. object with meshTri fields: {meshIndex: x, triIndex: [...] }
-//  Each meshTri has following fields: {meshIndex: x, triIndex: [...] }
-Object3DUtil.remeshObject = function (object, segments, material) {
-  // Get remesh of the object
-  // TODO: Have the meshIndex be consistent?  Sorted by userData.meshIndex?
-  //       Some models have several different pieces that are loaded, meshIndex only makes sense within each one
-  var origMeshes = Object3DUtil.getMeshList(object);
-
-  var meshes = [];
-  var idToMeshIndices = {};
-  var needConsolidation = false;
-  for (var i = 0; i < segments.length; i++) {
-    var segment = segments[i];
-    var meshTris = [segment];  // Default to case c)
-    if (segment.hasOwnProperty('meshTri')) {
-      // Case b
-      meshTris = segment['meshTri'];
-    } else if (segment.length) {
-      // Case a
-      meshTris = segment;
-    }
-    var componentMeshes = [];
-
-    for (var j = 0; j < meshTris.length; j++) {
-      var meshTri = meshTris[j];
-      var meshIndex = meshTri.meshIndex;
-      var origMesh = (meshTri.mesh) ? meshTri.mesh : origMeshes[meshIndex];
-
-      var componentMesh;
-      if (meshTri.triIndex) {
-        // Remesh with specific triangles
-        componentMesh = GeometryUtil.extractMesh(origMesh, meshTri.triIndex, material? false : true);
-      } else {
-        // Just my mesh
-        componentMesh = origMesh.clone();
-      }
-
-      // Get world transform from our parent
-      // TODO: if there is a scene transform, it needs to be undone by the viewer...
-      var parent = origMesh.parent;
-      if (parent) {
-        componentMesh.applyMatrix4(parent.matrixWorld);
-        componentMesh.matrixWorldNeedsUpdate = true;
-      }
-      //Object3DUtil.setMatrix(componentMesh, origMesh.matrixWorld);
-      //console.log('component', componentMesh.matrix.determinant(), origMesh.matrixWorld.determinant());
-      if (material) {
-        componentMesh.material = material;
-      }
-      componentMeshes.push(componentMesh);
-    }
-
-    var myMesh = GeometryUtil.mergeMeshes(componentMeshes);
-    myMesh.name = (segment.id != undefined)? segment.id.toString() : object.name + '-remeshed-' + i;
-    myMesh.userData = {
-      id: (segment.id != undefined)? segment.id : 'mesh' + i,
-      index: i
-    };
-    meshes.push(myMesh);
-    idToMeshIndices[myMesh.userData.id] = idToMeshIndices[myMesh.userData.id] || [];
-    idToMeshIndices[myMesh.userData.id].push(i);
-    if (idToMeshIndices[myMesh.userData.id].length > 1) {
-      needConsolidation = true;
-    }
-  }
-  if (needConsolidation) {
-    // Need to consolidation some meshes
-    //console.log('consolidating', idToMeshIndices);
-    var newMeshes = [];
-    var consolidated = new Set();
-    for (var i = 0; i < meshes.length; i++) {
-      var myMesh = meshes[i];
-      var id = myMesh.userData.id;
-      if (!consolidated.has(id)) {
-        var indices = idToMeshIndices[id];
-        if (indices.length > 1) {
-          var componentMeshes = indices.map(idx => meshes[idx]);
-          var merged = GeometryUtil.mergeMeshes(componentMeshes);
-          merged.name = myMesh.name;
-          merged.userData.id = myMesh.userData.id;
-          myMesh = merged;
+Object3DUtil.ensureVertexNormals = function(object3d) {
+  object3d.traverse((node) => {
+    if (node.type === 'Mesh') {
+      const geo = node.geometry;
+      if (geo instanceof THREE.Geometry) {
+        console.warn('Deprecated Geometry');
+        if (geo.faces[0].vertexNormals.length !== 3) {
+          geo.computeVertexNormals();
         }
-        myMesh.userData.index = i;
-        newMeshes.push(myMesh);
-        consolidated.add(id);
+      } else {  // usually a BufferGeometry
+        if (!geo.hasAttribute('normal')) {
+          geo.computeVertexNormals();
+        }
       }
     }
-    //console.log(newMeshes);
-    meshes = newMeshes;
-  }
-
-
-  // Clone the relevant mesh
-  var remeshedObj = new THREE.Object3D();
-  remeshedObj.name = object.name + '-remeshed';
-  for (var i = 0; i < meshes.length; i++) {
-    var myMesh = meshes[i];
-    remeshedObj.add(myMesh);
-  }
-  // Clear out any __bufferGeometry
-  for (var i = 0; i < origMeshes.length; i++) {
-    delete origMeshes[i].__bufferGeometry;
-  }
-  return remeshedObj;
-};
-
-Object3DUtil.assignMultiMaterialToSegments = function (object, segments, createMaterialFn) {
-  if (!createMaterialFn) {
-    createMaterialFn = function(index, segment) {
-      var material = Object3DUtil.getSimpleFalseColorMaterial(index);
-      return material;
-    };
-  }
-  // Get remesh of the object
-  // TODO: Have the meshIndex be consistent?  Sorted by userData.meshIndex?
-  //       Some models have several different pieces that are loaded, meshIndex only makes sense within each one
-  var origMeshes = Object3DUtil.getMeshList(object);
-
-  // Clone the original meshes
-  var materials = [];
-  var multiMaterial = new THREE.MultiMaterial(materials);
-  var remeshedObj = new THREE.Object3D();
-  remeshedObj.name = object.name + '-remeshed';
-  var clonedMeshes = _.map(origMeshes, function(x) {
-    x.updateMatrixWorld();
-    var cloned = x.clone();
-    cloned.geometry = GeometryUtil.toGeometry(cloned.geometry);
-    cloned.material = multiMaterial;
-    cloned.matrix.copy(x.matrixWorld);
-    cloned.matrix.decompose(cloned.position, cloned.quaternion, cloned.scale);
-    cloned.matrixWorldNeedsUpdate = true;
-    remeshedObj.add(cloned);
-    return cloned;
   });
-
-  for (var i = 0; i < segments.length; i++) {
-    var segment = segments[i];
-    materials[i] = createMaterialFn(i, segment);
-    var meshTris = [segment];  // Default to case c)
-    if (segment.hasOwnProperty('meshTri')) {
-      // Case b
-      meshTris = segment['meshTri'];
-    } else if (segment.length) {
-      // Case a
-      meshTris = segment;
-    }
-
-    for (var j = 0; j < meshTris.length; j++) {
-      var meshTri = meshTris[j];
-      var meshIndex = meshTri.meshIndex;
-      var clonedMesh = (meshTri.mesh) ? meshTri.mesh : clonedMeshes[meshIndex];
-
-      // TODO: Try to handle Buffer Geometry too
-      var faces = clonedMesh.geometry.faces;
-      if (meshTri.triIndex) {
-        var triIndices = meshTri.triIndex;
-        for (var ti in triIndices) {
-          if (triIndices.hasOwnProperty(ti)) {
-            faces[ti].materialIndex = i;
-          }
-        }
-      } else {
-        for (var k = 0; k < faces.length; k++) {
-          faces[k].materialIndex = i;
-        }
-      }
-    }
-
-  }
-  return remeshedObj;
-};
-
-// segmentGroups is a array of segment groups
-//  Each segmentGroup is a object with id, label, objectId, obb, and segments (optional)
-//  vertToSegIndices is a mapping of vertex to segment index
-Object3DUtil.remeshObjectUsingSegmentGroups = function (object, segmentGroups, vertToSegIndices, quiet) {
-  // Go over segment groups
-  var origMeshes = Object3DUtil.getMeshList(object);
-  // Assumes just one mesh
-  var origMesh = origMeshes[0];
-  var segToTriIndices = GeometryUtil.segVertIndicesToSegTriIndices(origMesh, vertToSegIndices);
-  // Convert to buffered geometry since extractMeshVertIndices works faster with buffered geometry
-  var origMeshBuffered = origMesh.clone();
-  origMeshBuffered.geometry = GeometryUtil.toBufferGeometry(origMesh.geometry);
-  var remeshedObj = new THREE.Object3D();
-  remeshedObj.name = object.name + '-remeshed';
-  var noIndices = [];
-  for (var i = 0; i < segmentGroups.length; i++) {
-    var segGroup = segmentGroups[i];
-    if (segGroup.segments && segGroup.segments.length > 0) {
-      //console.time('triIndices');
-      var segs = segGroup.segments;
-      var triIndices = [];
-      for (var si = 0; si < segs.length; si++) {
-        var vis = segToTriIndices[segs[si]];
-        if (vis) {
-          for (var j = 0; j < vis.length; j++) {
-            triIndices.push(vis[j]);
-          }
-          //Array.prototype.push.apply(triIndices, vis);
-        } else {
-          noIndices.push(segs[si]);
-        }
-      }
-      //console.time('triIndicesUniq');
-      triIndices = _.uniq(triIndices);
-      //console.timeEnd('triIndicesUniq');
-      //console.timeEnd('triIndices');
-      var myMesh = GeometryUtil.extractMesh(origMeshBuffered, triIndices, true);
-      var parent = origMesh.parent;
-      if (parent) {
-        myMesh.applyMatrix4(parent.matrixWorld);
-        myMesh.matrixWorldNeedsUpdate = true;
-      }
-      myMesh.name = object.name + '-remeshed-' + i;
-      myMesh.userData = segGroup;
-      segGroup['index'] = i;
-      remeshedObj.add(myMesh);
-    }
-  }
-  if (!quiet && noIndices.length > 0) {
-    console.error('No indices for ' + noIndices.length + ' segments', noIndices);
-  }
-  return remeshedObj;
 };
 
 Object3DUtil.getAllMeshMaterials = function(object3D) {
@@ -3574,8 +3381,9 @@ Object3DUtil.addVideoPlayer = function(object3D, opts) {
 };
 
 Object3DUtil.addArticulationPlayer = function(object3D, opts) {
-  var articulatable = Object3DUtil.findNodes(object3D, n => n.isArticulated);
+  var articulatable = Object3DUtil.findNodes(object3D, n => n.isArticulated && n.articulations.length);
   if (articulatable.length > 0) {
+    // find first articulatable that has articulations, others will be skipped
     var ArticulationPlayer = require('articulations/ArticulationPlayer');
     object3D.articulationPlayer = new ArticulationPlayer({
       articulatedObject: articulatable[0],
@@ -3719,27 +3527,21 @@ Object3DUtil.setCylinderDirection = function (obj, dir) {
   }
 };
 
-Object3DUtil.makeColumn = function (basePoint, columnDir, height, width, materialOrColor) {
-  width = width || 10;
-  var cylinderGeo = new THREE.CylinderGeometry(width, width, height);
+Object3DUtil.makeCylinderStartDir = function (basePoint, columnDir, height, width, materialOrColor, radialSegments) {
+  var cylinderGeo = new THREE.CylinderGeometry(width, width, height, radialSegments);
   var material = Object3DUtil.getMaterial(materialOrColor);
   var mesh = new THREE.Mesh(cylinderGeo, material);
-  mesh.name = 'Column';
+  mesh.name = 'Cylinder';
   var centerTo = basePoint.clone().add(columnDir.clone().multiplyScalar(height / 2));
   Object3DUtil.setCylinderDirection(mesh, columnDir);
   mesh.position.copy(centerTo);
   return mesh;
 };
 
-Object3DUtil.addColumn = function (scene, basePoint, columnDir, height, width, materialOrColor) {
-  var column = Object3DUtil.makeColumn(basePoint, columnDir, height, width, materialOrColor);
-  scene.add(column);
-};
-
-Object3DUtil.makeCylinder = function (start, end, width, materialOrColor) {
+Object3DUtil.makeCylinderStartEnd = function (start, end, width, materialOrColor, radialSegments) {
   var columnDir = end.clone().sub(start).normalize();
   var height = start.distanceTo(end);
-  var cylinderGeo = new THREE.CylinderBufferGeometry(width, width, height);
+  var cylinderGeo = new THREE.CylinderBufferGeometry(width, width, height, radialSegments);
   var material = Object3DUtil.getMaterial(materialOrColor);
   var mesh = new THREE.Mesh(cylinderGeo, material);
   mesh.name = 'Cylinder';
@@ -3793,245 +3595,6 @@ Object3DUtil.makeBoxFromToOrientation = function (from, to, orientation, size, m
   mesh.position.copy(center);
   return mesh;
 };
-
-Object3DUtil.makeWall = function (baseStart, baseEnd, wallUpDir, height, depth, materialOrColor) {
-  depth = depth || 10;
-  var width = baseEnd.distanceTo(baseStart);
-  // x = width, y = height, z = depth
-  // Build box geo
-  var boxGeo = new THREE.BoxGeometry(width, height, depth);
-  var material = Object3DUtil.getMaterial(materialOrColor);
-  var mesh = new THREE.Mesh(boxGeo, material);
-  mesh.name = 'Wall';
-
-  // Take start --> end to be right, front to be normal
-  var startToEnd = baseEnd.clone().sub(baseStart).normalize();
-  var wallFrontDir = new THREE.Vector3();
-  wallFrontDir.crossVectors(startToEnd, wallUpDir).normalize();
-  var alignMatrix = Object3DUtil.getAlignmentMatrix(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1),
-    wallUpDir, wallFrontDir);
-
-  var centerTo = baseStart.clone().add(baseEnd).multiplyScalar(0.5);
-  centerTo.add(wallUpDir.clone().multiplyScalar(height / 2));
-  alignMatrix.setPosition(centerTo);
-
-  Object3DUtil.setMatrix(mesh, alignMatrix);
-  return mesh;
-};
-
-// Make geometry for one pieces of a wall
-Object3DUtil.__makeWallWithHolesGeometry = function(opts) {
-  var holes = opts.holes;
-  var height = opts.height;
-  var depth = opts.depth;
-  var width = opts.width;
-
-  var initialHeight = opts.initialHeight;
-  var initialWidth = opts.initialWidth;
-
-  var wdelta = (width - initialWidth) / 2;
-
-  // Assume holes are disjoint
-  // Split holes into outside (on border) and inside holes (inside wall)
-  var outsideHoles = [];
-  var leftHoles = [], rightHoles = [], topHoles = [], bottomHoles = [];
-  var insideHoles = [];
-  if (holes) {
-    for (var iHole = 0; iHole < holes.length; iHole++) {
-      var hole = holes[iHole];
-      if (hole.min.x <= 0 && hole.max.x < initialWidth) {
-        leftHoles.push(hole);
-        outsideHoles.push(hole);
-      } else if (hole.min.x > 0 && hole.max.x >= initialWidth) {
-        rightHoles.push(hole);
-        outsideHoles.push(hole);
-      } else if (hole.min.y <= 0 && hole.max.y < initialHeight) {
-        bottomHoles.push(hole);
-        outsideHoles.push(hole);
-      } else if (hole.min.y > 0 && hole.max.y >= initialHeight) {
-        topHoles.push(hole);
-        outsideHoles.push(hole);
-      } else {
-        insideHoles.push(hole);
-      }
-    }
-  }
-
-  var wallShape = new THREE.Shape();
-  if (outsideHoles.length > 0) {
-    //console.log('processing outside holes', bottomHoles, rightHoles, topHoles, leftHoles);
-    bottomHoles = _.sortBy(bottomHoles, function(hole) { return hole.min.x; });
-    rightHoles = _.sortBy(rightHoles, function(hole) { return hole.max.y; });
-    topHoles = _.sortBy(topHoles, function(hole) { return -hole.max.x; });
-    leftHoles = _.sortBy(leftHoles, function(hole) { return -hole.max.y; });
-
-    // Start at lower left
-    wallShape.moveTo(0, 0);
-
-    // Process bottom holes
-    for (var i = 0; i < bottomHoles.length; i++) {
-      var hole = bottomHoles[i];
-      wallShape.lineTo(wdelta + hole.min.x, 0);
-      wallShape.lineTo(wdelta + hole.min.x, hole.max.y);
-      wallShape.lineTo(wdelta + hole.max.x, hole.max.y);
-      wallShape.lineTo(wdelta + hole.max.x, 0);
-    }
-    wallShape.lineTo(width, 0);
-
-    // Process right holes
-    for (var i = 0; i < rightHoles.length; i++) {
-      var hole = rightHoles[i];
-      wallShape.lineTo(width, hole.min.y);
-      wallShape.lineTo(wdelta + hole.min.x, hole.min.y);
-      wallShape.lineTo(wdelta + hole.min.x, hole.max.y);
-      wallShape.lineTo(width, hole.max.y);
-    }
-    // Go to top
-    if (!hole || hole.max.y < height) {
-      wallShape.lineTo(width, height);
-    }
-
-    // Process top holes
-    for (var i = 0; i < topHoles.length; i++) {
-      var hole = topHoles[i];
-      wallShape.lineTo(wdelta + hole.max.x, height);
-      wallShape.lineTo(wdelta + hole.max.x, hole.min.y);
-      wallShape.lineTo(wdelta + hole.min.x, hole.min.y);
-      wallShape.lineTo(wdelta + hole.min.x, height);
-    }
-    wallShape.lineTo(0, height);
-
-    // Process left holes
-    for (var i = 0; i < leftHoles.length; i++) {
-      var hole = leftHoles[i];
-      wallShape.lineTo(0, hole.max.y);
-      wallShape.lineTo(wdelta + hole.max.x, hole.max.y);
-      wallShape.lineTo(wdelta + hole.max.x, hole.min.y);
-      wallShape.lineTo(0, hole.min.y);
-    }
-
-    if (!hole || hole.min.y > 0) {
-      wallShape.lineTo(0, 0);
-    }
-  } else {
-    wallShape.moveTo(0, 0);
-    wallShape.lineTo(width, 0);
-    wallShape.lineTo(width, height);
-    wallShape.lineTo(0, height);
-    wallShape.lineTo(0, 0);
-  }
-
-  if (insideHoles.length) {
-    for (var iHole = 0; iHole < insideHoles.length; iHole++) {
-      var hole = insideHoles[iHole];
-      var holePath = new THREE.Path();
-      // Make sure holes are inside wall...
-      var minx = Math.max(wdelta + hole.min.x, 0.000);
-      var maxx = Math.min(wdelta + hole.max.x, width - 0.000);
-      var miny = Math.max(hole.min.y, 0.000);
-      var maxy = Math.min(hole.max.y, height - 0.000);
-
-      holePath.moveTo(minx, miny);
-      holePath.lineTo(maxx, miny);
-      holePath.lineTo(maxx, maxy);
-      holePath.lineTo(minx, maxy);
-      holePath.lineTo(minx, miny);
-      wallShape.holes.push(holePath);
-    }
-  }
-
-  var extrudeSettings = { depth: depth / 2, bevelEnabled: false };
-  var geo = new THREE.ExtrudeGeometry(wallShape, extrudeSettings);
-  return geo;
-};
-
-Object3DUtil.makeWallWithHoles = function (baseStart, baseEnd, wallUpDir, wallHeight, extraHeight,
-                                           depth, holes, materials) {
-  depth = depth || 10;
-  var height = wallHeight + extraHeight;
-  var wallDir = baseEnd.clone().sub(baseStart).normalize();
-  var wallFrontDir = new THREE.Vector3();
-  wallFrontDir.crossVectors(wallDir, wallUpDir).normalize();
-  var wallEndOffset = wallDir.clone().multiplyScalar(depth / 2 - depth / 10);
-
-  var p0 = baseStart.clone().sub(wallEndOffset);
-  var p1 = baseEnd.clone().add(wallEndOffset);
-  var width = p1.distanceTo(p0);
-
-  // Account for slight difference in original width and extended width
-  var initialWidth = baseStart.distanceTo(baseEnd);
-
-  var geo = Object3DUtil.__makeWallWithHolesGeometry({
-    holes: holes,
-    height: height,
-    depth: depth,
-    width: width,
-    initialWidth: initialWidth,
-    initialHeight: wallHeight
-  });
-
-  var materialBetween = Object3DUtil.getBasicMaterial('gray');
-  var materialIn  = [materials[0], materialBetween];
-  var materialOut = [materials[1], materialBetween];
-  var meshIn = new THREE.Mesh(geo, materialIn);
-  var meshOut = new THREE.Mesh(geo, materialOut);
-  meshIn.name = 'WallInside';
-  meshOut.name = 'WallOutside';
-
-  var alignMatrix = Object3DUtil.getAlignmentMatrix(
-    new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1),
-    wallUpDir, wallFrontDir);
-  alignMatrix.setPosition(p0);
-  Object3DUtil.setMatrix(meshIn, alignMatrix);
-
-  var offset = wallFrontDir.clone().multiplyScalar(-depth / 2 + depth / 19);  // NOTE: d/19 offset to avoid z-fighting
-  alignMatrix.setPosition(p0.clone().add(offset));
-  Object3DUtil.setMatrix(meshOut, alignMatrix);
-
-  var merged = new THREE.Object3D('DoubleSidedWall');
-  merged.add(meshIn);
-  merged.add(meshOut);
-  merged.name = 'DoubleSidedWall';
-
-  return merged;
-};
-
-Object3DUtil.addWall = function (scene, baseStart, baseEnd, wallUpDir, height, depth, color) {
-  var wall = Object3DUtil.makeWall(baseStart, baseEnd, wallUpDir, height, depth, color);
-  scene.add(wall);
-};
-
-function mergeHoles(holeBBoxes) {
-  var mergedHoleIndices = [];
-  var finalHoleBoxes = [];
-  for (var i = 0; i < holeBBoxes.length; i++) {
-    if (mergedHoleIndices.indexOf(i) >= 0) {
-      continue;
-    }
-    var iHoleBBox = holeBBoxes[i];
-    for (var j = i + 1; j < holeBBoxes.length; j++) {
-      var jHoleBBox = holeBBoxes[j];
-      if (iHoleBBox.intersects(jHoleBBox)) {
-        mergedHoleIndices.push(j);
-        //console.log('Merging ' + jHoleBBox.toString() + ' to ' + iHoleBBox.toString());
-        iHoleBBox.includeBBox(jHoleBBox);
-        //console.log('Got ' + iHoleBBox.toString());
-      }
-    }
-    finalHoleBoxes.push(iHoleBBox);
-  }
-  return { holeBBoxes: finalHoleBoxes, mergedHoleIndices: mergedHoleIndices };
-}
-
-function repeatedMergeHoles(holeBBoxes) {
-  var m = mergeHoles(holeBBoxes);
-  while (m.mergedHoleIndices.length > 0) {
-    m = mergeHoles(m.holeBBoxes);
-  }
-  return m.holeBBoxes;
-}
-
-Object3DUtil.mergeHoles = repeatedMergeHoles;
 
 Object3DUtil.getVisibleWidthHeight = function (camera, dist) {
   var vFOV = camera.fov * Math.PI / 180;   // convert vertical fov to radians
@@ -4105,14 +3668,32 @@ Object3DUtil.colorVertices = function(object3D, color, alpha) {
   });
 };
 
-Object3DUtil.colorVerticesUsingFaceIndex = function(object3D, colorIndexOrFn) {
-  var colorFn = getColorFn(colorIndexOrFn);
+// color vertex 0 as R, vertex 1 as G and vertex 2 as B
+Object3DUtil.colorVerticesAsRGB = function(object3D) {
   Object3DUtil.traverseMeshes(object3D, false, function(mesh) {
     var geometry = mesh.geometry;
     var vertexColorBuffer = geometry.attributes['color'].array;
     GeometryUtil.forFaceVertexIndices(geometry, function(iFace, vertIndices) {
-      var v = iFace;
-      //console.log('got face attribute ' + v + ', vertices ' + JSON.stringify(vertIndices));
+      for (var i = 0; i < vertIndices.length; i++) {
+        var ci = vertIndices[i]*3;
+        vertexColorBuffer[ci] = 0;
+        vertexColorBuffer[ci+1] = 0;
+        vertexColorBuffer[ci+2] = 0;
+        vertexColorBuffer[ci + (i % 3)] = 1;
+      }
+    });
+  });
+};
+
+Object3DUtil.colorVerticesUsingFaceIndex = function(object3D, colorIndexOrFn) {
+  var colorFn = getColorFn(colorIndexOrFn);
+  var startFace = 0;
+  Object3DUtil.traverseMeshes(object3D, false, function(mesh) {
+    var geometry = mesh.geometry;
+    var vertexColorBuffer = geometry.attributes['color'].array;
+    var nfaces = GeometryUtil.getGeometryFaceCount(geometry);
+    GeometryUtil.forFaceVertexIndices(geometry, function(iFace, vertIndices) {
+      var v = iFace + startFace;
       var c = colorFn? colorFn(v) : v;
       if (c == undefined) {
         c = v || 0;
@@ -4125,7 +3706,10 @@ Object3DUtil.colorVerticesUsingFaceIndex = function(object3D, colorIndexOrFn) {
         vertexColorBuffer[ci+2] = c.b;
       }
     });
+    startFace += nfaces;
+    //console.log('got nfaces', nfaces);
   });
+  //console.log('got total', startFace);
 };
 
 Object3DUtil.colorVerticesUsingFaceAttribute = function(object3D, attribute, colorIndexOrFn) {
@@ -4248,6 +3832,18 @@ Object3DUtil.grayOutVertices = function(object3D, center, maxRadius, grayColor) 
   });
 };
 
+Object3DUtil.getIntersectingPoints = function(object1, object2, threshold, nsamples, directed) {
+  const MeshIntersections = require('geo/MeshIntersections');
+  const MeshSampling = require('geo/MeshSampling');
+  object1.updateMatrixWorld(true);
+  object2.updateMatrixWorld(true);
+  const m1 = Object3DUtil.getMeshList(object1);
+  const m2 = Object3DUtil.getMeshList(object2);
+  const intersectPoints = MeshIntersections.MeshesMeshesIntersection(m1, m2,
+    {threshold: threshold, sampler: MeshSampling.getDefaultSampler(), nsamples: nsamples, directed: directed});
+  return intersectPoints;
+};
+
 Object3DUtil.filterByCategory = function(node, categories, includeNonModelInstances) {
   var modelInstance = Object3DUtil.getModelInstance(node);
   if (modelInstance) {
@@ -4275,7 +3871,7 @@ Object3DUtil.getModelMatrixWorld = function(object3D) {
 
 Object3DUtil.getModelMatrixWorldInverse = function(object3D) {
   var inverseMatrix = new THREE.Matrix4();
-  inverseMatrix.getInverse(Object3DUtil.getModelMatrixWorld(object3D));
+  inverseMatrix.copy(Object3DUtil.getModelMatrixWorld(object3D)).invert();
   return inverseMatrix;
 };
 

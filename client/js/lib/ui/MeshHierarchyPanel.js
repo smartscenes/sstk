@@ -311,10 +311,12 @@ MeshHierarchyPanel.prototype.setTarget = function(target) {
   if (this.__controls.retrieveAnnotationsButton) {
     this.__controls.retrieveAnnotationsButton.click();
   }
+  this.showSegmented = false;
 };
 
 MeshHierarchyPanel.prototype.restoreOriginalHierarchy = function() {
   if (this.origObject3D) {
+    this.showSegmented = false;
     var oldPartsNode = this.partsNode;
     this.clear();
     this.__computePartHierarchyFromObject3D(this.origObject3D, this.__stripLayersCount);
@@ -327,6 +329,7 @@ MeshHierarchyPanel.prototype.restoreOriginalHierarchy = function() {
 };
 
 MeshHierarchyPanel.prototype.setSegmented = function(segmented) {
+  this.showSegmented = true;
   this.__computePartHierarchyFromObject3D(segmented || this.origObject3D);
 };
 
@@ -356,6 +359,7 @@ MeshHierarchyPanel.prototype.__computePartHierarchyFromObject3D = function(objec
   } else {
     this.__computePartNodes(this.partsNode);
   }
+  this.partsNode.updateMatrixWorld();
   Object3DUtil.setVisible(this.partsNode, false);
 };
 
@@ -447,8 +451,12 @@ MeshHierarchyPanel.prototype.__updateNodeStatistics = function(node) {
     node.userData.nleafs = (showMultiMaterial)? nmats : 1;
   } else if (node instanceof THREE.Points) {
     node.userData.geomType = 'Points';
+    node.userData.npointclouds = 1;
+    node.userData.nleafs = 1;
   } else if (node instanceof THREE.Line) {
     node.userData.geomType = 'Line';
+    node.userData.nlines = 1;
+    node.userData.nleafs = 1;
   } else if (node instanceof THREE.Camera) {
     node.userData.geomType = 'Camera';
   } else if (node instanceof THREE.Light) {
@@ -460,6 +468,7 @@ MeshHierarchyPanel.prototype.__updateNodeStatistics = function(node) {
   var nfaces = node.userData.nfaces || 0;
   var nmeshes = node.userData.nmeshes || 0;
   var nlines = node.userData.nlines || 0;
+  var npointclouds = node.userData.npointclouds || 0;
   var nleafs = node.userData.nleafs || 0;
 
   if (node.children && node.children.length > 0) {
@@ -468,12 +477,14 @@ MeshHierarchyPanel.prototype.__updateNodeStatistics = function(node) {
       nmeshes += (node.children[i].userData.nmeshes || 0);
       nleafs += (node.children[i].userData.nleafs || 0);
       nlines += (node.children[i].userData.nlines || 0);
+      npointclouds += (node.children[i].userData.npointclouds || 0);
     }
   }
   if (nfaces > 0) node.userData.nfaces = nfaces;
   if (nmeshes > 0) node.userData.nmeshes = nmeshes;
   if (nleafs > 0) node.userData.nleafs = nleafs;
   if (nlines > 0) node.userData.nlines = nlines;
+  if (npointclouds > 0) node.userData.npointclouds = nlines;
 };
 
 MeshHierarchyPanel.prototype.__computeNodeStatistics = function(root) {
@@ -766,7 +777,7 @@ MeshHierarchyPanel.prototype.__populateTreePanel = function(treeNodes) {
       var partNode = this.partNodes[node.metadata['index']];
       if (partNode) {
         var meshId = this.getMeshId(partNode, this.partsNode);
-        console.log(meshId);
+        console.log(meshId, partNode);
         this.currentSelectedPart = partNode;
       }
       this.refreshHighlighting();
@@ -827,7 +838,7 @@ MeshHierarchyPanel.prototype.__getIconUrl = function(node, labelInfo) {
 };
 
 MeshHierarchyPanel.prototype.__getDefaultNodeLabel = function(node) {
-  return (node.name || (node.userData && node.userData.id != null) || node.id);
+  return (node.name || (node.userData && node.userData.id != null? node.userData.id : node.id));
 };
 
 MeshHierarchyPanel.prototype.__updateTreeNodesFromObject3D = function(treeNodes, root, object3D, partNodes, uuidToIndex) {
@@ -841,9 +852,10 @@ MeshHierarchyPanel.prototype.__updateTreeNodesFromObject3D = function(treeNodes,
   var scope = this;
   Object3DUtil.traverse(object3D, function (node) {
     var nfaces = node.userData.nfaces;
+    var nlines = node.userData.nlines;
 
     if (filterEmptyGeometries) {
-      if (!nfaces) return false;
+      if (!nfaces && !nlines) return false;
     }
 
     var index = (uuidToIndex)? uuidToIndex[node.uuid] : null;
@@ -921,7 +933,8 @@ MeshHierarchyPanel.prototype.__setHideEmptyMeshes = function (flag, treeNodes, p
   for (var i = treeNodes.length-1; i >=0; i--) {
     if (!partNodes[i]) { continue; }
     var tnode = treeNodes[i];
-    if (partNodes[i].userData && partNodes[i].userData.nmeshes === 0) {
+    var u = partNodes[i].userData;
+    if (u && !(u.nmeshes > 0 || u.nlines > 0 || u.npointclouds > 0)) {
       tnode.state = tnode.state || {};
       tnode.state.hidden = flag;
       if (updateJsTree) {
@@ -1160,8 +1173,9 @@ MeshHierarchyPanel.prototype.__computePartNodes = function (root) {
 
   Object3DUtil.traverse(root, function (node) {
     var nfaces = node.userData.nfaces;
+    var nlines = node.userData.nlines;
     if (filterEmptyGeometries) {
-      if (!nfaces) return false;
+      if (!nfaces && !nlines) return false;
     }
     partNodes.push(node);
 

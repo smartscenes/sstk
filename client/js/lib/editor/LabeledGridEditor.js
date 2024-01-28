@@ -62,15 +62,17 @@ LabeledGridEditor.prototype._createGrid = function () {
 
   // grid
   var dims = this.voxels.voxelGrid.dims;
-  var geometry = new THREE.Geometry();
+  var vertices = [];
+  var geometry = new THREE.BufferGeometry();
   for (var i = 0; i <= dims[0]; i++) {
-    geometry.vertices.push(new THREE.Vector3(i, 0, 0));
-    geometry.vertices.push(new THREE.Vector3(i, dims[1], 0));
+    vertices.push(i, 0, 0);
+    vertices.push(i, dims[1], 0);
   }
   for (var i = 0; i <= dims[1]; i++) {
-    geometry.vertices.push(new THREE.Vector3(0, i, 0));
-    geometry.vertices.push(new THREE.Vector3(dims[0], i, 0));
+    vertices.push(0, i, 0);
+    vertices.push(dims[0], i, 0);
   }
+  geometry.setAttribute( 'position', new THREE.Float32BufferAttribute(vertices, 3));
   var material = new THREE.LineBasicMaterial({ color: 0x000000, opacity: 0.2, transparent: true });
   this.gridlines = new THREE.LineSegments(geometry, material);
   Object3DUtil.setMatrix(this.gridlines, this.gridToWorld);

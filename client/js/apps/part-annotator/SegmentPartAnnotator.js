@@ -5,8 +5,6 @@
 var PartAnnotator = require('./PartAnnotator');
 var _ = require('util/util');
 
-require('physijs');
-
 /**
  * Annotation tool for labels meshes using custom segmentation.
  * Really the same as {@link PartAnnotator} but with better defaults for custom segmentation.

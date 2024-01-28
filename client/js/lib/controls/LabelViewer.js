@@ -40,9 +40,9 @@ LabelViewer.prototype.registerEventListeners = function (domElement) {
     this.selectPart(event);
   }.bind(this));
 
-  domElement.addEventListener('mousedown', this.handleMouseDown.bind(this));
-  domElement.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
-  domElement.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
+  domElement.addEventListener('pointerdown', this.handleMouseDown.bind(this));
+  domElement.addEventListener('pointermove', this.handleMouseMove.bind(this), false);
+  domElement.addEventListener('pointerup', this.handleMouseUp.bind(this), false);
 };
 
 LabelViewer.prototype.setLabelInfo = function(labelInfo) {

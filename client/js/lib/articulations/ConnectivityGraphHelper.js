@@ -50,21 +50,33 @@ class ConnectivityGraphHelper {
    * @param parts {THREE.Mesh[]}
    * @param minDist {number} Treat anything less than this as 0
    * @param maxDist {number} Treat anything more than this as too far
+   * @param [filter] {function(p1,p2)} If specified, will only compute distance for parts that pass the filter
+   * @param [distFn] {function(p1,p2)} Custom distance function for computing distance (returns distance)
+   * @param [debug] {boolean} Whether to print out debug distances
    * @returns {Array<Array<number>>} Return array where element i,j contains distance from part i to part j
    */
-  static computeDistancesMatrix(parts, minDist, maxDist) {
+  static computeDistancesMatrix(parts, minDist, maxDist, filter, distFn, debug) {
     console.time('computeDistancesMatrix');
+    if (distFn == null) {
+      distFn = function(p1, p2) {
+        return ConnectivityGraphHelper.computeMinDistance(p1, p2, minDist, maxDist);
+      };
+    }
     // For every pair of parts, compute the distance between the two parts
     let distances = [];
     for (let i = 0; i < parts.length; i++) {
       distances[i] = [];
       for (let j = 0; j < i; j++) {
-        if (parts[i] && parts[j]) {
+        if (parts[i] && parts[j] && (!filter || filter(parts[i], parts[j]))) {
           let name = 'distance-' + parts[i].name + '-' + parts[j].name;
-          console.time(name);
-          distances[i][j] = ConnectivityGraphHelper.computeMinDistance(parts[i], parts[j], minDist, maxDist);
-          console.log(name, distances[i][j]);
-          console.timeEnd(name);
+          if (debug) {
+            console.time(name);
+          }
+          distances[i][j] = distFn(parts[i], parts[j]);
+          if (debug) {
+            console.log(name, distances[i][j]);
+            console.timeEnd(name);
+          }
         }
       }
     }
@@ -77,12 +89,21 @@ class ConnectivityGraphHelper {
    * @param parts {THREE.Mesh[]}
    * @param minDist {number} Treat anything less than this as 0
    * @param maxDist {number} Treat anything more than this as too far
+   * @param [filter] {function(p1,p2)} If specified, will only compute distance for parts that pass the filter
+   * @param [distFn] {function(p1,p2)} Custom distance function for computing distance
+   *                                   (should return { distance: number, closestPoint0: point, closestPoint1: point })
+   * @param [debug] {boolean} Whether to print out debug distances
    * @returns { {distances: Array<Array<number>>, closestPoints: Array<Array<THREE.Vector3, THREE.Vector3>>} }
    *   Return object where distances is array with element i,j contains distance from part i to part j
    *                 and closestPoints is array with element i,j contains closestPoints from part i to part j
    */
-  static computeDistancesMatrixWithInfo(parts, minDist, maxDist) {
+  static computeDistancesMatrixWithInfo(parts, minDist, maxDist, filter, distFn, debug) {
     console.time('computeDistancesMatrix');
+    if (distFn == null) {
+      distFn = function(p1, p2) {
+        return ConnectivityGraphHelper.computeMinDistanceWithInfo(p1, p2, minDist, maxDist);
+      };
+    }
     // For every pair of parts, compute the distance between the two parts
     let distances = [];
     let closestPoints = [];
@@ -90,16 +111,20 @@ class ConnectivityGraphHelper {
       distances[i] = [];
       closestPoints[i] = [];
       for (let j = 0; j < i; j++) {
-        if (parts[i] && parts[j]) {
+        if (parts[i] && parts[j] && (!filter || filter(parts[i], parts[j]))) {
           let name = 'distance-' + parts[i].name + '-' + parts[j].name;
-          console.time(name);
-          let distInfo = ConnectivityGraphHelper.computeMinDistanceWithInfo(parts[i], parts[j], minDist, maxDist);
+          if (debug) {
+            console.time(name);
+          }
+          let distInfo = distFn(parts[i], parts[j]);
           distances[i][j] = distInfo.distance;
           if (distInfo.distance < Infinity) {
             closestPoints[i][j] = [ distInfo.closestPoint0, distInfo.closestPoint1 ];
           }
-          console.log(name, distances[i][j]);
-          console.timeEnd(name);
+          if (debug) {
+            console.log(name, distances[i][j]);
+            console.timeEnd(name);
+          }
         }
       }
     }
@@ -200,6 +225,7 @@ class ConnectivityGraphHelper {
     // Does ray casting between the closest points to check if parts are directly connected
     // Returns part ids encountered between the two parts
     const raycaster = new THREE.Raycaster();
+    //raycaster.intersectBackFaces = true;
     const validParts = parts.filter(p => p);
     return function(i,j) {
       const dist = (i < j)? distanceMatrix[j][i] : distanceMatrix[i][j];

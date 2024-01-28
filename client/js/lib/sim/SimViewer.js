@@ -277,10 +277,7 @@ SimViewer.prototype.init = function () {
     });
     assetManager.setSearchController(new SearchController());
     assetManager.searchController.setFilter('model', '+source:(wss OR p5d)');
-    assetManager.Subscribe('dynamicAssetLoaded', this, function(d) {
-      //console.log('adding to dynamic assets', d);
-      this._dynamicAssets.push(d);
-    }.bind(this));
+    assetManager.watchDynamicAssets(this, '_dynamicAssets');
     var sensorConfigName = this.allParams.sensors || 'default';
     var sensorConfig = sensorConfigs[sensorConfigName] || sensorConfigs.default;
     this.simulator = new Simulator({

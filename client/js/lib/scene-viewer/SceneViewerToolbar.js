@@ -1,14 +1,15 @@
-'use strict';
-
 var Toolbar = require('ui/Toolbar');
 
 function SceneViewerToolbar(params) {
   Toolbar.call(this, params);
-  this.allowEdit = params.allowEdit;
 }
 
 SceneViewerToolbar.prototype = Object.create(Toolbar.prototype);
 SceneViewerToolbar.prototype.constructor = SceneViewerToolbar;
+
+SceneViewerToolbar.prototype.__addCustomSceneEditButtons = function() {
+  // add some custom buttons
+};
 
 SceneViewerToolbar.prototype.init = function () {
   this.elem.hide();
@@ -99,40 +100,46 @@ SceneViewerToolbar.prototype.init = function () {
   }
 
   // Start new button group
-  if (this.allowEdit) {
-    this.addButton('Undo', 'Undo (Ctrl+Z)',
+  if (app.allowEdit) {
+    if (app.allowUndoStack) {
+      this.addButton('Undo', 'Undo (Ctrl+Z)',
       'undo', function (evt) {
         app.undo(evt);
       });
-    this.addButton('Redo', 'Redo (Ctrl+Y)',
-      'redo', function (evt) {
-        app.redo(evt);
-      });
+      this.addButton('Redo', 'Redo (Ctrl+Y)',
+        'redo', function (evt) {
+          app.redo(evt);
+        });
+      this.addSpacer();
+    }
 
-    this.addSpacer();
+    if (app.allowCopyPaste) {
+      this.addButton('Copy', 'Copy selected model (Ctrl+C)',
+        'copy', function (evt) {
+          app.copy(evt);
+        });
+      this.addButton('Paste', 'Paste copied model (Ctrl+V)',
+        'paste', function (evt) {
+          app.paste(evt);
+        });
+    }
 
-    this.addButton('Copy', 'Copy selected model (Ctrl+C)',
-      'copy', function (evt) {
-        app.copy(evt);
-      });
-    this.addButton('Paste', 'Paste copied model (Ctrl+V)',
-      'paste', function (evt) {
-        app.paste(evt);
-      });
     this.addButton('Delete', 'Delete selected model (Delete)',
       'delete', function (evt) {
         app.delete(evt);
-      });
+    });
 
     this.addButton('Tumble', 'Tumble selected model (Ctrl+M)',
-       'tumble', function (evt) {
+      'tumble', function (evt) {
         app.tumble(evt);
-       });
-
-    this.addSpacer();
+      });
   }
 
-  if (app.allowSave && app.saveScene) {
+  this.addSpacer();
+
+  this.__addCustomSceneEditButtons();
+
+  if (app.allowSave && app.saveScene && !app.finished) {
     this.addButton('Save', 'Save scene (Ctrl+S)',
       'save', function () {
         app.saveScene();
@@ -158,7 +165,6 @@ SceneViewerToolbar.prototype.init = function () {
       });
   }
 
-
   // Update button states
 
   // Disable buttons in the initial state
@@ -170,12 +176,15 @@ SceneViewerToolbar.prototype.init = function () {
   this.disableButton('Tumble');
 
   // Subscribe to app notifications so we can disable/enable/hide as necessary
-  this.app.contextQueryControls.Subscribe('ContextQueryActive', this, function () {
-    this.updateButtonState('BBox');
-  });
-  this.app.contextQueryControls.Subscribe('ContextQueryInactive', this, function () {
-    this.updateButtonState('BBox');
-  });
+  if (this.app.contextQueryControls) {
+    this.app.contextQueryControls.Subscribe('ContextQueryActive', this, function () {
+      this.updateButtonState('BBox');
+    });
+    this.app.contextQueryControls.Subscribe('ContextQueryInactive', this, function () {
+      this.updateButtonState('BBox');
+    });
+  }
+
   this.app.editControls.Subscribe('SelectedInstanceChanged', this, function (newInst) {
     if (newInst) {
       this.enableButton('Copy');
@@ -187,6 +196,7 @@ SceneViewerToolbar.prototype.init = function () {
       this.disableButton('Tumble');
     }
   });
+
   this.app.Subscribe('CopyCompleted', this, function () {
     this.enableButton('Paste');
   });
@@ -209,7 +219,7 @@ SceneViewerToolbar.prototype.init = function () {
   }
 
   // Hide some buttons
-  if (!this.allowEdit) {
+  if (!app.allowEdit) {
     this.disableButton('Save');
     // Hide every button except for close and help
     //for (var name in this.buttons) {

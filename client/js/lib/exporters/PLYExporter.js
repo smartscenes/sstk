@@ -499,12 +499,30 @@ PLYExporter.prototype.__appendMesh = function (mesh, params, data) {
 PLYExporter.prototype.__appendObject = function (object3D, params, data, appendMeshCallback) {
   var result = data || this.__createData(params);
   object3D.updateMatrixWorld();
-  Object3DUtil.traverseMeshes(object3D, !this.includeChildModelInstances, function(mesh) {
-    appendMeshCallback(mesh, params, result);
-  });
+  if (params.visibleOnly) {
+    Object3DUtil.traverseVisibleMeshes(object3D, !this.includeChildModelInstances, function(mesh) {
+      appendMeshCallback(mesh, params, result);
+    });
+  } else {
+    Object3DUtil.traverseMeshes(object3D, !this.includeChildModelInstances, function(mesh) {
+      appendMeshCallback(mesh, params, result);
+    });
+  }
   return result;
 };
 
+/**
+ * Export objects in PLY format
+ * @param objects {THREE.Object3D[]|THREE.Object3D}
+ * @param opts Options on how the objects should be exported
+ * @param [opts.callback] {function()} Callback for when the export finishes
+ * @param [opts.name=scene] {string} Filename to which the export ply would be saved to (`.ply` is appended if the name does not end with `.ply`)
+ * @param [opts.onlyVisible=true] {boolean} Whether to only export visible meshes
+ * @param [opts.transform] {THREE.Matrix4} Additional transform to apply to the object
+ * @param [opts.format=this.format] {string} Export as`ascii|binary_little_endian`
+ * @param [opts.vertexAttributes=this.vertexAttributes] Vertex attributes to export
+ * @param [opts.faceAttributes=this.faceAttributes] Face attributes to export
+ */
 PLYExporter.prototype.export = function (objects, opts) {
   opts = opts || {};
   var callback = opts.callback;

@@ -279,7 +279,7 @@ SimOperations.prototype.findModelsInDb = function(simState, query, cb) {
 };
 
 /**
- * Select model from from database
+ * Select model from database
  * @param simState {SimState}
  * @param query {string}
  * @param options

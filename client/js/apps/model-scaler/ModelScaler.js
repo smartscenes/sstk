@@ -7,16 +7,18 @@ var SearchController = require('search/SearchController');
 var Object3DUtil = require('geo/Object3DUtil');
 var ScaleLine = require('ui/ScaleLine');
 var CameraControls = require('controls/CameraControls');
+var PubSub = require('PubSub');
 var WaitPubSub = require('util/WaitPubSub');
 var UIUtil = require('ui/UIUtil');
 var keymap = require('controls/keymap');
 var _ = require('util/util');
 
 function ModelScaler(container) {
-  WaitPubSub.call(this);
+  PubSub.call(this);
   Constants.worldUp = new THREE.Vector3(0,0,1);
   // Set world front to -y so all models are aligned to that and our camera faces it
   Constants.worldFront = new THREE.Vector3(0,-1,0);
+  this.__waiting = new WaitPubSub();
 
   this.submitSizeUrl = Constants.baseUrl + '/submitSize';
   this.container = null;
@@ -88,7 +90,7 @@ function ModelScaler(container) {
   this.init(container, this.urlParams['modelId']);
 }
 
-ModelScaler.prototype = Object.create(WaitPubSub.prototype);
+ModelScaler.prototype = Object.create(PubSub.prototype);
 ModelScaler.prototype.constructor = ModelScaler;
 
 
@@ -133,7 +135,7 @@ ModelScaler.prototype.onRefModelPreload = function (deferredObj, refObjInfo, loa
 // Sizes and report reference sizes (if this.sizeRefModels and this.preloadAndReportRefSizes are set)
 ModelScaler.prototype.preloadRefModels = function (callback) {
   var taskId = 'preloadRefModels_' + _.generateRandomId();
-  this.addWaiting(taskId);
+  this.__waiting.addWaiting(taskId);
 
   var deferred = [];
 
@@ -154,7 +156,7 @@ ModelScaler.prototype.preloadRefModels = function (callback) {
   $.when.apply($, deferred).done(
           function () {
             if (callback) callback();
-            this.removeWaiting(taskId);
+            this.__waiting.removeWaiting(taskId);
           }.bind(this)
       );
 };
@@ -492,7 +494,7 @@ ModelScaler.prototype.__clearReferenceModels = function(refModelsMap) {
 
 ModelScaler.prototype.loadReferenceModels = function (refModelsMap) {
   var taskId = 'loadReferenceModels_' + _.generateRandomId();
-  this.addWaiting(taskId);
+  this.__waiting.addWaiting(taskId);
   // Clear current ref models
   this.__clearReferenceModels(refModelsMap);
 
@@ -511,7 +513,7 @@ ModelScaler.prototype.loadReferenceModels = function (refModelsMap) {
           function () {
             // Wait for all models to be loaded and reposition them if needed
             this.repositionRefModelsAndCamera();
-            this.removeWaiting(taskId);
+            this.__waiting.removeWaiting(taskId);
           }.bind(this)
       );
 };
@@ -589,15 +591,16 @@ ModelScaler.prototype.onTargetModelLoad = function (modelInstance) {
   var end = new Date().getTime();
   var time = end - this.start;
   console.log('Load time for model: ' + time);
-  this.waitAll(function() {
-    this.clear();
-    this.targetModelInstance = modelInstance;
-    if (this.resetScaleTo) {
-      this.scaleTo.val(this.resetScaleTo);
+  var scope = this;
+  this.__waiting.waitAll(function() {
+    scope.clear();
+    scope.targetModelInstance = modelInstance;
+    if (scope.resetScaleTo) {
+      scope.scaleTo.val(scope.resetScaleTo);
     }
-    this.scaleAndPositionTargetModel();
-    this.scene.add(modelInstance.object3D);
-  }.bind(this));
+    scope.scaleAndPositionTargetModel();
+    scope.scene.add(modelInstance.object3D);
+  });
 };
 
 ModelScaler.prototype.resetCamera = function () {

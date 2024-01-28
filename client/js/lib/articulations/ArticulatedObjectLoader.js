@@ -1,7 +1,7 @@
 const ArticulatedObject = require('articulations/ArticulatedObject');
 const Object3DLoader = require('loaders/Object3DLoader');
 const Object3DUtil = require('geo/Object3DUtil');
-const IndexedSegmentation = require('geo/IndexedSegmentation');
+const IndexedSegmentation = require('geo/seg/IndexedSegmentation');
 const Part = require('parts/Part');
 const PartConnectivityGraph = require('parts/PartConnectivityGraph');
 const async = require('async');
@@ -124,7 +124,7 @@ class ArticulatedObjectLoader {
             },
             (cb) =>{
                 // Load segmentation
-                segmentation.load({ callback: cb })
+                segmentation.load({ callback: cb });
             },
             (cb) => {
                 // Load articulations

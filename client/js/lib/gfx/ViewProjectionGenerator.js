@@ -144,9 +144,9 @@ ViewProjection.prototype.render = function(renderer, camera, scene) {
 ViewProjection.prototype.update = function(camera) {
   // Save away projection matrices
   var matrix = this.projectMatrix;
-  matrix.multiplyMatrices(camera.projectionMatrix, matrix.getInverse(camera.matrixWorld));
+  matrix.multiplyMatrices(camera.projectionMatrix, matrix.copy(camera.matrixWorld).invert());
   matrix = this.unprojectMatrix;
-  matrix.multiplyMatrices(camera.matrixWorld, matrix.getInverse(camera.projectionMatrix));
+  matrix.multiplyMatrices(camera.matrixWorld, matrix.copy(camera.projectionMatrix).invert());
 };
 
 ViewProjection.prototype.project = (function() {

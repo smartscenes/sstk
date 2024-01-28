@@ -75,7 +75,9 @@ class MeshIntersections {
     const fullOpts = _.clone(opts);
     fullOpts.results = results;
     MeshIntersections.MeshesMeshesIntersectionDirected(meshes1, meshes2, fullOpts);
-    MeshIntersections.MeshesMeshesIntersectionDirected(meshes2, meshes1, fullOpts);
+    if (!opts.directed) {
+      MeshIntersections.MeshesMeshesIntersectionDirected(meshes2, meshes1, fullOpts);
+    }
     return results;
   }
 }

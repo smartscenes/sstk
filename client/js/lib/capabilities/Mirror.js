@@ -27,7 +27,9 @@ function Mirror(opts) {
     mat.setMaterial(scope.mirror.material);
   });
 
-  this.assetManager.Publish('dynamicAssetLoaded', this);
+  if (this.assetManager) {
+    this.assetManager.Publish('dynamicAssetLoaded', this);
+  }
 }
 
 Mirror.prototype.__update = function() {
@@ -55,8 +57,11 @@ Mirror.prototype.update = function() {
   }
 };
 
-Mirror.prototype.destroy = function() {
-
+Mirror.prototype.destroy = function(notify) {
+  // Tell people that we are done
+  if (this.assetManager && notify) {
+    this.assetManager.Publish('dynamicAssetUnloaded', this);
+  }
 };
 
 module.exports = Mirror;

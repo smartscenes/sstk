@@ -2,16 +2,29 @@ var Constants = require('Constants');
 var AssetLoader = require('assets/AssetLoader');
 var Materials = require('materials/Materials');
 var Object3DUtil = require('geo/Object3DUtil');
-var PartNetOBJPartLoader = require('loaders/OBJPartLoader');
+var SimpleMobilityOBJPartLoader = require('loaders/SimpleMobilityOBJPartLoader');
+var PartNetOBJPartLoader = require('loaders/PartNetOBJPartLoader');
 var Shape2MotionOBJPartLoader = require('loaders/Shape2MotionOBJPartLoader');
-var P5DTextureLoader = require('loaders/P5DTextureLoader');
+var PTSLoader = require('loaders/PTSLoader');
 var URDFLoader = require('loaders/URDFLoader');
 var _ = require('util/util');
 require('three-loaders');
+var MeshoptDecoder = require('vendor/three/libs/meshopt_decoder'); // for GLTF mesh decoding
 
 // Wrapper for THREE loaders for loading a single mesh
 var Object3DLoader = function(assetManager) {
   this.assetManager = assetManager;
+};
+
+Object3DLoader.enableCompressedLoading = function(renderer) {
+  const THREE_PATH = `https://unpkg.com/three@0.${THREE.REVISION}.x`;
+  if (!Object3DLoader.__dracoLoader) {
+    Object3DLoader.__dracoLoader = new THREE.DRACOLoader().setDecoderPath(`${THREE_PATH}/examples/js/libs/draco/gltf/`);
+  }
+  if (!Object3DLoader.__ktx2loader) {
+    Object3DLoader.__ktx2loader = new THREE.KTX2Loader().setTranscoderPath(`${THREE_PATH}/examples/js/libs/basis/`);
+    Object3DLoader.__ktx2loader.detectSupport(renderer);
+  }
 };
 
 function getExtension(path) {
@@ -54,6 +67,28 @@ Object3DLoader.prototype.load = function(modelinfo, onsuccess, onerror) {
   }
 };
 
+Object3DLoader.prototype.__getProcessLoadedFn = function(options) {
+  if (options && (options.skipLines || options.skipPoints || options.filterEmptyGeometries)) {
+    return function(object3D) {
+      const removed = [];
+      if (options.skipLines) {
+        removed.push(Object3DUtil.removeLines(object3D));
+      }
+      if (options.skipPoints) {
+        removed.push(Object3DUtil.removePoints(object3D));
+      }
+      if (options.filterEmptyGeometries) {
+        removed.push(Object3DUtil.removeEmptyGeometries(object3D, _.isPlainObject(options.filterEmptyGeometries)? options.filterEmptyGeometries : null));
+      }
+      const totalRemoved = _.sum(removed, list => list.length);
+      if (totalRemoved > 0) {
+        console.log('filter out ' + totalRemoved + ' nodes');
+      }
+      return object3D;
+    };
+  }
+};
+
 Object3DLoader.prototype.__load = function(modelinfo, onsuccess, onerror) {
   if (modelinfo.file) {
     if (modelinfo.file instanceof File) {
@@ -69,6 +104,17 @@ Object3DLoader.prototype.__load = function(modelinfo, onsuccess, onerror) {
     }
   }
 
+  var processLoaded = this.__getProcessLoadedFn(modelinfo.options);
+  if (processLoaded) {
+    var origOnsuccess = onsuccess;
+    onsuccess = (object3D) => {
+      if (object3D) {
+        object3D = processLoaded(object3D);
+      }
+      origOnsuccess(object3D);
+    };
+  }
+
   if (modelinfo.extractType != null) {
     if (modelinfo.options && modelinfo.options.handleExtractTypes &&
         modelinfo.options.handleExtractTypes.indexOf(modelinfo.extractType) >= 0) {
@@ -76,9 +122,7 @@ Object3DLoader.prototype.__load = function(modelinfo, onsuccess, onerror) {
     }
   }
 
-  if (modelinfo.format === 'three.js') {
-    return this.__loadThreeJsModel(modelinfo, onsuccess, onerror);
-  } else if (modelinfo.format === 'obj') {
+  if (modelinfo.format === 'obj') {
     if (modelinfo.texture || (modelinfo.options && modelinfo.options.skipMtl)) {
       return this.__loadObjModel(modelinfo, onsuccess, onerror);
     } else {
@@ -87,12 +131,14 @@ Object3DLoader.prototype.__load = function(modelinfo, onsuccess, onerror) {
   } else if (!modelinfo.isZipped) {
     if (modelinfo.format === 'ply') {
       return this.__loadPlyModel(modelinfo, onsuccess, onerror);
+    } else if (modelinfo.format === 'pts') {
+      return this.__loadPtsModel(modelinfo, onsuccess, onerror);
     } else if (modelinfo.format === 'kmz') {
       return this.__loadKmzModel(modelinfo, onsuccess, onerror);
-    } else if (modelinfo.format === 'p5d') {
-      return this.__loadP5dModel(modelinfo, onsuccess, onerror);
     } else if (modelinfo.format === 'collada' || modelinfo.format === 'dae') {
       return this.__loadColladaModel(modelinfo, onsuccess, onerror);
+    } else if (modelinfo.format === 'fbx') {
+        return this.__loadFbxModel(modelinfo, onsuccess, onerror);
     } else if (modelinfo.format === 'utf8') {
       return this.__loadUTF8Model(modelinfo, onsuccess, onerror);
     } else if (modelinfo.format === 'utf8v2') {
@@ -103,10 +149,12 @@ Object3DLoader.prototype.__load = function(modelinfo, onsuccess, onerror) {
       return this.__loadGLTFModel(modelinfo, onsuccess, onerror);
     } else if (modelinfo.format === 'urdf') {
       return this.__loadURDFModel(modelinfo, onsuccess, onerror);
-    } else if (modelinfo.format === 'objparts' || modelinfo.format === 'partnet_objparts') {
-      return this.__loadPartNetObjPartsModel(modelinfo, onsuccess, onerror);
+    } else if (modelinfo.format === 'objparts') {
+      return this.__loadObjPartsModel(SimpleMobilityOBJPartLoader, modelinfo, onsuccess, onerror);
+    } else if (modelinfo.format === 'partnet_objparts') {
+      return this.__loadObjPartsModel(PartNetOBJPartLoader, modelinfo, onsuccess, onerror);
     } else if (modelinfo.format === 'shape2motion_objparts') {
-      return this.__loadShape2MotionObjPartsModel(modelinfo, onsuccess, onerror);
+      return this.__loadObjPartsModel(Shape2MotionOBJPartLoader, modelinfo, onsuccess, onerror);
     } else {
       var message = (modelinfo.format == undefined) ? 'Unspecified format' : ('Unsupported format ' + modelinfo.format);
       console.warn(message);
@@ -162,47 +210,31 @@ Object3DLoader.prototype.__loadAndExtractModel = function(modelinfo, onsuccess, 
   }
 };
 
-Object3DLoader.prototype.__loadPartNetObjPartsModel = function(modelInfo, callback, onerror) {
+Object3DLoader.prototype.__loadObjPartsModel = function(loaderClass, modelInfo, callback, onerror) {
   var options = _.defaults(Object.create(null), modelInfo.options || {});
   options.loadMtl = (options.loadMtl != undefined) ? options.loadMtl : modelInfo.loadMtl;
-  var loader = new PartNetOBJPartLoader({fs: Constants.sys.fs, meshPath: modelInfo.meshPath, objectLoadOptions: options, objectLoader: this });
+  var loader = new loaderClass({fs: Constants.sys.fs, meshPath: modelInfo.meshPath, meshFilePattern: modelInfo.meshFilePattern,
+    objectLoadOptions: options, objectLoader: this });
   var supportArticulated = this.assetManager.supportArticulated;
-  loader.load(modelInfo.file, function(err, partHierarchy) {
-    if (err) {
-      onerror(err);
-    } else {
-      if (modelInfo.mobility && supportArticulated) {
-        loader.loadMobility(modelInfo.mobility, (err2, articulations) => {
-          if (err2) {
-            console.error('Error loading mobility', err2);
-            callback(partHierarchy.root.object3D);
-          } else {
-            var articulated = loader.createArticulated(articulations, partHierarchy);
-            callback(articulated);
-          }
-        });
+  if (supportArticulated) {
+    loader.loadArticulated(modelInfo, options, (err, res) => {
+      if (res && res.articulated) {
+        callback(res.articulated);
+      } else if (res && res.partHierarchy) {
+        callback(res.partHierarchy.root.object3D);
       } else {
-        callback(partHierarchy.root.object3D);
+        onerror(err);
       }
-    }
-  }, options);
-};
-
-Object3DLoader.prototype.__loadShape2MotionObjPartsModel = function(modelInfo, callback, onerror) {
-  var ArticulatedObject = require('articulations/ArticulatedObject');
-  var options = _.defaults(Object.create(null), modelInfo.options || {});
-  options.loadMtl = (options.loadMtl != undefined) ? options.loadMtl : modelInfo.loadMtl;
-  var loader = new Shape2MotionOBJPartLoader({fs: Constants.sys.fs, objectLoadOptions: options, objectLoader: this} );
-  loader.load(modelInfo.file, function(err, partHierarchy) {
-    if (err) {
-      onerror(err);
-    } else {
-      // non articulated version: partHierarchy.root.object3D
-      var articulated = new ArticulatedObject(null, null, partHierarchy);
-      //console.log(articulated);
-      callback(articulated);
-    }
-  }, options);
+    });
+  } else {
+    loader.loadPartHierarchy(modelInfo.file, modelInfo, (err, partHierarchy) => {
+      if (partHierarchy) {
+        callback(partHierarchy.root.object3D);
+      } else {
+        onerror(err);
+      }
+    });
+  }
 };
 
 Object3DLoader.prototype.__loadObjMtlModel = function (modelInfo, callback, onerror) {
@@ -219,7 +251,8 @@ Object3DLoader.prototype.__loadObjMtlModel = function (modelInfo, callback, oner
 
   //console.log('modelInfo', modelInfo);
   options.mtl = mtlFile;
-  if (options.preserveMeshes == undefined || options.preserveMeshes) {
+  if (options.useObjMtlLoader) {
+    // TODO: Deprecate and remove
     // Use old OBJMTLLoader so we have same number of meshes as something...
     // console.log('Using old OBJMTLLoader (slow)');
     var loader = modelInfo.isZipped? new THREE.ZippedObjMtlLoader(options) : new THREE.OBJMTLLoader();
@@ -232,6 +265,7 @@ Object3DLoader.prototype.__loadObjMtlModel = function (modelInfo, callback, oner
     // Use new OBJLoader
     // console.log('Using new OBJLoader');
     var loader = modelInfo.isZipped? new THREE.ZippedObjLoader(options) : new THREE.OBJLoader();
+    this.__updateFileLoader(loader);
     if (!modelInfo.isZipped) {
       loader.setOptions(options);
       loader.setMtlOptions(options);
@@ -244,12 +278,30 @@ function createPointCloud(geometry, size) {
   if (geometry.index) {
     geometry.index = null;
   }
-  var material = new THREE.PointsMaterial({ size: size, vertexColors: THREE.VertexColors });
+  var material = new THREE.PointsMaterial({ size: size, vertexColors: true });
   //console.log('using size', size, 'for points material', Constants.virtualUnitToMeters);
   var points = new THREE.Points(geometry, material);
   return points;
 }
 
+/**
+ * Load a ply model
+ * @param modelInfo Information on how to load the ply model
+ * @param modelInfo.file path to load the ply file
+ * @param [modelInfo.options.isPointCloud] {boolean} Whether to treat the ply as a point cloud (ignored if there is no faces, automatically a point cloud)
+ * @param [modelInfo.options.isMesh] {boolean} Whether to treat the ply as a triangular mesh (ignored if there is no faces)
+ * @param [modelInfo.options.pointSize] {number} What size to use for points (used when the ply is treated as a point cloud)
+ * @param [modelInfo.options.computeNormals] {boolean} Whether to compute normals
+ * @param [modelInfo.options.defaultMaterial] {THREE.Material} Material to use for
+ * @param [modelInfo.options.defaultMaterialType] {string} String or material class for creating a default material
+ * @param [modelInfo.options.materialSidedness] {string|int} Should the material be front/back/double sided.
+ * @param [modelInfo.options.propertyNameMapping] {Map<string,string>} Mapping of custom property names to standard property names
+ * @param [modelInfo.options.customFaceAttributes] {string[]} Array of custom face attributes to track
+ * @param [modelInfo.options.customVertexAttributes] {string[]} Array of custom vertex attributes to track
+ * @param callback
+ * @param onerror
+ * @private
+ */
 Object3DLoader.prototype.__loadPlyModel = function (modelInfo, callback, onerror) {
   // Tested to work for ASCII and BINARY ply files
   var plyFile = modelInfo.file;
@@ -266,7 +318,7 @@ Object3DLoader.prototype.__loadPlyModel = function (modelInfo, callback, onerror
   }
   var side = this.assetManager.__getMaterialSide(modelInfo);
   var vertexColorMaterial = new materialType(
-    { name: 'vertexColors', vertexColors: THREE.VertexColors, side: side });
+    { name: 'vertexColors', vertexColors: true, side: side });
   var material = (options.defaultMaterial) ? options.defaultMaterial : vertexColorMaterial;
   var computeNormals = options.computeNormals;
   var loader = new THREE.PLYLoader({
@@ -306,6 +358,29 @@ Object3DLoader.prototype.__loadPlyModel = function (modelInfo, callback, onerror
     }, undefined, onerror);
 };
 
+Object3DLoader.prototype.__loadPtsModel = function (modelInfo, callback, onerror) {
+  // Tested to work for ASCII and BINARY ply files
+  var ptsFile = modelInfo.file;
+  var options = modelInfo.options || {};
+  options = _.defaults(Object.create(null), options, _.pick(modelInfo,
+    ['pointSize', 'computeNormals', 'fields']));
+  //console.log('got options', options);
+  var loader = new PTSLoader({
+    computeNormals: options.computeNormals,
+    fields: options.fields || ['x','y','z', 'red', 'green', 'blue']
+  });
+  var size = (options.pointSize != null)? options.pointSize : 0.01; // TODO: Have reasonable point size
+  var onLoad = function (geometry) {
+    var points = createPointCloud(geometry, size);
+    callback(points);
+  };
+  this.assetManager.assetLoader.load(ptsFile, 'utf8',
+    function (data) {
+      onLoad(loader.parse(data));
+    }, undefined, onerror);
+};
+
+
 Object3DLoader.prototype.__loadObjModel = function (modelInfo, callback, onerror) {
   var objFile = modelInfo.file;
   var textureFile = modelInfo.texture;
@@ -330,56 +405,16 @@ Object3DLoader.prototype.__loadObjModel = function (modelInfo, callback, onerror
   return loader.load(objFile, onload, undefined, onerror);
 };
 
-Object3DLoader.prototype.__loadThreeJsModel = function (modelInfo, callback, onerror) {
-  var file = modelInfo.file;
-  // model
-  if (file.endsWith('.zip')) {
-    var zipLoader = new THREE.ZippedJsonLoader();
-    var onload = function (object) {
-      callback(object);
+Object3DLoader.prototype.__updateFileLoader = function(loader) {
+  if (Constants.isBrowser) {
+    loader.getFileLoader = function(params) {
+      var ldr = new AssetLoader({ manager: loader.manager });
+      return {
+        load: function(url, onLoad, onProgress, onError) {
+          return ldr.load(url, params? params.responseType : null, onLoad, onProgress, onError);
+        }
+      };
     };
-    zipLoader.load(file, onload);
-  } else {
-    var loader = new THREE.LegacyJSONLoader();
-    loader.setResourcePath(modelInfo.texturePath || modelInfo.materialBase);
-    var onload = function (geometry, materials) {
-      var mesh = new THREE.Mesh(geometry, new THREE.MultiMaterial(materials));
-      callback(mesh);
-    };
-    return loader.load(file, onload, undefined, onerror);
-  }
-};
-
-Object3DLoader.prototype.__loadP5dModel = function (modelInfo, callback, onerror) {
-  var loader = new P5DTextureLoader();
-  var scope = this;
-  if (this.assetManager.autoLoadVideo) {
-    loader.loadVideoTexture = function (path) {
-      return scope.loadVideoTexture(path);
-    };
-  }
-  var newCallback = function (object3D) {
-    var meshes = Object3DUtil.getMeshList(object3D);
-    for (var i = 0; i < meshes.length; i++) {
-      var mesh = meshes[i];
-      //var objectType = 'unknown';
-      var config = {};
-      loader.updateMaterials(mesh, config);
-    }
-    if (modelInfo.category) {
-      if (((modelInfo.category.indexOf('hanging_kitchen_cabinet') >= 0) ||
-        (modelInfo.category.indexOf('range_oven_with_hood') >=0) ||
-        (modelInfo.category.indexOf('range_hood') >=0)) &&
-        (modelInfo.category.indexOf('kitchen_cabinet') < 0)) {
-        modelInfo.category = _.concat(['kitchen_cabinet'], modelInfo.category);
-      }
-    }
-    callback(object3D);
-  };
-  if (modelInfo.file.endsWith('.obj')) {
-    return this.__loadObjMtlModel(modelInfo, newCallback, onerror);
-  } else {
-    return this.__loadThreeJsModel(modelInfo, newCallback, onerror);
   }
 };
 
@@ -392,6 +427,7 @@ Object3DLoader.prototype.__loadKmzModel = function (modelInfo, callback, onerror
 
 Object3DLoader.prototype.__loadColladaModel = function (modelInfo, callback, onerror) {
   var loader = new THREE.ColladaLoader();
+  this.__updateFileLoader(loader);
   return this.__loadColladaOrKmzModel(loader, modelInfo, callback, onerror);
 };
 
@@ -401,16 +437,9 @@ Object3DLoader.prototype.__loadColladaOrKmzModel = function (loader, modelInfo, 
     var object = collada.scene;
     // Copy out some collada info into the userData so it is kept
     Object3DUtil.traverse(object, function (node) {
-      if (!node.hasOwnProperty('userData')) {
-        node['userData'] = {};
-      }
-      if (node.hasOwnProperty('colladaId')) {
+      if (node.userData.hasOwnProperty('colladaId')) {
         // Use collada id as the id
-        node.userData.id = node.colladaId;
-      } else if (node instanceof THREE.Mesh) {
-        if (node.geometry.hasOwnProperty('colladaId')) {
-          node.userData.id = node.geometry.colladaId;
-        }
+        node.userData.id = node.userData.colladaId;
       } else if (node !== object) {
         console.warn('Node without colladaId', node);
       }
@@ -428,7 +457,7 @@ Object3DLoader.prototype.__loadColladaOrKmzModel = function (loader, modelInfo, 
       // Unset any object scale that was set by the ColladaLoader so we can set and scale it in our framework
       object.scale.set(1, 1, 1);
       if (!modelInfo.unit) {
-        modelInfo.unit = collada.dae.unit;
+        modelInfo.unit = collada.metadata.unit;
       }
     }
     //console.log('Unit for model ' + modelInfo.fullId + ': ' + modelInfo.unit);
@@ -452,11 +481,14 @@ Object3DLoader.prototype.__loadColladaOrKmzModel = function (loader, modelInfo, 
     }
   }
   modelInfo.formatOptions['applyUp'] = loader.options.convertUpAxis;
-  var skipLines = _.get(modelInfo, ['options', 'skipLines']);
-  if (skipLines != undefined) {
-    loader.options.skipLines = skipLines;
-  }
   return loader.load(file, colladaReady, undefined, onerror);
+};
+
+Object3DLoader.prototype.__loadFbxModel = function (modelInfo, callback, onerror) {
+  var loader = new THREE.FBXLoader();
+  return loader.load(modelInfo.file, function (object) {
+    callback(object);
+  }, undefined, onerror);
 };
 
 Object3DLoader.prototype.__loadUTF8Model = function (modelInfo, callback, onerror) {
@@ -478,24 +510,20 @@ Object3DLoader.prototype.__loadUTF8Model = function (modelInfo, callback, onerro
 
 Object3DLoader.prototype.__loadUTF8v2Model = function (modelInfo, callback, onerror) {
   var loader = new THREE.UTF8Loader();
-  var side = this.assetManager.__getMaterialSide(modelInfo);
+  var options = {};
+  this.assetManager.__updateMaterialOptions(modelInfo, options, Materials.DefaultMaterialType)
   return loader.load(modelInfo.file, function (object) {
     callback(object);
-  }, onerror, _.defaults(Object.create(null), { side: side }, modelInfo.options));
+  }, onerror, _.defaults(Object.create(null), options, modelInfo.options));
 };
 
 Object3DLoader.prototype.__loadGLTFModel = function (modelInfo, callback, onerror) {
-  var loader = new THREE.GLTFLoader();
-  if (Constants.isBrowser) {
-    loader.getFileLoader = function(responseType) {
-      var ldr = new AssetLoader({ manager: loader.manager });
-      return {
-        load: function(url, onLoad, onProgress, onError) {
-          return ldr.load(url, responseType, onLoad, onProgress, onError);
-        }
-      };
-    };
-  }
+  var loader = new THREE.GLTFLoader()
+    .setDRACOLoader( Object3DLoader.__dracoLoader )
+    .setKTX2Loader( Object3DLoader.__ktx2loader )
+    .setMeshoptDecoder( MeshoptDecoder );
+
+  this.__updateFileLoader(loader);
   if (!_.isString(modelInfo.file)) {
     loader.setPath('');
   }

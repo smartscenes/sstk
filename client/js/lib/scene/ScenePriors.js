@@ -61,7 +61,7 @@ ScenePriors.prototype.queryPlacement = function (options, succeededCallback1, fa
     }
     for (var p in qr) {
       var sceneTransformMatrixInverse = new THREE.Matrix4();
-      sceneTransformMatrixInverse.getInverse(options.sceneState.scene.matrixWorld);
+      sceneTransformMatrixInverse.copy(options.sceneState.scene.matrixWorld).invert();
       if (qr.hasOwnProperty(p) && qr[p] instanceof THREE.Vector3) {
         qr[p] = qr[p].clone().applyMatrix4(sceneTransformMatrixInverse);
         if (p === 'supportNormal') {

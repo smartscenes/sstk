@@ -1,4 +1,4 @@
-var OBB = require('geo/OBB');
+var BBoxUtil = require('geo/BBoxUtil');
 var GeometryUtil = require('geo/GeometryUtil');
 var OBBIntersections = {};
 
@@ -10,20 +10,27 @@ var PLANE_SIDES = Object.freeze({
 
 var _VOLUME_EPSILON = 0.00000000001;
 
-function computeIOU(obb1, obb2, debug) {
+function computeIOUDetailed(obb1, obb2, debug) {
   var vol1 = obb1.volume();
   var vol2 = obb2.volume();
   if (vol1 < _VOLUME_EPSILON || vol2 < _VOLUME_EPSILON) {
-    return 0;
+    return { intersect: 0, union: 0, iou: 0, vol1: vol1, vol2: vol2};
   }
   var intersection = computeOBBIntersection(obb1, obb2, debug);
   if (intersection) {
     var volIntersect = GeometryUtil.getVolume(intersection);
     var volUnion = vol1 + vol2 - volIntersect;
-    return volIntersect / volUnion;
+    return { intersect: volIntersect, union: volUnion, iou: volIntersect / volUnion, vol1: vol1, vol2: vol2};
   } else {
-    return 0;
+    return { intersect: 0, union: 0, iou: 0, vol1: vol1, vol2: vol2};
   }
+}
+
+OBBIntersections.computeIOUDetailed = computeIOUDetailed;
+
+function computeIOU(obb1, obb2, debug) {
+  var iou = computeIOUDetailed(obb1, obb2, debug);
+  return iou.iou;
 }
 
 OBBIntersections.computeIOU = computeIOU;
@@ -32,7 +39,7 @@ function toConvexHull(points) {
   require('three-convexhull');
   require('three-convexgeo');
 
-  var convex = THREE.ConvexBufferGeometry.fromPoints(points);
+  var convex = THREE.ConvexGeometry.fromPoints(points);
   return convex;
 }
 
@@ -57,15 +64,15 @@ function computeOBBIntersectionPoints(obb1, obb2, out, debug) {
   var refToWorldTransform = obb1.basis.clone();
   refToWorldTransform.setPosition(obb1.position);
   var toRefTransform = new THREE.Matrix4();
-  toRefTransform.getInverse(refToWorldTransform);
+  toRefTransform.copy(refToWorldTransform).invert();
   var robb1 = obb1.clone();
   robb1.applyMatrix4(toRefTransform);
   var verts1 = robb1.getCorners();
   var robb2 = obb2.clone();
   robb2.applyMatrix4(toRefTransform);
   var verts2 = robb2.getCorners();
-  for (var i = 0; i < OBB.FACE_VERTS.length; i++) {
-    var vertIndices = OBB.FACE_VERTS[i];
+  for (var i = 0; i < BBoxUtil.FACE_VERTS.length; i++) {
+    var vertIndices = BBoxUtil.FACE_VERTS[i];
     var face = vertIndices.map(vi => verts2[vi]);
     var clip = intersectBoxVerticesPoly(verts1, face);
     for (var j = 0; j < clip.length; j++) {
@@ -192,7 +199,7 @@ function getPlaneLineSegIntersection(planePoint, p1, p2, axis, out) {
 }
 
 /**
- * Returns which side of the plan the point is located
+ * Returns which side of the plane the point is located
  * See Real-Time Collision Detection, by Christer Ericson, page 364.
  * @param point {THREE.Vector3}
  * @param planePoint {THREE.Vector3} vector of point on the plane

@@ -288,6 +288,15 @@ LabelsPanel.prototype.getLabelInfo = function(label) {
   }
 };
 
+LabelsPanel.prototype.getLabelInfoByField = function(fieldName, fieldValue) {
+  //console.log('getLabelInfo: ' + label);
+  for (var i = 0; i < this.labelInfos.length; i++) {
+    var labelInfo = this.labelInfos[i];
+    if (labelInfo && labelInfo[fieldName] === fieldValue) {
+      return labelInfo;
+    }
+  }
+};
 /**
  * Saves the labels as a HTML page
  * @param options Options for how labels are saved
@@ -602,6 +611,24 @@ LabelsPanel.prototype.setFrozen = function (labelInfo, flag) {
   }
 };
 
+LabelsPanel.prototype.setTextColor = function (labelInfo, textColor) {
+  console.log('set text color', labelInfo, textColor);
+  labelInfo.textColor = textColor;
+  if (textColor != null) {
+    labelInfo.element.find('span.labelText').css('color', textColor);
+  } else {
+    labelInfo.element.find('span.labelText').css('color', '');
+  }
+};
+
+LabelsPanel.prototype.updateInfo = function(labelInfo, update) {
+  if (labelInfo) {
+    if (update.textColor != null) {
+      this.setTextColor(labelInfo, update.textColor);
+    }
+  }
+};
+
 /**
  * Creates a button in the panel with a color icon and label
  * @param labelInfo {LabelInfo}
@@ -622,7 +649,11 @@ LabelsPanel.prototype.createButton = function (labelInfo) {
   if (labelInfo.frozen) {
     frozenIndicator.show();
   }
-  label.append(colorDiv).append(radio).append($('<span/>').addClass('labelText').text(name)).append(frozenIndicator);
+  var labelText = $('<span/>').addClass('labelText').text(name);
+  if (labelInfo.textColor) {
+    labelText.css('color', labelInfo.textColor);
+  }
+  label.append(colorDiv).append(radio).append(labelText).append(frozenIndicator);
   label.data('index', labelInfo.index);
   labelInfo.element = label;
   labelInfo.selectField = radio;  // Set selectField so we can set the property properly
@@ -646,11 +677,10 @@ LabelsPanel.prototype.createButton = function (labelInfo) {
     deleteIcon.click(this.onDeleteButtonClick.bind(this, labelInfo));
     label.append(deleteIcon);
   }
-  //Make button toggleable
-  //label.click(this.onLabelButtonClick.bind(this, labelInfo));
+  // Make button clickable
   var scope = this;
   label.click(function(event) { scope.onLabelButtonClick(labelInfo, event); });
-  //Make label editable
+  // Make label editable
   if (this.allowEditLabels && !labelInfo.fixed) {
     // Double click to edit label
     var editField = $('<input/>').attr('type', 'text').attr('value', labelInfo.label).hide();
@@ -1299,11 +1329,12 @@ module.exports = LabelsPanel;
  * @typedef LabelInfo
  * @type {object}
  * @property {int} index
- * @property {int} id - index + 1
+ * @property {int} id - index + 1 (typically)
  * @property {string} name - Text that is displayed to the user
  * @property {string} label - Label that is stored internally
  * @property {color} color - Color used to represent this label
  * @property {string} cssColor - String representing the color for use in CSS
+ * @property {string} textColor - String representing the text label color for use in CSS
  * @property {material} colorMat - Material to use on meshes to represent this label
  * @property {material} hoverMat - Material to use on meshes to represent this label when hovering
  * @property {boolean} fixed - Whether the label can be changed or not

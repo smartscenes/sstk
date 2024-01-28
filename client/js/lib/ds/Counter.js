@@ -54,6 +54,25 @@ Counter.prototype.getCounts = function() {
   return this.__counts;
 };
 
+Counter.prototype.getSorted = function() {
+  var counts = _.map(this.__counts, (v,k) => { return { id: k, count: v }; });
+  return _.sortBy(counts, (c) => { return -c.count; });
+};
+
+Counter.prototype.getMax = function() {
+  return _.reduce(this.__counts, (result, v, k) => {
+    if (result) {
+      if (v > result.count) {
+        return { id: k, count: v };
+      } else {
+        return result;
+      }
+    } else {
+      return { id: k, count: v };
+    }
+  }, undefined);
+};
+
 Counter.prototype.add = function(obj, count) {
   count = count || 1;
   var id = this.__idFn(obj);

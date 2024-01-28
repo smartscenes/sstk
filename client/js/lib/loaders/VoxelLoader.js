@@ -4,6 +4,7 @@ var LabeledGridLoader = require('loaders/LabeledGridLoader');
 var NRRDLoader = require('loaders/NRRDLoader');
 var FileLoader = require('io/FileLoader');
 var jBinary = require('jbinary');
+var _ = require('util/util');
 
 /**
  * Generic voxel loader that dispatches to the appropriate loader
@@ -11,8 +12,8 @@ var jBinary = require('jbinary');
  * @constructor
  * @memberOf loaders
  */
-function VoxelLoader() {
-
+function VoxelLoader(params) {
+  this.__options = params || {};
 }
 
 VoxelLoader.prototype.load = function (path, callback) {
@@ -29,11 +30,11 @@ VoxelLoader.prototype.load = function (path, callback) {
 VoxelLoader.prototype.__parseVoxels = function (filename, data, callback) {
   var parser;
   if (filename.endsWith('binvox')) {
-    parser = new BinvoxLoader();
+    parser = new BinvoxLoader(this.__options.binvox);
   } else if (filename.endsWith('vox')) {
-    parser = new LabeledGridLoader();
+    parser = new LabeledGridLoader(this.__options.vox);
   } else if (filename.endsWith('nrrd')) {
-    parser = new NRRDLoader({ GridType: ColorGrid });
+    parser = new NRRDLoader(_.defaults({ GridType: ColorGrid }, this.__options.nrrd));
   } else {
     console.warn('Unknown grid type: ' + filename);
     callback('Unknown grid type: ' + filename);

@@ -1,10 +1,12 @@
 'use strict';
 
-var Constants = require('Constants');
-var BBox = require('geo/BBox');
-var SemanticOBB = require('geo/SemanticOBB');
-var Object3DUtil = require('geo/Object3DUtil');
-var _ = require('util/util');
+const Constants = require('Constants');
+const AttachmentInfo = require('model/AttachmentInfo');
+const BBoxUtil = require('geo/BBoxUtil');
+const SemanticOBB = require('geo/SemanticOBB');
+const Object3DUtil = require('geo/Object3DUtil');
+const RaycasterUtil = require('geo/RaycasterUtil');
+const _ = require('util/util');
 
 /**
  * ModelInstance represents an object (an instantiation of a 3D model)
@@ -24,17 +26,39 @@ function ModelInstance(model, clone) {
   this.model = model;
   this.scale = 1;
   this.material = null;
+  this.type = 'ModelInstance';
+  this.__isModelObject3DNormalized = false;
 
   if (clone instanceof THREE.Object3D) {
     if (clone.userData.type === 'Model') {
       this.modelObject3D = clone;
     } else if (clone.userData.type === 'ModelInstance') {
       this.object3D = clone;
-      // Assume first child is the model...
-      this.modelObject3D = this.object3D.children[0];
+      // Assume first child is the model or modelBase
+      let modelObjectsIdentified = false;
+      for (let i = 0; i < this.object3D.children.length; i++) {
+        const child = this.object3D.children[i];
+        if (child.userData.type === 'Model') {
+          this.modelObject3D = child;
+          modelObjectsIdentified = true;
+          break;
+        } else if (child.userData.type === 'ModelBase') {
+          this.modelBaseObject3D = child;
+          const firstChild = this.modelBaseObject3D.children[0];
+          if (firstChild.userData.type === 'Model') {
+            this.modelObject3D = firstChild;
+          } else {
+            console.error('ModelInstance.clone error: Invalid child type for modelBaseObject3D', firstChild);
+          }
+          modelObjectsIdentified = true;
+          break;
+        }
+      }
+      if (!modelObjectsIdentified) {
+        console.error('ModelInstance.clone error: cannot find Model or ModelBase', clone);
+      }
     } else {
-      console.error('Invalid object 3d as parameter');
-      console.log(clone);
+      console.error('ModelInstance.clone error: Invalid object 3d as parameter', clone);
     }
   }
 
@@ -61,10 +85,43 @@ function ModelInstance(model, clone) {
     modelInstance: this
   };
 
+  if (model.info.support != null) {
+    // TODO: check childAttachment
+    this.object3D.userData.defaultAttachment = new AttachmentInfo(null, model.info.support, null);
+  }
+
   this.object3D.userData.lightsOn = this.modelObject3D.userData.lightsOn;
   this._updateLights();
-  this.__isModelObject3DNormalized = false;
 }
+
+Object.defineProperty(ModelInstance.prototype, 'isPickable', {
+  get: function () { return this.object3D.userData.isPickable; },
+  set: function (v) { this.object3D.userData.isPickable = !!v; }
+});
+
+Object.defineProperty(ModelInstance.prototype, 'isSelectable', {
+  get: function () { return this.object3D.userData.isSelectable; },
+  set: function (v) { this.object3D.userData.isSelectable = !!v; }
+});
+
+Object.defineProperty(ModelInstance.prototype, 'isEditable', {
+  get: function () { return this.object3D.userData.isEditable; },
+  set: function (v) { this.object3D.userData.isEditable = !!v; }
+});
+
+Object.defineProperty(ModelInstance.prototype, 'isSupportObject', {
+  get: function () { return this.object3D.userData.isSupportObject; },
+  set: function (v) { this.object3D.userData.isSupportObject = !!v; }
+});
+
+Object.defineProperty(ModelInstance.prototype, 'isFrozen', {
+  get: function () { return this.object3D.userData.isFrozen; },
+  set: function (v) { this.object3D.userData.isFrozen = !!v; }
+});
+
+Object.defineProperty(ModelInstance.prototype, 'isDraggable', {
+  get: function () { return this.isSelectable && this.isEditable && !this.isFrozen; }
+});
 
 ModelInstance.prototype.clone = function (clonedObject3D) {
   if (clonedObject3D === undefined) {
@@ -73,10 +130,18 @@ ModelInstance.prototype.clone = function (clonedObject3D) {
     clonedObject3D = this.object3D.clone();
   }
 
-  var newMinst = new ModelInstance(this.model, clonedObject3D);
+  const newMinst = new ModelInstance(this.model, clonedObject3D);
   newMinst.scale = this.scale;
   if (this.material) {
     newMinst.material = this.material.clone();
+  }
+  // TODO: Properly handle this.__isModelObject3DNormalized
+  if (this.__isModelObject3DNormalized) {
+    if (clonedObject3D.userData.type === 'ModelInstance') {
+      newMinst.__isModelObject3DNormalized = this.__isModelObject3DNormalized;
+    } else {
+      newMinst.ensureNormalizedModelCoordinateFrame();
+    }
   }
   return newMinst;
 };
@@ -99,11 +164,11 @@ ModelInstance.prototype.getPartsConnectivity = function() {
   if (this.partsConnectivity) {
     return this.partsConnectivity;
   }
-  var partsConnectivity = this.model.getPartsConnectivity();
+  let partsConnectivity = this.model.getPartsConnectivity();
   if (partsConnectivity) {
-    var object3d = this.modelObject3D;
-    var nodes = Object3DUtil.findNodes(object3d,(node) => node.userData.pid != null);
-    var idToObj = _.keyBy(nodes, (node) => node.userData.pid );
+    const object3d = this.modelObject3D;
+    const nodes = Object3DUtil.findNodes(object3d,(node) => node.userData.pid != null);
+    const idToObj = _.keyBy(nodes, (node) => node.userData.pid );
     partsConnectivity = partsConnectivity.withPartObject3Ds(idToObj, true);
     this.partsConnectivity = partsConnectivity;
   }
@@ -111,12 +176,12 @@ ModelInstance.prototype.getPartsConnectivity = function() {
 };
 
 ModelInstance.prototype.toArticulatedObject = function(articulations) {
-  var partsConnectivity = this.getPartsConnectivity();
+  const partsConnectivity = this.getPartsConnectivity();
   if (partsConnectivity) {
     if (!Array.isArray(articulations)) {
       articulations = [articulations];
     }
-    var ArticulatedObject = require('articulations/ArticulatedObject');
+    const ArticulatedObject = require('articulations/ArticulatedObject');
     return new ArticulatedObject(articulations, partsConnectivity);
   }
 };
@@ -127,23 +192,23 @@ ModelInstance.prototype.tumble = function () {
 
 ModelInstance.prototype.__switchModel = function(m) {
   function replaceModelObject3D(obj3D, modelObject3D) {
-    var modelInstChildren = _.filter(obj3D.children, function(x) { return x.userData.type === 'ModelInstance'; });
+    const modelInstChildren = _.filter(obj3D.children, function(x) { return x.userData.type === 'ModelInstance'; });
     Object3DUtil.removeAllChildren(obj3D);
     obj3D.add(modelObject3D);
-    for (var i = 0; i < modelInstChildren.length; i++) {
+    for (let i = 0; i < modelInstChildren.length; i++) {
       obj3D.add(modelInstChildren[i]);
     }
   }
   // console.log('switchModel', this, this.modelObject3D, m);
-  var oldModelObject3D = this.modelObject3D;
+  const oldModelObject3D = this.modelObject3D;
   this.model = m;
   this.modelObject3D = m.object3D.clone();
   Object3DUtil.setMatrix(this.modelObject3D, oldModelObject3D.matrix);
   // Move materials from old model to this one
-  var oldMeshes = Object3DUtil.getMeshList(oldModelObject3D);
-  var newMeshes = Object3DUtil.getMeshList(this.modelObject3D);
+  const oldMeshes = Object3DUtil.getMeshList(oldModelObject3D);
+  const newMeshes = Object3DUtil.getMeshList(this.modelObject3D);
   if (oldMeshes.length === newMeshes.length) {
-    for (var i = 0; i < newMeshes.length; i++) {
+    for (let i = 0; i < newMeshes.length; i++) {
       newMeshes[i].material = oldMeshes[i].material;
     }
   }
@@ -163,13 +228,13 @@ ModelInstance.prototype.__switchModel = function(m) {
 };
 
 ModelInstance.prototype.useFlippedModel = function(assetManager) {
-  var flipped = assetManager.getFlippedModel(this.model);
+  const flipped = assetManager.getFlippedModel(this.model);
   // Set the modelObject3D to be the flipped model
   this.__switchModel(flipped);
 };
 
 ModelInstance.prototype.useModelVariant = function(assetManager, variantId, callback) {
-  var scope = this;
+  const scope = this;
   assetManager.getModelVariant(this.model, variantId, function(err, variant) {
     if (err) {
       console.error(err);
@@ -185,11 +250,11 @@ ModelInstance.prototype.useModelVariant = function(assetManager, variantId, call
 };
 
 ModelInstance.prototype.useNextModelVariant = function(assetManager) {
-  var modelInfo = this.model.info;
+  const modelInfo = this.model.info;
   if (modelInfo.variantIds) {
-    var i = modelInfo.variantIds.indexOf(modelInfo.id);
+    const i = modelInfo.variantIds.indexOf(modelInfo.id);
     if (i >= 0) {
-      var vi = (i+1) % modelInfo.variantIds.length;
+      const vi = (i+1) % modelInfo.variantIds.length;
       this.useModelVariant(assetManager, modelInfo.variantIds[vi]);
       return modelInfo.variantIds[vi];
     }
@@ -202,10 +267,10 @@ ModelInstance.prototype.getLightState = function () {
 
 ModelInstance.prototype.setLightState = function (flag, assetManager) {
   this.object3D.userData.lightsOn = flag;
-  var numLights = 0;
-  var lightSpecs = this.model.info.lightSpecs;
+  let numLights = 0;
+  const lightSpecs = this.model.info.lightSpecs;
   if (lightSpecs) {
-    var modelObject = this.getObject3D('Model');
+    const modelObject = this.getObject3D('Model');
     numLights = lightSpecs.lights? lightSpecs.lights.length : 0;
     if (assetManager && numLights && modelObject.userData.lightsOn == undefined) {
       assetManager.__lightsLoader.createLights(this.model.info, modelObject);
@@ -218,16 +283,16 @@ ModelInstance.prototype.setLightState = function (flag, assetManager) {
 
 ModelInstance.prototype.queryCapabilities = function(assetManager) {
   // Some capabilities to query
-  var object3D = this.object3D;
-  var modelInfo = this.model.info;
-  var scope = this;
+  const object3D = this.object3D;
+  const modelInfo = this.model.info;
+  const scope = this;
   // variants
   Object3DUtil.getCapability(object3D,
     'variants', function() {
-      var hasVariants = modelInfo.variantIds && modelInfo.variantIds.length > 0;
+      const hasVariants = modelInfo.variantIds && modelInfo.variantIds.length > 0;
       if (hasVariants) {
-        var openVariants = modelInfo.variantIds.filter(function(x) { return !x.endsWith('_0'); });
-        var closeVariants = modelInfo.variantIds.filter(function(x) { return x.endsWith('_0'); });
+        const openVariants = modelInfo.variantIds.filter(function(x) { return !x.endsWith('_0'); });
+        const closeVariants = modelInfo.variantIds.filter(function(x) { return x.endsWith('_0'); });
         return {
           getOperations: function() {
             return ['toggle', 'open', 'close'];
@@ -253,9 +318,9 @@ ModelInstance.prototype.queryCapabilities = function(assetManager) {
   // lights
   Object3DUtil.getCapability(object3D,
     'lights', function() {
-      var hasLights = modelInfo.lightSpecs && modelInfo.lightSpecs.lights && modelInfo.lightSpecs.lights.length > 0;
+      const hasLights = modelInfo.lightSpecs && modelInfo.lightSpecs.lights && modelInfo.lightSpecs.lights.length > 0;
       if (hasLights) {
-        var LightControls = require('capabilities/LightControls');
+        const LightControls = require('capabilities/LightControls');
         return new LightControls({
           object3D: object3D
         });
@@ -277,9 +342,9 @@ ModelInstance.prototype.queryCapabilities = function(assetManager) {
 
 ModelInstance.prototype._updateLights = function () {
   this.setLightState(this.object3D.userData.lightsOn);
-  var lights = Object3DUtil.findLights(this.object3D);
-  for (var i = 0; i < lights.length; i++) {
-    var light = lights[i];
+  const lights = Object3DUtil.findLights(this.object3D);
+  for (let i = 0; i < lights.length; i++) {
+    const light = lights[i];
     if (light instanceof THREE.SpotLight && light.target) {
       light.parent.add(light.target);
     }
@@ -304,17 +369,17 @@ ModelInstance.prototype.ensureNormalizedModelCoordinateFrame = function () {
   }
   // NOTE: Assumes that this.modelObject3D is a direct child of this.object3D and that
   //       there are no other children for this.object3D
-  var modelInstanceMatrix = this.object3D.matrix.clone();
-  var modelObjectMatrix = this.modelObject3D.matrix.clone();
+  const modelInstanceMatrix = this.object3D.matrix.clone();
+  const modelObjectMatrix = this.modelObject3D.matrix.clone();
 
-  var matrix = new THREE.Matrix4();
+  const matrix = new THREE.Matrix4();
   matrix.multiplyMatrices(modelInstanceMatrix, modelObjectMatrix);
 
-  var alignment = this.model.getAlignmentMatrix();
+  const alignment = this.model.getAlignmentMatrix();
   Object3DUtil.normalize(this.modelObject3D, alignment, this.object3D.scale);
 
-  var newModelObjectMatrixInv = new THREE.Matrix4();
-  newModelObjectMatrixInv.getInverse(this.modelObject3D.matrix);
+  const newModelObjectMatrixInv = new THREE.Matrix4();
+  newModelObjectMatrixInv.copy(this.modelObject3D.matrix).invert();
   matrix.multiply(newModelObjectMatrixInv);
 
   Object3DUtil.setMatrix(this.object3D, matrix);
@@ -335,6 +400,7 @@ ModelInstance.prototype.ensureNormalizedModelCoordinateFrame = function () {
  * Set attachment point.  To ensure that editing operations use a reasonable coordinate frame,
  *  the `modelBaseObject3D` is introduced here so that operations on `this.object3D` can now assume that
  *  the origin of `this.object3D` is at the attachment point (so movement, rotation, scaling will all be about that point)
+ * The `modelBaseObject3D` wraps around the normalized `modelObject3D` which has consistent orientation.
  * @param options
  * @param [options.position] {THREE.Vector3} Position at which to place attachment point
  * @param [options.coordFrame] {string} Coordinate frame is 'worldBB', 'parentBB', 'childBB', or 'child'
@@ -355,11 +421,19 @@ ModelInstance.prototype.setAttachmentPoint = function (options) {
     this.modelBaseObject3D.add(this.modelObject3D);
     this.modelBaseObject3D.name = this.modelObject3D.name + '-base';
     this.object3D.add(this.modelBaseObject3D);
+  } else {
+    // NOTE: attachmentPoint is not cloned correctly since it is a Vector3
+    // We should avoid storing anything that is not a plain js object in userData
+    const u = this.modelBaseObject3D.userData;
+    const ap = u['attachmentPoint'];
+    if (!(ap instanceof THREE.Vector3)) {
+      u['attachmentPoint'] = new THREE.Vector3(ap.x, ap.y, ap.z);
+    }
   }
-  var p = options.position;
-  var pCoordFrame = options.coordFrame;
+  let p = options.position;
+  let pCoordFrame = options.coordFrame;
   if (options.useModelContactPoint) {
-    var contactPointInModelSpace = this.model.getAnnotatedContactPoint();
+    const contactPointInModelSpace = this.model.getAnnotatedContactPoint();
     if (contactPointInModelSpace) {
       console.log('contactPoint');
       console.log(contactPointInModelSpace);
@@ -372,6 +446,17 @@ ModelInstance.prototype.setAttachmentPoint = function (options) {
 
   if (!this.modelBaseObject3D.userData['attachmentPoint'].equals(p)) {
     Object3DUtil.setChildAttachmentPoint(this.object3D, this.modelBaseObject3D, p, pCoordFrame);
+  }
+};
+
+ModelInstance.prototype.getCurrentAttachment = function() {
+  // Return information about current attachment
+  if (this.modelBaseObject3D) {
+    const u = this.modelBaseObject3D.userData;
+    return {
+      position: u.attachmentPoint,
+      coordFrame: u.attachmentPointCoordFrame
+    };
   }
 };
 
@@ -391,7 +476,7 @@ ModelInstance.prototype.getAttachmentPointLocal = function () {
  */
 ModelInstance.prototype.getAttachmentPointWorld = function () {
   if (this.modelBaseObject3D) {
-    var v = new THREE.Vector3();
+    const v = new THREE.Vector3();
     this.object3D.updateMatrixWorld();
     v.setFromMatrixPosition(this.object3D.matrixWorld);
     return v;
@@ -417,53 +502,62 @@ ModelInstance.prototype.getCandidateAttachmentPoints = function() {
   // Returns as candidate attachment points the 6 canonical bbox sides
   // along with any annotated contact points
   this.object3D.updateMatrixWorld();
-  var modelBB = Object3DUtil.computeBoundingBoxLocal(this.modelObject3D.parent);
-  var modelBBDims = modelBB.dimensions();
-  var mw = this.modelObject3D.parent.matrixWorld;
-  var modelBBDimsWorld = new THREE.Vector3();
-  var modelBBWorldCenter = new THREE.Vector3(0,0,0).applyMatrix4(mw);
-  modelBBDimsWorld.fromArray([new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)].map(
-    function (x) {
-      return x.multiply(modelBBDims).applyMatrix4(mw).sub(modelBBWorldCenter).length();
-    }));
-  var modelBBFaceDimsWorld = BBox.getFaceDims(modelBBDimsWorld);
-  var normalMatrixWorld = new THREE.Matrix3();
-  normalMatrixWorld.getNormalMatrix(mw);
+  const modelBB = Object3DUtil.computeBoundingBoxLocal(this.modelObject3D.parent);
 
   //console.log('got modelBBDimsWorld', modelBBDimsWorld);
-  var attachmentPoints = [];
-  for (var i = 0; i < 6; i++) {
-    var fc = Object3DUtil.FaceCenters01[i];
-    var outNorm = Object3DUtil.OutNormals[i];
-    var p = modelBB.getWorldPosition(fc);
-    var wp = p.clone().applyMatrix4(this.modelObject3D.parent.matrixWorld);
-    var woutNorm = outNorm.clone().applyMatrix3(normalMatrixWorld).normalize();
-    var s = Math.abs(modelBBDimsWorld.dot(outNorm));
+  const attachmentPoints = [];
+  for (let i = 0; i < 6; i++) {
+    const fc = Object3DUtil.FaceCenters01[i];
+    const outNorm = Object3DUtil.OutNormals[i];
+    const p = modelBB.getWorldPosition(fc);
     attachmentPoints.push({
       type: 'bbface',
       frame: 'child',
       bbfaceIndex: i,
       local: { pos: p, out: outNorm },
-      world: { pos: wp, out: woutNorm, size: s, faceDims: modelBBFaceDimsWorld[i] },
       index: attachmentPoints.length
     });
   }
-  var contactPointInModelSpace = this.model.getAnnotatedContactPoint();
+  const contactPointInModelSpace = this.model.getAnnotatedContactPoint();
   if (contactPointInModelSpace) {
     // Get the point in modelBaseObject3D
-    var p = contactPointInModelSpace.clone().applyMatrix4(this.modelObject3D.matrix);
-    var wp = p.clone().applyMatrix4(this.modelObject3D.parent.matrixWorld);
-    var outNorm = Object3DUtil.OutNormals[Constants.BBoxFaceCenters.BOTTOM];
-    var woutNorm = outNorm.clone().applyMatrix3(normalMatrixWorld).normalize();
-    var s = Math.abs(modelBBDimsWorld.dot(outNorm));
+    const p = contactPointInModelSpace.clone().applyMatrix4(this.modelObject3D.matrix);
+    const outNorm = Object3DUtil.OutNormals[Constants.BBoxFaceCenters.BOTTOM];
     attachmentPoints.push({
       type: 'annotated',
       local: { pos: p, out: outNorm },
-      world: { pos: wp, out: woutNorm, size: s },
       index: attachmentPoints.length
     });
   }
+  this.updateCandidateAttachmentPointsWorld(attachmentPoints, modelBB);
   return attachmentPoints;
+};
+
+ModelInstance.prototype.updateCandidateAttachmentPointsWorld = function(attachmentPoints, modelBB) {
+  this.object3D.updateMatrixWorld();
+  const mw = this.modelObject3D.parent.matrixWorld;
+
+  modelBB = modelBB || Object3DUtil.computeBoundingBoxLocal(this.modelObject3D.parent);
+  const modelBBDims = modelBB.dimensions();
+  const modelBBDimsWorld = (new THREE.Vector3()).setFromMatrixScale(mw).multiply(modelBBDims);
+  const modelBBFaceDimsWorld = BBoxUtil.getFaceDims(modelBBDimsWorld);
+
+  for (let i = 0; i < attachmentPoints.length; i++) {
+    const ap = attachmentPoints[i];
+    if (ap.world) {
+      ap.world.pos.copy(ap.local.pos).applyMatrix4(mw);
+      ap.world.out.copy(ap.local.out).transformDirection(mw);
+    } else {
+      ap.world = {
+        pos: ap.local.pos.clone().applyMatrix4(mw),
+        out: ap.local.out.clone().transformDirection(mw)
+      };
+    }
+    ap.world.size = Math.abs(modelBBDimsWorld.dot(ap.local.out));
+    if (ap.bbfaceIndex != null) {
+      ap.world.faceDims = modelBBFaceDimsWorld[ap.bbfaceIndex];
+    }
+  }
 };
 
 ModelInstance.prototype.setMaterial = function (material) {
@@ -474,22 +568,22 @@ ModelInstance.prototype.setMaterial = function (material) {
 ModelInstance.prototype.alignAndScale = function (targetUp, targetFront, sceneUnit) {
   // Assumes that the model has not been aligned/scaled
   // Aligns and scales the model instance based on the model unit and front/up
-  var model = this.model;
+  const model = this.model;
   if (targetUp && targetFront) {
-    var up = model.getUp();
-    var front = model.getFront();
+    const up = model.getUp();
+    const front = model.getFront();
     Object3DUtil.alignToUpFrontAxes(this.object3D, up, front, targetUp, targetFront);
   }
   if (sceneUnit) {
-    var targetScale = model.getVirtualUnit() / sceneUnit;
+    const targetScale = model.getVirtualUnit() / sceneUnit;
     this.setScale(targetScale);
   }
 };
 
 ModelInstance.prototype.alignAndScaleObject3D = function(object3D, targetUp, targetFront) {
-  var model = this.model;
-  var up = model.getUp();
-  var front = model.getFront();
+  const model = this.model;
+  const up = model.getUp();
+  const front = model.getFront();
   Object3DUtil.alignToUpFrontAxes(object3D, up, front, targetUp, targetFront);
   Object3DUtil.rescaleObject3D(object3D, model.getVirtualUnit());
 };
@@ -519,7 +613,7 @@ ModelInstance.prototype.centerTo = function(relPos) {
 ModelInstance.prototype.scaleBy = function (scale, maintainAttachmentAt) {
   //console.time('scaleBy');
   if (maintainAttachmentAt != undefined) {
-    var oldPosition = Object3DUtil.getBBoxFaceCenter(this.object3D,maintainAttachmentAt);
+    const oldPosition = Object3DUtil.getBBoxFaceCenter(this.object3D,maintainAttachmentAt);
     this.setScale(this.scale * scale);
     Object3DUtil.placeObject3DByBBFaceCenter(this.object3D,oldPosition,maintainAttachmentAt);
   } else {
@@ -530,14 +624,14 @@ ModelInstance.prototype.scaleBy = function (scale, maintainAttachmentAt) {
 
 ModelInstance.prototype.setScale = function (scale) {
   // Debug logging
-  //console.log("Scaling model instance " + this.object3D.id + ", model " + this.model.getFullID() + " to " + scale);
-  //var bbdims = this.getBBoxDims();
+  // console.log("Scaling model instance " + this.object3D.id + ", model " + this.model.getFullID() + " to " + scale);
+  // const bbdims = this.getBBoxDims();
   // console.log("Before bbdims: [" + bbdims.x + "," + bbdims.y + "," + bbdims.z + "]");
   // Actual scaling
   if (this.object3D.parent && this.scale) {
     // Has parent, just do relative scaling
-    var sf = scale / this.scale;
-    var s = this.object3D.scale;
+    const sf = scale / this.scale;
+    const s = this.object3D.scale;
     this.object3D.scale.set(s.x * sf, s.y * sf, s.z * sf);
   } else {
     // No parent, just set our scale
@@ -571,15 +665,15 @@ ModelInstance.prototype.getVirtualUnit = function () {
 };
 
 ModelInstance.prototype.getPhysicalSize = function (sizeBy) {
-  var dims = this.getPhysicalDims();
+  const dims = this.getPhysicalDims();
   return Object3DUtil.convertBbDimsToSize(dims, sizeBy);
 };
 
 ModelInstance.prototype.setToPhysicalSize = function (sizeBy, targetSize) {
-  var dims = this.model.getPhysicalDims();
-  var modelSize = Object3DUtil.convertBbDimsToSize(dims, sizeBy);
+  const dims = this.model.getPhysicalDims();
+  const modelSize = Object3DUtil.convertBbDimsToSize(dims, sizeBy);
   if (modelSize) {
-    var scale = targetSize / modelSize;
+    const scale = targetSize / modelSize;
     this.setScale(scale);
   } else {
     console.error('Unable to get model size using sizeBy ' + this.sizeBy);
@@ -615,7 +709,7 @@ ModelInstance.prototype.rotateWrtBBFace = function (axis, delta, bbface) {
 
 ModelInstance.prototype.setRotation = function (x, y, z) {
   //console.log(this.object3D.position, this.object3D.rotation);
-  var r = this.object3D.rotation;
+  const r = this.object3D.rotation;
   this.rotate(new THREE.Vector3(-r.x,-r.y,-r.z), 'ZYX');
   this.rotate(new THREE.Vector3(x,y,z));
   // Just setting the rotation doesn't quite work (object moved)
@@ -636,7 +730,7 @@ ModelInstance.prototype.setQuaternion = function (x, y, z, w) {
 ModelInstance.prototype.clearRotation = function (undoModelRotation) {
     this.setRotation(0,0,0);
     if (undoModelRotation) {
-      var modelRotation = this.model.object3D.rotation;
+      const modelRotation = this.model.object3D.rotation;
       this.rotate(new THREE.Vector3(-modelRotation.x,-modelRotation.y,-modelRotation.z), 'ZYX');
     }
   };
@@ -651,7 +745,7 @@ ModelInstance.prototype.applyTransform = function (transform) {
 
 ModelInstance.prototype.worldToModel = function(p, out) {
   const inv = new THREE.Matrix4();
-  inv.getInverse(this.modelObject3D.matrixWorld);
+  inv.copy(this.modelObject3D.matrixWorld).invert();
   out = out || new THREE.Vector3();
   out.copy(p);
   out.applyMatrix4(inv);
@@ -676,7 +770,7 @@ ModelInstance.prototype.getNormalizedModelToWorld = function(out) {
 
 ModelInstance.prototype.getWorldToNormalizedModel = function(out) {
   out = this.getNormalizedModelToWorld(out);
-  out.getInverse(out);
+  out.copy(out).invert();
   return out;
 };
 
@@ -688,7 +782,7 @@ ModelInstance.prototype.getOriginalModelToWorld = function(out) {
 
 ModelInstance.prototype.getWorldToOriginalModel = function(out) {
   out = this.getOriginalModelToWorld(out);
-  out.getInverse(out);
+  out.copy(out).invert();
   return out;
 };
 
@@ -700,19 +794,19 @@ ModelInstance.prototype.getBBox = function () {
 };
 
 ModelInstance.prototype.getBBoxDims = function () {
-  var bbox = this.getBBox();
+  const bbox = this.getBBox();
   return bbox.dimensions();
 };
 
 ModelInstance.prototype.__getNormalizedModelBBox = function() {
   // TODO: cache local bounding box?
-  var transform = this.getWorldToNormalizedModel();
+  const transform = this.getWorldToNormalizedModel();
   return Object3DUtil.computeBoundingBox(this.modelObject3D, transform);
 };
 
 ModelInstance.prototype.getSemanticOBB = function(transform) {
-  var bbox = this.__getNormalizedModelBBox();
-  var semanticOBB = new SemanticOBB(new THREE.Vector3(), bbox.getHalfSizes(), new THREE.Matrix4());
+  const bbox = this.__getNormalizedModelBBox();
+  const semanticOBB = new SemanticOBB(new THREE.Vector3(), bbox.getHalfSizes(), new THREE.Matrix4());
   if (transform) {
     if (typeof (transform) === 'string') {
       if (transform === 'world') {
@@ -730,15 +824,15 @@ ModelInstance.prototype.getSemanticOBB = function(transform) {
 };
 
 ModelInstance.prototype.getPhysicalDims = function () {
-  var unscaledPhysicalDims = this.model.getPhysicalDims();
-  var physicalDims = new THREE.Vector3();
+  const unscaledPhysicalDims = this.model.getPhysicalDims();
+  const physicalDims = new THREE.Vector3();
   physicalDims.copy(unscaledPhysicalDims);
   physicalDims.multiply(this.object3D.scale);
   return physicalDims;
 };
 
 ModelInstance.prototype.getUpFrontAxes = function (targetUp, targetFront, snapTo) {
-  var r = new THREE.Quaternion();
+  const r = new THREE.Quaternion();
   if (this.modelBaseObject3D) {
     r.multiplyQuaternions(this.object3D.quaternion, this.modelBaseObject3D.quaternion);
     r.multiplyQuaternions(r, this.modelObject3D.quaternion);
@@ -752,28 +846,66 @@ ModelInstance.prototype.alignObbUpFront = function(obb, targetUp, targetFront) {
   Object3DUtil.alignObjectObbUpFront(this.object3D, obb, targetUp, targetFront);
 };
 
+ModelInstance.prototype.checkBBFaceClear = function(objects, intersectObjects, faceIndex, opts) {
+  var intersectOpts = {
+    intersectBackFaces: true,
+    allowAllModelInstances: true,
+    ignore: [this.object3D],
+    near: opts.near,
+    far: opts.far,
+    callback: opts.callback
+  };
+  var semanticOBB = this.getSemanticOBB('world');
+  var faceNormalDims = BBoxUtil.getFaceNormalDims(semanticOBB.dimensions());
+  var offset = 0.05 * faceNormalDims[faceIndex];
+  intersectOpts.near = Math.max(offset, intersectOpts.near);
+  var sampler = {
+    sample: function(origin, direction) {
+      semanticOBB.sampleFace(faceIndex, origin);
+      direction.copy(BBoxUtil.OutNormals[faceIndex]);
+      semanticOBB.localDirToWorldDir(direction);
+    }
+  };
+  var intersected = RaycasterUtil.getIntersectedForSamples(intersectObjects, sampler, opts.nsamples, intersectOpts);
+  var ratio = intersected / opts.nsamples;
+  return { intersectedCount: intersected, intersectedRatio: ratio, isClear: ratio < opts.isClearThreshold };
+};
+
+
 ModelInstance.prototype.getPartMeshes = function() {
   return Object3DUtil.getMeshList(this.object3D);
 };
 
 ModelInstance.prototype.getUILogInfo = function (detailed) {
-  var logInfo = detailed ? {
+  const logInfo = detailed ? {
     modelIndex: this.index,
     modelId: this.model.getFullID(),
-    category: this.model.getCategory()
+    category: this.model.getCategory(),
+    id: this.object3D.userData.id
   } : {
-    modelIndex: this.index
+    modelIndex: this.index,
+    id: this.object3D.userData.id
   };
   return logInfo;
 };
 
 ModelInstance.getUILogInfo = function (obj, detailed) {
   if (obj instanceof THREE.Object3D) {
-    var selectedInstance = Object3DUtil.getModelInstance(obj);
+    const selectedInstance = Object3DUtil.getModelInstance(obj);
     return selectedInstance.getUILogInfo(detailed);
   } else if (obj instanceof ModelInstance) {
     return obj.getUILogInfo(detailed);
   }
+};
+
+ModelInstance.prototype.getParentObject3D = function() {
+  const anc = Object3DUtil.findFirstAncestor(this.object3D, (node) => (node.userData.id != null || node.index != null), false);
+  return anc? anc.ancestor : undefined;
+};
+
+ModelInstance.prototype.getParentRegion = function() {
+  const anc = Object3DUtil.findFirstAncestor(this.object3D, (node) => (node.userData.type === 'Room'), false);
+  return anc? anc.ancestor : undefined;
 };
 
 // Exports

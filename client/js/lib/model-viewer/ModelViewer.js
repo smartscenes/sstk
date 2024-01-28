@@ -22,6 +22,7 @@ var ImagesPanel = require('ui/ImagesPanel');
 var ColorsPanel = require('ui/ColorsPanel');
 var AlignPanel = require('ui/AlignPanel');
 var PartsPanel = require('ui/PartsPanel');
+var ArticulationsPanel = require('articulations/ui/ArticulationsPanel');
 var AnnotationsPanel = require('ui/AnnotationsPanel');
 
 // Object3D functions
@@ -29,14 +30,18 @@ var Object3DUtil = require('geo/Object3DUtil');
 var BBox = require('geo/BBox');
 
 // Advanced functionality
-var ExportObject3DForm = require('ui/ExportObject3DForm');
+var ImportObject3DForm = require('ui/modal/ImportObject3DForm');
+var ExportObject3DForm = require('ui/modal/ExportObject3DForm');
+var ProjectAnnotationsForm = require('ui/modal/ProjectAnnotationsForm');
 var MeshSampling = require('geo/MeshSampling');
-var ModelInstanceVoxels = require('model/ModelInstanceVoxels');
 var LightProbe = require('geo/LightProbe');
+var SceneUtil = require('scene/SceneUtil');
 // var ViewOptimizer = require('gfx/ViewOptimizer');
 
 
 // Util
+var TabsControl = require('ui/TabsControl');
+var UIUtil = require('ui/UIUtil');
 var keymap = require('controls/keymap');
 var _ = require('util/util');
 
@@ -87,14 +92,14 @@ ModelViewer.SymmetryPlanes = [null, 'nd']; // 'X', 'Y', 'Z' ];
 function ModelViewer(params) {
   params = (params instanceof Element) ? { container: params } : params;
   this.params = params;
-  this.urlParams = _.getUrlParams();
   var defaults = {
-    appId: 'ModelViewer.v1-20200615',
+    appId: 'ModelViewer.v1-20220206',
     useDatGui: true,
     useAmbientOcclusion: false,
     nImagesPerModel: 14,
     useShadows: true,
-    usePhysicalLights: false
+    allowCameraControlToggle: true,
+    colorByOptions: { color: '#fef9ed' }
   };
   var allParams = _.defaultsDeep(Object.create(null), this.urlParams, params, defaults);
 
@@ -107,8 +112,15 @@ function ModelViewer(params) {
   this.showSearchSimilar = params.showSearchSimilar;
   this.showSearchSortOption = params.showSearchSortOption || false;
 
-  this._tabs = params.tabs;
-  this._tabsElement = $(params.tabsDiv || '#tabs');
+  // Tabs
+  this.__tabsControl = new TabsControl({
+    tabs: params.tabs,
+    tabsDiv: params.tabsDiv,
+    onTabActivated: tab => this.__onTabActivated(tab)
+    //keymap: keymap
+  });
+  this.__tabsControl.hookupFunctions(this);
+
   this._includeTestModels = params.includeTestModels;
   this._useNewImages = params.useNewImages;
   Viewer3D.call(this, allParams);
@@ -144,6 +156,19 @@ function ModelViewer(params) {
   this.enableMirrors = allParams['enableMirrors'];
   this.useDirectionalLights = allParams['useDirectionalLights'];
   this.supportArticulated = allParams.supportArticulated;
+  this.allowCameraControlToggle = allParams.allowCameraControlToggle;
+  this.saveImageModifierKey = allParams.saveImageModifierKey;
+  this.allowMagicColors = (params.allowMagicColors !== undefined) ? params.allowMagicColors : false;
+  this.colorBy = allParams['colorBy'] || 'original';
+  this.colorByOptions = allParams.colorByOptions;
+  this.defaultLoadOptions = _.defaults(Object.create(null),
+    allParams['modelOptions'] || {},
+    {
+      skipLines: false,
+      skipPoints: false,
+      filterEmptyGeometries: false
+    }
+  );
 }
 
 ModelViewer.prototype = Object.create(Viewer3D.prototype);
@@ -162,69 +187,86 @@ Object.defineProperty(ModelViewer.prototype, 'modelOpacity', {
   }
 });
 
+Object.defineProperty(ModelViewer.prototype, 'colorBy', {
+  get: function () { return this.__colorBy; },
+  set: function (v) {
+    this.__colorBy = v;
+    this.refreshModelMaterials();
+  }
+});
+
+ModelViewer.prototype.refreshModelMaterials = function() {
+  var targetObject = this.getTargetObject3D();
+  if (targetObject) {
+    this.__revertObjectMaterials(targetObject, false);
+  }
+};
+
+ModelViewer.prototype.__revertObjectMaterials = function (object3D, nonrecursive) {
+  Object3DUtil.revertMaterials(object3D, nonrecursive, true);
+  this.colorByOptions.colorBy = this.__colorBy;
+  if (this.__colorBy) {
+    SceneUtil.recolorObject(object3D);
+    if (this.__colorBy !== 'original') {
+      var ensureVertexColors = (this.__colorBy === 'faceIndex' || this.__colorBy === 'triuv');
+      this.colorByOptions.ensureVertexColors = ensureVertexColors;
+      SceneUtil.colorObject3D(object3D, this.colorByOptions);
+    }
+  }
+};
+
 ModelViewer.prototype.registerCustomModelAssetGroup = function(assetIdsFile, jsonFile, autoLoad) {
   this.registerCustomAssetGroup(this.modelSearchController, assetIdsFile, jsonFile, autoLoad);
 };
 
-ModelViewer.prototype.loadLocalModel = function (localFile) {
-  this.clearAndLoadModel({
-    file: localFile
-  });
-};
-
-ModelViewer.prototype.__getTabIndex = function (name, defaultIndex) {
-  var i = this._tabs? this._tabs.indexOf(name) : undefined;
-  if (i >= 0) return i;
-  else return defaultIndex;
-};
-
-ModelViewer.prototype.getActiveTab = function() {
-  var active = this._tabsElement.tabs( "option", "active" );
-  return this._tabs? this._tabs[active] : active;
+ModelViewer.prototype.loadLocalModel = function (localFile, opts) {
+  this.clearAndLoadModel(_.defaults({
+    file: localFile,
+    options: _.defaults({
+      ignoreMtlError: true,
+      autoAlign: this.assetManager.autoAlignModels,
+      autoScale: this.assetManager.autoScaleModels
+    }, this.defaultLoadOptions)
+  }, opts || {}));
 };
 
 ModelViewer.prototype.selectAlignTab = function () {
-  this._tabsElement.tabs({ active: this.__getTabIndex('align') });
+  this.activateTab('align');
 };
 
 ModelViewer.prototype.selectPartsTab = function () {
-  this._tabsElement.tabs({ active: this.__getTabIndex('parts') });
+  this.activateTab('parts');
 };
 
 ModelViewer.prototype.selectSearchTab = function (source) {
   if (source === 'textures') {
-    this._tabsElement.tabs({ active: this.__getTabIndex('textures') });
+    this.activateTab('textures');
   } else {
-    this._tabsElement.tabs({ active: this.__getTabIndex('models') });
+    this.activateTab('models');
     if (source) {
       this.modelSearchController.selectSource(source);
     }
   }
 };
 
-ModelViewer.prototype.__initTabs = function() {
-  var scope = this;
-  // ['models', 'images', 'align', 'textures', 'colors', 'parts', 'annotations']
-  this._tabsElement.bind('tabsactivate', function (event, ui) {
-    var tab = scope.getActiveTab();
-    keymap.setScope(tab);
-    switch (tab) {
-      case 'models':
-        scope.modelSearchController.onResize();
-        break;
-      case 'textures':
-        scope.textureSearchController.onResize();
-        break;
-      case 'images':
-        scope.modelImagesPanel.onResize();
-        break;
-      case 'parts':
-        if (_.get(scope, ['partsPanel', 'meshHierarchy', 'isVisible'])) {
-          keymap.setScope('parts.meshHierarchy');
-        }
-        break;
-    }
-  });
+ModelViewer.prototype.__onTabActivated = function(tab) {
+  keymap.setScope(tab);
+  switch (tab) {
+    case 'models':
+      this.modelSearchController.onResize();
+      break;
+    case 'textures':
+      this.textureSearchController.onResize();
+      break;
+    case 'images':
+      this.modelImagesPanel.onResize();
+      break;
+    case 'parts':
+      if (_.get(this, ['partsPanel', 'meshHierarchy', 'isVisible'])) {
+        keymap.setScope('parts.meshHierarchy');
+      }
+      break;
+  }
 };
 
 // i.e. get full id
@@ -265,9 +307,7 @@ ModelViewer.prototype.init = function () {
     defaultLightState: this.urlParams['defaultLightState'],
     supportArticulated: this.supportArticulated,
   });
-  this.assetManager.Subscribe('dynamicAssetLoaded', this, function(d) {
-    this._dynamicAssets.push(d);
-  }.bind(this));
+  this.assetManager.watchDynamicAssets(this, '_dynamicAssets');
   this.modelSearchController = new SearchController({
     assetFilters: { model: { sourceFilter: '+source:(' + this.modelSources.join(' OR ') + ')' }},
     searchSucceededCallback: this.modelSearchSucceeded.bind(this),
@@ -366,6 +406,12 @@ ModelViewer.prototype.init = function () {
           defaultPartType: this.urlParams['defaultPartType'],
           defaultLabelType: this.urlParams['defaultLabelType'],
           allowVoxels: this.urlParams['allowVoxels'],
+          allowAllSupportedParts: this.urlParams['allowAllSupportedParts'],
+          includeDefaultLabelRemaps: this.urlParams['includeDefaultLabelRemaps'],
+          skipSegmentedObject3D: this.urlParams['skipSegmentedObject3D'],
+          targetElementType: this.urlParams['targetElementType'],
+          obbAlignPartType: this.urlParams['obbAlignPartType'],
+          obbAlignTask: this.urlParams['obbAlignTask'],
           meshHierarchy: {
             allowLabeling: this.urlParams['editHierarchy'],
             allowEditHierarchy: this.urlParams['editHierarchy'],
@@ -393,6 +439,10 @@ ModelViewer.prototype.init = function () {
         }
      );
     this.partsPanel = new PartsPanel(partsPanelParams);
+    this.articulationsPanel = new ArticulationsPanel({
+      container: $('#articulationsPanel'),
+      assetManager: this.assetManager
+    });
   }
 
   var imageIndexElem = $('#imageIndex');
@@ -411,6 +461,8 @@ ModelViewer.prototype.init = function () {
         imageIndexElem.hide();
       }
       this.modelSearchController.updatePreviewImages(this.assetManager.previewImageIndex);
+      // Use default preview images for textureSearchController
+      this.textureSearchController.updatePreviewImages(-1);
     }.bind(this);
     imageIndexElem.change(selectImagePreviewFunc);
 
@@ -430,13 +482,12 @@ ModelViewer.prototype.init = function () {
       'motif', 'support', 'symType', 'contactPoint',
       'color', 'material', 'shape', 'depicts',
       'state', 'usedFor', 'foundIn', 'hasPart', 'attr',
-      'isContainerLike', 'isCornerPiece',
       'needCleaning', 'isCornerPiece', 'isContainerLike',
       'isSingleCleanObject', 'hasMultipleObjects', 'hasNestedObjects',
       'isArrangement', 'isCollection',
       'modelQuality', 'geometryQuality', 'textureQuality', 'segmentationQuality', 'articulatabilityQuality',
       'baseVariantId' ];
-    var readOnlyAttributes = ['id', 'datasets', 'isAligned', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
+    var readOnlyAttributes = ['id', 'datasets', 'isAligned', 'simClusterIds', 'isContainerLike', 'weight', 'volume', 'solidVolume', 'surfaceVolume',
       'staticFrictionForce' /*, "aligned.dims" */];
     var attributeInfos = {
       'modelQuality': { min: 0, max: 10, step: 1, description: 'overall quality of model (0 = no geometry, 10 = perfect)' },
@@ -500,8 +551,10 @@ ModelViewer.prototype.init = function () {
   this.scene.add(this.debugNode);
   this.scene.add(this.controlsNode);
 
-  this.setupLocalLoading(this.loadLocalModel.bind(this));
-  this.setupRegisterCustomAssetGroupUI(this.modelSearchController);
+  this.setupLocalLoading((file) => {
+    var opts = this.__importObject3DForm? this.__importObject3DForm.config : null;
+    this.loadLocalModel(file, opts);
+  });
 
   var format = this.urlParams['format'];
   if (format) {
@@ -511,7 +564,7 @@ ModelViewer.prototype.init = function () {
   if (!this.skipLoadInitialModel) {
     this.loadInitialModel();
   }
-  this.__initTabs();
+  this.__tabsControl.initTabs();
   var action = this.urlParams['action'];
   if (action === 'align') {
     this.selectAlignTab();
@@ -522,9 +575,11 @@ ModelViewer.prototype.init = function () {
     }
   }
   if (this.useDirectionalLights) {
-    Lights.addSimple2LightSetup(this.camera, new THREE.Vector3(0, 0, 0), true);
+    this.lights = Lights.addSimple2LightSetup(this.camera, new THREE.Vector3(0, 0, 0), true);
   } else {
-    this.scene.add(this.createDefaultLight());
+    var hemisphereLight = this.createDefaultLight();
+    this.scene.add(hemisphereLight);
+    this.lights = { hemisphere: hemisphereLight };
   }
   this.renderer = new Renderer({
     container: this.container,
@@ -537,6 +592,7 @@ ModelViewer.prototype.init = function () {
     useOutlineShader: true,
     outlineHighlightedOnly: true
   });
+  AssetManager.enableCompressedLoading(this.renderer.renderer);
   this.renderer.domElement.addEventListener('dblclick', this.selectMesh.bind(this), false);
   this.renderer.domElement.addEventListener('click', this.handleMouseClick.bind(this), false);
   this.renderer.domElement.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
@@ -614,15 +670,15 @@ ModelViewer.prototype.setupInstructions = function () {
       'Left click = Orbit view<br>' +
       'Right click = Pan view<br>' +
       'Mouse wheel = Zoom view<br>' +
-      'P = Previous model (in search results)<br>' +
-      'N = Next model<br>' +
-      'I = Save image<br>' +
-      'T = Toggle controller mode<br>' +
-      'Left/Right/Up/Down arrow key = Realign model<br>' +
+      (this.allowPrevNext? 'P = Previous model (in search results)<br>': '') +
+      (this.allowPrevNext? 'N = Next model<br>':'') +
+      (this.saveImageModifierKey? _.capitalize(this.saveImageModifierKey) + '-' : '') + 'I = Save image<br>' +
+      (this.allowCameraControlToggle? 'T = Toggle controller mode<br>':'') +
+      (this.alignPanel? 'Left/Right/Up/Down arrow key = Realign model<br>':'') +
       'PgUp/PgDown = Next/Prev part<br>' +
       'Dblclick = Select mesh<br>' +
       'Shift+dblclick = Toggle light<br>' +
-      'Shift+Meta+dblclick = Articulate<br>' +
+      (this.supportArticulated? 'Shift+Meta+dblclick = Articulate<br>':'') +
       'Meta+dblclick = Highlight part<br>' +
       'Shift+R = Reset camera<br>' +
       'Shift+H = Submit current alignment<br>' +
@@ -665,6 +721,44 @@ ModelViewer.prototype.setupDatGui = function () {
     Viewer3D.prototype.setupDatGui.call(this);
     this.datgui.add(this, 'modelOpacity', 0, 1).name('Model opacity').listen();
 
+    var showAll = !(this.useDatGui instanceof Object);
+    var options = (this.useDatGui instanceof Object) ? this.useDatGui : {};
+    if (showAll || options['lights'] && this.lights) {
+      var lightsGui = this.datgui.getFolder('lights');
+      if (this.lights.ambient) {
+        lightsGui.add(this.lights.ambient, 'intensity', 0, 10).step(0.05).listen();
+        lightsGui.addColor(this.lights.ambient, 'color').listen();
+        lightsGui.addColor(this.lights.ambient, 'groundColor').listen();
+      }
+      if (this.lights.hemisphere) {
+        lightsGui.add(this.lights.hemisphere, 'intensity', 0, 10).step(0.05).listen();
+        lightsGui.addColor(this.lights.hemisphere, 'color').listen();
+        lightsGui.addColor(this.lights.hemisphere, 'groundColor').listen();
+      }
+    }
+
+    if (this.allowMagicColors) {
+      if (showAll || options['showColors']) {
+        // setup coloring submenu
+        // TODO: allow reverting to original colors
+        var supportedColorByTypes = ['original'].concat(SceneUtil.ColorByTypesObject);
+        var colorsGui = this.datgui.getFolder('coloring');
+        colorsGui.add(this, 'colorBy', supportedColorByTypes).listen();
+        colorsGui.addColor(this.colorByOptions, 'color').listen().onChange(() => {
+          if (this.colorBy === 'color') {
+            this.refreshModelMaterials();
+          }
+        });
+      }
+    }
+
+    if (showAll || options['loadOptions']) {
+      var loadGui = this.datgui.getFolder('loading');
+      loadGui.add(this.defaultLoadOptions, 'skipLines').listen();
+      loadGui.add(this.defaultLoadOptions, 'skipPoints').listen();
+      loadGui.add(this.defaultLoadOptions, 'filterEmptyGeometries').listen();
+    }
+
     // Some debug utilities
     var scope = this;
     this.datgui.add({
@@ -672,6 +766,8 @@ ModelViewer.prototype.setupDatGui = function () {
         var target = scope.getTarget();
         if (target) {
           scope.fitPartsOBB(target, { checkAABB: true, debug: true });
+        } else {
+          scope.showWarning('Please load a model before attempting to fit part obbs');
         }
       }
     }, 'fitPartsOBB').listen();
@@ -680,6 +776,8 @@ ModelViewer.prototype.setupDatGui = function () {
         var target = scope.getTarget();
         if (target) {
           scope.showCreateVoxelsPanel(target);
+        } else {
+          scope.showWarning('Please load a model before attempting to create voxels');
         }
       }
     }, 'createVoxels').listen();
@@ -688,6 +786,8 @@ ModelViewer.prototype.setupDatGui = function () {
         var target = scope.getTarget();
         if (target) {
           scope.showSamplePointsPanel(target);
+        } else {
+          scope.showWarning('Please load a model before attempting to sample points');
         }
       }
     }, 'samplePoints').listen();
@@ -696,9 +796,67 @@ ModelViewer.prototype.setupDatGui = function () {
         var target = scope.getTarget();
         if (target) {
           scope.showSegmentModelPanel(target);
+        } else {
+          scope.showWarning('Please load a model before attempting to segment model');
         }
       }
     }, 'segmentModel').listen();
+    this.datgui.add({
+      addGeometry: function() {
+        var target = scope.getTarget();
+        if (target) {
+          var AddGeometryForm = require('ui/modal/AddGeometryForm');
+          scope.__addGeometryForm = scope.__addGeometryForm || new AddGeometryForm({
+            warn: function(msg) { scope.showWarning(msg); },
+          });
+          scope.__addGeometryForm.show(target, (err, object3D) => {
+            if (err) {
+              scope.showWarning('Error adding geometry');
+            } else {
+              scope.setExtraDebugNode('addedGeometry', object3D);
+            }
+          });
+        } else {
+          scope.showWarning('Please load a model before attempting to add geometry');
+        }
+      }
+    }, 'addGeometry').listen();
+    this.datgui.add({
+      propagateSegmentAnnotations: function() {
+        var target = scope.getTarget();
+        if (target) {
+          scope.__propagationAnnotationsForm = scope.__propagationAnnotationsForm || new ProjectAnnotationsForm({
+            assetManager: scope.assetManager,
+            allowExtraOptions: true,
+            onProjected: function(projectedData) {
+              scope.showMessage('Projection successful');
+              // console.log(projectedData);
+              if (projectedData.segmented) {
+                Object3DUtil.applyRandomMaterials(projectedData.segmented);
+                scope.setExtraDebugNode('segmentedObject', projectedData.segmented);
+              }
+            },
+            warn: function(msg) { scope.showWarning(msg); }
+          });
+          scope.__propagationAnnotationsForm.show(target);
+        } else {
+          scope.showWarning('Please load a model before attempting to propagate annotations');
+        }
+      }
+    }, 'propagateSegmentAnnotations').listen();
+    this.datgui.add({
+      importModel: function() {
+        scope.__importObject3DForm = scope.__importObject3DForm || new ImportObject3DForm({
+          import: function(opts) {
+            UIUtil.popupFileInput(file => {
+              scope.loadLocalModel(file, opts);
+            });
+          },
+          warn: function(msg) { scope.showWarning(msg); }
+        });
+        scope.__importObject3DForm.show();
+      }
+    }, 'importModel').listen();
     this.datgui.add({
       exportModel: function() {
         var target = scope.getTarget();
@@ -708,6 +866,8 @@ ModelViewer.prototype.setupDatGui = function () {
             warn: function(msg) { scope.showWarning(msg); }
           });
           scope.__exportObject3DForm.show(target);
+        } else {
+          scope.showWarning('Please load a model before attempting to export model');
         }
       }
     }, 'exportModel').listen();
@@ -744,6 +904,45 @@ ModelViewer.prototype.setupDatGui = function () {
         }
       }
     }, 'showBillboards').listen();
+    this.datgui.add({
+      showAttachmentCandidates: function() {
+        var object3D = scope.getTargetObject3D();
+        if (object3D) {
+          var ModelUtil = require('model/ModelUtil');
+          var modelInfo = scope.getTarget().model.info;
+          var waitId = scope.addWaitingToQueue('compute');
+          var attachments = ModelUtil.identifyObjectAttachments(object3D, modelInfo, { lineWidth: 1 });
+          if (attachments.length > 0) {
+            var group = new THREE.Group();
+            for (var attachment of attachments) {
+              group.add(attachment.vizNode);
+            }
+            scope.setExtraDebugNode('attachmentContactsBbox', group);
+          }
+          scope.removeWaiting(waitId,'compute');
+        }
+      }
+    }, 'showAttachmentCandidates').listen();
+    this.datgui.add({
+      showSupportSurfaces: function() {
+        var object3D = scope.getTargetObject3D();
+        if (object3D) {
+          var ModelUtil = require('model/ModelUtil');
+          var waitId = scope.addWaitingToQueue('compute');
+          var supportSurfaces = ModelUtil.identifySupportSurfaces(object3D, {},{ lineWidth: 1 });
+          if (supportSurfaces.length > 0) {
+            console.log('Support surfaces', supportSurfaces);
+            console.log('Support surfaces json', supportSurfaces.map(s => s.toJSON()));
+            var group = new THREE.Group();
+            for (var supportSurface of supportSurfaces) {
+              group.add(supportSurface.vizNode);
+            }
+            scope.setExtraDebugNode('supportSurface', group);
+          }
+          scope.removeWaiting(waitId,'compute');
+        }
+      }
+    }, 'showSupportSurfaces').listen();
     this.datgui.add({
       clearExtra: function() {
         scope.clearExtraDebugNodes();
@@ -784,6 +983,8 @@ ModelViewer.prototype.applyMaterial = function (material) {
 
 ModelViewer.prototype.loadModel = function (source, id, metadata) {
 //  var modelInfo = this.assetManager.getLoadModelInfo(source, id, metadata);
+  metadata.options = metadata.options || {};
+  _.merge(metadata.options, this.defaultLoadOptions);
   this.clearAndLoadModel(metadata);
 };
 
@@ -939,6 +1140,9 @@ ModelViewer.prototype.onModelLoad = function (modelInstance) {
       keymap.setScope('parts.meshHierarchy');
     }
   }
+  if (this.articulationsPanel) {
+    this.articulationsPanel.init(modelInstance.object3D);
+  }
   if (this.annotationsPanel) {
     this.annotationsPanel.setTarget(modelInstance, false, Object3DUtil.getBoundingBox(modelInstance.object3D));
   }
@@ -1085,10 +1289,14 @@ ModelViewer.prototype.keyHandler = function (event) {
       }
       break;
     case 'I':
-      this.saveImage();
+      if (this.saveImageModifierKey == null || event[this.saveImageModifierKey + 'Key']) {
+        this.saveImage();
+      }
       break;
     case 'T':
-      this.toggleControlType();
+      if (this.allowCameraControlToggle) {
+        this.toggleControlType();
+      }
       break;
     case 'G':
       if (event.shiftKey) {
@@ -1152,7 +1360,7 @@ ModelViewer.prototype.showSamplePointsPanel = function(target) {
   ];
   var scope = this;
   bootbox.form({
-    title: 'Create voxels',
+    title: 'Sample Points',
     inputs: questions,
     callback: function(results) {
       if (results) {
@@ -1212,7 +1420,9 @@ ModelViewer.prototype.showContactPoint = function(p, visible) {
     var target = this.getTargetObject3D();
     if (target) {
       var color = 'blue';
-      var bbox = Object3DUtil.getBoundingBox(target);
+      target.updateMatrixWorld(true);
+      var transform = Object3DUtil.getModelMatrixWorldInverse(target);
+      var bbox = Object3DUtil.computeBoundingBox(target, transform);
       var r = bbox.dimensions().length() * 0.01;
       ball = Object3DUtil.makeBall(new THREE.Vector3(), r, color);
       this.setModelNode('contactPoint', ball);
@@ -1234,9 +1444,10 @@ ModelViewer.prototype.samplePoints = function(target, opts) {
   var meshes = Object3DUtil.getMeshList(mInstObject3D);
   var samples = MeshSampling.getMeshesSurfaceSamples(meshes, opts.numSamples);
   var flatSamples = _.flatten(samples);
+  var pointSize = Object3DUtil.getBoundingBox(mInstObject3D).radius() / 50;
   //console.log(flatSamples);
   var sampledPoints = new THREE.Group();
-  var sphere = new THREE.SphereGeometry(1, 5, 5);
+  var sphere = new THREE.SphereGeometry(pointSize, 5, 5);
   flatSamples.forEach(function (s) {
     var material = new THREE.MeshPhongMaterial({ color: s.color });
     var m = new THREE.Mesh(sphere, material);
@@ -1261,141 +1472,34 @@ ModelViewer.prototype.fitPartsOBB = function(target, opts) {
 };
 
 ModelViewer.prototype.showCreateVoxelsPanel = function(target) {
-  this.__createVoxelConfig = this.__createVoxelConfig ||
-      { voxelsField: 'none', downsampleBy: 1, numSamples: 100000, samplesPerVoxel: 0, dim: 32,
-        limitToVisible: true, useTwoPass: true, center: true, useMaterialScores: true, exportToFile: false};
-
-  // Requires special bootbox with form support
-  var questions = [
-    {
-      "title": "Voxels to use",
-      "name": "voxelsField",
-      "inputType": "select",
-      "inputOptions": _.map(['none', 'voxels-surface', 'voxels-solid'], function(x) { return { text: x, value: x }; }),
-      "value": this.__createVoxelConfig.voxelsField
-    },
-    {
-      "title": "Number of samples",
-      "name": "numSamples",
-      "inputType": "number",
-      "value": this.__createVoxelConfig.numSamples
-    },
-    {
-      "title": "Number of samples to ensure for each voxel (used when working with existing voxelization)",
-      "name": "samplesPerVoxel",
-      "inputType": "number",
-      "value": this.__createVoxelConfig.samplesPerVoxel
-    },
-    {
-      "title": "Resolution",
-      "name": "dim",
-      "inputType": "number",
-      "value": this.__createVoxelConfig.dim
-    },
-    {
-      "title": "Downsample by",
-      "name": "downsampleBy",
-      "inputType": "number",
-      "value": this.__createVoxelConfig.downsampleBy
-    },
-    {
-      "title": "Limit to visible triangles",
-      "name": "limitToVisible",
-      "inputType": "boolean",
-      "value": this.__createVoxelConfig.limitToVisible
-    },
-    {
-      "title": "Use two pass",
-      "name": "useTwoPass",
-      "inputType": "boolean",
-      "value": this.__createVoxelConfig.useTwoPass
-    },
-    {
-      "title": "Export NRRD",
-      "name": "exportToFile",
-      "inputType": "boolean",
-      "value": this.__createVoxelConfig.exportToFile
-    }
-  ];
-  var scope = this;
-  bootbox.form({
-    title: 'Create voxels',
-    inputs: questions,
-    callback: function(results) {
-      if (results) {
-        _.each(questions, function(q,i) {
-          scope.__createVoxelConfig[q.name] = results[i];
-        });
-        scope.createVoxels(target, scope.__createVoxelConfig);
+  var CreateVoxelsForm = require('ui/modal/CreateVoxelsForm');
+  this.__createVoxelsForm = this.__createVoxelsForm || new CreateVoxelsForm({
+    onVoxelsCreated: (colorVoxels) => {
+      //colorVoxels.voxelGrid.__compare(partsPanel.colorVoxels.voxelGrid);
+      if (this.partsPanel) {
+        // Rely on parts panel to manage custom voxels
+        this.partsPanel.addCustomVoxels('voxels-color-custom', colorVoxels);
+      } else {
+        // Track voxels on our own
+        this.setExtraDebugNode('colorVoxels', colorVoxels.getVoxelNode());
       }
     }
   });
-};
-
-ModelViewer.prototype.createVoxels = function(target, opts) {
-  console.log('createVoxels', opts);
-  var scope = this;
-  target.voxels = new ModelInstanceVoxels({ name: 'custom-voxels', voxelsField: opts.voxelsField });
-  target.voxels.init(target);
-  target.voxels.createColorVoxels(opts, function (colorVoxels) {
-    //colorVoxels.voxelGrid.__compare(partsPanel.colorVoxels.voxelGrid);
-    if (scope.partsPanel) {
-      // Rely on parts panel to manage custom voxels
-      scope.partsPanel.addCustomVoxels('voxels-color-custom', colorVoxels);
-    } else {
-      // Track voxels on our own
-      this.setExtraDebugNode('colorVoxels', colorVoxels.getVoxelNode());
-    }
-    if (opts.exportToFile) {
-      var NRRDExporter = require('exporters/NRRDExporter');
-      var nrrdexp = new NRRDExporter();
-      nrrdexp.export(colorVoxels.getVoxelGrid(), {content: target.model.info.fullId + '_rgb.vox', name: target.model.info.fullId});
-    }
-  });
+  this.__createVoxelsForm.show(target);
 };
 
 ModelViewer.prototype.showSegmentModelPanel = function(target) {
-  this.__segmentObjectConfig = this.__segmentObjectConfig ||
-    { method: 'clustering', adjFaceNormSimThreshold: 0.9 };
-
-  // Requires special bootbox with form support
-  var questions = [
-    {
-      "title": "Method to use",
-      "name": "method",
-      "inputType": "select",
-      "inputOptions": _.map(['clustering', 'connectivity'], function(x) { return { text: x, value: x }; }),
-      "value": this.__segmentObjectConfig.method
+  var SegmentObjectForm = require('ui/modal/SegmentObjectForm');
+  this.__segmentObjectForm = this.__segmentObjectForm || new SegmentObjectForm({
+    config: {
+      createSegmented: true
     },
-    {
-      "title": "Similarity",
-      "name": "adjFaceNormSimThreshold",
-      "inputType": "number",
-      "value": this.__segmentObjectConfig.adjFaceNormSimThreshold
-    }
-  ];
-  var scope = this;
-  bootbox.form({
-    title: 'Segment object',
-    inputs: questions,
-    callback: function(results) {
-      if (results) {
-        _.each(questions, function(q,i) {
-          scope.__segmentObjectConfig[q.name] = results[i];
-        });
-        scope.segmentModel(target, scope.__segmentObjectConfig);
-      }
+    onSegmented: (segmented) => {
+      Object3DUtil.applyRandomMaterials(segmented);
+      this.setExtraDebugNode('segmentedObject', segmented);
     }
   });
-};
-
-ModelViewer.prototype.segmentModel = function(target, opts) {
-  var ObjectSegmentator = require('geo/ObjectSegmentator');
-  var segmentator = new ObjectSegmentator();
-  var cloned = target.object3D.clone();
-  cloned = segmentator.segmentObject(cloned, opts);
-  Object3DUtil.applyRandomMaterials(cloned);
-  this.setExtraDebugNode('segmentedObject', cloned);
+  this.__segmentObjectForm.show(target);
 };
 
 ModelViewer.prototype.lookAt = function (scene, objects) {
@@ -1510,7 +1614,7 @@ ModelViewer.prototype.handleMouseMove = function(event) {
   event.preventDefault();
   var target = this.getTarget();
   if (target && this.mouseMode == null) {
-    if (!target.object3D.visible && this.partsPanel.getDebugNode().visible) {
+    if (!target.object3D.visible && this.partsPanel && this.partsPanel.getDebugNode().visible) {
       var mouse = this.picker.getCoordinates(this.container, event);
       var intersects = this.picker.getIntersectedDescendants(mouse.x, mouse.y, this.camera, [this.partsPanel.getDebugNode()]);
       this.partsPanel.onPartHovered(intersects);
@@ -1519,7 +1623,7 @@ ModelViewer.prototype.handleMouseMove = function(event) {
 };
 
 ModelViewer.prototype.__clickPart = function(event, target, mode) {
-  if (!target.object3D.visible && this.partsPanel.getDebugNode().visible) {
+  if (!target.object3D.visible && this.partsPanel && this.partsPanel.getDebugNode().visible) {
     var mouse = this.picker.getCoordinates(this.container, event);
     var intersects = this.picker.getIntersectedDescendants(mouse.x, mouse.y, this.camera, [this.partsPanel.getDebugNode()]);
     if (intersects.length > 0) {
@@ -1595,23 +1699,34 @@ ModelViewer.prototype.articulateModelInstance = function (modelInstance, selecte
     selectedArticulated = anc? anc.ancestor: null;
   }
   if (modelInstance) {
-    var capabilities = modelInstance.queryCapabilities(this.assetManager);
-    if (capabilities.articulation) {
-      var cap = capabilities.articulation;
-      //console.log('clicked', clickedMesh.userData);
+    if (this.articulationsPanel) {
+      let widgets;
       if (selectedArticulated) {
-        let pid = selectedArticulated.userData.articulatablePartId;
-        if (pid === cap.getActivePartId()) {
-          cap.toggle();
-        } else {
-          if (cap.selectPart(pid) >= 0) {
-            cap.turnOn();
-          } else {
-            cap.toggle();
-          }
-        }
+        const pid = selectedArticulated.userData.articulatablePartId;
+        widgets = this.articulationsPanel.getWidgetsForPart(pid);
       } else {
-        cap.toggle();
+        widgets = this.articulationsPanel.getWidgets(0);
+      }
+      widgets.player.toggle();
+    } else {
+      const capabilities = modelInstance.queryCapabilities(this.assetManager);
+      if (capabilities.articulation) {
+        var cap = capabilities.articulation;
+        //console.log('clicked', clickedMesh.userData);
+        if (selectedArticulated) {
+          const pid = selectedArticulated.userData.articulatablePartId;
+          if (pid === cap.getActivePartId()) {
+            cap.toggle();
+          } else {
+            if (cap.selectPart(pid) >= 0) {
+              cap.turnOn();
+            } else {
+              cap.toggle();
+            }
+          }
+        } else {
+          cap.toggle();
+        }
       }
     }
   }

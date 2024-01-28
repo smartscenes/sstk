@@ -10,11 +10,12 @@ var Object3DUtil = require('geo/Object3DUtil');
 var Lights = require('gfx/Lights');
 var Materials = require('materials/Materials');
 var PubSub = require('PubSub');
+var WaitPubSubMultiQueue = require('util/WaitPubSubMultiQueue');
 var Renderer = require('gfx/Renderer');
 var System = require('system');
 var FileUtil = require('io/FileUtil');
 var UIUtil = require('ui/UIUtil');
-var dat = require('dat.gui');
+var dat = require('ui/datGui');
 var keymap = require('controls/keymap');
 var Stats = require('stats');
 var _ = require('util/util');
@@ -40,11 +41,23 @@ var _ = require('util/util');
  * @param [params.showStats=false] {boolean} Whether to show javascript performance stats panel
  * @param [params.useClippingPlanes=false] {boolean} Whether to support clipping planes
  * @param [params.clipOnLookAt=false] {boolean} Whether to automatically set clipping planes on lookAt
+ * @param [params.useOverlayMessages=false] {boolean} Whether to use overlay alert messages
  * @constructor
  */
 var Viewer3D = function (params) {
   PubSub.call(this);
-
+  params = _.defaults(params, {
+    useEnvMap: true,
+    useBackground: false,
+    useEDLShader: false,
+    useShadows: false,
+    lightsOn: false,
+    useAmbientOcclusion: false,
+    ambientOcclusionType: 'ssao',
+    usePhysicalLights: true,
+    useOverlayMessages: false
+  });
+  this.urlParams = this.getUrlParams();
   this.__options = params;
   this.appId = params.appId;
   this.system = System;
@@ -60,12 +73,13 @@ var Viewer3D = function (params) {
   this.loadingIconUrl = (params.loadingIconUrl !== undefined) ? params.loadingIconUrl : Constants.defaultLoadingIconUrl;
   this.maxGridCells = (params.maxGridCells !== undefined)? params.maxGridCells : 200;
 
-  this.useAmbientOcclusion = (params.useAmbientOcclusion !== undefined) ? params.useAmbientOcclusion : false;
-  this.ambientOcclusionType = params.ambientOcclusionType || 'ssao';
-  this.useEDLShader = (params.useEDLShader !== undefined) ? params.useEDLShader : false;
-  this.useShadows = (params.useShadows !== undefined) ? params.useShadows : false;
-  this.lightsOn = (params.lightsOn !== undefined) ? params.lightsOn : false;
-  this.usePhysicalLights = (params.usePhysicalLights !== undefined) ? params.usePhysicalLights : false;
+  this.useAmbientOcclusion = params.useAmbientOcclusion;
+  this.ambientOcclusionType = params.ambientOcclusionType;
+  this.useEDLShader = params.useEDLShader;
+  this.useShadows = params.useShadows;
+  this.lightsOn = params.lightsOn;
+  this.usePhysicalLights = params.usePhysicalLights;
+  this.useOverlayMessages = params.useOverlayMessages;
 
   this.cameraControls = null;
   this.camera = null;
@@ -89,6 +103,7 @@ var Viewer3D = function (params) {
   this.controlTypesMap = _.invert(this.controlTypes);
   this._controlTypeIndex = 0;
   this.controlType = this.controlTypes[this._controlTypeIndex];
+  this.fixedWidthToHeightRatio = false;
 
   // Wireframe
   this.__isWireframe = false;
@@ -115,7 +130,20 @@ var Viewer3D = function (params) {
   this.__useOutline = false;
 
   // Have background
-  this.useBackground = false;
+  this.__useEnvMap = params.useEnvMap;
+  this.__useBackground = params.useBackground;
+  this.__selectedEnvMapName = 'neutral';
+  var envMapsList = [
+    { name: 'neutral' },
+    { name: 'venice_sunset',
+      path: `${Constants.baseUrl}/data/envmaps/venice_sunset_1k.hdr`,
+      type: 'equirectangular'
+    }
+  ];
+
+  this.__envMaps = _.keyBy(envMapsList, 'name');
+
+  // headlights
   this._useHeadlight = false;
   this._headlights = {};
 
@@ -127,7 +155,12 @@ var Viewer3D = function (params) {
   }
 
   // async tasks that we are waiting on
-  this._waiting = {};
+  this._waiting = new WaitPubSubMultiQueue();
+  // Forward all events from waiting queue
+  var scope = this;
+  this._waiting.SubscribeAll(this, function (event) {
+    scope.Publish.apply(scope, arguments);
+  });
 
   // dynamic assets and controls
   this._dynamicAssets = [];
@@ -141,6 +174,13 @@ var Viewer3D = function (params) {
 
 Viewer3D.prototype = Object.create(PubSub.prototype);
 Viewer3D.prototype.constructor = Viewer3D;
+
+Viewer3D.prototype.getUrlParams = function() {
+  if (!this.urlParams) {
+    this.urlParams = _.getUrlParams();
+  }
+  return this.urlParams;
+};
 
 Object.defineProperty(Viewer3D.prototype, 'useOrthographicCamera', {
   get: function () {return this._useOrthographicCamera; },
@@ -312,6 +352,26 @@ Object.defineProperty(Viewer3D.prototype, 'pickingPlane', {
   },
   set: function (g) {
     this.__pickingPlane = g;
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'useEnvMap', {
+  get: function () {
+    return this.__useEnvMap;
+  },
+  set: function (flag) {
+    this.__useEnvMap = flag;
+    this.__ensureEnvMap(this.__selectedEnvMapName);
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'useBackground', {
+  get: function () {
+    return this.__useBackground;
+  },
+  set: function (flag) {
+    this.__useBackground = flag;
+    this.__ensureEnvMap(this.__selectedEnvMapName);
   }
 });
 
@@ -508,6 +568,10 @@ Viewer3D.prototype.setupDatGui = function () {
     // Set up dat gui;
     var gui = new dat.GUI();
     gui.close();
+    if ((showAll || options['appId']) && this.appId != null) {
+      const appIdGui = gui.add(this, 'appId');
+      $(appIdGui.domElement).find('input').prop('readonly', true);
+    }
     if (showAll || options['camera']) {
       var cameraGui = gui.addFolder('camera');
       cameraGui.add(this, 'useOrthographicCamera').name('orthographic').listen();
@@ -533,6 +597,12 @@ Viewer3D.prototype.setupDatGui = function () {
 
     var renderingGui = gui.addFolder('rendering');
     if (showAll || options['useOutline']) { renderingGui.add(this, 'useOutline').listen(); }
+    if (showAll || options['envMap']) {
+      var envMapNames = Object.keys(this.__envMaps);
+      renderingGui.add(this, 'envMapName', envMapNames).name('envMap').listen();
+    }
+    if (showAll || options['useBackground']) { renderingGui.add(this, 'useBackground').listen(); }
+    if (showAll || options['useEnvMap']) { renderingGui.add(this, 'useEnvMap').listen(); }
     if (showAll) { this.renderer.setupDatGui(renderingGui); }
 
     if (this.clippingBox && (showAll || options['showClipping'])) {
@@ -547,29 +617,13 @@ Viewer3D.prototype.setupDatGui = function () {
       this.clippingOptions = propsClipping;
     }
 
-    gui.getFolder = function (name) {
-      return gui.__folders[name] || gui.addFolder(name);
-    };
     this.datgui = gui;
-  }
-};
-
-Viewer3D.prototype.__updateDatGui = function (gui) {
-  for (var i in gui.__controllers) {
-    if (gui.__controllers.hasOwnProperty(i)) {
-      gui.__controllers[i].updateDisplay();
-    }
-  }
-  for (var name in gui.__folders) {
-    if (gui.__folders.hasOwnProperty(name)) {
-      this.__updateDatGui(gui.__folders[name]);
-    }
   }
 };
 
 Viewer3D.prototype.updateDatGui = function () {
   if (this.datgui) {
-    this.__updateDatGui(this.datgui);
+    this.datgui.update();
   }
 };
 
@@ -606,28 +660,26 @@ Viewer3D.prototype.showLoadingIcon = function (isLoading) {
   }
 };
 
-Viewer3D.prototype.addWaiting = function(id, obj) {
-  obj = obj || true;
-  this._waiting[id] = obj;
-  //console.log(this._waiting);
+Viewer3D.prototype.addWaitingToQueue = function(queueName, obj) {
+  var waitingKey = queueName + '_' + _.generateRandomId();
+  this.addWaiting(waitingKey, obj || true, queueName);
+  return waitingKey;
+};
+
+Viewer3D.prototype.addWaiting = function(id, obj, queueName) {
+  this._waiting.addWaiting(id, obj, queueName);
   this.showLoadingIcon(true);
 };
 
-Viewer3D.prototype.removeWaiting = function(id) {
-  delete this._waiting[id];
-  //console.log(this._waiting);
-  if (_.isEmpty(this._waiting)) {
+Viewer3D.prototype.removeWaiting = function(id, queueName) {
+  this._waiting.removeWaiting(id, queueName);
+  if (this._waiting.isAllEmpty) {
     this.showLoadingIcon(false);
-    this.Publish('WaitingEmpty');
   }
 };
 
 Viewer3D.prototype.waitAll = function(cb) {
-  if (_.isEmpty(this._waiting)) {
-    setTimeout(function() { cb(); }, 0);
-  } else {
-    this.SubscribeOnce('WaitingEmpty', this, function() { cb(); });
-  }
+  this._waiting.waitAll(cb);
 };
 
 Viewer3D.prototype.toggleControlType = function () {
@@ -707,13 +759,18 @@ Viewer3D.prototype.saveImage = function (maxWidth, maxHeight) {
   //this.showImageData(dataUrl);
 };
 
+Viewer3D.prototype.saveImageDataToPng = function(pixels, filename) {
+  var canvas = CanvasUtil.createCanvasFromPixels(pixels);
+  FileUtil.saveCanvasImage(canvas, filename);
+};
+
 Viewer3D.prototype.showImageData = function (dataUrl) {
   var imageHtml = '<img src="' + dataUrl + '"/>';
   bootbox.dialog({
     message: imageHtml,
     onEscape: true
   });
-  // Can no longer ope dataUrls in chrome!
+  // Can no longer open dataUrls in chrome!
   // https://bugs.chromium.org/p/chromium/issues/detail?id=594215
   //window.open(dataUrl);
 };
@@ -733,7 +790,18 @@ Viewer3D.prototype.onWindowResize = function (options) {
 
     var width = this.container.clientWidth;
     var height = this.container.clientHeight;
-    this.camera.aspect = width / height;
+    if (this.fixedWidthToHeightAspectRatio) {
+      this.camera.aspect = this.fixedWidthToHeightAspectRatio;
+      var height2 = width / this.fixedWidthToHeightAspectRatio;
+      if (height2 > height) {
+        width = height * this.fixedWidthToHeightAspectRatio;
+      } else {
+        height = height2;
+      }
+      console.log('got width x height', width, height, this.fixedWidthToHeightAspectRatio);
+    } else {
+      this.camera.aspect = width / height;
+    }
     this.camera.updateProjectionMatrix();
 
     this.renderer.setSize(width, height);
@@ -764,6 +832,7 @@ Viewer3D.prototype.onSceneChanged = function () {
       this.clippingBox.init(bbox);
     }
   }
+  this.__ensureEnvMap(this.__selectedEnvMapName);
 };
 
 Viewer3D.prototype.getRenderScene = function () {
@@ -815,20 +884,19 @@ Viewer3D.prototype.animate = function () {
 };
 
 // Errors
-Viewer3D.prototype.showError = function (msg) {
-  UIUtil.showAlert(msg, 'alert-danger');
+Viewer3D.prototype.showError = function (msg, parent) {
+  return UIUtil.showAlert({ parent: parent, message: msg, style: 'alert-danger', overlay: this.useOverlayMessages });
 };
 
-Viewer3D.prototype.showWarning = function (msg) {
-  UIUtil.showAlert(msg, 'alert-warning');
+Viewer3D.prototype.showWarning = function (msg, parent) {
+  return UIUtil.showAlert({ parent: parent, message: msg, style: 'alert-warning', overlay: this.useOverlayMessages });
 };
 
-Viewer3D.prototype.showMessage = function (msg) {
-  UIUtil.showAlert(msg, 'alert-info');
+Viewer3D.prototype.showMessage = function (msg, parent) {
+  return UIUtil.showAlert({ parent: parent, message: msg, style: 'alert-info', overlay: this.useOverlayMessages });
 };
 
 // Hookups for event registration
-// TODO: This can be pushed into the Viewer3D
 // Register event handlers for mouse and keyboard interaction
 Viewer3D.prototype.registerEventListeners = function () {
   this.registerBasicEventListeners();
@@ -850,7 +918,7 @@ Viewer3D.prototype.registerBasicEventListeners = function () {
 };
 
 Viewer3D.prototype.registerContextMenu = function(callback) {
-  window.addEventListener('mousedown', function(event) {
+  window.addEventListener('pointerdown', function(event) {
     if ((event.ctrlKey || event.metaKey) && event.button === THREE.MOUSE.RIGHT) {
       event.stopPropagation();
     }
@@ -885,11 +953,11 @@ var AssetManager = require('assets/AssetManager');
 var AssetsDb = require('assets/AssetsDb');
 var LocalFileLoader = require('io/LocalFileLoader');
 
-Viewer3D.prototype.setSourceAndSearch = function (searchController, source, searchText) {
+Viewer3D.prototype.setSourceAndSearch = function (searchController, source, searchText, cb) {
   // Goto this asset group and do a search
   searchController.selectSource(source);
   searchController.setSearchText(searchText);
-  searchController.startSearch();
+  searchController.startSearch(cb);
 };
 
 Viewer3D.prototype.searchForAsset = function (searchController, defaultSource, assetId) {
@@ -1000,35 +1068,6 @@ Viewer3D.prototype.setupLocalLoading = function (loadFromLocal, allowMultiple, f
   }
 };
 
-Viewer3D.prototype.setupRegisterCustomAssetGroupUI = function (searchController) {
-  $('#registerAssetsFile').change(function () {
-    var input = $(this);
-    var numFiles = input.get(0).files ? input.get(0).files.length : 0;
-    var label = input.val().replace(/\\/g, '/').replace(/.*\//, '');
-    //input.trigger('fileselect', [numFiles, label]);
-    $('#registerAssetsFilename').val(label);
-  });
-  $('#registerMetaFile').change(function () {
-    var input = $(this);
-    var numFiles = input.get(0).files ? input.get(0).files.length : 0;
-    var label = input.val().replace(/\\/g, '/').replace(/.*\//, '');
-    //input.trigger('fileselect', [numFiles, label]);
-    $('#registerMetaFilename').val(label);
-  });
-
-  $('#registerBtn').click(function () {
-    var assetsFile = $('#registerAssetsFile').get(0).files[0];
-    var jsonFile = $('#registerMetaFile').get(0).files[0];
-    if (!assetsFile) {
-      this.showError('Please select an csv or txt file listing your assets');
-    }
-    if (!jsonFile) {
-      this.showError('Please select a metadata file describing your dataset');
-    }
-    this.registerCustomAssetGroup(searchController, assetsFile, jsonFile, true);
-  }.bind(this));
-};
-
 Viewer3D.prototype.setupBasicRenderer = function() {
   // Setup renderer
   var width = this.container.clientWidth;
@@ -1080,8 +1119,12 @@ Viewer3D.prototype.positionCameraByAgentHeight = function(event, objects) {
     var cameraPosition = intersects[0].point.clone();
     cameraPosition.y += this.agentHeight*Constants.metersToVirtualUnit;
     var targetPosition = this.cameraControls.controls.target;
-    targetPosition.y = cameraPosition.y;
-    this.cameraControls.viewTarget({position: cameraPosition, target: targetPosition});
+    if (targetPosition) {
+      targetPosition.y = cameraPosition.y;
+      this.cameraControls.viewTarget({position: cameraPosition, target: targetPosition});
+    } else {
+      this.cameraControls.viewTarget({position: cameraPosition, target: this.cameraControls.lastViewConfig.target});
+    }
     var cameraControlIndex = this.controlTypesMap['firstPerson'];
     if (cameraControlIndex >= 0) {
       this.updateCameraControl(cameraControlIndex);
@@ -1089,17 +1132,46 @@ Viewer3D.prototype.positionCameraByAgentHeight = function(event, objects) {
   }
 };
 
-Viewer3D.prototype.updateEnvironment = function() {
-  if (!this.pmremGenerator) {
-    this.pmremGenerator = new THREE.PMREMGenerator(this.renderer.renderer);
-    this.pmremGenerator.compileEquirectangularShader();
+Viewer3D.prototype.__updateEnvMapSettings = function(envMapEntry) {
+  const scene = this.getRenderScene();
+  const envMap = envMapEntry? envMapEntry.envMap : null;
+  scene.environment = this.useEnvMap? envMap : null;
+  scene.background = this.useBackground? envMap : null;
+};
+
+Viewer3D.prototype.__ensureEnvMap = function(name) {
+  var entry = this.__envMaps[name];
+  if (entry) {
+    if (!entry.envMap) {
+      this.__loadEnvMap(entry);
+    } else {
+      this.__updateEnvMapSettings(entry);
+    }
+  } else {
+    console.error('Unknown env map', name);
   }
-  const environment = `${Constants.baseUrl}/data/envmaps/venice_sunset_1k.hdr`;
-  Materials.getCubeMapTexture( environment, this.pmremGenerator ).then(( { envMap } ) => {
-    this.sceneState.fullScene.environment = envMap;
-    this.sceneState.fullScene.background = this.useBackground? envMap : null;
+};
+
+Viewer3D.prototype.__loadEnvMap = function(entry) {
+  Materials.getEnvMap(entry, this.renderer.getPmremGenerator()).then(( { envMap } ) => {
+    entry.envMap = envMap;
+    this.__updateEnvMapSettings(entry);
   });
 };
+
+Object.defineProperty(Viewer3D.prototype, 'envMap', {
+  get: function () {
+    return this.__envMaps[this.__selectedEnvMapName];
+  }
+});
+
+Object.defineProperty(Viewer3D.prototype, 'envMapName', {
+  get: function () { return this.__selectedEnvMapName; },
+  set: function (v) {
+    this.__selectedEnvMapName = v;
+    this.__ensureEnvMap(this.__selectedEnvMapName);
+  }
+});
 
 Viewer3D.prototype.initHeadlights = function() {
   var headlight1 = new THREE.PointLight('#ffffff', 0, 0, 2);

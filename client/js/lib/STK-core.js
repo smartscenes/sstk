@@ -1,4 +1,5 @@
 // Main modules
+require('three-geometry');
 
 module.exports = {
   Constants: require('./Constants'),
@@ -21,7 +22,9 @@ module.exports = {
     Articulation: require('./articulations/Articulation'),
     DisplayAxis: require('./articulations/DisplayAxis'),
     DisplayRadar: require('./articulations/DisplayRadar'),
-    ArticulationsRenderHelper: require('./articulations/ArticulationsRenderHelper')
+    ArticulationsRenderHelper: require('./articulations/ArticulationsRenderHelper'),
+    ArticulationsRenderDataGenerator: require('./articulations/ArticulationsRenderDataGenerator'),
+    ArticulatedObject: require('./articulations/ArticulatedObject')
   },
   /** @namespace controls */
   controls: {
@@ -42,8 +45,7 @@ module.exports = {
     JSONExporter: require('./exporters/JSONExporter'),
     OBJMTLExporter: require('./exporters/OBJMTLExporter'),
     PLYExporter: require('./exporters/PLYExporter'),
-    SceneStateExporter: require('./exporters/SceneStateExporter'),
-    SUNCGExporter: require('./exporters/SUNCGExporter')
+    SceneStateExporter: require('./exporters/SceneStateExporter')
   },
   /** @namespace geo */
   geo: {
@@ -54,6 +56,7 @@ module.exports = {
     GeometryUtil: require('./geo/GeometryUtil'),
     MeshHelpers: require('./geo/MeshHelpers'),
     MeshSampling: require('./geo/MeshSampling'),
+    MeshAligner: require('./geo/MeshAligner'),
     OBB: require('./geo/OBB'),
     OBBFitter: require('./geo/OBBFitter'),
     OBBIntersections: require('./geo/OBBIntersections'),
@@ -83,9 +86,11 @@ module.exports = {
   /** @namespace model */
   model: {
     Model: require('./model/Model'),
+    ModelInfo: require('./model/ModelInfo'),
     ModelInstance: require('./model/ModelInstance'),
     ModelVoxels: require('./model/ModelVoxels'),
-    ModelInstanceVoxels: require('./model/ModelInstanceVoxels')
+    ModelInstanceVoxels: require('./model/ModelInstanceVoxels'),
+    ModelUtil: require('./model/ModelUtil'),
   },
   /** @namespace nav */
   nav: {
@@ -105,6 +110,7 @@ module.exports = {
   },
   /** @namespace scene */
   scene: {
+    SceneRawVoxels: require('./scene/SceneRawVoxels'),
     SceneLoader: require('./scene/SceneLoader'),
     SceneOperations: require('./scene/SceneOperations'),
     SceneState: require('./scene/SceneState'),

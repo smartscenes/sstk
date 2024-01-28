@@ -1,8 +1,28 @@
-'use strict';
+function showLarge(elem, largeImg) {
+  const url = elem.attr('src');
+  elem.addClass('enlarged');
+  let align = elem.attr('enlarge_align');
+  if (!align) {
+    align = 'center';
+  }
+  const img = largeImg.find('img');
+  img.show();
+  img.attr('src', url);
+  img.position({
+    my: align,
+    at: align,
+    of: elem
+  });
+  img.off('hover');
+  img.hover(function () {
+  }, function () {
+    $(this).hide();
+    elem.removeClass('enlarged');
+  });
+}
 
-define([], function () {
-
-  function ImagesPanel(params) {
+class ImagesPanel {
+  constructor(params) {
     // Number of images to show per row
     this.entriesPerRow = 3;
     // Model/Scene id of current object;
@@ -10,8 +30,8 @@ define([], function () {
     // List of image urls for the model/scene
     this.imageUrls = [];
     // Placeholder for large image
-    var img = $('<img/>');
-    this.largeImg = $('<span></span>').attr('class','large');
+    const img = $('<img/>');
+    this.largeImg = $('<span></span>').attr('class', 'large');
     this.largeImg.append(img);
     if (params) {
       // Panel showing images for this model/scene
@@ -26,50 +46,29 @@ define([], function () {
     }
   }
 
-  ImagesPanel.prototype.setImageUrls = function (itemId, imageUrls) {
+  setImageUrls(itemId, imageUrls) {
     this.itemId = itemId;
     this.imageUrls = imageUrls;
     this.showImages(this.imageUrls);
-  };
+  }
 
-  ImagesPanel.prototype.createImageElem = function (imageUrl, i) {
+  __createImageElem(imageUrl, i) {
     //var title = result.name;
-    var url = imageUrl;
-    var elem = $('<div></div>')
-        .attr('class', 'searchResult')
-        .attr('id', 'image.' + this.itemId + '.' + i);
+    const url = imageUrl;
+    const elem = $('<div></div>')
+      .attr('class', 'searchResult')
+      .attr('id', 'image.' + this.itemId + '.' + i);
     //            .attr('title', title);
-    elem.append($('<img/>').attr('src',url).attr('width', '100%').attr('class', 'enlarge'));
+    elem.append($('<img/>').attr('src', url).attr('width', '100%').attr('class', 'enlarge'));
     if (this.onClickImageCallback) {
-      elem.click(function () { this.onClickImageCallback(imageUrl);}.bind(this));
+      elem.click(function () {
+        this.onClickImageCallback(imageUrl);
+      }.bind(this));
     }
     return elem;
-  };
+  }
 
-  function showLarge(elem, largeImg) {
-      var url = elem.attr('src');
-      elem.addClass('enlarged');
-      var align = elem.attr('enlarge_align');
-      if (!align) {
-        align = 'center';
-      }
-      var img = largeImg.find('img');
-      img.show();
-      img.attr('src', url);
-      img.position({
-        my: align,
-        at: align,
-        of: elem
-      });
-      img.off('hover');
-      img.hover(function () {
-      },function () {
-        $(this).hide();
-        elem.removeClass('enlarged');
-      });
-    }
-
-  ImagesPanel.prototype.showImages = function (imageUrls) {
+  showImages(imageUrls) {
     this.container.empty();
     // If there were no images, notify the user of this
     if (imageUrls.length === 0) {
@@ -77,19 +76,19 @@ define([], function () {
       return;
     }
 
-    var resultsElem = $('<div></div>').attr('class', 'imageResults');
+    const resultsElem = $('<div></div>').attr('class', 'imageResults');
     this.container.append(resultsElem);
-    var w = (resultsElem.width() - 40) / this.entriesPerRow;
-    var table = $('<table margin=2></table>');
-    var row;
-    var limit = imageUrls.length;
-    var tdCss = {
+    const w = (resultsElem.width() - 40) / this.entriesPerRow;
+    const table = $('<table margin=2></table>');
+    let row;
+    const limit = imageUrls.length;
+    const tdCss = {
       'width': w + 'px',
       'height': w + 'px'
     };
-    for (var i = 0; i < limit; i++) {
-      var elem = this.createImageElem(imageUrls[i], i);
-      var tdElem = $('<td></td>').css(tdCss).append(elem);
+    for (let i = 0; i < limit; i++) {
+      const elem = this.__createImageElem(imageUrls[i], i);
+      const tdElem = $('<td></td>').css(tdCss).append(elem);
       if ((i % this.entriesPerRow) === 0) {
         row = $('<tr></tr>');
         table.append(row);
@@ -98,20 +97,21 @@ define([], function () {
     }
     resultsElem.append(table);
     this.container.append(this.largeImg);
-    var largeImg = this.largeImg;
+    const largeImg = this.largeImg;
     resultsElem.find('img.enlarge').hover(function () {
-          showLarge($(this), largeImg);
-        },function () {
-        });
-  };
+      showLarge($(this), largeImg);
+    }, function () {
+    });
+  }
 
-  ImagesPanel.prototype.onResize = function () {
-    var imageElems = this.container.find('td');
-    var w = (this.container.width() - 40) / this.entriesPerRow;
-    imageElems.each(function (index, elem) { $(this).css('width', w).css('height', w); });
-  };
+  onResize() {
+    const imageElems = this.container.find('td');
+    const w = (this.container.width() - 40) / this.entriesPerRow;
+    imageElems.each(function (index, elem) {
+      $(this).css('width', w).css('height', w);
+    });
+  }
+}
 
-  // Exports
-  return ImagesPanel;
-
-});
+// Exports
+module.exports = ImagesPanel;

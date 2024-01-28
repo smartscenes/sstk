@@ -67,6 +67,14 @@ class ArticulationState {
     }
   }
 
+  proportionToValue(p) {
+    return this.articulation.proportionToValue(p);
+  }
+
+  valueToProportion(v) {
+    return this.articulation.valueToProportion(v);
+  }
+
   setValueCapped(v) {
     const newValue = this.articulation.getCappedValue(v);
     this.value = newValue;
@@ -85,6 +93,17 @@ class ArticulationState {
     return amount;
   }
 
+  setToState(stateName, defaultName) {
+    let stateInfo = this.articulation.getMotionState(stateName);
+    if (!stateInfo) {
+      stateInfo = this.articulation.getMotionState(defaultName);
+    }
+    if (stateInfo) {
+      this.value = stateInfo.value;
+    } else {
+      console.warn(`Cannot find value for either specified state ${stateName} or default ${defaultName}`);
+    }
+  }
   setToMin() {
     this.value = this.articulation.rangeMin;
   }
@@ -111,6 +130,12 @@ class ArticulationState {
 
   get inRange() {
     return (this.rangeMin == null || this.value >= this.rangeMin) && (this.rangeMax == null || this.value <= this.rangeMax);
+  }
+
+  toJson() {
+    const json = this.articulation.toJson();
+    json.value = this.value;
+    return json;
   }
 
 }

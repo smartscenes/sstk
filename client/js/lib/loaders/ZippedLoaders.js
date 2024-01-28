@@ -1,138 +1,128 @@
-var ZIPLoader = require('loaders/ZIPLoader');
-var _ = require('util/util');
+const ZIPLoader = require('loaders/ZIPLoader');
+const _ = require('util/util');
 
-THREE.ZIPloader = ZIPLoader;
+class KMZLoader extends ZIPLoader {
+  constructor(params) {
+    params = _.defaults(params || {}, { regex: /^.*\.dae$/ });
+    super(params);
 
-THREE.ZippedJsonLoader = function (params) {
-  params = _.defaults(params || {}, { regex: /^.*\.js$/ });
-  var baseLoader = params.loader || new THREE.LegacyJSONLoader();
-
-  function load ( ziploader, url, readyCallback, progressCallback, errorCallback ) {
-    var text = ziploader.zip.file(url).asText();
-    var json = JSON.parse(text);
-    var result = baseLoader.parse(json);
-    var zmesh = new THREE.Mesh(result.geometry, new THREE.MeshFaceMaterial(result.materials));
-    readyCallback(zmesh);
-  }
-
-  baseLoader.zippedLoad = load;
-
-  params.loader = baseLoader;
-  ZIPLoader.call(this, params);
-};
-
-THREE.ZippedJsonLoader.prototype = Object.create(ZIPLoader.prototype);
-THREE.ZippedJsonLoader.prototype.constructor = THREE.ZippedJsonLoader;
-
-THREE.KMZLoader = function(params) {
-  params = _.defaults(params || {}, { regex: /^.*\.dae$/ });
-
-  var scope = this;
-  var colladaLoader = params.loader || new THREE.ColladaLoader();
-  colladaLoader.options.loadTextureCallback = function loadTexture(basePath, relPath) {
-    return scope.loadTexture(basePath, relPath);
-  };
-  function load( zipLoader, url, readyCallback, progressCallback, errorCallback ) {
-    try {
-      var text = zipLoader.zip.file(url).asText();
-      var xmlParser = new DOMParser();
-      var responseXML = xmlParser.parseFromString(text, 'application/xml');
-      colladaLoader.parse(responseXML, readyCallback, url);
-    } catch (err) {
-      if (errorCallback) {
-        console.error('Error parsing kmz', err);
-        errorCallback('Error parsing kmz: ' + err);
+    const scope = this;
+    const colladaLoader = params.loader || new THREE.ColladaLoader();
+    colladaLoader.options.loadTextureCallback = function loadTexture(basePath, relPath) {
+      return scope.loadTexture(basePath, relPath);
+    };
+    function load(zipLoader, url, readyCallback, progressCallback, errorCallback) {
+      try {
+        const text = zipLoader.zip.file(url).asText();
+        const parsed = colladaLoader.parse(text, url);
+        readyCallback(parsed);
+      } catch (err) {
+        if (errorCallback) {
+          console.error('Error parsing kmz', err);
+          errorCallback('Error parsing kmz: ' + err);
+        }
       }
     }
+
+    colladaLoader.zippedLoad = load;
+
+    params.loader = colladaLoader;
   }
+}
 
-  colladaLoader.zippedLoad = load;
+class ZippedObjLoader extends ZIPLoader {
+  constructor(params) {
+    params = _.defaults(params || {}, { regex: /^.*\.obj$/ });
+    super(params);
 
-  params.loader = colladaLoader;
-  ZIPLoader.call(this, params);
-};
-
-THREE.KMZLoader.prototype = Object.create(ZIPLoader.prototype);
-THREE.KMZLoader.prototype.constructor = THREE.KMZLoader;
-
-THREE.ZippedObjLoader = function(params) {
-  params = _.defaults(params || {}, { regex: /^.*\.obj$/ });
-
-  var scope = this;
-
-  var baseLoader = params.loader || new THREE.OBJLoader();
-  var mtlLoader = new THREE.MTLLoader(baseLoader.manager);
-  mtlLoader.load = function(url, onLoad, onProgress, onError) {
-    var text = scope.zip.file(url).asText();
-    onLoad( mtlLoader.parse(text) );
-  };
-  params.loadTexture = function loadTexture(url, mapping, onLoad, onProgress, onError) {
-    var texture = scope.loadTexture('', url);
-    if ( mapping !== undefined ) texture.mapping = mapping;
-    if (onLoad) {
-      onLoad(texture);
-    }
-    return texture;
-  };
-
-  baseLoader.getFileLoader = function() {
-    return {
-      load: function(url, onLoad, onProgress, onError) {
-        var text = scope.zip.file(url).asText();
-        onLoad(text);
-      },
-      setPath: function() {}
+    const scope = this;
+    const baseLoader = params.loader || new THREE.OBJLoader();
+    const mtlLoader = new THREE.MTLLoader(baseLoader.manager);
+    mtlLoader.load = function(url, onLoad, onProgress, onError) {
+      url = scope.normalizePath(url);
+      const mtlfile = scope.zip.file(url);
+      if (mtlfile) {
+        const text = mtlfile.asText();
+        onLoad( mtlLoader.parse(text) );
+      } else {
+        onError('Error loading mtl ' + url + ' from zip file ' + scope.zip.path);
+      }
     };
-  };
-
-  params.loader = baseLoader;
-  params.mtlLoader = mtlLoader;
-  ZIPLoader.call(this, params);
-  baseLoader.setOptions(this.options);
-  baseLoader.setMtlOptions(this.options);
-};
-
-THREE.ZippedObjLoader.prototype = Object.create(ZIPLoader.prototype);
-THREE.ZippedObjLoader.prototype.constructor = THREE.ZippedObjLoader;
-
-THREE.ZippedObjMtlLoader = function(params) {
-  params = _.defaults(params || {}, { regex: /^.*\.obj$/ });
-
-  var scope = this;
-
-  var baseLoader = params.loader || new THREE.OBJMTLLoader();
-  var mtlLoader = new THREE.MTLLoader(baseLoader.manager);
-  mtlLoader.load = function(url, onLoad, onProgress, onError) {
-    var text = scope.zip.file(url).asText();
-    onLoad( mtlLoader.parse(text) );
-  };
-  params.loadTexture = function loadTexture(url, mapping, onLoad, onProgress, onError) {
-    var texture = scope.loadTexture('', url);
-    if ( mapping !== undefined ) texture.mapping = mapping;
-    if (onLoad) {
-      onLoad(texture);
-    }
-    return texture;
-  };
-
-  baseLoader.getFileLoader = function() {
-    return {
-      load: function(url, onLoad, onProgress, onError) {
-        var text = scope.zip.file(url).asText();
-        onLoad(text);
-      },
-      setPath: function() {}
+    params.loadTexture = function loadTexture(url, mapping, onLoad, onProgress, onError) {
+      const texture = scope.loadTexture('', url);
+      if ( mapping !== undefined ) texture.mapping = mapping;
+      if (onLoad) {
+        onLoad(texture);
+      }
+      return texture;
     };
-  };
-  baseLoader.load = function(url, onLoad, onProgress, onError ) {
 
-    baseLoader.loadWithMtl(url, scope.options.mtl, scope.options, onLoad, onProgress, onError);
-  };
+    baseLoader.getFileLoader = function() {
+      return {
+        load: function(url, onLoad, onProgress, onError) {
+          const text = scope.zip.file(url).asText();
+          onLoad(text);
+        },
+        setPath: function() {}
+      };
+    };
 
-  params.loader = baseLoader;
-  params.mtlLoader = mtlLoader;
-  ZIPLoader.call(this, params);
-};
+    params.loader = baseLoader;
+    params.mtlLoader = mtlLoader;
 
-THREE.ZippedObjMtlLoader.prototype = Object.create(ZIPLoader.prototype);
-THREE.ZippedObjMtlLoader.prototype.constructor = THREE.ZippedObjMtlLoader;
+    baseLoader.setOptions(this.options);
+    baseLoader.setMtlOptions(this.options);
+  }
+}
+
+class ZippedObjMtlLoader extends ZIPLoader {
+  constructor(params) {
+    params = _.defaults(params || {}, { regex: /^.*\.obj$/ });
+    super(params);
+
+    const scope = this;
+
+    const baseLoader = params.loader || new THREE.OBJMTLLoader();
+    const mtlLoader = new THREE.MTLLoader(baseLoader.manager);
+    mtlLoader.load = function(url, onLoad, onProgress, onError) {
+      url = scope.normalizePath(url);
+      const mtlfile = scope.zip.file(url);
+      if (mtlfile) {
+        const text = mtlfile.asText();
+        onLoad( mtlLoader.parse(text) );
+      } else {
+        onError('Error loading mtl ' + url + ' from zip file ' + scope.zip.path);
+      }
+    };
+    params.loadTexture = function loadTexture(url, mapping, onLoad, onProgress, onError) {
+      const texture = scope.loadTexture('', url);
+      if ( mapping !== undefined ) texture.mapping = mapping;
+      if (onLoad) {
+        onLoad(texture);
+      }
+      return texture;
+    };
+
+    baseLoader.getFileLoader = function() {
+      return {
+        load: function(url, onLoad, onProgress, onError) {
+          const text = scope.zip.file(url).asText();
+          onLoad(text);
+        },
+        setPath: function() {}
+      };
+    };
+
+    baseLoader.load = function(url, onLoad, onProgress, onError ) {
+      baseLoader.loadWithMtl(url, scope.options.mtl, scope.options, onLoad, onProgress, onError);
+    };
+
+    params.loader = baseLoader;
+    params.mtlLoader = mtlLoader;
+  }
+}
+
+THREE.ZIPloader = ZIPLoader;
+THREE.KMZLoader = KMZLoader;
+THREE.ZippedObjLoader = ZippedObjLoader;
+THREE.ZippedObjMtlLoader = ZippedObjMtlLoader;

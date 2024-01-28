@@ -7,7 +7,12 @@ var BinaryView = require('util/BinaryView');
  * @constructor
  * @memberof loaders
  */
-var LabeledGridLoader = function () {
+var LabeledGridLoader = function (params) {
+  this.setOptions(params);
+};
+
+LabeledGridLoader.prototype.setOptions = function(options) {
+  this.options = options || {};
 };
 
 /**
@@ -81,7 +86,7 @@ LabeledGridLoader.prototype.parse = function (filename, binary) {
           m[8], m[9], m[10], m[11],
           m[12], m[13], m[14], m[15]
         );
-        grid.gridToWorld.getInverse(grid.worldToGrid);
+        grid.gridToWorld.copy(grid.worldToGrid).invert();
       } else if (name == 'voxelSize') {
         grid.voxelSize = parseFloat(value);
       } else if (name == 'numVoxels') {

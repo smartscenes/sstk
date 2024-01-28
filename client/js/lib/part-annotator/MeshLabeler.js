@@ -12,9 +12,9 @@ var _ = require('util/util');
  * label events.
  * @constructor
  * @param params Configuration
- * @param params.filterEmptyGeometries
- * @param params.showMultiMaterial
- * @param params.collapseNestedPaths
+ * @param params.filterEmptyGeometries {boolean}
+ * @param params.showMultiMaterial {boolean}
+ * @param params.collapseNestedPaths {boolean}
  * @param [params.updateAnnotationStats] Callback to adjust annotation statistics when something is labeled/unlabeled.
  * @param [params.getMeshId] {function}
  * @extends BasePartLabeler
@@ -174,7 +174,7 @@ MeshLabeler.prototype.groupRawAnnotations = function(options) {
     var anns = annotationsByPartSetLabel[pid_label];
 
     var partIds = _.flatten(anns.map(function(x) {
-      return x.partId.split(',');
+      return (typeof x.partId === 'string')? x.partId.split(',') : x.partId;
     }));
     var ann = {
       label: anns[0].label,
@@ -359,36 +359,23 @@ MeshLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
 
 MeshLabeler.prototype.restore = function(labels, savedLabelInfos, options) {
   options = options || {};
-  console.time('restore');
   if (!options.getMeshFn) {
     var meshes = this.getMeshes();
     options.getMeshFn = function(id) {
       return meshes[id];
     };
   }
-  for (var i = 0; i < savedLabelInfos.length; i++) {
-    var savedLabelInfo = savedLabelInfos[i];
-    var labelInfo = labels.createLabelInfo(savedLabelInfo.label, savedLabelInfo );
-    labels.appendButton(labelInfo);
-    labels.labelInfos[labelInfo.index] = labelInfo;
-    if (savedLabelInfo.initialPoint) {
-      labelInfo.initialPoint = savedLabelInfo.initialPoint;
-    }
-    if (savedLabelInfo.obb) {
-      labelInfo.obb = new OBB();
-      labelInfo.obb.fromJSON(savedLabelInfo.obb);
-    }
+  BasePartLabeler.prototype.restore.call(this, labels, savedLabelInfos, options);
+};
 
-    var labelMeshes = savedLabelInfo.meshIds;
-    if (labelMeshes && labelMeshes.length > 0) {
-      for (var mi = 0; mi < labelMeshes.length; mi++) {
-        var part = options.getMeshFn(labelMeshes[mi]);
-        this.labelPart(part, labelInfo, {skipFitOBB: true});
-      }
+MeshLabeler.prototype.__restoreLabel = function(createdLabelInfo, savedLabelInfo, options) {
+  var labelMeshes = savedLabelInfo.meshIds;
+  if (labelMeshes && labelMeshes.length > 0) {
+    for (var mi = 0; mi < labelMeshes.length; mi++) {
+      var part = options.getMeshFn(labelMeshes[mi]);
+      this.labelPart(part, createdLabelInfo, {skipFitOBB: true});
     }
   }
-  this.updateLabels(labels.labelInfos);
-  console.timeEnd('restore');
 };
 
 MeshLabeler.prototype.getMeshedObject3D = function() {

@@ -1,9 +1,7 @@
 'use strict';
 
 // Application entry point
-require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function (SceneViewer, Constants) {
-  Physijs.scripts.worker = 'client/js/vendor/physijs/physijs_worker.js';
-  Physijs.scripts.ammo = 'ammo.js';
+require(['scene-viewer/SceneViewer','Constants','jquery-ui'], function (SceneViewer, Constants) {
   Constants.sys = {
     fs: require('io/FileUtil'),
     Buffer: Buffer
@@ -60,17 +58,12 @@ require(['scene-viewer/SceneViewer','Constants','physijs','jquery-ui'], function
   } else if (sceneViewer.urlParams.scans || sceneViewer.urlParams.extra) {
     sceneViewer.skipLoadInitialScene = true;
     sceneViewer.launch();
-    sceneViewer.registerAssets(Constants.extraAssetsFile);
+    sceneViewer.registerAssets(Constants.extraAssetsFile, function (err, res) {
+        sceneViewer.loadInitialScene();
+      });
   } else {
     sceneViewer.launch();
   }
-
-  sceneViewer.sceneSearchController.searchPanel.Subscribe('SearchSucceededPreparePanel', null, function () {
-      $('#tabs').tabs({ active: 0 });
-    });
-  sceneViewer.modelSearchController.searchPanel.Subscribe('SearchSucceededPreparePanel', null, function () {
-      $('#tabs').tabs({ active: 1 });
-    });
 
   // Make text scene form toggleable
   //$( '#textSceneForm' ).hide();

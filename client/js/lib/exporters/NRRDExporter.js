@@ -1,4 +1,4 @@
-var zlib = require('pako');
+var fflate = require('fflate');
 var FileUtil = require('io/FileUtil');
 var _ = require('util/util');
 
@@ -28,7 +28,7 @@ NRRDExporter.prototype.export = function(volume, opts) {
   function appendData() {
     var buffer = volume.getRawData().buffer;
     if (compress) {
-      buffer = zlib.gzip(new Uint8Array(buffer)).buffer;
+      buffer = fflate.gzipSync(new Uint8Array(buffer)).buffer;
     }
     fileutil.fsAppendToFile(filename, buffer, finishFile);
   }

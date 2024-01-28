@@ -220,17 +220,18 @@ Simulator.prototype.__waitReady = function(cb) {
   }
 };
 
+// TODO: specify assetGroup to use for sceneStats
 Simulator.prototype.__preloadData = function(opts) {
   opts = opts || {};
   console.log('preloadData', opts);
   if (opts.loadSceneStatistics && !this.__aggregatedSceneStatistics) {
     // Preload various data that we will need
     this.__addWaiting('loadSceneStatistics');
-    var assetGroup = AssetGroups.getAssetGroup('p5dScene');
+    var assetGroup = AssetGroups.getAssetGroup(opts.assetGroup);
     this.__aggregatedSceneStatistics = new SceneStatistics();
     this.__aggregatedSceneStatistics.importCsvs({
       fs: this.opts.fs,
-      basename: assetGroup.rootPath + '/stats/suncg',
+      basename: assetGroup.rootPath + '/stats',
       stats: opts.stats || ['materials', 'relations'],
       callback: function(err, data) {
         if (err) {
@@ -837,10 +838,7 @@ Simulator.prototype.start = function (callback) {
       enableLights: this.opts.useLights,
       defaultLightState: this.opts.defaultLightState
     });
-    this.assetManager.Subscribe('dynamicAssetLoaded', this, function(d) {
-      console.log('adding to dynamic assets', d);
-      this._dynamicAssets.push(d);
-    }.bind(this));
+    assetManager.watchDynamicAssets(this, '_dynamicAssets');
   }
   this.__simOperations.init();
   var preloadOpts = {

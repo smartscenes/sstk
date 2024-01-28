@@ -8,6 +8,7 @@ function FileLoader(params) {
   params = params || {};
   this.manager = params.manager;
   this.crossOrigin = params.crossOrigin;
+  this.defaultEncoding = params.defaultEncoding;
   this.defaultOnLoad = params.defaultOnLoad;
   this.defaultOnProgress = params.defaultOnProgress;
   this.defaultOnError = params.defaultOnError || function (event) {
@@ -27,6 +28,25 @@ FileLoader.prototype.loadErrorFirst = function (fileOrUrl, encoding, callback) {
 
 FileLoader.prototype.load = function (fileOrUrl, encoding, onLoad, onProgress, onError) {
   // Load compatible in style to THREE.js loaders
+  if (typeof(encoding) === 'function') {
+    // encoding not specified, shift arguments
+    onError = onProgress;
+    onProgress = onLoad;
+    onLoad = encoding;
+    encoding = this.defaultEncoding;
+  }
+  return this.loadWithEncoding(fileOrUrl, encoding, onLoad, onProgress, onError);
+};
+
+FileLoader.prototype.loadAsync = function(url, onProgress) {
+  // Load compatible in style to THREE.js loaders
+  var scope = this;
+  return new Promise(function (resolve, reject) {
+    scope.load(url, resolve, onProgress, reject);
+  });
+};
+
+FileLoader.prototype.loadWithEncoding = function (fileOrUrl, encoding, onLoad, onProgress, onError) {
   if (fileOrUrl instanceof File) {
     return this.loadFromLocal(fileOrUrl, encoding, onLoad, onProgress, onError);
   } else if (typeof fileOrUrl === 'string') {
@@ -53,7 +73,7 @@ FileLoader.prototype.loadFromUrl = function (url, encoding, onLoad, onProgress, 
   onError = onError || this.defaultOnError;
   var loader = new THREE.FileLoader(this.manager);
   //loader.setCrossOrigin(this.crossOrigin);
-  if (encoding) {
+  if (encoding && typeof(encoding) === 'string') {
     if (encoding === 'json' || encoding === 'jsonl') {
       if (onLoad) {
         var oldOnLoad = onLoad;
@@ -78,6 +98,8 @@ FileLoader.prototype.loadFromUrl = function (url, encoding, onLoad, onProgress, 
       }
       loader.setResponseType(encoding);
     }
+  } else if (encoding != null) {
+    console.error('Invalid encoding', encoding);
   }
   return loader.load(url, onLoad, onProgress, onError);
 };

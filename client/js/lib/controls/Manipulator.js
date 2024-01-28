@@ -5,6 +5,7 @@ var PubSub = require('PubSub');
 var HighlightControls = require('controls/HighlightControls');
 var UILog = require('editor/UILog');
 var Object3DUtil = require('geo/Object3DUtil');
+var MatrixUtil = require('math/MatrixUtil');
 
 /**
  * Controls for rotating and scaling an object
@@ -37,7 +38,8 @@ Manipulator.prototype.init = function (params) {
   this.camera = params.camera;
   this.controls = params.controls;
   this.uilog = params.uilog;
-  this.useModelBase = params.useModelBase;  // attachment point is baked in to model base, NOT yet working...
+  this.useModelBase = params.useModelBase;  // attachment point is baked in to model base, mostly working?
+  this.useModelOBB = params.useModelOBB;  // whether to use model obb for manipulator plane
   this.imagesDir = Constants.manipulatorImagesDir;
   this.enabled = true;
   this.allowRotation = (params.allowRotation !== undefined) ? params.allowRotation : true;
@@ -48,16 +50,16 @@ Manipulator.prototype.init = function (params) {
   this.modelInstance = null;
   this.scaleTile = null;
   this.rotationCircle = null;
-  this.manipulatorPlane = null;//NOTE: Invisible manipulator plane is used to determine points for mouse scale/rotation
+  this.manipulatorPlane = null; //NOTE: Invisible manipulator plane is used to determine points for mouse scale/rotation
   this.scaleTileOffsetAmount = 0.002*Constants.metersToVirtualUnit;
   this.rotationCircleOffsetAmount = 0.003*Constants.metersToVirtualUnit;
   this.manipulatorPlaneSize = 100*Constants.metersToVirtualUnit;
 
-  this.scaleTileTexture = Object3DUtil.loadTexture(this.imagesDir + '/scaleManipulator.png', THREE.UVMapping);
-  this.rotationCircleTexture = Object3DUtil.loadTexture(this.imagesDir + '/rotationManipulator.png', THREE.UVMapping);
+  this.scaleTileColor = new THREE.Color('#00a6ed');
+  this.scaleTileHighlightColor = new THREE.Color('cyan');
 
-  this.scaleTileHighlightTexture = Object3DUtil.loadTexture(this.imagesDir + '/scaleManipulator_highlighted.png', THREE.UVMapping);
-  this.rotationCircleHighlightTexture = Object3DUtil.loadTexture(this.imagesDir + '/rotationManipulator_highlighted.png', THREE.UVMapping);
+  this.rotationCircleColor = new THREE.Color('orange');
+  this.rotationCircleHighlightColor = new THREE.Color('yellow');
 
   //Used for mouse scaling/rotation
   this.componentClicked = null; //component clicked is the part of the manipulator clicked on mouseDown
@@ -69,31 +71,47 @@ Manipulator.prototype.init = function (params) {
 
   this.highlightControls = this.createHighlightControls();
   //this.axes = new MeshHelpers.FatAxes(100, 10);
+
+  this.controlsEnabled = null; // Used to preserve initial state of orbit control.
+
+  this.manipulatorSizeMultiplier = (params.manipulatorSizeMultiplier !== undefined) ? params.manipulatorSizeMultiplier : 1.0;
+  this.limitRotationsToAxis = (params.manipulatorFixedRotationAxis !== undefined) ? params.manipulatorFixedRotationAxis: undefined;
 };
 
-Manipulator.prototype.setAttachmentFace = function (faceIndex) {
+Manipulator.prototype.setAttachmentFace = function (faceIndex, faceNormal) {
   var scope = this;
   function rotateMesh(m) {
     if (m) {
       m.rotation.set(0, 0, 0);
-      if (scope.rotatePlane) {
-        m.setRotationFromAxisAngle(scope.rotatePlane.axis, scope.rotatePlane.angle);
+      if (scope.__quaternion) {
+        m.quaternion.copy(scope.__quaternion);
       }
     }
   }
 
   this.attachmentFace = faceIndex;
-  this.manipulatorPlaneNormal = Object3DUtil.InNormals[this.attachmentFace];
+  if (this.useModelOBB && faceNormal) {
+    this.manipulatorPlaneNormal = faceNormal.clone();
+    this.manipulatorPlaneDir = (this.attachmentFace === Constants.BBoxFaces.BOTTOM || this.attachmentFace === Constants.BBoxFaces.TOP)?
+      Constants.worldFront : Constants.worldUp;
+  } else {
+    this.manipulatorPlaneNormal = Object3DUtil.InNormals[this.attachmentFace];
+    this.manipulatorPlaneDir = (this.attachmentFace === Constants.BBoxFaces.BOTTOM || this.attachmentFace === Constants.BBoxFaces.TOP)?
+      Constants.worldFront : Constants.worldUp;
+  }
+  this.__quaternion = MatrixUtil.getAlignmentQuaternion(new THREE.Vector3(0,0,1), new THREE.Vector3(0,1,0),
+    this.manipulatorPlaneNormal, this.manipulatorPlaneDir);
   this.scaleTileOffset = this.manipulatorPlaneNormal.clone().multiplyScalar(this.scaleTileOffsetAmount);
   this.rotationCircleOffset = this.manipulatorPlaneNormal.clone().multiplyScalar(this.rotationCircleOffsetAmount);
-  // X (YZ plane) - rotateY
-  // Y (XZ plane) - rotateX
-  // Z (XY plane) - default
-  this.rotatePlane = Object3DUtil.PlaneToFaceRotationParams[this.attachmentFace];
   rotateMesh(this.manipulatorPlane);
   rotateMesh(this.scaleTile);
   rotateMesh(this.rotationCircle);
   this.update();
+};
+
+Manipulator.prototype.getModelBBox = function () {
+  var bbox = this.modelInstance.getBBox();
+  return bbox;
 };
 
 //getModelBase() computes the center of the bottom face of the object's BBox
@@ -104,7 +122,7 @@ Manipulator.prototype.getModelBase = function () {
       return attachmentPoint;
     }
   }
-  var bbox = this.modelInstance.getBBox();
+  var bbox = this.getModelBBox();
   var faceCenters = bbox.getFaceCenters();
   var attachmentFaceCenter = faceCenters[this.attachmentFace];
   return attachmentFaceCenter;
@@ -112,7 +130,7 @@ Manipulator.prototype.getModelBase = function () {
 
 //getTileDimension computes the size that tile should be
 Manipulator.prototype.getTileDimension = function (extra) {
-  var bbox = this.modelInstance.getBBox();
+  var bbox = this.getModelBBox();
   var allFaceDims = bbox.getFaceDims();
   var attachmentFaceDims = allFaceDims[this.attachmentFace];
   var maxDim = Math.max(attachmentFaceDims.x, attachmentFaceDims.y);
@@ -123,7 +141,7 @@ Manipulator.prototype.getTileDimension = function (extra) {
   var c = new THREE.Vector2(this.container.clientWidth, this.container.clientHeight);
   var v = Object3DUtil.getVisibleWidthHeight(this.camera, dist);
   var r = v.length() / c.length();
-  return maxDim + extra * r;
+  return (maxDim + extra * r)*this.manipulatorSizeMultiplier;
 };
 
 //Insert components of the manipulator under the object
@@ -160,11 +178,10 @@ Manipulator.prototype.addRotationCircle = function () {
 
   if (!this.allowRotation) return; // rotation not allowed
 
-  var circleRad = this.getTileDimension(0.05*Constants.metersToVirtualUnit) / 2;
-  var circleGeo = new THREE.CircleGeometry(circleRad, 20);
+  var circleRad = this.getTileDimension( 0.05*Constants.metersToVirtualUnit) / 2;
+  var circleGeo = new THREE.RingGeometry(circleRad*0.75, circleRad*0.9, 45);
   var material = new THREE.MeshBasicMaterial({
-    map: this.rotationCircleTexture,
-    //color: new THREE.Color("green"),
+    color: this.rotationCircleColor,
     side: THREE.DoubleSide,
     opacity: 0.95,
     transparent: true,
@@ -173,9 +190,8 @@ Manipulator.prototype.addRotationCircle = function () {
   var circleMesh = new THREE.Mesh(circleGeo, material);
   circleMesh.name = 'ManipulatorRotate';
 
-  //Object3DUtil.rescaleObject3D(circleMesh, 1.1);
-  if (this.rotatePlane) {
-    circleMesh.setRotationFromAxisAngle(this.rotatePlane.axis, this.rotatePlane.angle);
+  if (this.__quaternion) {
+    circleMesh.quaternion.copy(this.__quaternion);
   }
   circleMesh.position.copy(this.position);
   circleMesh.position.add(this.rotationCircleOffset); //so circle doesn't clash with other meshes under object
@@ -188,6 +204,43 @@ Manipulator.prototype.addRotationCircle = function () {
   this.scene.pickables.push(circleMesh);
 };
 
+Manipulator.prototype.__createArrowShape = function(lineLength, lineWidth, arrowLength, arrowWidth) {
+  arrowLength = arrowLength || lineLength / Math.sqrt(2);
+  arrowWidth = arrowWidth || lineLength / 5;
+  lineWidth = lineWidth || lineLength / 3;
+  var halfLineWidthSqrt2 = 0.5 * lineWidth / Math.sqrt(2);
+  var lineLengthSqrt2 = lineLength / Math.sqrt(2);
+  var shape = new THREE.Shape();
+  shape.moveTo(0,0);
+  shape.lineTo(arrowLength, 0);
+  shape.lineTo(arrowLength, arrowWidth);
+  shape.lineTo(arrowWidth + halfLineWidthSqrt2, arrowWidth);
+  shape.lineTo(lineLengthSqrt2 + halfLineWidthSqrt2, lineLengthSqrt2);
+  shape.lineTo(lineLengthSqrt2, lineLengthSqrt2 + halfLineWidthSqrt2);
+  shape.lineTo(arrowWidth, arrowWidth + halfLineWidthSqrt2);
+  shape.lineTo(arrowWidth, arrowLength);
+  shape.lineTo(0, arrowLength);
+  shape.lineTo(0, 0);
+  return shape;
+};
+
+Manipulator.prototype.__createArrowMesh = function(name, size, color) {
+  var arrowShape = this.__createArrowShape(size*Math.sqrt(2));
+  var arrowGeo = new THREE.ShapeBufferGeometry(arrowShape);
+
+  var material = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.95,
+      alphaTest: 0.5,
+      side: THREE.DoubleSide
+    }
+  );
+  var arrowMesh = new THREE.Mesh(arrowGeo, material);
+  arrowMesh.name = name;
+  return arrowMesh;
+};
+
 Manipulator.prototype.addScaleTile = function () {
   //console.log('Add scale tile');
 
@@ -198,32 +251,48 @@ Manipulator.prototype.addScaleTile = function () {
   if (!this.allowScaling) return; // scaling not allowed
 
   var tileDim = this.getTileDimension(0.05*Constants.metersToVirtualUnit);
-  var planeGeo = new THREE.PlaneBufferGeometry(tileDim, tileDim);
-
-  var material = new THREE.MeshBasicMaterial({
-      map: this.scaleTileTexture,
-      transparent: true,
-      alphaTest: 0.5,
-      color: 0xFFFFFF,
-      side: THREE.DoubleSide
-    }
-  );
-  var planeMesh = new THREE.Mesh(planeGeo, material);
-  planeMesh.name = 'ManipulatorScale';
-
-  //Object3DUtil.rescaleObject3D(planeMesh, 1.4);
-  if (this.rotatePlane) {
-    planeMesh.setRotationFromAxisAngle(this.rotatePlane.axis, this.rotatePlane.angle);
+  var scaleTile = new THREE.Group();
+  scaleTile.name = 'ManipulatorScale';
+  var arrowInfos = [
+    { pos: [-0.5,-0.5], rot: 0 },
+    { pos: [0.5,-0.5], rot: Math.PI/2 },
+    { pos: [0.5,0.5], rot: Math.PI },
+    { pos: [-0.5,0.5], rot: -Math.PI/2 }
+  ];
+  for (var i = 0; i < arrowInfos.length; i++) {
+    var arrowInfo = arrowInfos[i];
+    var arrowSize = tileDim*0.17;
+    var arrow = this.__createArrowMesh('ManipulatorScaleArrow' + i, arrowSize, this.scaleTileColor);
+    arrow.position.set(arrowInfo.pos[0]*tileDim, arrowInfo.pos[1]*tileDim, 0);
+    arrow.rotation.z = arrowInfo.rot;
+    arrow.userData.isManipulator = true;
+    arrow.userData.isScaleTile = true;
+    scaleTile.add(arrow);
   }
-  planeMesh.position.copy(this.position);
-  planeMesh.position.add(this.scaleTileOffset); //so tile doesn't clash with other meshes under object
-  planeMesh.updateMatrix();
-  planeMesh.userData.isManipulator = true;
-  planeMesh.userData.isScaleTile = true;
 
-  this.scene.pickables.push(planeMesh);
-  this.scaleTile = planeMesh;
-  this.scene.add(planeMesh);
+  // var planeGeo = new THREE.PlaneBufferGeometry(tileDim, tileDim);
+  // var material = new THREE.MeshBasicMaterial({
+  //     transparent: true,
+  //     alphaTest: 0.5,
+  //     color: 0xFFFFFF,
+  //     side: THREE.DoubleSide
+  //   }
+  // );
+  // var planeMesh = new THREE.Mesh(planeGeo, material);
+  // scaleTile.add(planeMesh);
+
+  if (this.__quaternion) {
+    scaleTile.quaternion.copy(this.__quaternion);
+  }
+  scaleTile.position.copy(this.position);
+  scaleTile.position.add(this.scaleTileOffset); //so tile doesn't clash with other meshes under object
+  scaleTile.updateMatrix();
+  scaleTile.userData.isManipulator = true;
+  scaleTile.userData.isScaleTile = true;
+
+  this.scene.pickables.push(scaleTile);
+  this.scaleTile = scaleTile;
+  this.scene.add(scaleTile);
 };
 
 Manipulator.prototype.addManipulatorPlane = function () {
@@ -237,8 +306,8 @@ Manipulator.prototype.addManipulatorPlane = function () {
     this.manipulatorPlane.name = 'ManipulatorPlane';
   }
   this.manipulatorPlane.rotation.set(0, 0, 0);
-  if (this.rotatePlane) {
-    this.manipulatorPlane.setRotationFromAxisAngle(this.rotatePlane.axis, this.rotatePlane.angle);
+  if (this.__quaternion) {
+    this.manipulatorPlane.quaternion.copy(this.__quaternion);
   }
   this.manipulatorPlane.position.copy(this.position);
   this.manipulatorPlane.position.add(this.scaleTileOffset); //so tile doesn't clash with other meshes under object
@@ -268,10 +337,9 @@ Manipulator.prototype.updateRotationCircle = function (scaledBy, rotatedBy) {
   if (this.rotationCircle) {
     if ((rotatedBy !== undefined && rotatedBy !== 0) || (scaledBy !== undefined && scaledBy !== 1)) {
       this.rotationCircle.position.set(0, 0, 0);
-      var obj = this.rotationCircle;
-      obj.scale.x = obj.scale.x * scaledBy;
-      obj.scale.y = obj.scale.y * scaledBy;
-      obj.scale.z = obj.scale.z * scaledBy;
+      if (scaledBy !== undefined && scaledBy !== 1) {
+        this.rotationCircle.scale.multiplyScalar(scaledBy);
+      }
       this.rotationCircle.rotateZ(-rotatedBy);
     }
     this.rotationCircle.position.copy(this.position);
@@ -289,10 +357,7 @@ Manipulator.prototype.updateScaleTile = function (scaledBy) {
   if (this.scaleTile) {
     if (scaledBy !== undefined && scaledBy !== 1) {
       this.scaleTile.position.set(0, 0, 0);
-      var obj = this.scaleTile;
-      obj.scale.x = obj.scale.x * scaledBy;
-      obj.scale.y = obj.scale.y * scaledBy;
-      obj.scale.z = obj.scale.z * scaledBy;
+      this.scaleTile.scale.multiplyScalar(scaledBy);
     }
     this.scaleTile.position.copy(this.position);
     this.scaleTile.position.add(this.scaleTileOffset);
@@ -340,16 +405,22 @@ Manipulator.prototype.onMouseDown = function (event, intersected) {
           this.interaction['input'] = 'manipulator';
           if (this.componentClicked === this.scaleTile) {
             this.Publish(Constants.EDIT_OPSTATE.INIT, Constants.CMDTYPE.SCALE, { object: this.modelInstance });
-            this.interaction.type = UILog.EVENT.MODEL_SCALE;
+            this.interaction.type = UILog.EVENT.MODEL_SCALE_END;
             this.interaction['field'] = 'scaleBy';
+            this.interaction['total'] = 1.0;
+            this.uilog.log(UILog.EVENT.MODEL_SCALE_START, event, this.interaction);
+
           } else if (this.componentClicked === this.rotationCircle) {
             this.Publish(Constants.EDIT_OPSTATE.INIT, Constants.CMDTYPE.ROTATE, { object: this.modelInstance });
-            this.interaction.type = UILog.EVENT.MODEL_ROTATE;
+            this.interaction.type = UILog.EVENT.MODEL_ROTATE_END;
             this.interaction['field'] = 'rotateBy';
             this.interaction['axis'] = this.manipulatorPlaneNormal.clone();
+            
+            this.uilog.log(UILog.EVENT.MODEL_ROTATE_START, event, this.interaction);
           }
         }
         if (this.controls) {
+          this.controlsEnabled = this.controls.enabled;
           this.controls.enabled = false;
         }
         return false;
@@ -472,6 +543,9 @@ Manipulator.prototype.handleMouseRotation = function () {
     angle = -angle;
   }
   var axis = this.manipulatorPlaneNormal.clone();
+  if (this.limitRotationsToAxis !== undefined) {
+    axis = this.limitRotationsToAxis.clone();
+  }
   //var object = this.modelInstance.object3D;
   //var oldParent = object.parent;
 
@@ -487,8 +561,9 @@ Manipulator.prototype.handleMouseRotation = function () {
   return angle;
 };
 
-Manipulator.prototype.getRotationAxis = function(angle) {
-  return this.manipulatorPlaneNormal.clone();
+Manipulator.prototype.getRotationAxis = function() {
+  const axis = (this.limitRotationsToAxis)? this.limitRotationsToAxis : this.manipulatorPlaneNormal;
+  return axis.clone();
 };
 
 Manipulator.prototype.onMouseLeave = function (event) {
@@ -523,7 +598,7 @@ Manipulator.prototype.__manipulationDone = function(event) {
     this.componentClicked = null;
     this.mouseDown = false;
     if (this.controls) {
-      this.controls.enabled = true;
+      this.controls.enabled = this.controlsEnabled;
     }
     return notHandled;
   }
@@ -602,19 +677,27 @@ Manipulator.prototype.removeManipulatorPlane = function (clear) {
 
 Manipulator.prototype.revertMaterials = function () {
   if (this.scaleTile) {
-    this.scaleTile.material.map = this.scaleTileTexture;
+    this.scaleTile.traverse((mesh) => {
+      if (mesh.material) {
+        mesh.material.color.copy(this.scaleTileColor);
+      }
+    });
   }
   if (this.rotationCircle) {
-    this.rotationCircle.material.map = this.rotationCircleTexture;
+    this.rotationCircle.material.color.copy(this.rotationCircleColor);
   }
 };
 
 Manipulator.prototype.highlightRotationCircle = function () {
-  this.rotationCircle.material.map = this.rotationCircleHighlightTexture;
+  this.rotationCircle.material.color.copy(this.rotationCircleHighlightColor);
 };
 
 Manipulator.prototype.highlightScaleTile = function () {
-  this.scaleTile.material.map = this.scaleTileHighlightTexture;
+  this.scaleTile.traverse((mesh) => {
+    if (mesh.material) {
+      mesh.material.color.copy(this.scaleTileHighlightColor);
+    }
+  });
 };
 
 module.exports = Manipulator;

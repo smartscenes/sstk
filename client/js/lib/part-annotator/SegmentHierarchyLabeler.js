@@ -1,55 +1,77 @@
-var MeshHierarchyLabeler = require('part-annotator/MeshHierarchyLabeler');
-var Segments = require('geo/Segments');
+var SegmentLabeler = require('part-annotator/SegmentLabeler');
+var _ = require("util/util");
 
 /**
- * {@link MeshHierarchyLabeler} with custom segmentation
+ * Allows for labeling of meshes at different granularities
  * @constructor
- * @extends MeshHierarchyLabeler
+ * @extends SegmentLabeler
  */
 function SegmentHierarchyLabeler(params) {
-  MeshHierarchyLabeler.call(this, params);
-  this.onSegmentsLoaded = params.onSegmentsLoaded;
-  this.segmentType = params.segmentType || 'surfaces';
-  console.log('Segment type is ' + this.segmentType);
-  this.segments = new Segments({
-    skipSegmentedObject3D: true,
-    skipUnlabeledSegment: true
-  },  this.segmentType);
+  SegmentLabeler.call(this, params);
+  this.hierarchyLevel = 0;  // 0 is leaf node, +1 as we go up in the hierarchy
+  this.maxHierarchyLevel = 0;
 }
 
-SegmentHierarchyLabeler.prototype = Object.create(MeshHierarchyLabeler.prototype);
+SegmentHierarchyLabeler.prototype = Object.create(SegmentLabeler.prototype);
 SegmentHierarchyLabeler.prototype.constructor = SegmentHierarchyLabeler;
 
-SegmentHierarchyLabeler.prototype.__segmentsUpdated = function(err, res) {
-  if (this.segments.segmentedObject3DHierarchical) {
-    this.meshHierarchy.setSegmented(this.segments.segmentedObject3DHierarchical);
-    this.maxHierarchyLevel = this.meshHierarchy.maxHierarchyLevel;
-    if (this.showNodeCallback) {
-      this.showNodeCallback(this.meshHierarchy.partsNode);
-    }
+Object.defineProperty(SegmentHierarchyLabeler.prototype, 'segmentHierarchy', {
+  get: function () {
+    return this.segments? this.segments.indexedSegmentationHier : null;
   }
+});
 
-  if (!err && this.onSegmentsLoaded) {
-    this.onSegmentsLoaded(this.segments);
-  }
-};
-
-SegmentHierarchyLabeler.prototype.setTarget = function(modelInstance) {
-  MeshHierarchyLabeler.prototype.setTarget.call(this, modelInstance);
-  this.segments.init(modelInstance);
-  this.segments.ensureSegments((err, res) => this.__segmentsUpdated(err, res));
-};
-
-SegmentHierarchyLabeler.prototype.applySegmentAnnotation = function(annotation, cb) {
-  this.segments.__setSegments((err, res) => {
-    this.segments.isCustomSegmentation = true;
-    this.segments.segmentsJson = annotation['segmentation'];
-    this.__segmentsUpdated(err, res);
-    if (cb) {
-      cb(err, res);
+// Set part based on hierarchy level
+SegmentHierarchyLabeler.prototype.__findPart = function (event) {
+  var intersect = SegmentLabeler.prototype.__findPart.call(this, event);
+  // hierarchyLevels are 0 for elementType, 1, 2, etc for levels in the segmentHierarchy
+  // -1 so that we are 0 indexed
+  var currHierLevel = this.hierarchyLevel-1;
+  if (intersect && 0 < currHierLevel) {
+    var selectedIndex = [];
+    selectedIndex[0] = intersect.segmentIndex;
+    for (i = 0; i < currHierLevel; i++) {
+      var fineToCoarseIndices = this.segmentHierarchy[i+1].index;
+      selectedIndex[i+1] = fineToCoarseIndices[selectedIndex[i]];
     }
-  }, 'segmentation', 'trimeshHier', annotation);
+    var hierIndices = [];
+    hierIndices[currHierLevel] = [selectedIndex[currHierLevel]];
+    for (var i = currHierLevel-1; i >= 0; i--) {
+      var coarseToFineIndices = this.segmentHierarchy[i+1].segToElements;
+      hierIndices[i] = [];
+      for (var j = 0; j < hierIndices[i+1].length; j++) {
+        var ci = hierIndices[i+1][j];
+        hierIndices[i].push.apply(hierIndices[i], coarseToFineIndices[ci]);
+      }
+      hierIndices[i] = _.uniq(hierIndices[i]);
+    }
+    intersect.fineSegmentIndex = intersect.segmentIndex;
+    intersect.segmentIndex = hierIndices[0];
+    intersect.level = this.hierarchyLevel;
+  }
+  // console.log('findPart', intersect);
+  return intersect;
 };
+
+SegmentHierarchyLabeler.prototype.nextLevel = function(inc) {
+  this.hierarchyLevel = this.hierarchyLevel + inc;
+  if (this.hierarchyLevel < 0) {
+    this.hierarchyLevel = 0;
+  }
+  if (this.maxHierarchyLevel && this.hierarchyLevel > this.maxHierarchyLevel) {
+    this.hierarchyLevel = this.maxHierarchyLevel;
+  }
+  this.Publish('levelUpdated', this.hierarchyLevel);
+  console.log('Set hierarchyLevel to ' + this.hierarchyLevel);
+};
+
+// Loading of segments
+SegmentHierarchyLabeler.prototype.__onSegmentsLoaded = function(segments) {
+  this.hierarchyLevel = 1;
+  //console.log('segments', segments.indexedSegmentationHier);
+  this.maxHierarchyLevel = segments.indexedSegmentationHier.length;
+};
+
 
 module.exports = SegmentHierarchyLabeler;
 

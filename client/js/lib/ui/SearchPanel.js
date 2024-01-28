@@ -32,6 +32,7 @@ require('jquery-pagination');
  * @param [params.allowGroupExpansion=false] {boolean} If true, and `expandGroupCallback` is not specified, `expandCategory` is used for `expandGroupCallback`
  * @param [params.tooltipIncludeAll=true] {boolean} Whether to include all returned fields in tooltip or just name
  * @param [params.tooltipIncludeFields] {string[]} List of fields to include in tooltip
+ * @param [params.tooltipIncludeLimits]
  * @param [params.tooltipIncludeExtraFields] {string[]} More fields to include in tooltip (appended to `tooltipIncludeFields`)
  * @param [params.showSearchOptions=true] {boolean} Whether to show search options (search text box, sort, sources, etc)
  * @param [params.showSearchSortOption=true] {boolean} Whether to show option to sort search results
@@ -43,7 +44,14 @@ require('jquery-pagination');
  * @param [params.loadImagesLazy=false] {boolean} Whether to do lazy loading of images
  * @param [params.sortOrder] {string} Sort order to use
  * @param [params.additionalSortOrder] {string} Additional sort order to use
+ * @param [params.additionalSearchOpts] {{ solrQueryProxy: proxy}} Additional search options to include when doing a search query
  * @param [params.previewImageIndex] {int|string} What image to display in the search results
+ * @param [params.searchHistoryLimit=10] {int} Limit on the number of search history items to remember
+ * @param [params.showSearchHistoryPrevNext=false] {boolean} Whether to show buttons for search history previous and next
+ * @param [params.showRecent=false] {boolean} Whether to show list of recent models (added for RLSD)
+ * @param [params.maxRecent=5] {int} Limit on the number of recent models (added for RLSD)
+ * @param [params.showCrumbs=false] {boolean} Whether to show hierarchy of links (for hierarchically organized assets - added for RLSD)
+ * @param [params.rootCrumb] {Array<SearchPanel.Crumb>} What to use as initial crumb (added for RLSD)
  * @constructor
  * @memberOf ui
  */
@@ -68,11 +76,20 @@ function SearchPanel(params) {
   this.loadImagesLazy = false;
   this.previewImageIndex = undefined;
   this.__id = 'sp_' + _.generateRandomId();
+  this.__crumbEntries = [];
+  this.showCrumbs = false;
+  this.showRecent = false;
+  this.maxRecent = 5;  // Put limit on the number of recent search results
+  this.recents = [];
+  this.searchHistoryLimit = 20;  // Limit on search history
+  this.searchHistory = [];
 
   if (params) {
     // Application callback when search has succeeded
     // Parameters: resultList (list of results)
     this.searchSucceededCallback = params.searchSucceededCallback;
+    // Additional search options to add by default
+    this.additionalSearchOpts = params.additionalSearchOpts;
     // Application callback when search has failed
     // Parameters: error message
     this.searchFailedCallback = params.searchFailedCallback;
@@ -121,6 +138,7 @@ function SearchPanel(params) {
     if (params.showSearchSourceOption !== undefined) this.showSearchSourceOption = params.showSearchSourceOption;
     if (params.showSearchBySize !== undefined) this.showSearchBySize = params.showSearchBySize;
     if (params.showRowOptions !== undefined) this.showRowOptions = params.showRowOptions;
+
     // Show animated gif onhover?
     if (params.showAnimatedOnHover !== undefined) this.showAnimatedOnHover = params.showAnimatedOnHover;
 
@@ -137,10 +155,27 @@ function SearchPanel(params) {
 
     if (params.padding !== undefined) this.padding = params.padding;
 
+    if (params.showCrumbs !== undefined) this.showCrumbs = params.showCrumbs;
+    if (params.rootCrumb !== undefined) this.rootCrumb = params.rootCrumb;
+
+    if (params.showRecent !== undefined) this.showRecent = params.showRecent;
+    if (params.maxRecent != undefined) this.maxRecent = params.maxRecent;
+
+    this.showSearchHistoryPrevNext = (params.showSearchHistoryPrevNext != null)? params.showSearchHistoryPrevNext : false;
+    if (params.searchHistoryLimit != undefined) this.searchHistoryLimit = params.searchHistoryLimit;
+    this.customSearchIcons = params.customSearchIcons;
+
     // Predefined elements
     this.searchButton = params.searchButton;
     this.searchTextElem = params.searchTextElem;
   }
+
+  this.searchDetails = null;
+
+  // Internal variables
+  this.__skipContainerMouseEnterEvent = false;
+  this.__skipResultsPanelMouseEnterEvent = false;
+  this.__currentSearchHistoryIndex = 0;  // most recent search query
 
   this.limit = this.nRows * this.entriesPerRow;
   if (this.sources.indexOf(this.source) < 0) {
@@ -159,8 +194,7 @@ function SearchPanel(params) {
       }
 
       // Allows people to select from different sources to search
-
-      if (this.showSearchSourceOption) {
+      if (this.showSearchSourceOption && this.showSearchOptions) {
         this.sourceElem = $('<select></select>').attr('class', 'searchSource');
         this.searchOptionsElem.append(this.sourceElem);
       }
@@ -288,15 +322,96 @@ function SearchPanel(params) {
     }
 
     this.searchInfoElem = $('<div></div>').attr('class', 'searchInfo');
+
+    // Breadcrumbs init
+    if (this.showCrumbs) {
+      this.breadCrumbElem = $("<span></span");
+      this.breadCrumbElem.attr('class', 'crumbBar');
+      this.searchInfoElem.append(this.breadCrumbElem);
+      if (this.rootCrumb) {
+        this.crumbs = this.rootCrumb;
+      }
+    }
+
     // Display pagination information
     this.pageElem = $('<div></div>');
     this.searchInfoElem.append(this.pageElem);
     this.container.append(this.searchInfoElem);
 
+    // Put additional search icons
+    if (this.showSearchHistoryPrevNext || this.customSearchIcons) {
+      this.additionalSearchIconsElem = $('<div class="searchIcons"></div>');
+      this.container.append(this.additionalSearchIconsElem);
+      if (this.showSearchHistoryPrevNext) {
+        var prevHistoryButton = UIUtil.createGlyphIconButton('glyphicon-arrow-left').addClass('btn-xs')
+          .attr('title', 'Previous query').prop('disabled', true);
+        var nextHistoryButton = UIUtil.createGlyphIconButton('glyphicon-arrow-right').addClass('btn-xs')
+          .attr('title', 'Next query').prop('disabled', true);
+        prevHistoryButton.click(() => {
+          this.__gotoPrevInSearchHistory();
+        });
+        nextHistoryButton.click(() => {
+          this.__gotoNextInSearchHistory();
+        });
+        this.additionalSearchIconsElem.append(prevHistoryButton);
+        this.additionalSearchIconsElem.append(nextHistoryButton);
+        this.__prevHistoryButton = prevHistoryButton;
+        this.__nextHistoryButton = nextHistoryButton;
+      }
+      if (this.customSearchIcons) {
+        this.__customSearchButtons = [];
+        for (var i = 0; i < this.customSearchIcons.length; i++) {
+          var opts = this.customSearchIcons[i];
+          var button = UIUtil.createGlyphIconButton('glyphicon-' + opts.glyphicon).addClass('btn-xs').attr('title', opts.help);
+          button.click(() => {
+            opts.onclick(this.lastQuery);
+          });
+          button.hide();
+          this.additionalSearchIconsElem.append(button);
+          this.__customSearchButtons.push(button);
+        }
+      }
+    }
+
     // Results are displayed in the resultsElem in a tabular form
-    this.resultsElem = $('<div></div>').attr('class', 'searchResults');
-    this.__setResultsElemSize();
+    this.resultsElem = $('<div></div>');
+    this.resultsElem = this.resultsElem.attr('class', 'searchResults');
+    if (this.showRecent) {
+      this.resultsElem.addClass('searchResultsWithSpace');
+    }
+    
+    this.container.on("mouseenter",()=>{
+      if (this.__skipContainerMouseEnterEvent) {
+        this.__skipContainerMouseEnterEvent = false;
+        return;
+      }
+      this.Publish('SearchContainerMouseEnter', this.searchDetails);
+    });
+    this.container.on("mouseleave",()=>{
+      this.Publish('SearchContainerMouseLeave', this.searchDetails);
+    });
+
+    this.resultsElem.on("mouseenter",()=>{
+      if (this.__skipResultsPanelMouseEnterEvent) {
+        this.__skipResultsPanelMouseEnterEvent = false;
+        return;
+      }
+      this.Publish('ResultsPanelMouseEnter', this.searchDetails);
+    });
+    this.resultsElem.on("mouseleave",()=>{
+      this.Publish('ResultsPanelMouseLeave', this.searchDetails);
+    });
     this.container.append(this.resultsElem);
+
+    // Recent init
+    if (this.showRecent) {
+      this.recentElemContainer = $('<div></div>').attr('class', 'recentResultsContainer');
+      this.recentElem = $('<div></div>').attr('class', 'recentResults');
+      this.recentElemContainer.append($('<span></span>').text("Recent Models").attr('class', 'recentTitle'));
+      this.recentElemContainer.append(this.recentElem);
+      this.container.append(this.recentElemContainer);
+    }
+    this.__setResultsElemSize();
 
     // Add element to go back from expanded group
     if (this.expandGroupCallback) {
@@ -315,7 +430,7 @@ function SearchPanel(params) {
         }
       }.bind(this));
     }
-    // Bind search source to when source source changes
+    // Bind search source to when source changes
     if (this.sourceElem) {
       this.sourceElem.empty();
       for (var i = 0; i < this.sources.length; i++) {
@@ -341,6 +456,64 @@ function SearchPanel(params) {
 SearchPanel.prototype = Object.create(PubSub.prototype);
 SearchPanel.prototype.constructor = SearchPanel;
 
+SearchPanel.prototype.skipContainerMouseEnterEvent = function(){
+  this.__skipContainerMouseEnterEvent = true;
+};
+
+SearchPanel.prototype.skipResultsPanelMouseEnterEvent = function(){
+  this.__skipResultsPanelMouseEnterEvent = true;
+};
+
+SearchPanel.prototype.__updateSearchHistory = function(lastQuery) {
+  if (this.__currentSearchHistoryIndex > 0) {
+    const dropped = this.searchHistory.splice(0, this.__currentSearchHistoryIndex);
+    console.log('Dropped ' + dropped.length + ' search history entries');
+    this.__currentSearchHistoryIndex = 0;
+  }
+  this.searchHistory.unshift(lastQuery);
+  if (this.searchHistory.length > this.searchHistoryLimit) {
+    this.searchHistory.length = this.searchHistoryLimit;
+  }
+  if (this.__prevHistoryButton) {
+    this.__prevHistoryButton.prop('disabled', this.__currentSearchHistoryIndex >= this.searchHistory.length - 1);
+  }
+};
+
+SearchPanel.prototype.__gotoSearchHistoryIndex = function(index) {
+  this.__currentSearchHistoryIndex = index;
+  const q = this.searchHistory[index];
+  if (q) {
+    if (q.searchBox) {
+      this.setSearchText(q.searchBox);
+    }
+    var crumbs = _.get(q, ['searchDisplayOptions', 'crumbEntry', 'crumbs']);
+    if (crumbs) {
+      this.crumbs = crumbs;
+    }
+    var callback = q.searchDisplayOptions ? q.searchDisplayOptions.callback : undefined;
+    var searchDisplayOptions = _.defaults({ skipSearchHistoryUpdate: true }, q.searchDisplayOptions || {});
+    this.search(_.clone(q.query), callback, searchDisplayOptions);
+  }
+  if (this.__nextHistoryButton) {
+    this.__nextHistoryButton.prop('disabled', index === 0);
+  }
+  if (this.__prevHistoryButton) {
+    this.__prevHistoryButton.prop('disabled', index >= this.searchHistory.length - 1);
+  }
+};
+
+SearchPanel.prototype.__gotoNextInSearchHistory = function() {
+  if (this.__currentSearchHistoryIndex > 0) {
+    this.__gotoSearchHistoryIndex(this.__currentSearchHistoryIndex - 1);
+  }
+};
+
+SearchPanel.prototype.__gotoPrevInSearchHistory = function() {
+  if (this.__currentSearchHistoryIndex < this.searchHistory.length - 1) {
+    this.__gotoSearchHistoryIndex(this.__currentSearchHistoryIndex + 1);
+  }
+};
+
 Object.defineProperty(SearchPanel.prototype, 'isSearchBySize', {
   get: function () {return this.searchBySizeElem? this.searchBySizeElem.prop('checked') : false; },
   set: function (v) {
@@ -349,6 +522,83 @@ Object.defineProperty(SearchPanel.prototype, 'isSearchBySize', {
     }
   }
 });
+
+Object.defineProperty(SearchPanel.prototype, 'crumbs', {
+  get: function() { return this.__crumbEntries; },
+  set: function(crumbEntries) {
+    this.__crumbEntries = crumbEntries;
+    this.__updateCrumbs(crumbEntries);
+  }
+});
+
+SearchPanel.prototype.__updateCrumbs = function(crumbEntries) {
+  if (!this.breadCrumbElem) { return; }
+  console.assert(this.showCrumbs);
+  this.breadCrumbElem.empty();
+
+  const prevEntries = [];
+  for (var i = 0; i < crumbEntries.length; i++) {
+    const crumbEntry = crumbEntries[i];
+    prevEntries.push(crumbEntry);
+    const crumbElem = $('<span></span>');
+    crumbElem.attr('class', 'crumbEntry');
+    crumbElem.text(crumbEntry.text);
+    this.breadCrumbElem.append(crumbElem);
+
+    const prevEntriesCopy = JSON.parse(JSON.stringify(prevEntries));
+    crumbElem.on('click', () => {
+      this.skipContainerMouseEnterEvent();
+      this.expandCrumbLink(crumbEntry, prevEntriesCopy);
+    });
+
+    if (i < crumbEntries.length - 1) {
+      // Add separator
+      const separatorElem = $('<span></span>');
+      separatorElem.attr('class', 'crumbSeparator');
+      this.breadCrumbElem.append(separatorElem);
+      separatorElem.text(' / ');
+    }
+  }
+};
+
+SearchPanel.prototype.expandCrumbLink = function(entry, crumbs) {
+  // Search by issuing query directly
+  this.__updateSortOrder();
+
+  // Search by setting source and setting search text
+  // this.setSearchText(entry.query);
+  // this.selectSource(entry.source);
+  // this.startSearch();
+
+  // Update crumbs
+  this.crumbs = crumbs;
+  return this.search({ searchText: entry.query, source: entry.source, start: 0}, null, { crumbEntry: entry });
+};
+
+SearchPanel.prototype.expandLinkResult = function(result) {
+  // User has clicked a link for a model group
+  const newCrumb = (result.subcat_query)? {
+    queryType: 'category',
+    query: result.subcat_query,
+    source: result.source,
+    text: result.name
+  } : {
+    queryType: 'linked',
+    query: result.linked_query,
+    source: result.linked_source,
+    text: result.name
+  };
+
+  // don't track enter mouse events for result panel and search container
+  this.skipResultsPanelMouseEnterEvent();
+  this.skipContainerMouseEnterEvent();
+
+  // Copy crumbs (TODO: check if we need this or can add function to add crumb)
+  // Currently this recreats the crumbs and is not that efficient
+  const newCrumbs = this.crumbs.map(v => v);
+  newCrumbs.push(newCrumb);
+  return this.expandCrumbLink(newCrumb, newCrumbs);
+};
 
 SearchPanel.prototype.loadIds = function(ids, options) {
   //console.log('load ids', ids.length);
@@ -425,6 +675,17 @@ SearchPanel.prototype.setSearchText = function (s) {
     this._searchText = s;
     return false;
   }
+};
+
+SearchPanel.prototype.addRecent = function(info) {
+  const candidateId = info.fullId;
+  this.recents = this.recents.filter(item => item.fullId !== candidateId);
+  this.recents.unshift(info);
+  if (this.recents.length > this.maxRecent) {
+    this.recents.length = this.maxRecent;
+  }
+  this.updateRecent();
+  //console.log({recentAdded: info});
 };
 
 SearchPanel.prototype.getSearchText = function (defaultValue) {
@@ -552,6 +813,21 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
     imgElem.data('src', imagePreviewUrl);
     imgElem.data('metadata', result);
     elem.append(imgElem);
+
+    // NOTE: Custom grouping for RLSD
+    if (result.is_link) {
+      if (title) {
+        var labelElem = $('<span></span>');
+        labelElem.text(title);
+        labelElem.attr('class', 'searchPanelResultLabel');
+        elem.append(labelElem);
+      }
+      var expandElem = $('<div class="glyphicon glyphicon-chevron-right"></div>');
+      elem.append(expandElem);
+      // var linkElem = $("<span></span>");
+      // linkElem.text(">>");
+      // elem.append(linkElem);
+    }
   } else {
     elem.append('<span>' + result.name + '</span>');
   }
@@ -590,7 +866,7 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
       }
       elem.addClass('searchResultClicked');
       this.curSelectedIndex = index;
-      this.onClickResultCallback(source, result.id, result, elem, index);
+      this.onClickResultCallback(source, result.id, result, elem, index, this.searchDetails);
       this.Publish('ResultClicked', result, index);
     }.bind(this));
   }
@@ -611,7 +887,7 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
   if (this.onMousedownResultCallback) {
     elem.mousedown(function (event) {
       event.preventDefault();
-      this.onMousedownResultCallback(source, result.id, result, elem, index);
+      this.onMousedownResultCallback(source, result.id, result, elem, index, this.searchDetails);
     }.bind(this));
     this.Publish('ResultMousedown', result, index);
   }
@@ -624,19 +900,72 @@ SearchPanel.prototype.createSearchResult = function (result, index, dimstr, isLa
 
 SearchPanel.prototype.__setResultsElemSize = function () {
   var searchOptionsElemHeight = (this.searchOptionsElem) ? this.searchOptionsElem.outerHeight() : 0;
-  var restHeight = searchOptionsElemHeight + this.searchInfoElem.outerHeight();
-  var resultsElemHeight = Math.max(10, this.container.height() - restHeight - 25);
+  var searchIconsElemHeight = (this.additionalSearchIconsElem) ? this.additionalSearchIconsElem.outerHeight() : 0;
+  var recentElementsHeight = (this.showRecent) ? this.recentElemContainer.outerHeight() : 0;
+  var restHeight = searchOptionsElemHeight + searchIconsElemHeight + this.searchInfoElem.outerHeight();
+  var resultsElemHeight = Math.max(10, this.container.height() - restHeight - 25 - recentElementsHeight);
   this.resultsElem.css('height', resultsElemHeight + 'px');
-  //this.resultsElem.css('position', 'absolute');
-  //this.resultsElem.css('top', restHeight + 'px');
+  this.resultsElem.css('position', 'absolute');
+  this.resultsElem.css('top', restHeight + 'px');
 };
 
 SearchPanel.prototype.__getEntryWidth = function () {
   return Math.max(10, (this.resultsElem.width() - this.padding) / this.entriesPerRow - 10);
 };
 
+SearchPanel.prototype.updateRecent = function(){
+  if (!this.recentElem) return;
+  this.recentElem.empty();
+
+  var w = this.__getEntryWidth();
+  var dimstr = ' width=' + w + ' ';
+  var table = $('<table margin=2></table>');
+  var row;
+  
+  for (var i = 0; i < this.recents.length; i++) {
+    var result = this.recents[i];
+    if (result) {
+      var elem = this.createSearchResult(this.recents[i], i, dimstr, this.loadImagesLazy);
+      var tdElem = $('<td></td>').append(elem);
+      if ((i % this.entriesPerRow) === 0) {
+        row = $('<tr></tr>');
+        table.append(row);
+      }
+      row.append(tdElem);
+    } else {
+      console.log('No result for index ' + i);
+    }
+  }
+  this.recentElem.append(table);
+
+  if (this.loadImagesLazy) {
+    table.find('img.lazy').lazy({
+      bind: 'event',
+      threshold: 50,
+      visibleOnly: true,
+      parent: this.recentElem,
+      appendScroll: this.recentElem
+    });
+  } else {
+  }
+};
+
+SearchPanel.prototype.updateCustomSearchIcons = function() {
+  if (this.customSearchIcons) {
+    for (var i = 0; i < this.customSearchIcons.length; i++) {
+      var isActive = this.customSearchIcons[i].isActive? this.customSearchIcons[i].isActive(this.lastQuery) : true;
+      if (isActive) {
+        this.__customSearchButtons[i].show();
+      } else {
+        this.__customSearchButtons[i].hide();
+      }
+    }
+  }
+};
+
 SearchPanel.prototype.showSearchResults = function (resultList, start, resultListStart) {
   if (!this.resultsElem) return;  // No place to put results!!!
+  this.updateCustomSearchIcons();
   if (!start || start < 0) start = 0;
   if (resultListStart == undefined) {
     resultListStart = start;
@@ -859,6 +1188,8 @@ SearchPanel.prototype.showMoreSearchResults = function (start) {
  */
 SearchPanel.prototype.searchSucceeded = function (options, data) {
   this.Publish('SearchSucceededPreparePanel');
+  // console.log('shape sorter succeeded options: ', options);
+  // console.log('shape sorter succeeded data: ', data);
   if (data.response && data.response.docs) {
     this.__searchSucceededWithDocs(data.response, options);
   } else if (data.grouped) {
@@ -1012,15 +1343,22 @@ SearchPanel.prototype.getQuerySortOrder = function () {
   }
 };
 
-SearchPanel.prototype.startSearch = function (callback) {
+SearchPanel.prototype.__updateSortOrder = function() {
   this.sortOrder = this.sortOrderElem ? this.sortOrderElem.val() : this.sortOrder || '';
+};
+
+SearchPanel.prototype.startSearch = function (callback) {
+  this.__updateSortOrder();
   var searchTerm = this.getSearchText();
-  this.Publish('startSearch', searchTerm);
-  this.search({ searchText: searchTerm, start: 0}, callback);
+  this.setSearchText(searchTerm);
+  var query = { searchText: searchTerm, start: 0};
+  this.Publish('preStartSearch', query);
+  let searchDetails = this.search(query, callback);
+  this.Publish('startSearch', searchDetails);
 };
 
 SearchPanel.prototype.refreshSearch = function () {
-  this.sortOrder = this.sortOrderElem ? this.sortOrderElem.val() : this.sortOrder || '';
+  this.__updateSortOrder();
   var searchTerm = this.getSearchText();
   this.search({ searchText: searchTerm, start: this.curStart});
 };
@@ -1033,7 +1371,9 @@ SearchPanel.prototype.refreshSearch = function () {
  */
 SearchPanel.prototype.search = function (query, callback, searchDisplayOptions) {
   if (!query) return;
+  this.searchDetails = {searchTime: new Date().getTime(), query:query};
   var queryOpts = query;
+
   if (_.isString(query)) {
     queryOpts = { searchText: query };
   }
@@ -1041,10 +1381,16 @@ SearchPanel.prototype.search = function (query, callback, searchDisplayOptions) 
   queryOpts = _.defaults(Object.create(null), queryOpts, { sort: sortOrder, source: this.source, start: 0, limit: this.limit });
 
   var updatedSearchDisplayOptions = _.defaults(Object.create(null), { callback: callback }, searchDisplayOptions || {});
-  this.lastQuery = { query: queryOpts, searchDisplayOptions: searchDisplayOptions };
+  this.lastQuery = { query: queryOpts, searchDisplayOptions: searchDisplayOptions, searchBox: this.getSearchText() };
+  if (!updatedSearchDisplayOptions.skipSearchHistoryUpdate) {
+    this.__updateSearchHistory(this.lastQuery);
+  }
 
   var scope = this;
   console.log('queryOpts', queryOpts);
+  if (this.additionalSearchOpts) {
+   queryOpts = _.defaults(Object.create(null), queryOpts, this.additionalSearchOpts);
+  }
   this.searchModule.query(queryOpts, function(err, res) {
     if (err) {
       scope.searchFailed(err);
@@ -1052,6 +1398,7 @@ SearchPanel.prototype.search = function (query, callback, searchDisplayOptions) 
       scope.searchSucceeded(updatedSearchDisplayOptions, res);
     }
   });
+  return this.searchDetails;
 };
 
 SearchPanel.prototype.selectSource = function (source) {
@@ -1151,8 +1498,18 @@ SearchPanel.prototype.expandCategory = function (category, callback) {
  * @typedef {Object} {SearchPanel.SearchDisplayOptions}
  * @memberOf ui
  * @property [ordering] {Array<{id:string}>} Explicit list of ordered assets
- * @property {idField} {string} What field to use for id
+ * @property [idField] {string} What field to use for id
  * @property [isExpandedGroup=false] {boolean} Whether the group is expanded
  * @property [ensureGroupedModelsUnique=false] {boolean} Filter grouped models so they are unique
+ * @property [skipSearchHistoryUpdate=false] {boolean} Whether to skip update of history (set to true if query is from history)
+ * @property [crumbEntry=null] {object} Crumb information
+ */
+
+/**
+ * @typedef {Object} {SearchPanel.Crumb}
+ * @memberOf ui
+ * @property query {string} Query associated with this crumb
+ * @property text {string} What text label to show for the crumb
+ * @property [source] {string} Optional query source
  */
 module.exports = SearchPanel;

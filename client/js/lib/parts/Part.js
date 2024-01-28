@@ -56,7 +56,7 @@ class Part {
       parentId: this.parentIds && this.parentIds.length? this.parentIds : undefined,
       childIds: this.childIds && this.childIds.length? this.childIds : undefined,
       sourceParts: this.sourceParts? this.sourceParts.map( p => p.toJson() ) : undefined
-    }
+    };
   }
 
   fromJson(json) {

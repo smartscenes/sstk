@@ -136,10 +136,12 @@ OffscreenPicker.prototype.getIntersectedFromScreenPosition = function (container
  * @param camera {THREE.Camera}
  * @param scene {THREE.Object3D}
  * @param [pickables] {Object<int, Object<int, int>>} Optional counts of pickable mesh ids and face indices to be updated
+ * @param [getMeshId] {function(Mesh): int} Function that returns the mesh id
  * @returns {Object<int, Object<int, int>>} Map of mesh id to map of pickable face indices to counts
  */
-OffscreenPicker.prototype.updatePickables = function(camera, scene, pickables) {
+OffscreenPicker.prototype.updatePickables = function(camera, scene, pickables, getMeshId) {
   // Get all pickable triangles from this view point
+  getMeshId = getMeshId || function(mesh) { return mesh.id; };
   this.__updateScene(scene);
   this.__gpuPicker.setCamera(camera);
   var width = this.__gpuPicker.pickingTexture.width;
@@ -151,8 +153,9 @@ OffscreenPicker.prototype.updatePickables = function(camera, scene, pickables) {
       var m = { x: i, y: j };
       var intersected = this.__gpuPicker.pick(m);
       if (intersected) {
-        pickables[intersected.object.id] = pickables[intersected.object.id] || {};
-        pickables[intersected.object.id][intersected.faceIndex] = (pickables[intersected.object.id][intersected.faceIndex] || 0) + 1;
+        var meshId = getMeshId(intersected.object);
+        pickables[meshId] = pickables[meshId] || {};
+        pickables[meshId][intersected.faceIndex] = (pickables[meshId][intersected.faceIndex] || 0) + 1;
       }
     }
   }

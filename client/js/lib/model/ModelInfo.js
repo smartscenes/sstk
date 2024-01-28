@@ -38,10 +38,19 @@ ModelInfo.getRelativeTransform = function(info1, info2) {
   var alignMat = ModelInfo.getAlignmentMatrix(info1, info2);
   var s = ModelInfo.getUnit(info1) / ModelInfo.getUnit(info2);
   return alignMat.scale(new THREE.Vector3(s, s, s));
-}
+};
 
 ModelInfo.getCenterTo = function(info) {
   return Object3DUtil.toVector3(info.defaultCenter);
+};
+
+ModelInfo.getDataInfo = function(info) {
+  return info.dataInfo;
+};
+
+ModelInfo.getMetadataForDataType = function(info, type) {
+  console.log(info);
+  return info.dataInfo? info.dataInfo.dataTypes[type] : null;
 };
 
 module.exports = ModelInfo;

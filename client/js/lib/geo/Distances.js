@@ -1327,7 +1327,7 @@ function PointMeshesDistanceSquared(point, meshes, opts) {
         }
       }
     } else {
-      throw "Unsupported mesh type";
+      throw 'Unsupported mesh type';
     }
   }
   if (opts.profile) {
@@ -1794,7 +1794,7 @@ function computeDistance(object1, object2, opts) {
   if (fn) {
     return fn(object1, object2, opts);
   } else {
-    throw "Unsupported distance computation " + type1 + " and " + type2;
+    throw 'Unsupported distance computation ' + type1 + ' and ' + type2;
   }
 }
 

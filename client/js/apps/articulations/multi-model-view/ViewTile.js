@@ -54,9 +54,19 @@ class ViewTile {
 
     setModelInst(modelInstance, articulations) {
         this.modelInstance = modelInstance;
-        this.articulations = articulations || this.modelInstance.getObject3D('Model').userData.articulations;
+        articulations = articulations || this.modelInstance.getObject3D('Model').userData.articulations;
 
-        this.articulatedObject = this.modelInstance.clone().toArticulatedObject(this.articulations);
+        if (articulations && articulations.length) {
+            this.articulatedObject = this.modelInstance.clone().toArticulatedObject(articulations);
+        } else {
+            const articulatedObjects = this.modelInstance.clone().getArticulatedObjects();
+            if (articulatedObjects.length) {
+                this.articulatedObject = articulatedObjects[0];
+                if (articulatedObjects.length > 1) {
+                    console.warn('Taking first articulated objects, ignoring others', articulatedObjects);
+                }
+            }
+        }
 
         // align and rescale
         this.group = new THREE.Group();
@@ -173,7 +183,7 @@ class ViewTile {
                     return false;
                 }
 
-                const parentId = articulationState.part.baseIds[0];
+                const parentId = articulationState.part.baseIds? articulationState.part.baseIds[0] : null;
                 if (!(basePartId == null) && parentId != basePartId) {
                     return false;
                 }
@@ -183,13 +193,15 @@ class ViewTile {
 
             let resetFlag = true;
             for (let articulationState of articulationStates) {
-                renderHelper.applyMultiplePartColorings(this.articulatedObject, articulationState, resetFlag);
+                renderHelper.applyPartColorings(this.articulatedObject, articulationState, resetFlag);
 
-                if (articulationState.type.toLowerCase() == 'fixed') {
+                if (articulationState.type.toLowerCase() === 'fixed') {
                     // Deal with the default highlight
                     continue;
                 }
-                if (resetFlag == true) resetFlag = false;
+                if (resetFlag) {
+                    resetFlag = false;
+                }
 
                 if (articulationState.refNow == null && articulationState.articulation.rangeMin != null && articulationState.articulation.rangeMax != null) {
                     articulationState.apply(articulationState.articulation.rangeMin - articulationState.articulation.defaultValue);

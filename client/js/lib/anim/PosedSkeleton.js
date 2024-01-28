@@ -48,7 +48,7 @@ PosedSkeleton.prototype.__update = function() {
   this.bodyToWorld.setPosition(this.worldPosition);
   this.bodyToWorld.makeRotationFromQuaternion(this.worldOrientation);
   this.worldToBody = new THREE.Matrix4();
-  this.worldToBody.getInverse(this.bodyToWorld);
+  this.worldToBody.copy(this.bodyToWorld).invert();
 };
 
 PosedSkeleton.prototype.getJointPositionScene = function(jointId, useKinect) {

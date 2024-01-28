@@ -1,9 +1,8 @@
 require('loaders/OBJLoader');
-const Part = require('parts/Part');
 const async = require('async');
 const _ = require('util/util');
 
-class PartsLoader {
+class IndexedMeshPartsLoader {
 
   static loadPartMeshes(model_filename, parts_filename, callback) {
     console.time('loadPartMeshes');
@@ -20,51 +19,23 @@ class PartsLoader {
       if (err) {
         callback(err);
       } else {
-        let object = res[0];
-        let partsJson = res[1];
-        let partsData = PartsLoader.parseParts(partsJson);
-        let partMeshes = PartsLoader.segmentObject(object, partsData.labels, partsData.indices, partsData.partNames, PartsLoader.MESH_OPACITY);
+        const object = res[0];
+        const partsJson = res[1];
+        const partsData = IndexedMeshPartsLoader.parseParts(partsJson);
+        const partMeshes = IndexedMeshPartsLoader.segmentObject(object, partsData.labels,
+          partsData.indices, partsData.partNames, IndexedMeshPartsLoader.MESH_OPACITY);
         callback(null, { id: partsData.id, annId: partsData.annId, parts: partMeshes });
       }
     });
   }
 
-  static loadPartsWithConnectivityGraph(partsFilesInfo, callback) {
-    // Load the precomputed connectivity graph and OBBs
-    const meshFilename = partsFilesInfo['mesh'];
-    const precomputedFilename = partsFilesInfo['connectivity_graph'];
-    const partsFilename = partsFilesInfo['parts'];
-    async.parallel([
-      (cb) => {
-        _.getJSON(precomputedFilename, cb);
-      },
-      (cb) => {
-        PartsLoader.loadPartMeshes(meshFilename, partsFilename, cb);
-      }
-    ], (err, res) => {
-      if (err) {
-        callback(err);
-      } else {
-        // Convert these into Part objects
-        const precomputedJson = res[0];
-        const partsData = res[1];
-        const graph = precomputedJson.connectivityGraph;
-        const parts = precomputedJson.parts.map(p => p? Part.fromJson(p):null);
-        const partMeshes = partsData.parts;
-        for (let i = 0; i < partMeshes.length; i++) {
-          const part = parts[i];
-          if (part) {
-            part.object3D = partMeshes[i];
-          }
-        }
-        callback(null, { annId: partsData.annId, parts: parts, connectivityGraph: graph});
-      }
-    });
-  }
-
   static parseParts(json) {
-    const labels = json.segmentation[6].labels;
-    const indices = json.segmentation[6].index;
+    const partSegIndex = _.findIndex(json.segmentation, seg => seg.name === "parts");
+    if (partSegIndex < 0) {
+      throw 'Segmentation does not contain parts';
+    }
+    const labels = json.segmentation[partSegIndex].labels;
+    const indices = json.segmentation[partSegIndex].index;
 
     // Create map from labels -> PIDs (part IDs)
     const partIndices = {};
@@ -118,7 +89,7 @@ class PartsLoader {
     const color = new THREE.Color(0xaaaaaa);
 
     // Map face index -> all triangles (indices) in face
-    const faces = PartsLoader.groupFaces(indices);
+    const faces = IndexedMeshPartsLoader.groupFaces(indices);
     //const faces = _.groupByMulti(indices, x => x);
 
     // Load entire object geometry
@@ -196,6 +167,6 @@ class PartsLoader {
 
 }
 
-PartsLoader.MESH_OPACITY = 0.5;
+IndexedMeshPartsLoader.MESH_OPACITY = 0.5;
 
-module.exports = PartsLoader;
+module.exports = IndexedMeshPartsLoader;

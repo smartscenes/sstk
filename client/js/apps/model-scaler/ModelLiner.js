@@ -14,15 +14,15 @@ var IOUtil = require('io/IOUtil');
 var Picker = require('controls/Picker.js');
 var OBJMTLExporter = require('exporters/OBJMTLExporter');
 var FileSaver = require('file-saver');
-var dat = require('dat.gui');
+var dat = require('ui/datGui');
 
 function ModelLiner(container) {
   Constants.worldUp = new THREE.Vector3(0,0,1);
   // Set world front to -y so all models are aligned to that and our camera faces it
   Constants.worldFront = new THREE.Vector3(0,-1,0);
 
-  this.modelScalesCsv = Constants.dataDir + '/sizes/CombAll.modelScales.csv'; // file of estimated scales we will use
-  this.lineupModelIdsFile = Constants.dataDir + '/sizes/lineups4.json';
+  this.modelScalesCsv = Constants.baseUrl + '/data/sizes/CombAll.modelScales.csv'; // file of estimated scales we will use
+  this.lineupModelIdsFile = Constants.baseUrl + '/data/sizes/lineups4.json';
   this.container = null;
   this.camera = null;
   this.scene = null;
@@ -252,9 +252,6 @@ ModelLiner.prototype.setupDatGui = function () {
   gui.add(this, 'indicateUnscaledModels').listen();
   gui.add(this, 'multiLineup').listen();
   gui.add(this, 'nRows').min(0).max(10).listen();
-  gui.getFolder = function (name) {
-    return gui.__folders[name] || gui.addFolder(name);
-  };
   this.datgui = gui;
 };
 

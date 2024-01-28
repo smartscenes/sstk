@@ -10,6 +10,7 @@ var LabelsPreviewPanel = require('ui/LabelsPreviewPanel');
 var CustomListLabelsPreviewPanel = require('ui/CustomListLabelsPreviewPanel');
 var LabelCountsPanel = require('ui/LabelCountsPanel');
 var AnnotationsPanel = require('ui/AnnotationsPanel');
+var TabsControl = require('ui/TabsControl');
 var _ = require('util/util');
 require('dragscrollable');
 require('jquery-lazy');
@@ -21,6 +22,9 @@ require('jquery-lazy');
  * @param [options.nImagesPerModel] {int} Number of image that each model has
  * @param [options.imageIndex] {int} Index of image to show for a model
  * @param [options.inspect] {boolean} Whether to enable inspect model
+ * @param [options.updateByQuery] {boolean} Whether to enable updateByQuery (not just selected)
+ * @param [options.allowSearchScenes] {boolean} Whether to allow searching of scenes
+ * @param [options.sceneSource] {string} Source to use when searching for scenes
  * @memberOf model-tools
  * @constructor
  */
@@ -34,7 +38,13 @@ function ModelCategorizer(params) {
   var urlParams = _.getUrlParams();
   var defaults = {
     nImagesPerModel: 14,
-    imageIndex: 13
+    imageIndex: 13,
+    searchPanel: {
+      entriesPerRow: 6,
+      nRows: 40
+    },
+    viewOnly: false,
+    categoryField: 'category'
   };
   var allParams = _.defaultsDeep(Object.create(null), urlParams, params, defaults);
   this.nImagesPerModel = allParams['nImagesPerModel'];
@@ -42,8 +52,22 @@ function ModelCategorizer(params) {
   this.addInspectModelResultButtons = allParams.inspect;
   this.includeExtraAssets = allParams.extra;
   this.allowUpdateByQuery = allParams.updateByQuery;
+  this.allowSearchScenes = allParams.allowSearchScenes;
+  this.sceneSource = allParams.sceneSource;
   this.source = allParams.source;
-  this.categoryField = 'category';
+  this.categoryField = allParams.categoryField;
+  if (this.categoryField !== 'category') {
+    this.viewOnly = true;
+  }
+  this.viewOnly = allParams.viewOnly;
+  this.__options = allParams;
+
+  // Tabs
+  this.__tabsControl = new TabsControl({
+    tabs: params.tabs,
+    tabsDiv: params.tabsDiv });
+  this.__tabsControl.initTabs();
+
   this.init();
 }
 
@@ -56,8 +80,12 @@ ModelCategorizer.prototype.init = function () {
   // - Categories associated with model
   //    (listed at top - yellow = no change, green = added, red = deleted)
   var scope = this;
+  var searchPanelOpts = scope.__options.searchPanel;
   this.modelSearchPanelHelper = new ModelSearchPanelHelper({
-    includeExtraAssets: this.includeExtraAssets
+    includeExtraAssets: this.includeExtraAssets,
+    allowSearchScenes: this.allowSearchScenes,
+    sceneSource: this.sceneSource,
+    segmentType: this.__options.segmentType
   });
   this.searchPanel = $('#searchPanel');
   this.searchController = new SearchController({
@@ -104,8 +132,8 @@ ModelCategorizer.prototype.init = function () {
       elem.prepend(labels);
       elem.dblclick(scope.showModel.bind(scope, fullId));
     },
-    entriesPerRow: 6,
-    nRows: 40,
+    entriesPerRow: searchPanelOpts.entriesPerRow,
+    nRows: searchPanelOpts.nRows,
     searchPanel: this.searchPanel,
     showLoadFile: true,
     allowSave: true,
@@ -123,6 +151,14 @@ ModelCategorizer.prototype.init = function () {
       assetFiles: Constants.indexedAssetsFile,
       searchController: this.searchController,
       callback: function (err, res) {
+        if (scope.source) {
+          scope.searchController.selectSource(scope.source);
+        }
+        const initialQuery = _.getUrlParam('query');
+        if (initialQuery) {
+          scope.searchController.setSearchText(initialQuery);
+          scope.searchController.startSearch();
+        }
       }
     });
   }
@@ -168,6 +204,7 @@ ModelCategorizer.prototype.init = function () {
   this.categoriesPanel = new LabelCountsPanel({
     container: '#categoriesPanel',
     searchController: this.searchController,
+    excludeZeroCountLabels: true,
     labelName: this.categoryField
   });
   this.categoriesPanel.Subscribe('LabelsUpdated', this, function(labels) {
@@ -215,9 +252,16 @@ ModelCategorizer.prototype.init = function () {
   var newImagesCheckbox = $('#newImages');
   if (newImagesCheckbox && newImagesCheckbox.length > 0) {
     var imageIndexElem = $('#imageIndex');
+    var defaultImageIndexAdded = false;
     for (var i = 0; i < this.nImagesPerModel; i++) {
       var imageName = imageNames[i] || i;
+      if (i === this.defaultImageIndex) {
+        defaultImageIndexAdded = true;
+      }
       imageIndexElem.append('<option value="' + i + '">' + imageName + '</option>');
+    }
+    if (!defaultImageIndexAdded) {
+      imageIndexElem.append('<option value="' + this.defaultImageIndex + '">' + this.defaultImageIndex + '</option>');
     }
     imageIndexElem.val(this.defaultImageIndex);
     var selectImagePreviewFunc = function () {
@@ -236,39 +280,45 @@ ModelCategorizer.prototype.init = function () {
     selectImagePreviewFunc();
   }
 
-  var initialQuery = _.getUrlParam('query');
-  if (initialQuery) {
-    this.searchController.setSearchText(initialQuery);
-    this.searchController.startSearch();
+  if (!this.includeExtraAssets) {
+    var initialQuery = _.getUrlParam('query');
+    if (initialQuery) {
+      this.searchController.setSearchText(initialQuery);
+      this.searchController.startSearch();
+    }
   }
 
   var annotationsPanel = $('#annotationsPanel');
   if (annotationsPanel && annotationsPanel.length > 0) {
-    var editableAttributes = ['wnsynset', /*'category', */ 'datatags',
-      'motif', 'support', 'symType',
-      'color', 'material', 'shape', 'depicts',
-      'state', 'usedFor', 'foundIn', 'hasPart', 'attr',
-      'needCleaning', 'isCornerPiece', 'isContainerLike',
-      'isSingleCleanObject', 'hasMultipleObjects', 'hasNestedObjects',
-      'isArrangement', 'isCollection'];
-    var readOnlyAttributes = [];
-    var attributeLinks =  { 'wnsynset': ModelSchema.ShapeNetSynsetAttributeLink };
-    this.annotationsPanel = new AnnotationsPanel({
-      container: annotationsPanel,
-      allowEnabledSelection: true,
-      allowUpdateByQuery: this.allowUpdateByQuery,
-      getQuery: this.allowUpdateByQuery? function() {
-        return scope.searchController.searchPanel.getLastQueryOptions();
-      } : null,
-      enabledAttributes: ['wnsynset'],
-      attributes: editableAttributes,
-      attributesReadOnly: readOnlyAttributes,
-      attributeLinks: attributeLinks,
-      allowOpSelection: true,
-      searchController: this.searchController,
-      onSubmittedCallback: this.clearChanges.bind(this)
-    });
-    this.updateAnnotationsPanel();
+    if (this.viewOnly) {
+      this.__tabsControl.disableTab('annotations', true);
+    } else {
+      var editableAttributes = ['wnsynset', /*'category', */ 'datatags',
+        'motif', 'support', 'symType',
+        'color', 'material', 'shape', 'depicts',
+        'state', 'usedFor', 'foundIn', 'hasPart', 'attr',
+        'needCleaning', 'isCornerPiece', 'isContainerLike',
+        'isSingleCleanObject', 'hasMultipleObjects', 'hasNestedObjects',
+        'isArrangement', 'isCollection'];
+      var readOnlyAttributes = [];
+      var attributeLinks = {'wnsynset': ModelSchema.ShapeNetSynsetAttributeLink};
+      this.annotationsPanel = new AnnotationsPanel({
+        container: annotationsPanel,
+        allowEnabledSelection: true,
+        allowUpdateByQuery: this.allowUpdateByQuery,
+        getQuery: this.allowUpdateByQuery ? function () {
+          return scope.searchController.searchPanel.getLastQueryOptions();
+        } : null,
+        enabledAttributes: ['wnsynset'],
+        attributes: editableAttributes,
+        attributesReadOnly: readOnlyAttributes,
+        attributeLinks: attributeLinks,
+        allowOpSelection: true,
+        searchController: this.searchController,
+        onSubmittedCallback: this.clearChanges.bind(this)
+      });
+      this.updateAnnotationsPanel();
+    }
   }
 
   // Resize
@@ -487,6 +537,27 @@ ModelCategorizer.prototype.createLabelTag = function (source, id, category, upda
     //change.attr('src','resources/images/16/delete.png');
     label.append(change);
   }
+  var search = $('<img/>').attr('src', 'resources/images/16/search.png');
+  label.prepend(search);
+  search.click(
+    function (e) {
+      var query = this.categoryField + ':"' + category + '"';
+      this.searchController.setSearchText(query);
+      this.searchController.search(query);
+      e.stopPropagation();
+    }.bind(this)
+  );
+  return label;
+};
+
+ModelCategorizer.prototype.createViewOnlyLabelTag = function (source, id, category) {
+  var catClass = 'searchResultLabel';
+  catClass = catClass + ' ' + catClass ;
+  var label = $('<div></div>')
+    .attr('class', 'roundBorder ' + catClass)
+    .attr('id', 'labels_' + source + '_' + id + '_' + category)
+    .attr('data-id', source + '.' + id)
+    .text(category);
   var search = $('<img/>').attr('src', 'resources/images/16/search.png');
   label.prepend(search);
   search.click(

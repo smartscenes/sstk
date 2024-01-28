@@ -63,7 +63,7 @@ var fields = [
       { query: 'modelIds:(122 OR 247)', description: 'Scenes with either model 122 or 247 (two different doors)' }]
   },
   { name: 'roomTypes', type: 'categorical',
-    description: 'Best guess at whether to room is a Bedroom, Bathroom, etc by the SUNCG team (each room can have multiple room types)',
+    description: 'Best guess at whether to room is a Bedroom, Bathroom, etc (each room can have multiple room types)',
     examples: [{ query: 'roomTypes:Kitchen', description: 'Scenes with kitchens' },
       { query: '!roomTypes:*', description: 'Scenes with uncategorized rooms' }] },
   { name: 'origRoomTypes', type: 'categorical',

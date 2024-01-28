@@ -4,6 +4,9 @@
  * @memberOf geo
  */
 var OBB = require('three-OBB');
+var BBoxUtil = require('geo/BBoxUtil');
+var Constants = require('Constants');
+var _ = require('util/util');
 
 OBB.prototype.containsPoint = OBB.prototype.isPointContained;
 
@@ -57,13 +60,13 @@ OBB.prototype.toJSON = function () {
 /**
  * Converts the OBB to a Mesh object with BoxGeometry
  */
-OBB.prototype.toMesh = function() {
-  var mesh = new THREE.Mesh(new THREE.BoxGeometry(this.halfSizes.x, this.halfSizes.y, this.halfSizes.z));
-  mesh.applyMatrix(this.basis);
+OBB.prototype.toMesh = function(material) {
+  var mesh = new THREE.Mesh(new THREE.BoxGeometry(this.halfSizes.x*2, this.halfSizes.y*2, this.halfSizes.z*2), material);
+  mesh.applyMatrix4(this.basis);
   var p = this.position;
-  mesh.applyMatrix(new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
+  mesh.applyMatrix4(new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
   return mesh;
-}
+};
 
 Object.defineProperty(OBB.prototype, 'dominantNormal', {
   get: function () {
@@ -74,6 +77,13 @@ Object.defineProperty(OBB.prototype, 'dominantNormal', {
   }
 });
 
+OBB.prototype.ensureMinSize = function(min) {
+  var m = min/2;
+  this.halfSizes.x = Math.max(m, this.halfSizes.x);
+  this.halfSizes.y = Math.max(m, this.halfSizes.y);
+  this.halfSizes.z = Math.max(m, this.halfSizes.z);
+};
+
 OBB.prototype.__getSmallestIndex = function() {
   // Pick the R col with the smallest length
   var smallestIdx = 1;
@@ -82,6 +92,11 @@ OBB.prototype.__getSmallestIndex = function() {
   if (r[2] < r[smallestIdx]) smallestIdx = 2;
   return smallestIdx;
 };
+
+// expose function
+OBB.prototype.getSmallestIndex = OBB.prototype.__getSmallestIndex;
+
+OBB.prototype.getDominantNormalIndex = OBB.prototype.__getSmallestIndex;
 
 OBB.prototype.__extractDominantNormal = function () {
   var smallestIdx = this.__getSmallestIndex();
@@ -156,7 +171,7 @@ OBB.prototype.localDirToWorldDir = function(v) {
 OBB.prototype.worldDirToLocalDir = (function() {
   var inv = new THREE.Matrix4();
   return function(v) {
-    inv.getInverse(this.basis);
+    inv.copy(this.basis).invert();
     v.applyMatrix4(inv);
     return v;
   };
@@ -212,9 +227,9 @@ OBB.prototype.diagonalLength = (function() {
  * Aspect ratio is two numbers: shortest/longest, shortest/middle
  */
 OBB.prototype.aspectRatios = function() {
-  dims = this.halfSizes;
-  short = Math.min(Math.min(dims.x, dims.y), dims.z);
-  long = Math.max(Math.max(dims.x, dims.y), dims.z);
+  var dims = this.halfSizes;
+  var short = Math.min(Math.min(dims.x, dims.y), dims.z);
+  var long = Math.max(Math.max(dims.x, dims.y), dims.z);
   var mid;
   if (dims.x != short && dims.x != long) {
     mid = dims.x;
@@ -302,7 +317,7 @@ OBB.prototype.getRotationQuaternion = function(quaternion) {
 //                       otherwise,    local position center is (0.5, 0.5, 0.5)
 OBB.prototype.getWorldToLocalMatrix4 = function (zeroCenter) {
   var matrix = this.getLocalToWorldMatrix4(zeroCenter);
-  matrix.getInverse();
+  matrix.invert();
   return matrix;
 };
 
@@ -412,6 +427,30 @@ OBB.prototype.getNumValidDimensions = function(min) {
   return okayDims.length;
 };
 
+OBB.prototype.getFaceDims = function () {
+  var dims = this.dimensions();
+  return BBoxUtil.getFaceDims(dims);
+};
+
+OBB.prototype.getFaceNormalDims = function () {
+  var dims = this.dimensions();
+  return BBoxUtil.getFaceNormalDims(dims);
+};
+
+OBB.prototype.getFaceCorners = function (faceIndex) {
+  return BBoxUtil.getFaceCorners(this.getCorners(), faceIndex);
+};
+
+OBB.prototype.sample = function(out, rng) {
+  out = BBoxUtil.sample(out, rng);
+  return this.getWorldPosition(out, out);
+};
+
+OBB.prototype.sampleFace = function(faceIndex, out, rng) {
+  out = BBoxUtil.sampleFace(faceIndex, out, rng);
+  return this.getWorldPosition(out, out);
+};
+
 OBB.prototype.reverseNormal = function() {
   // Reverse the dominant normal
   var smallestIdx = this.__getSmallestIndex();
@@ -420,12 +459,36 @@ OBB.prototype.reverseNormal = function() {
   m[si] = -m[si];
   m[si+1] = -m[si+1];
   m[si+2] = -m[si+2];
-  var si2 = (smallestIdx === 0)? 2 : (smallestIdx+1)%3;
+  var si2_raw = (smallestIdx === 0)? 2 : ((smallestIdx+1)%3);
+  var si2 = si2_raw*4;
   m[si2] = -m[si2];
   m[si2+1] = -m[si2+1];
   m[si2+2] = -m[si2+2];
+  this.__isReversed = true;  // track that we made this change
   this.__dominantNormal = this.__extractDominantNormal();
   this.clearCache();
+};
+
+OBB.prototype.setDominantNormalComponentTo = function(targetIndex) {
+  var domIndex = this.getDominantNormalIndex();
+  if (domIndex !== targetIndex) {
+    if (targetIndex >= 0 && targetIndex < 3) {
+      var m = this.basis.elements;
+      var di = domIndex * 4;
+      var ti = targetIndex * 4;
+      var tmp = [-m[ti], -m[ti+1], -m[ti+2]];
+      m[ti] = m[di];
+      m[ti+1] = m[di+1];
+      m[ti+2] = m[di+2];
+      m[di] = tmp[ti];
+      m[di+1] = tmp[ti+1];
+      m[di+2] = tmp[ti+2];
+      this.__dominantNormal = this.__extractDominantNormal();
+      this.clearCache();
+    } else {
+      console.error('Invalid target index for OBB.setDominantNormalComponentTo', targetIndex);
+    }
+  }
 };
 
 Object.defineProperty(OBB.prototype, 'min', {
@@ -436,14 +499,37 @@ Object.defineProperty(OBB.prototype, 'max', {
   get: function () { return this.getMinMax().max; }
 });
 
-// Vertices pointing toward the inside
-OBB.FACE_VERTS = [
-  [0, 2, 3, 1],      // -x
-  [4, 5, 7, 6],      // +x
-  [0, 1, 5, 4],      // -y
-  [2, 6, 7, 3],      // +y
-  [0, 4, 6, 2],      // -z
-  [1, 3, 7, 5],      // +z
-];
+Object.defineProperty(OBB.prototype, 'isPlane', {
+  get: function () {
+    // check if very shortest dimension is must smaller than the other two dimensions
+    var aspectRatios = this.aspectRatios();
+    return aspectRatios.x < 0.1 && aspectRatios.y < 0.1;
+  }
+});
+
+OBB.prototype.isVerticalPlane = function(up) {
+  up = up || Constants.worldUp;
+  return this.isPlane && Math.abs(this.dominantNormal.dot(up)) < 0.05;
+};
+
+OBB.prototype.isHorizontalPlane = function(up) {
+  up = up || Constants.worldUp;
+  return this.isPlane && Math.abs(this.dominantNormal.dot(up)) >= 0.95;
+};
+
+OBB.fromJSON = function(json) {
+  var obb = new OBB();
+  obb.fromJSON(json);
+  return obb;
+};
+
+OBB.fromAABB = function(aabb, transform) {
+  var obb = new OBB();
+  obb.setFromAABB(aabb);
+  if (transform) {
+    obb.applyMatrix4(transform);
+  }
+  return obb;
+};
 
 module.exports = OBB;

@@ -50,10 +50,12 @@ Example of using `STK.SimpleModelViewer` from `STK.bundle.js`
   # Existing files
   js/                   # Main javascript code
     apps/               # Bundled apps built on top of the STK client library 
+       articulations/   # Tools for annotation articulations
        model-scaler/    # Tools for scaling models
        model-tools/     # Tools for annotating model category
        part-annotator/  # Tools for annotating model parts
-       scan-net/        # Tools for annotating scans
+       rlsd/            # Tools for RLSD project
+       scan-annotator/  # Tools for annotating scans
        scene-viewer/    # Tools for viewing scenes
        taxonomy-viewer/ # Tools for viewing ShapeNet taxonomy
        viz/             # Visualization tools

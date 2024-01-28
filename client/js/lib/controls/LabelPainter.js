@@ -87,10 +87,10 @@ LabelPainter.prototype.registerEventListeners = function (domElement) {
     }
   );
 
-  domElement.addEventListener('mousedown', this.handleMouseDown.bind(this));
-  domElement.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
-  document.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
-  domElement.addEventListener('mouseleave', this.handleMouseLeave.bind(this), false);
+  domElement.addEventListener('pointerdown', this.handleMouseDown.bind(this));
+  domElement.addEventListener('pointermove', this.handleMouseMove.bind(this), false);
+  document.addEventListener('pointerup', this.handleMouseUp.bind(this), false);
+  domElement.addEventListener('pointerleave', this.handleMouseLeave.bind(this), false);
 };
 
 LabelPainter.prototype.setLabelInfo = function (labelInfo) {

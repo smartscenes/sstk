@@ -399,7 +399,7 @@ MultiLevelGrid.prototype.toJson = function() {
     unit: this.unit,
     grids: gridsJson,
     timings: this.timings
-  }
+  };
 };
 
 MultiLevelGrid.prototype.idToLevelGrid = function(id) {

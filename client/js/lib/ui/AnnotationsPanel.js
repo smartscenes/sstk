@@ -352,7 +352,7 @@ AnnotationsPanel.prototype.__setAnnotationsFromModelInfo = function (modelInfo, 
         this.showAttribute(name, field, value, 'noedit');
       } else {
         this.showAttribute(name, field, undefined, 'noedit');
-        if (this.hideEmptyFields) {
+        if (field && field.div && this.hideEmptyFields) {
           field.div.hide();
         }
       }
@@ -446,9 +446,10 @@ AnnotationsPanel.prototype.setAnnotation = function (fieldName, value, keepNewAn
   var field = this.attributesMap[fieldName];
   if (field) {
     var update = this.__computeFieldDelta(field);
+    var v = keepNewAnnotations? this.annotations['new'][fieldName] : value;
     this.annotations.update[fieldName] = update;
     // Update the UI
-    this.showAttribute(fieldName, field, value, update);
+    this.showAttribute(fieldName, field, v, update);
     this.Publish('FieldUpdated', field, this.getAnnotation(fieldName));
   }
 };
@@ -1224,7 +1225,7 @@ WordNetLabelLinker.prototype.clear = function() {
 WordNetLabelLinker.prototype.getHoverData = function(key) {
   var linked = this.__cached[key];
   if (linked) {
-    return JSON.stringify(_.omit(linked.record, ['wnhyperlemmas', 'wnhypersynsets']), null, ' ');
+    return JSON.stringify(_.omit(linked.record, ['wnhyperlemmas', 'wnhypersynsets', 'wnhypersynsetkeys']), null, ' ');
   }
 };
 
@@ -1273,8 +1274,10 @@ WordNetLabelLinker.prototype.__convertSynset = function(synset) {
 
 WordNetLabelLinker.prototype.__convertSynsetTaxnomyNode = function(node) {
   var linkField = this.fieldMappings[this.linkField];
+  var wnsynsetkey = this.fieldMappings['wnsynsetkey'];
   node.synset.wnhyperlemmas = node.ancestors? _.uniq(_.flatMap(node.ancestors, function(x) { return x.words; })) : undefined;
   node.synset.wnhypersynsets = node.ancestors? _.uniq(_.flatMap(node.ancestors, function(x) { return x[linkField]; })) : undefined;
+  node.synset.wnhypersynsetkeys = node.ancestors? _.uniq(_.flatMap(node.ancestors, function(x) { return x[wnsynsetkey]; })) : undefined;
   var linkDetail = this.__convertSynset(node.synset);
   return linkDetail;
 };

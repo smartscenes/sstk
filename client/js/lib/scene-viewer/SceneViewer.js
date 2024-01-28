@@ -51,23 +51,23 @@ var ModelInfoFilter = require('model/ModelInfoFilter');
 
 // Object3D functions
 var Object3DUtil = require('geo/Object3DUtil');
-var GeometryUtil = require('geo/GeometryUtil');
 var MeshHelpers = require('geo/MeshHelpers');
 var OBJMTLExporter = require('exporters/OBJMTLExporter');
 
 // Advanced functionality
 var VisualizeParts = require('scene-viewer/VisualizeParts');
-var ExportObject3DForm = require('ui/ExportObject3DForm');
+var ExportSceneForm = require('ui/modal/ExportSceneForm');
 var ViewOptimizer = require('gfx/ViewOptimizer');
 var Character = require('anim/Character');
 
 // Util
 var FileUtil = require('io/FileUtil');
+var TabsControl = require('ui/TabsControl');
+var UIUtil = require('ui/UIUtil');
 var keymap = require('controls/keymap');
 var _ = require('util/util');
 var async = require('async');
 
-require('physijs');
 require('jquery-console');
 require('jquery-lazy');
 
@@ -76,8 +76,13 @@ SceneViewer.HighlightSelectedFalseBkFalse = 1;  // Selected object is false mate
 SceneViewer.HighlightSelectedOrigBkFalse = 2;  // Selected object is original material, background false material
 SceneViewer.HighlightModesCount = 3;
 
-SceneViewer.ControlTypes = ['orbitRightClick', 'firstPerson'];
+SceneViewer.ControlTypes = ['orbitRightClick', 'firstPerson', 'pointerLock'];
 SceneViewer.ControlTypesMap = _.invert(SceneViewer.ControlTypes);
+
+SceneViewer.WAIT = Object.freeze({
+  LOAD_MODEL: 'loadModel',
+  LOAD_SCENE: 'loadScene'
+});
 
 /**
  * Default reasonable, context query control options for each context control.
@@ -212,7 +217,6 @@ SceneViewer.DefaultContextQueryType = 'one-click';
  * @param [params.restrictTextures] {string} Filter queries (e.g. +category:xxx ) for restricting what textures are shown in the search panel
  * @param [params.restrictScans] {string} Filter queries (e.g. +category:xxx ) for restricting what scans are shown in the search panel
  * @param [params.restrictArch] {string} Filter queries (e.g. +category:xxx ) for restricting what arch are shown in the search panel
- *
  * @param [params.loadModelFilter] {function} Filter function takes modelinfo and returns whether to load model
  *
  * @param [params.cameraControlIconsDir=Constants.cameraControlIconsDir] {string}
@@ -234,7 +238,6 @@ function SceneViewer(params) {
   var defaults = {
     appId: 'SceneViewer@0.0.1',
     allowEdit: false,
-    usePhysicalLights: false,
     selectMode: false,
     materialMode: false,
     includeCeiling: true,
@@ -244,7 +247,11 @@ function SceneViewer(params) {
     contextQueryType: SceneViewer.DefaultContextQueryType,
     textureSet: 'all',
     texturedObjects: Constants.defaultTexturedObjects,
-    centerFirstModel: true
+    centerFirstModel: true,
+    colorByOptions: { color: '#fef9ed' },
+    allowUndoStack: true,
+    useContextQueryControls: false,
+    cameraControlTypes: undefined
   };
   this.urlParams = _.getUrlParams();
   if (this.urlParams.config) {
@@ -256,23 +263,24 @@ function SceneViewer(params) {
       console.warn('Unknown config', this.urlParams.config);
     }
   }
-  var allParams = _.defaultsDeep(Object.create(null), this.urlParams, params, defaults);
+  params = _.defaultsDeep(Object.create(null), params, defaults);
+  var allParams = _.defaultsDeep(Object.create(null), this.urlParams, params);
   Viewer3D.call(this, allParams);
 
-  
   this.userId = Constants.getGlobalOrDefault('userId', this.urlParams['userId']);
   this.defaultSceneId = allParams.defaultSceneId;
-
+  
   this.sceneState = null;
 
   this.assetManager = null;
   this.sceneSearchController = null;
   this.modelSearchController = null;
+  this.__modelSearchControlers = [];
   this.textureSearchController = null;
   this.scanSearchController = null;
   this.archSearchController = null;
   this.searchControllers = {};
-  
+
   this.sceneGenerator = null;
   this.sceneHierarchy = null;
   this.bvhVisualizer = null;
@@ -288,19 +296,25 @@ function SceneViewer(params) {
   this.supportArticulated = allParams.supportArticulated;
   this.uilog = null;
   this.archName = null;
-
+  
   this.showInstructions = params.showInstructions;
   this.modelViewerUrl = params.modelViewerUrl;
-
+  
   this.onLoadUrl = params.onLoadUrl;
   this.onSaveUrl = params.onSaveUrl;
   this.onCloseUrl = params.onCloseUrl;
-
+  
   this.enableUILog = params.enableUILog;
-
+  
   this.sceneSources = params.sceneSources || Constants.assetSources.scene;
   this.modelSources = params.modelSources;
   this.defaultLoadOptions = allParams['defaultLoadOptions'];
+  
+  this.useContextQueryControls = (params.useContextQueryControls !== undefined) ? params.useContextQueryControls: false;
+  
+  this.allowUndoStack = (params.allowUndoStack !== undefined) ? params.allowUndoStack: false;
+  this.colorBy = allParams['colorBy'] || 'original';
+  this.colorByOptions = allParams.colorByOptions;
 
   this.allowSave = (params.allowSave !== undefined) ? params.allowSave : false;
   this.allowClose = (params.allowClose !== undefined) ? params.allowClose : false;
@@ -315,7 +329,19 @@ function SceneViewer(params) {
   this.allowCopyPaste = (params.allowCopyPaste !== undefined) ? params.allowCopyPaste : true;
   this.useSidePanelSearch = (params.useSidePanelSearch !== undefined) ? params.useSidePanelSearch : true;
   this.showSearchOptions = (params.showSearchOptions !== undefined) ? params.showSearchOptions : true;
+  // Override showSearchOptions using urlParams
+  if (this.urlParams['showSearchOptions']){
+    this.showSearchOptions = true;
+  }
   this.showSearchSourceOption = (params.showSearchSourceOption !== undefined) ? params.showSearchSourceOption : false;
+  // Custom search options (specified by user)
+  this.__customSearchOptions = _.mapValues(Constants.assetTypes, (opts, assetType) => {
+    return _.merge({name: assetType}, allParams.searchOptions? allParams.searchOptions[assetType] : {});
+  });
+  // Actual search options (will include default values)
+  this.searchOptions = _.mapValues(this.__customSearchOptions, (opts, assetType) => {
+    return _.clone(opts);
+  });
   this.cameraControlIconsDir = params.cameraControlIconsDir || Constants.cameraControlIconsDir;
   this.toolbarIconsDir = params.toolbarIconsDir || Constants.toolbarIconsDir;
   this.toolbarOptions = params.toolbarOptions;
@@ -337,9 +363,13 @@ function SceneViewer(params) {
   this.selectedObjectMaterial = params.selectedObjectMaterial;
   this.restrictSelectToModels = params.restrictSelectToModels;
   // Tabs
-  this._tabs = params.tabs;
-  this._tabsElement = $(params.tabsDiv || '#tabs');
-  this.onTabsActivate = params.onTabsActivate;
+  this.__tabsControl = new TabsControl({
+    tabs: params.tabs,
+    tabsDiv: params.tabsDiv,
+    onTabsActivate: params.onTabsActivate,
+    onTabActivated: tab => this.__onTabActivated(tab),
+    keymap: keymap });
+  this.__tabsControl.hookupFunctions(this);
 
   // filter function takes modelinfo and returns whether to load model
   this.loadModelFilter = params.loadModelFilter;
@@ -356,11 +386,15 @@ function SceneViewer(params) {
   this._showModels = true;
   this._showScene = true;
   this._showScan = true;
+  this._archOpacity = 1.0;
   this._isScanSupport = allParams.isScanSupport || false;
   this._scanOpacity = 0.5;
+  this.isAutoCreateSceneForScan = (allParams.isAutoCreateSceneForScan != null)? allParams.isAutoCreateSceneForScan : true;
 
   this._showSceneVoxels = (params.showSceneVoxels !== undefined) ? params.showSceneVoxels : false;
-  this.controlTypes = SceneViewer.ControlTypes;
+  this.controlTypes = (params.cameraControlTypes !== undefined) ? params.cameraControlTypes: SceneViewer.ControlTypes;
+  // this.controlTypes = SceneViewer.ControlTypes;
+
   this.controlTypesMap = SceneViewer.ControlTypesMap;
   this.controlType = this.controlTypes[this._controlTypeIndex];
 
@@ -375,18 +409,19 @@ function SceneViewer(params) {
   c.setRGB(0.5, 0.5, 0.5);
   this.falseBkMaterial = Object3DUtil.getSimpleFalseColorMaterial(0, c);
   this.hiddenMaterial = Object3DUtil.ClearMat;
-  this.usePhysijs = false;
   this.addGround = allParams.addGround || false;
   this.editControls = null;
   this.characterMode = false;
 
   this.allowEditHierarchy = allParams.allowEditHierarchy;
+  this.debugArch = allParams['debugArch'] || false;
+  this.isHighlightArchMode = this.debugArch;
+  this.highlightSupportArchOnly = false;
   this.autoLoadScene = allParams['autoLoadScene'];
   this.autoLoadVideo = allParams['autoLoadVideo'];
   this.enableLights = allParams['enableLights'];
   this.enableMirrors = allParams['enableMirrors'];
   this.defaultLightState = allParams['defaultLightState'];
-  this.colorBy = allParams['colorBy'] || 'original';
   this.defaultViewMode = allParams['viewMode'];
   this.defaultModelFormat = allParams['modelFormat'] || params.defaultModelFormat || 'utf8v2';
   this.defaultSceneFormat = allParams['format'] || params.defaultSceneFormat /* || 'wss' */;
@@ -394,7 +429,10 @@ function SceneViewer(params) {
     ['scene', 'model', 'actionTrace', 'navmap', 'wall', 'arch'];
   this.loadAll = allParams['loadAll'];
   this.includeCeiling = allParams['includeCeiling'];
-  this._showCeiling = allParams.showCeiling || false;
+  // Internal flags for showing / hiding certain architectural elements
+  this.__showCeiling = allParams.showCeiling || false;
+  this.__showGlassWalls = true;
+  this.__showRailing = true;
   this.keepInvalid = allParams['keepInvalid'];
   this.keepHidden = allParams['keepHidden'];
   this.keepParse = allParams['keepParse'];
@@ -443,7 +481,11 @@ function SceneViewer(params) {
 
   this.selectedTextureMaterial = null;
   this.selectedColorMaterial = null;
+
+  // view optimizaer
+  this.__viewOptimizer = null;
 }
+
 
 SceneViewer.prototype = Object.create(Viewer3D.prototype);
 SceneViewer.prototype.constructor = SceneViewer;
@@ -512,18 +554,56 @@ Object.defineProperty(SceneViewer.prototype, 'showScan', {
 });
 
 Object.defineProperty(SceneViewer.prototype, 'showCeiling', {
-  get: function () { return this._showCeiling; },
+  get: function () { return this.__showCeiling; },
   set: function (v) {
-    this._showCeiling = v;
+    this.__showCeiling = v;
     if (this.sceneState) {
-      var ceilings = Object3DUtil.findNodes(this.sceneState.scene, function (node) {
+      const nodes = Object3DUtil.findNodes(this.sceneState.scene, function (node) {
         return node.userData.type === 'Ceiling' || node.userData.archType === 'Ceiling';
       });
-      for (var i = 0; i < ceilings.length; i++) {
-        var recursive = ceilings[i].userData.type === 'ModelInstance';
-        Object3DUtil.setVisible(ceilings[i], v, recursive);
+      for (let node of nodes) {
+        const recursive = node.userData.type === 'ModelInstance';
+        Object3DUtil.setVisible(node, v, recursive);
       }
     }
+  }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'showGlassWalls', {
+  get: function () { return this.__showGlassWalls; },
+  set: function (v) {
+    this.__showGlassWalls = v;
+    if (this.sceneState) {
+      const nodes = Object3DUtil.findNodes(this.sceneState.scene, function (node) {
+        return node.userData.type === 'Wall' && node.userData.material === 'Glass';
+      });
+      for (let node of nodes) {
+        Object3DUtil.setVisible(node, v, true);
+      }
+    }
+  }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'showRailing', {
+  get: function () { return this.__showRailing; },
+  set: function (v) {
+    this.__showRailing = v;
+    if (this.sceneState) {
+      const nodes = Object3DUtil.findNodes(this.sceneState.scene, function (node) {
+        return node.userData.type === 'Railing';
+      });
+      for (let node of nodes) {
+        Object3DUtil.setVisible(node, v, true);
+      }
+    }
+  }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'archOpacity', {
+  get: function () { return this._archOpacity; },
+  set: function (v) {
+    this._archOpacity = v;
+    this.__applyArchOpacity(v);
   }
 });
 
@@ -543,12 +623,9 @@ Object.defineProperty(SceneViewer.prototype, 'restrictModels', {
   get: function () { return this.__restrictModels; },
   set: function (v) {
     this.__restrictModels = v;
-    if (this.modelSearchController) {
-      this.modelSearchController.setFilter(Constants.assetTypeModel, v);
-    }
-    if (this.contextQueryControls) {
-      this.contextQueryControls.searchController.setFilter(Constants.assetTypeModel, v);
-    }
+    this.__modelSearchControllers.forEach(s => {
+      s.setFilter(Constants.assetTypeModel, v);
+    });
   }
 });
 
@@ -556,35 +633,79 @@ Object.defineProperty(SceneViewer.prototype, 'colorBy', {
   get: function () { return this.__colorBy; },
   set: function (v) {
     this.__colorBy = v;
-    if (this.sceneState) {
-      this.__revertSceneMaterials();
+    this.refreshSceneMaterials();
+  }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'hemisphereLight', {
+  get: function () { return this._ambientLights ? _.find(this._ambientLights, x => x.isHemisphereLight) : null; }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'ambientLight', {
+  get: function () { return this._ambientLights ? _.find(this._ambientLights, x => x.isAmbientLight) : null; }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'ambientLightIntensity', {
+  get: function () {
+    const light = this.ambientLight;
+    return light ? light.intensity : 0;
+  },
+  set: function (v) {
+    const light = this.ambientLight;
+    if (light) {
+      light.intensity = v;
+    }
+  }
+});
+
+Object.defineProperty(SceneViewer.prototype, 'ambientLightColor', {
+  get: function () {
+    const light = this.ambientLight;
+    return light ? light.color.getHexString() : '#ffffff';
+  },
+  set: function (v) {
+    const light = this.ambientLight;
+    if (light) {
+      light.color.setStyle(v);
     }
   }
 });
 
 Object.defineProperty(SceneViewer.prototype, 'hemisphereLightIntensity', {
-  get: function () { return this._ambientLights ? this._ambientLights[0].intensity : 0; },
+  get: function () {
+    const hemiLight = this.hemisphereLight;
+    return hemiLight ? hemiLight.intensity : 0;
+  },
   set: function (v) {
-    if (this._ambientLights && this._ambientLights[0]) {
-      this._ambientLights[0].intensity = v;
+    const hemiLight = this.hemisphereLight;
+    if (hemiLight) {
+      hemiLight.intensity = v;
     }
   }
 });
 
 Object.defineProperty(SceneViewer.prototype, 'hemisphereLightColor', {
-  get: function () { return this._ambientLights ? this._ambientLights[0].color.getHex() : '#ffffff'; },
+  get: function () {
+    const hemiLight = this.hemisphereLight;
+    return hemiLight ? hemiLight.color.getHexString() : '#ffffff';
+  },
   set: function (v) {
-    if (this._ambientLights && this._ambientLights[0]) {
-      this._ambientLights[0].color.setHex(v);
+    const hemiLight = this.hemisphereLight;
+    if (hemiLight) {
+      hemiLight.color.setStyle(v);
     }
   }
 });
 
 Object.defineProperty(SceneViewer.prototype, 'hemisphereLightGround', {
-  get: function () { return this._ambientLights ? this._ambientLights[0].groundColor.getHex() : '#ffffff'; },
+  get: function () {
+    const hemiLight = this.hemisphereLight;
+    return hemiLight ? hemiLight.groundColor.getHexString() : '#ffffff';
+  },
   set: function (v) {
-    if (this._ambientLights && this._ambientLights[0]) {
-      this._ambientLights[0].groundColor.setHex(v);
+    const hemiLight = this.hemisphereLight;
+    if (hemiLight) {
+      hemiLight.groundColor.setStyle(v);
     }
   }
 });
@@ -611,54 +732,42 @@ Object.defineProperty(SceneViewer.prototype, 'characterMode', {
   }
 });
 
-SceneViewer.prototype.__getTabIndex = function (name, defaultIndex) {
-  var i = this._tabs? this._tabs.indexOf(name) : undefined;
-  if (i >= 0) return i;
-  else return defaultIndex;
+SceneViewer.prototype.blockInsert = function(){
+  this.blockInserts = true;
 };
 
-SceneViewer.prototype.getActiveTab = function() {
-  var active = this._tabsElement.tabs( "option", "active" );
-  return this._tabs? this._tabs[active] : active;
+SceneViewer.prototype.unblockInsert = function(){
+  this.blockInserts = false;
 };
 
-SceneViewer.prototype.__initTabs = function() {
-  var scope = this;
-  // ['scenes', 'models', 'textures', 'colors', 'arch', 'scans', 'sceneHierarchy', 'bvh', 'sceneGen']
-  this._tabsElement.bind('tabsactivate', function (event, ui) {
-    if (scope.onTabsActivate) {
-      scope.onTabsActivate();
-    }
-    var tab = scope.getActiveTab();
-    keymap.setScope(tab);
-    switch (tab) {
-      case 'scenes':
-        scope.sceneSearchController.onResize();
-        break;
-      case 'models':
-        scope.modelSearchController.onResize();
-        break;
-      case 'textures':
-        scope.textureSearchController.onResize();
-        break;
-      case 'arch':
-        scope.archSearchController.onResize();
-        break;
-      case 'scans':
-        scope.scanSearchController.onResize();
-        break;
-      case 'sceneHierarchy':
-        if (scope.sceneHierarchy) {
-          scope.sceneHierarchy.onActivate();
-        }
-        break;
-      case 'bvh':
-        if (scope.bvhVisualizer) {
-          scope.bvhVisualizer.onActivate();
-        }
-        break;
-    }
-  });
+SceneViewer.prototype.__onTabActivated = function(tab) {
+  switch (tab) {
+    case 'scenes':
+      this.sceneSearchController.onResize();
+      break;
+    case 'models':
+      this.modelSearchController.onResize();
+      break;
+    case 'textures':
+      this.textureSearchController.onResize();
+      break;
+    case 'arch':
+      this.archSearchController.onResize();
+      break;
+    case 'scans':
+      this.scanSearchController.onResize();
+      break;
+    case 'sceneHierarchy':
+      if (this.sceneHierarchy) {
+        this.sceneHierarchy.onActivate();
+      }
+      break;
+    case 'bvh':
+      if (this.bvhVisualizer) {
+        this.bvhVisualizer.onActivate();
+      }
+      break;
+  }
 };
 
 SceneViewer.prototype.updateCameraControl = function (index) {
@@ -677,15 +786,43 @@ SceneViewer.prototype.setupDatGui = function () {
     var gui = this.datgui.getFolder('view');
     if (showAll || options['showGround']) gui.add(this, 'showGround').listen();
     if (showAll || options['isScanSupport']) gui.add(this, 'isScanSupport').listen();
+    if (showAll || options['isAutoCreateSceneForScan']) {
+      gui.add(this, 'isAutoCreateSceneForScan').name('createScanScene').listen();
+    }
     if (showAll || options['scanOpacity']) gui.add(this, 'scanOpacity', 0, 1.0).listen();
     if (showAll || options['showScan']) gui.add(this, 'showScan').listen();
+    if (showAll || options['archOpacity']) gui.add(this, 'archOpacity', 0, 1.0).listen();
     if (showAll || options['showModels']) gui.add(this, 'showModels').listen();
     if (showAll || options['showScene']) gui.add(this, 'showScene').listen();
     if (showAll || options['showSceneVoxels']) gui.add(this, 'showSceneVoxels').listen();
     if (this.allowMagicColors) {
       if (showAll || options['showColors']) {
+        // setup coloring submenu
         // TODO: allow reverting to original colors
-        gui.add(this, 'colorBy', ['original'].concat(SceneUtil.ColorByOptions)).listen();
+        var supportedColorByTypes = ['original'].concat(SceneUtil.ColorByTypes);
+        var allowSplitColors = this.colorByOptions.object && this.colorByOptions.arch;
+        if (allowSplitColors) {
+          supportedColorByTypes.push('splitColors');
+        }
+        var colorsGui = this.datgui.getFolder('coloring');
+        colorsGui.add(this, 'colorBy', supportedColorByTypes).listen();
+        colorsGui.addColor(this.colorByOptions, 'color').listen().onChange(() => {
+          if (this.colorBy === 'color') {
+            this.refreshSceneMaterials();
+          }
+        });
+        if (allowSplitColors) {
+          colorsGui.addColor(this.colorByOptions.object, 'color').name('object color').listen().onChange(() => {
+            if (this.colorBy === 'splitColors' && this.colorByOptions.object.colorBy === 'color') {
+              this.refreshSceneMaterials();
+            }
+          });
+          colorsGui.addColor(this.colorByOptions.arch, 'color').name('arch color').listen().onChange(() => {
+            if (this.colorBy === 'splitColors' && this.colorByOptions.arch.colorBy === 'color') {
+              this.refreshSceneMaterials();
+            }
+          });
+        }
       }
     }
     if (showAll || options['showWalls']) gui.add(this, 'visualizeWalls').listen();
@@ -693,6 +830,8 @@ SceneViewer.prototype.setupDatGui = function () {
     if (showAll || options['showNavmap']) gui.add(this, 'navmapMode', this.navmapModesMap).listen();
     if (showAll || options['lights']) {
       var lightsGui = this.datgui.getFolder('lights');
+      // lightsGui.add(this, 'ambientLightIntensity', 0, 5).step(0.05).listen();
+      // lightsGui.addColor(this, 'ambientLightColor').listen();
       lightsGui.add(this, 'hemisphereLightIntensity', 0, 5).step(0.05).listen();
       lightsGui.addColor(this, 'hemisphereLightColor').listen();
       lightsGui.addColor(this, 'hemisphereLightGround').listen();
@@ -701,12 +840,11 @@ SceneViewer.prototype.setupDatGui = function () {
       lightsGui.addColor(this._headlights['point'], 'colorHex').name('color').listen();
       lightsGui.add(this._headlights['directional'], 'intensity', 0, 2).step(0.05).name('directionalLightIntensity').listen();
       lightsGui.addColor(this._headlights['directional'], 'colorHex').name('color').listen();
-      lightsGui.add(this, 'useBackground').onChange(() => {
-        this.updateEnvironment();
-      });
     }
     if (showAll || options['controls']) {
-      this.editControls.updateDatGui(this.datgui);
+      var controls = this.editControls.updateDatGui(this.datgui);
+      controls.add(this, 'isHighlightArchMode').name('highlightArch').listen();
+      controls.add(this, 'highlightSupportArchOnly').listen();
     }
     if (showAll || options['picker']) {
       var pickerGui = this.datgui.getFolder('picker');
@@ -715,19 +853,72 @@ SceneViewer.prototype.setupDatGui = function () {
     }
     this.datgui.add({
       exportScene: function() {
-        var target = scope.sceneState.scene;
-        if (target) {
-          scope.__exportObject3DForm = scope.__exportObject3DForm || new ExportObject3DForm({
+        var sceneState = scope.sceneState;
+        if (sceneState) {
+          scope.__exportSceneForm = scope.__exportSceneForm || new ExportSceneForm({
             export: function(target, exporter, exportOpts) { exporter.export(target, exportOpts); },
             warn: function(msg) { scope.showWarning(msg); }
           });
-          scope.__exportObject3DForm.show(target);
+          scope.__exportSceneForm.show(sceneState);
         }
       }
     }, 'exportScene').listen();
+    this.datgui.add({
+      createVoxels: function() {
+        var sceneState = scope.sceneState;
+        if (sceneState) {
+          scope.showCreateVoxelsPanel(sceneState);
+        } else {
+          scope.showWarning('Please load a scene before attempting to create voxels');
+        }
+      }
+    }, 'createVoxels').listen();
+    this.datgui.add({
+      identifyExteriorDoors: function() {
+        var sceneState = scope.sceneState;
+        var debug = false;
+        if (sceneState) {
+          // if (debug) {
+          //   var doors = sceneState.findModelInstances(function (mi) {
+          //     return mi.model.isDoor();
+          //   });
+          //   for (var i = 0; i < doors.length; i++) {
+          //     var door = doors[i];
+          //     var doorObb = door.getSemanticOBB('world');
+          //     scope.sceneState.debugNode.add(new MeshHelpers.OBB(doorObb, 'yellow'));
+          //   }
+          // }
+          var exteriorDoors = SceneUtil.identifyExteriorDoors(sceneState, {
+            sampleCallback: function(ray, intersects) {
+              if (debug) {
+                scope.sceneState.debugNode.add(Object3DUtil.makeBall(ray.origin, 0.1, 'green'));
+                scope.sceneState.debugNode.add(new MeshHelpers.FatArrow(ray.direction, ray.origin,
+                  0.5, 1, 0.25, 0.25,'green'));
+                //console.log('check', ray, intersects);
+              }
+            }
+          });
+          console.log('got exterior doors', exteriorDoors);
+          console.log('got exterior door ids', exteriorDoors.map(x => x.object3D.userData.id));
+          scope.setSelectedObjects(exteriorDoors.map(x => x.object3D));
+        }
+      }
+    }, 'identifyExteriorDoors').listen();
     //if (showAll || options['showCharacterMode']) gui.add(this, 'characterMode').name('character').listen();
   }
 };
+
+SceneViewer.prototype.showCreateVoxelsPanel = function(target) {
+  var CreateVoxelsForm = require('ui/modal/CreateVoxelsForm');
+  this.__createVoxelsForm = this.__createVoxelsForm || new CreateVoxelsForm({
+    onVoxelsCreated: (colorVoxels) => {
+      // Track voxels on our own
+      this.sceneState.setExtraDebugNode('colorVoxels', colorVoxels.getVoxelNode());
+    }
+  });
+  this.__createVoxelsForm.show(target);
+};
+
 
 SceneViewer.prototype.registerCustomSceneAssetGroup = function (assetIdsFile, jsonFile, autoLoad) {
   this.registerCustomAssetGroup(this.sceneSearchController, assetIdsFile, jsonFile, autoLoad);
@@ -737,7 +928,7 @@ SceneViewer.prototype.registerCustomModelAssetGroup = function (assetIdsFile, js
   this.registerCustomAssetGroup(this.modelSearchController, assetIdsFile, jsonFile, autoLoad);
 };
 
-SceneViewer.prototype.registerAssets = function (assetFiles) {
+SceneViewer.prototype.registerAssets = function (assetFiles, callback) {
   var sceneViewer = this;
   var assetTypes = ['scene', 'scan', 'model', 'texture', 'arch'];
   sceneViewer.assetManager.registerCustomAssetGroups({
@@ -762,6 +953,9 @@ SceneViewer.prototype.registerAssets = function (assetFiles) {
       }
       for (var i = 0; i < assetTypes.length; i++) {
         console.log('Registered ' + assetTypes[i] + ' ' + registeredByType[assetTypes[i]]);
+      }
+      if (callback) {
+        callback();
       }
     }
   });
@@ -798,10 +992,68 @@ SceneViewer.prototype.init = function () {
   }
   var sceneHierarchyContainer = $('#sceneHierarchy');
   if (sceneHierarchyContainer.length) {
-    this.sceneHierarchy = new SceneHierarchyPanel({
+    var markNodes;
+    if (this.debugArch) {
+      markNodes = {
+        fields: ['id', 'roomId', 'wallId', 'holeIndex', 'box'],
+        marks: [
+          { name: 'remove', color: 'gray', shortcut: 'r' },
+          { name: 'check', label: 'check needed', color: 'orange', shortcut: 'c' },
+          { name: 'good', color: 'green', shortcut: 'g' }
+        ],
+        additionalMarkFields: [
+          // {
+          //   "title": "Mark",
+          //   "name": "mark",
+          //   "inputType": "text"
+          // },
+          {
+            "title": "Label",
+            "name": "label",
+            "inputType": "text"
+          },
+          {
+            "title": "Note",
+            "name": "note",
+            "inputType": "text"
+          },
+          {
+            "title": "Object Ids",
+            "name": "ids",
+            "inputType": "text"
+          }
+        ],
+        action: (object3D, mark) => {
+          if (object3D.userData.isWallHole) {
+            Object3DUtil.traverse(object3D, function(node) {
+              if (node.material) {
+                if (mark) {
+                  if (!node.material.originalColor) {
+                    node.material.originalColor = node.material.color.clone();
+                  }
+                  node.material.color.set(mark.color);
+                } else {
+                  if (node.material.originalColor) {
+                    node.material.color.copy(node.material.originalColor);
+                  }
+                }
+                return false;
+              } else {
+                return true;
+              }
+            });
+          }
+        }
+      };
+    }
+    var sceneHierarchyOpts = _.defaults(Object.create(null), this.__options.sceneHierarchy,
+    {
       container: sceneHierarchyContainer,
       assetManager: this.assetManager,
       tooltipIncludeFields: this.modelSearchController.searchPanel.tooltipIncludeFields,
+      getObjectIconUrl: function(source, id, metadata) {
+        return scope.assetManager.getImagePreviewUrl(source, id, scope.modelSearchController.searchPanel.previewImageIndex, metadata);
+      },
       onhoverCallback: function (node, objects) {
         scope.highlightObjects(objects);
       },
@@ -810,8 +1062,10 @@ SceneViewer.prototype.init = function () {
       useIcons: true,
       useSort: true,
       autoCreateTree: true,
+      markNodes: markNodes,
       app: this
     });
+    this.sceneHierarchy = new SceneHierarchyPanel(sceneHierarchyOpts);
   }
   var bvhVisualizerContainer = $('#sceneBVH');
   if (bvhVisualizerContainer.length) {
@@ -829,7 +1083,7 @@ SceneViewer.prototype.init = function () {
   }
   this.setupLoadingIcon();
 
-  this.__initTabs();
+  this.__tabsControl.initTabs();
 
   // create empty scene
   this.sceneState = new SceneState();
@@ -839,12 +1093,14 @@ SceneViewer.prototype.init = function () {
   this.addDefaultCameras(); //AndLights();
   //this.cameraControls.saveCameraState();
 
-
   this.showAxes = this._drawAxes;
 
-  this.undoStack = new UndoStack(this, Constants.undoStackMaxSize);
-  this.uilog = new UILog({ enabled: this.enableUILog });
-  this.uilog.log(UILog.EVENT.SCENE_CREATE, null, {});
+  // Setup undo stack and UI log
+  this.setupUndoStack();
+  this.setupUILog();
+
+  // Test Scenes
+  this.setupTestScenes();
 
   // Setup local loading buttons
   this.setupLocalLoading(this.loadFromLocal.bind(this), {
@@ -864,6 +1120,7 @@ SceneViewer.prototype.init = function () {
     outlineHighlightedOnly: true
   });
   this.assetManager.maxAnisotropy = this.renderer.getMaxAnisotropy();
+  AssetManager.enableCompressedLoading(this.renderer.renderer);
 
   //PICKER
   this.picker = new Picker({
@@ -893,23 +1150,10 @@ SceneViewer.prototype.init = function () {
   this.setupConsole();
 
   // Hookup camera control panel
-  this.cameraControlsPanel = new CameraControlsPanel({
-    app: this,
-    container: $('#cameraControls'),
-    controls: this.cameraControls,
-    iconsPath: this.cameraControlIconsDir,
-    cameraWidgetSettings: Constants.cameraWidgetSettings
-  });
+  this.setupCameraControlsPanel();
 
   // Hookup toolbar
-  this.toolbar = new SceneViewerToolbar({
-    app: this,
-    container: $('#sceneToolbar'),
-    iconsPath: this.toolbarIconsDir,
-    allowEdit: this.allowEdit
-  });
-  this.toolbar.init();
-  this.toolbar.applyOptions(this.toolbarOptions);
+  this.setupToolbar();
 
   // Scene loading
   if (!this.skipLoadInitialScene) {
@@ -933,17 +1177,49 @@ SceneViewer.prototype.init = function () {
   }
 };
 
+SceneViewer.prototype.setupCameraControlsPanel = function() {
+  this.cameraControlsPanel = new CameraControlsPanel({
+    app: this,
+    container: $('#cameraControls'),
+    controls: this.cameraControls,
+    iconsPath: this.cameraControlIconsDir,
+    cameraWidgetSettings: Constants.cameraWidgetSettings
+  });
+};
+
+SceneViewer.prototype.setupToolbar = function() {
+  // Hookup toolbar
+  this.toolbar = new SceneViewerToolbar({
+    app: this,
+    container: $('#sceneToolbar'),
+    iconsPath: this.toolbarIconsDir,
+  });
+  this.toolbar.init();
+  this.toolbar.applyOptions(this.toolbarOptions);
+};
+
+SceneViewer.prototype.setupUndoStack = function() {
+  this.undoStack = null;
+  if (this.allowUndoStack) {
+    this.undoStack = new UndoStack(this, Constants.undoStackMaxSize);
+  }
+};
+
+SceneViewer.prototype.setupUILog = function() {
+  this.uilog = new UILog({ enabled: this.enableUILog, sessionId: this.sessionId });
+  this.uilog.log(UILog.EVENT.SCENE_CREATE, null, {});
+};
+
 SceneViewer.prototype.loadInitialScene = function () {
   var sceneId = this.urlParams['sceneId'] || this.defaultSceneId;
-  var sceneManagerId = this.urlParams['sceneManagerId'];
   var sceneUrl = this.urlParams['sceneUrl'];
+  var query = this.urlParams['query'];
+  var source = this.urlParams['source'];
   var skipSearch = this.urlParams['skipSearch'];
   var archId = this.urlParams['archId'];
+  var archFormat = this.urlParams['archFormat'];
 
-  var taskId = this.urlParams['taskId'];
-  var scope = this;
-
-  if (sceneId || archId || sceneManagerId || sceneUrl) {
+  if (sceneId || archId || sceneUrl || query) {
     var options = {};
     var highlightMode = this.urlParams['hl'];
     if (highlightMode !== undefined) {
@@ -958,31 +1234,34 @@ SceneViewer.prototype.loadInitialScene = function () {
     if (targetIds) {
       options['targetObjectIds'] = Array.isArray(targetIds) ? targetIds : targetIds.split(',');
     }
-    else if (archId) {
+
+    if (archId) {
       var sid = AssetManager.toSourceId('s3dArch', archId);
       var assetInfo = this.assetManager.getAssetInfo(archId);
+      if (archFormat) {
+        assetInfo['format'] = archFormat;
+      }
       var loadInfo = this.assetManager.getLoadInfo(sid.source, archId, assetInfo);
-      this.loadArch(loadInfo)
-    } 
-    else if (sceneUrl) {
-      this.clearAndLoadScene({ file: sceneUrl }, options);
-    }
-    else {
+      this.loadArch(loadInfo);
+    } else if (sceneUrl) {
+      this.clearAndLoadScene({file: sceneUrl}, options);
+    } else if (query) {
+      this.setSourceAndSearch(this.sceneSearchController, source || 'scenes', query,
+        this.initialSceneSearchSucceeded.bind(this, options));
+    } else {
       var sid = AssetManager.toSourceId('scenes', sceneId);
       if (sid.source === 'db' || sid.source === 'mturk' || skipSearch) {
         this.clearAndLoadScene({ fullId: sceneId }, options);
       } else {
         // TODO: Add db/mturk search to search controller...
+        var sid = AssetManager.toSourceId(null, sceneId);
         this.sceneOptions[sceneId] = options;
-        this.sceneSearchController.setSearchText('fullId:' + sceneId);
-        this.sceneSearchController.startSearch(
-          this.initialSceneSearchSucceeded.bind(this, options)
-        );
+        this.setSourceAndSearch(this.sceneSearchController, sid.source, 'fullId:' + sceneId,
+          this.initialSceneSearchSucceeded.bind(this, options));
       }
     }
   }
 };
-
 
 SceneViewer.prototype.setupAssets = function () {
   var scope = this;
@@ -995,18 +1274,14 @@ SceneViewer.prototype.setupAssets = function () {
     enableLights: this.enableLights,
     defaultLightState: this.defaultLightState,
     supportArticulated: this.supportArticulated,
-    useBuffers: !this.usePhysijs,   // physijs doesn't like the buffered geometry
     useColladaScale: false,
     modelFilter: _.isFunction(scope.loadModelFilter) ? scope.loadModelFilter : null
   });
-  this.assetManager.Subscribe('dynamicAssetLoaded', this, function (d) {
-    console.log('adding to dynamic assets', d);
-    this._dynamicAssets.push(d);
-  }.bind(this));
+  this.assetManager.watchDynamicAssets(this, '_dynamicAssets');
   // Hack so we recolor room wss.room01
   this.assetManager.addMaterialBinding('wss.room01', {
     'materials': [
-      { name: 'floor', textureId: 'a3dTexture.47237' },
+      { name: 'floor', textureId: 'a3dTexture.47237', encoding: THREE.sRGBEncoding },
       { name: 'wall', color: 'aad4ff' },
       { name: 'trim', color: '617991' }],
     'materialMappings': {
@@ -1020,7 +1295,7 @@ SceneViewer.prototype.setupAssets = function () {
   this.sceneOperations = new SceneOperations({ assetManager: this.assetManager });
 
   //sceneSearchController
-  this.sceneSearchController = new SearchController({
+  this.sceneSearchController = new SearchController(_.defaults(this.searchOptions['scene'], {
     assetFilters: { scene: { sourceFilter: '+source:(' + this.sceneSources.join(' OR ') + ')' }},
     searchSucceededCallback: this.sceneSearchSucceeded.bind(this),
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
@@ -1032,7 +1307,7 @@ SceneViewer.prototype.setupAssets = function () {
     loadImagesLazy: true,
     nRows: 33,
     panelType: 'side'
-  });
+  }));
   this.sceneSearchController.searchPanel.setAutocomplete(
     new SolrQuerySuggester({
       schema: new SceneSchema()
@@ -1041,17 +1316,22 @@ SceneViewer.prototype.setupAssets = function () {
   if (this.restrictScenes) {
     this.sceneSearchController.setFilter(Constants.assetTypeScene, this.restrictScenes);
   }
+  this.sceneSearchController.Subscribe('SearchSucceededPreparePanel', null, function () {
+    scope.activateTab('scenes');
+  });
   this.sceneSearchController.Subscribe('startSearch', this, function (query) {
     scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'scene', queryString: query });
   });
   this.searchControllers['scene'] = this.sceneSearchController;
 
-  //modelSearchController
+  // modelSearchController
+  this.__modelSearchControlers = [];
   this.modelSources = this.modelSources || _.concat(Constants.assetSources.model);
   this.modelSearchPanelHelper = new ModelSearchPanelHelper({
     includeExtraAssets: this.urlParams.extra
   });
-  this.modelSearchController = new SearchController({
+
+  this.modelSearchController = new SearchController(_.defaults(this.searchOptions['model'], {
     assetFilters: { model: { sourceFilter: '+source:(' + this.modelSources.join(' OR ') + ')' }},
     searchSucceededCallback: this.modelSearchSucceeded.bind(this),
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
@@ -1068,9 +1348,11 @@ SceneViewer.prototype.setupAssets = function () {
     showSearchSourceOption: this.showSearchSourceOption,
     showSearchSortOption: false,
     sortOrder: 'score desc',
+    // sortOrder: 'random_840783942 desc',
     additionalSortOrder: 'id asc',
     entriesPerRow: 2
-  });
+  }));
+  this.__modelSearchControlers.push(this.modelSearchController);
   this.modelSearchController.searchPanel.setAutocomplete(
     new SolrQuerySuggester({
       schema: new ModelSchema()
@@ -1079,14 +1361,29 @@ SceneViewer.prototype.setupAssets = function () {
   if (this.restrictModels) {
     this.modelSearchController.setFilter(Constants.assetTypeModel, this.restrictModels);
   }
-  this.modelSearchController.Subscribe('startSearch', this, function (query) {
-    scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'model', queryString: query });
+  // this.modelSearchController.Subscribe('SearchSucceededPreparePanel', null, function () {
+  //   scope.activateTab('models');
+  // });
+  this.modelSearchController.Subscribe('startSearch', this, function (searchDetails) {
+    scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'model', searchDetails: searchDetails });
+  });
+  this.modelSearchController.Subscribe('ResultsPanelMouseEnter', this, function (searchDetails) {
+    scope.uilog.log(UILog.EVENT.SEARCH_RESULTS_PANEL_FOCUS, null, { type: 'model', searchDetails: searchDetails });
+  });
+  this.modelSearchController.Subscribe('ResultsPanelMouseLeave', this, function (searchDetails) {
+    scope.uilog.log(UILog.EVENT.SEARCH_RESULTS_PANEL_UNFOCUS, null, { type: 'model', searchDetails: searchDetails });
+  });
+  this.modelSearchController.Subscribe('SearchContainerMouseEnter', this, function (searchDetails) {
+    scope.uilog.log(UILog.EVENT.SEARCH_CONTAINER_FOCUS, null, { type: 'model', searchDetails: searchDetails });
+  });
+  this.modelSearchController.Subscribe('SearchContainerMouseLeave', this, function (searchDetails) {
+    scope.uilog.log(UILog.EVENT.SEARCH_CONTAINER_UNFOCUS, null, { type: 'model', searchDetails: searchDetails });
   });
   this.searchControllers['model'] = this.modelSearchController;
 
   // Scan search controller
   this.scanSources = this.scanSources || _.concat(Constants.assetSources.scan);
-  this.scanSearchController = new SearchController({
+  this.scanSearchController = new SearchController(_.defaults(this.searchOptions['scan'], {
     searchSucceededCallback: this.modelSearchSucceeded.bind(this),
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
     onClickResultCallback: this.modelSearchResultClickedCallback.bind(this),
@@ -1103,17 +1400,20 @@ SceneViewer.prototype.setupAssets = function () {
     sortOrder: 'score desc',
     additionalSortOrder: 'id asc',
     entriesPerRow: 2
-  });
+  }));
   if (this.restrictScans) {
     this.scanSearchController.setFilter(Constants.assetTypeScan, this.restrictScans);
   }
+  this.scanSearchController.Subscribe('SearchSucceededPreparePanel', null, function () {
+    scope.activateTab('scans');
+  });
   this.scanSearchController.Subscribe('startSearch', this, function (query) {
     scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'scan', queryString: query });
   });
   this.searchControllers['scan'] = this.scanSearchController;
 
   // archSearchController
-  this.archSearchController = new SearchController({
+  this.archSearchController = new SearchController(_.defaults(this.searchOptions['arch'], {
     searchSucceededCallback: this.archSearchSucceeded.bind(this),
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
     onClickResultCallback: function (source, id, archinfo) {
@@ -1123,19 +1423,22 @@ SceneViewer.prototype.setupAssets = function () {
     sources: [],
     searchPanel: $('#archSearchPanel'),
     panelType: 'side'
-  });
+  }));
   if (this.restrictArch) {
     this.archSearchController.setFilter(Constants.assetTypeArch, this.restrictArch);
   }
+  this.archSearchController.Subscribe('SearchSucceededPreparePanel', null, function () {
+    scope.activateTab('arch');
+  });
   this.archSearchController.Subscribe('startSearch', this, function (query) {
     scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'arch', queryString: query });
   });
   this.searchControllers['arch'] = this.archSearchController;
 
-  //textureSearchController
+  // textureSearchController
   var textureContainer = $('#textureSearchPanel');
   this.createCheckboxes(textureContainer, ['floorSelected', 'wallSelected', 'ceilingSelected'], ['Floor', 'Wall', 'Ceiling'], [false, false, false]);
-  this.textureSearchController = new SearchController({
+  this.textureSearchController = new SearchController(_.defaults(this.searchOptions['texture'], {
     assetFilters: { texture: { sourceFilter: '+source:(' + Constants.assetSources.texture.join(' OR ') + ')' }},
     searchSucceededCallback: this.textureSearchSucceeded.bind(this),
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
@@ -1143,9 +1446,20 @@ SceneViewer.prototype.setupAssets = function () {
     sources: Constants.assetSources.texture,
     searchPanel: $('#textureSearchPanel'),
     panelType: 'side'
-  });
+  }));
 
-  //colorsPanelController
+  if (this.restrictTextures) {
+    this.textureSearchController.setFilter(Constants.assetTypeTexture, this.restrictTextures);
+  }
+  this.textureSearchController.Subscribe('SearchSucceededPreparePanel', null, function () {
+    scope.activateTab('textures');
+  });
+  this.textureSearchController.Subscribe('startSearch', this, function (query) {
+    scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'texture', queryString: query });
+  });
+  this.searchControllers['texture'] = this.textureSearchController;
+
+  // colorsPanelController
   var colorsPanel = $('#colorsPanel');
   if (colorsPanel && colorsPanel.length > 0) {
     this.colorsPanel = new ColorsPanel({
@@ -1158,14 +1472,6 @@ SceneViewer.prototype.setupAssets = function () {
       }.bind(this)
     });
   }
-
-  if (this.restrictTextures) {
-    this.textureSearchController.setFilter(Constants.assetTypeTexture, this.restrictTextures);
-  }
-  this.textureSearchController.Subscribe('startSearch', this, function (query) {
-    scope.uilog.log(UILog.EVENT.SEARCH_QUERY, null, { type: 'texture', queryString: query });
-  });
-  this.searchControllers['texture'] = this.textureSearchController;
 
   // AXC: Do we need this?
   this.assetManager.setSearchController(this.modelSearchController);
@@ -1205,24 +1511,18 @@ SceneViewer.prototype.setupInstructions = function () {
   if (instructions && this.showInstructions) {
     var instructionsHtml = this.instructions ? this.instructions.html :
       (this.allowEdit ?
-        '<b>Image Overlay Adjustments</b><br>' +
-        'A - Decrease FOV <br>'+
-        'Z - Increase FOV <br>' +
-        'X - Overlay RGB preview at center <br>' +
-        'S - Increase center preview opacity<br>' +
-        'D - Decrease center preview opacity<br>' +
-        '------Editing Controls_-----------<br>' +
+        '<b>Editing Controls</b><br>' +
         'LEFT/RIGHT = Rotate highlighted model(s) around Z-axis<br>' +
         'DOWN/UP = Rescale highlighted model(s) by 0.9/1.1 <br>' +
-        'Ctrl+S = Save current scene to console<br>' : '') +
-      '------Trackball Controller--------<br>' +
+        'Ctrl+S = Save current progress to console<br>' : '') +
+      '<b>Trackball Controller</b>><br>' +
       'Right click = Orbit view<br>' +
       'Shift + Right click = Pan view<br>' +
       'Mouse wheel = Zoom view<br>' +
-      '------First Person Controller--------<br>' +
+      '<b>First Person Controller</b><br>' +
       'W/S/A/D = Forward/Back/Left/Right<br>' +
       'R/F = Up/Down<br>' +
-      '-------------------------------------<br>' +
+      '<b>Other Controls</b><br>' +
       (this.allowLookAt ? 'Dblclick = Look at object<br>' : '') +
       'Shift+Dblclick = Act on object (turn on video/light or open/close door)<br>' +
       'Ctrl/Cmd+Dblclick = Articulate object (for supported objects)<br>' +
@@ -1231,13 +1531,12 @@ SceneViewer.prototype.setupInstructions = function () {
       'Ctrl+I = Save image<br>' +
       'Shift+T = Toggle controller mode<br>' +
       'Ctrl+O = Reset camera<br>' +
-      //          'G = Generate URL<br>' +
-      (this.allowHighlightMode ? 'Ctrl+U = Toggle highlight mode<br>' : '') +
+      (this.allowHighlightMode? 'Ctrl+U = Toggle highlight mode<br>' : '') +
       'Shift+Ctrl+V = Toggle voxels<br>' +
       'Shift+A = Toggle axis';
     if (this.allowMagicColors) {
       instructionsHtml += '<br>' +
-        '------Magic Colors--------<br>' +
+        '<b>Magic Colors</b>><br>' +
         'Shift+G = Color by model id<br>' +
         'Ctrl+G = Color by object category<br>' +
         'Ctrl+Alt+G = Color by object id<br>' +
@@ -1261,10 +1560,16 @@ SceneViewer.prototype.setupEditControls = function () {
     allowRotation: this.allowRotation,
     allowScaling: this.allowScaling,
     rotateBy: this.rotateBy,
-    allowAny: this.allowEditAny
+    allowAny: this.allowEditAny,
+    putOnArchOnly: this.putOnArchOnly,
+    restrictToSurface: this.restrictToSurface,  // TODO: check how this is different from support surface change
+    manipulatorSizeMultiplier: this.manipulatorSizeMultiplier,
+    manipulatorFixedRotationAxis: this.manipulatorFixedRotationAxis
   });
   this.addControl(this.editControls);
-  this.__initContextQueryControls();
+  if (this.useContextQueryControls) {
+    this.__initContextQueryControls();
+  }
 
   this.Subscribe(Constants.EDIT_OPSTATE.INIT, this, this.onEditOpInit.bind(this));
   this.Subscribe(Constants.EDIT_OPSTATE.DONE, this, this.onEditOpDone.bind(this));
@@ -1289,7 +1594,7 @@ SceneViewer.prototype.setupEventListeners = function () {
   var scope = this;
   this.registerEventListeners();
   this.bindKeys();
-  this.renderer.domElement.addEventListener('mouseup', __wrappedEventListener(function (event) {
+  this.renderer.domElement.addEventListener('pointerup', __wrappedEventListener(function (event) {
       event.preventDefault();
       scope.renderer.domElement.focus();
       if (event.which === Constants.LEFT_MOUSE_BTN) {
@@ -1312,15 +1617,50 @@ SceneViewer.prototype.setupEventListeners = function () {
     false
   );
 
-  this.renderer.domElement.addEventListener('mousedown', __wrappedEventListener(function (event) {
+  this.renderer.domElement.addEventListener('pointerdown', __wrappedEventListener(function (event) {
       scope.renderer.domElement.focus();
       if (event.which === Constants.LEFT_MOUSE_BTN) {
-        if (scope.editMode) {
+        if (scope.editMode && !scope.isHighlightArchMode) {
           if (scope.contextQueryIsEnabled && scope.contextQueryControls && event.shiftKey) {
             scope.contextQueryControls.onDocumentMouseDown(event);
             return false;
           } else {
-            return scope.editControls.onMouseDown(event);
+            var notHandled = true;
+            var priorityInverted = event.shiftKey;
+            // TODO: consider if we need to have separate _mousecontrols
+            for (var i = 0; i < scope._controls.length; i++) {
+              var ci = priorityInverted? scope._controls.length-i-1 : i;
+              var control = scope._controls[ci];
+              if (control.enabled) {
+                notHandled = control.onMouseDown(event);
+                if (!notHandled) {
+                  break;
+                }
+              }
+            }
+            return notHandled;
+          }
+        } else if (scope.isHighlightArchMode) {
+          if (scope.__lastHovered) {
+            if (event.shiftKey) {
+              // Print in console information about the point that is being clicked
+              var mouse = scope.picker.getCoordinates(scope.container, event);
+              var arch = scope.__lastHovered;
+              var intersects = scope.picker.getIntersectedDescendants(mouse.x, mouse.y, scope.camera, [arch]);
+              if (intersects.length > 0) {
+                var intersected = intersects[0];
+                var worldPoint = intersected.point;
+                var scenePoint = scope.sceneState.scene.worldToLocal(worldPoint.clone());
+                var archObject3D = (arch.userData.type === 'Wall')? arch.children[0] : arch;
+                var archPoint = archObject3D.worldToLocal(worldPoint.clone());
+                console.log('intersected', scenePoint, archPoint, arch.userData);
+              }
+            } else {
+              scope.sceneHierarchy.selectObject(scope.__lastHovered, true, true);
+              if (scope.debugArch) {
+                scope.__sceneHierarchyContextMenuActivated = {object3D: scope.__lastHovered};
+              }
+            }
           }
         }
       }
@@ -1328,17 +1668,43 @@ SceneViewer.prototype.setupEventListeners = function () {
     false
   );
 
-  this.renderer.domElement.addEventListener('mousemove', __wrappedEventListener(function (event) {
+  this.renderer.domElement.addEventListener('pointermove', __wrappedEventListener(function (event) {
       event.preventDefault();
       scope.renderer.domElement.focus();
-      if (event.which !== Constants.RIGHT_MOUSE_BTN) {
-        if (scope.editMode) {
+      var rightMouseButtonPressed = UIUtil.isRightMouseButtonPressed(event);
+      // console.log('pointermove', rightMouseButtonPressed);
+      if (!rightMouseButtonPressed) {
+        if (scope.editMode && !scope.isHighlightArchMode) {
           if (scope.contextQueryIsEnabled && scope.contextQueryControls && event.shiftKey) {
             scope.container.style.cursor = scope.contextQueryControls.mouseMoveCursor;
             scope.contextQueryControls.onDocumentMouseMove(event);
             return false;
           } else {
-            return scope.editControls.onMouseMove(event);
+            var notHandled = true;
+            var priorityInverted = event.shiftKey;
+            // TODO: consider if we need to have separate _mousecontrols
+            for (var i = 0; i < scope._controls.length; i++) {
+              var ci = priorityInverted? scope._controls.length-i-1 : i;
+              var control = scope._controls[ci];
+              if (control.enabled) {
+                notHandled = control.onMouseMove(event);
+                if (!notHandled) {
+                  break;
+                }
+              }
+            }
+            return notHandled;
+          }
+        } else if (scope.isHighlightArchMode) {
+          var archObjects = scope.sceneState.getArchObject3Ds();
+          var visibleArchObjects = Object3DUtil.filterVisible(archObjects);
+          if (scope.highlightSupportArchOnly) {
+            visibleArchObjects = visibleArchObjects.filter(x => x.userData.isSupportObject);
+          }
+          scope.__lastHovered = scope.highlightHovered(event, visibleArchObjects, 'object');
+          if (scope.__sceneHierarchyContextMenuActivated && scope.__lastHovered !== scope.__sceneHierarchyContextMenuActivated.object3D) {
+            scope.sceneHierarchy.hideContextMenu( scope.__sceneHierarchyContextMenuActivated.object3D);
+            scope.__sceneHierarchyContextMenuActivated = null;
           }
         }
       }
@@ -1346,9 +1712,11 @@ SceneViewer.prototype.setupEventListeners = function () {
     false
   );
 
-  this.renderer.domElement.addEventListener('mouseleave', function (event) {
-    if (scope.editMode) {
+  this.renderer.domElement.addEventListener('pointerleave', function (event) {
+    if (scope.editMode && !scope.isHighlightArchMode) {
       scope.editControls.onMouseLeave(event);
+    } else if (scope.isHighlightArchMode) {
+      scope.highlightHovered(null);
     }
   });
 
@@ -1368,13 +1736,6 @@ SceneViewer.prototype.setupEventListeners = function () {
       }
     }
   }, false);
-
-  this.renderer.domElement.addEventListener('keyup', function (event) {
-    scope.editControls.onKeyUp(event);
-  });
-
-  this.renderer.domElement.addEventListener('keydown', this.onKeyDown.bind(this), true);
-
 };
 
 SceneViewer.prototype.setupConsole = function () {
@@ -1410,6 +1771,31 @@ SceneViewer.prototype.setupConsole = function () {
     });
     controller.promptText('generate a room with a desk and a lamp');
     this.console = controller;
+  }
+};
+
+SceneViewer.prototype.setupTestScenes = function () {
+  // Test Scenes
+  var selectSceneElem = $('#selectScene');
+  if (selectSceneElem && selectSceneElem.length) {
+    var scenes = {
+      // Test scenes from Web Scene Studios
+      'testThreeJsScene': { format: 'three.js', file: 'resources/scenes/test_scene.json', hasSupport: true },
+      'testWssScene1': { format: 'wss', file: 'resources/scenes/testWssScene1.json', hasSupport: true },
+      'testWssScene2': { format: 'wss', file: 'resources/scenes/testWssScene2.json', hasSupport: false }
+    };
+    for (var name in scenes) {
+      if (scenes.hasOwnProperty(name)) {
+        selectSceneElem.append('<option value="' + name + '">' + name + '</option>');
+      }
+    }
+    var that = this;
+    selectSceneElem.change(function () {
+      $('#selectScene option:selected').each(function () {
+        var m = scenes[$(this).val()];
+        that.clearAndLoadScene(m);
+      });
+    });
   }
 };
 
@@ -1455,6 +1841,12 @@ SceneViewer.prototype.isConsoleVisible = function () {
   return $('#console').is(':visible');
 };
 
+SceneViewer.prototype.setEditMode = function(flag) {
+  if (this.editMode != flag) {
+    this.toggleEditMode();
+  }
+};
+
 SceneViewer.prototype.toggleEditMode = function () {
   if (this.allowEdit) {
     this.editMode = !this.editMode;
@@ -1472,6 +1864,12 @@ SceneViewer.prototype.toggleEditMode = function () {
 
 SceneViewer.prototype.isEditMode = function () {
   return this.editMode;
+};
+
+SceneViewer.prototype.setSelectMode = function(flag) {
+  if (this.selectMode != flag) {
+    this.toggleSelectMode();
+  }
 };
 
 SceneViewer.prototype.toggleSelectMode = function () {
@@ -1559,6 +1957,7 @@ SceneViewer.prototype.__initContextQueryControls = function () {
   });
   this.contextQueryControls = new this.__contextQueryOptions.contextQueryControls(options);
   this.contextQueryControls.enabled = this.contextQueryIsEnabled;
+  this.__modelSearchControlers.push(this.contextQueryControls.searchController);
   if (this.restrictModels) {
     this.contextQueryControls.searchController.setFilter(Constants.assetTypeModel, this.restrictModels);
   }
@@ -1647,8 +2046,15 @@ SceneViewer.prototype.addDefaultCameras = function (sceneBBox) {
     camera: this.camera,
     container: this.container,
     autoRotateCheckbox: $('#autoRotate'),
-    renderCallback: function() {
-      scope.render(); 
+    orbitStartCallback: (orbitDetails)=>{
+      if (scope.uilog) {
+        scope.uilog.log(UILog.EVENT.CAMERA_ORBIT_START, null, orbitDetails);
+      }
+    },
+    orbitEndCallback: (orbitDetails)=>{
+      if (scope.uilog) {
+        scope.uilog.log(UILog.EVENT.CAMERA_ORBIT_END, null, orbitDetails);
+      }
     }
   });
   this.sceneState.setCurrentCameraControls(this.cameraControls);
@@ -1658,7 +2064,7 @@ SceneViewer.prototype.addDefaultCameras = function (sceneBBox) {
 
 SceneViewer.prototype.addDefaultLights = function (sceneBBox) {
   // set low if interior lights turned on
-  var intensity = this.usePhysicalLights ? (this.lightsOn? 0.5 : 2.0) : 1.0;
+  var intensity = this.usePhysicalLights ? (this.lightsOn? 0.1 : 0.5) : 1.0;
   var lights = this.sceneState.addDefaultLights(sceneBBox, this.camera.position, intensity);
   this._ambientLights = lights;
 };
@@ -1716,8 +2122,9 @@ SceneViewer.prototype.createCheckboxes = function (container, ids, text, default
     fieldInput.prop('checked', defaultValues[i]);
     container.append(fieldInput);
     container.append(fieldLabel);
-    container.append('<br>');
+    container.append('&nbsp;&nbsp;');
   }
+  container.append('<br>');
 };
 
 SceneViewer.prototype.loadTexture = function (source, id, metadata) {
@@ -1776,9 +2183,12 @@ SceneViewer.prototype.setCursorStyle = function (style) {
   this.editControls.setCursorStyle(style);
 };
 
+SceneViewer.prototype.getCursorStyle = function() {
+  return this.editControls.getCursorStyle();
+};
+
 SceneViewer.prototype.loadModel = function (source, id, metadata, opts) {
-  this.setCursorStyle('wait');
-  this.setIsModelLoading(true);
+  var waitingKey = this.addWaitingToQueue(SceneViewer.WAIT.LOAD_MODEL);
   var modelId = AssetManager.toFullId(source, id);
   this.uilog.log(UILog.EVENT.MODEL_LOAD, null, { modelId: modelId, progress: 'started' });
   var loadOptions = {
@@ -1787,11 +2197,21 @@ SceneViewer.prototype.loadModel = function (source, id, metadata, opts) {
   if (opts) {
     _.defaults(loadOptions, opts);
   }
-  this.assetManager.getModelInstance(source, id, this.onModelLoad.bind(this, loadOptions),
-    this.onModelLoadError.bind(this, modelId), metadata);
+  var modelInfo = _.defaults(Object.create(null), { fullId: modelId, source: source, id: id }, metadata);
+  var scope = this;
+  this.assetManager.loadModel(modelInfo,
+    function (err, modelInstance) {
+      scope.removeWaiting(waitingKey, SceneViewer.WAIT.LOAD_MODEL);
+      if (err) {
+        console.error('Error loading model', modelId, err);
+        scope.onModelLoadError(modelId);
+      } else {
+        scope.onModelLoad(loadOptions, modelInstance);
+      }
+    });
 };
 
-SceneViewer.prototype.modelSearchResultClickedCallback = function (source, id, result, elem, index) {
+SceneViewer.prototype.modelSearchResultClickedCallback = function (source, id, result, elem, index, searchDetails) {
   // if (this.contextQueryControls.active) {
   //   this.toggleContextQueryMode();
   // }
@@ -1800,8 +2220,14 @@ SceneViewer.prototype.modelSearchResultClickedCallback = function (source, id, r
     if (!this.editMode) {
       this.toggleEditMode();
     }
-    this.uilog.log(UILog.EVENT.SEARCH_SELECT, null, { type: 'model', source: source, id: id, index: index });
-    this.loadModel(source, id, result);
+    // NOTE: Custom grouping for RLSD
+    if (result.is_link) {
+      this.modelSearchController.searchPanel.expandLinkResult(result);
+    } else {
+      this.uilog.log(UILog.EVENT.SEARCH_SELECT, null, { type: 'model', source: source, id: id, index: index, searchDetails: searchDetails });
+      this.modelSearchController.addRecent(result);
+      this.loadModel(source, id, result);
+    }
   }
 };
 
@@ -1842,8 +2268,8 @@ SceneViewer.prototype.clearAndLoadScene = function (sceneinfo, loadOptions) {
     console.log('Loading is in progress...');
     return;
   }
+  var waitingKey = this.addWaitingToQueue(SceneViewer.WAIT.LOAD_SCENE);
   this.clear();
-  this.showLoadingIcon(true);
   var defaults = {
     defaultSceneFormat: this.defaultSceneFormat,
     freezeObjects: this.freezeObjects,
@@ -1868,12 +2294,13 @@ SceneViewer.prototype.clearAndLoadScene = function (sceneinfo, loadOptions) {
   loadOptions.keepCurrentCamera = false;
   loadOptions.clearUndoStack = true;
   loadOptions.pushToUndoStack = true;
+  loadOptions.loadKey = waitingKey;
   loadOptions.loadTime = { start: new Date().getTime() };
   // Make sure some information is pushed through to assetManager loadScene
   sceneinfo = _.merge(sceneinfo, _.pick(loadOptions, _.keys(defaults)));
   var scope = this;
   this.assetManager.loadAssetAsScene(sceneinfo, function (err, sceneState) {
-    scope.onSceneLoad(loadOptions, sceneState);
+    scope.onSceneLoad(loadOptions, sceneState, err);
   });
 };
 
@@ -1883,18 +2310,19 @@ SceneViewer.prototype.restoreScene = function (sceneinfo) {
     console.log('Loading is in progress...');
     return;
   }
+  var waitingKey = this.addWaitingToQueue(SceneViewer.WAIT.LOAD_SCENE);
   this.clear();
-  this.showLoadingIcon(true);
   var loadOptions = {
     keepCurrentCamera: true,
     clearUndoStack: false,
     pushToUndoStack: false,
     sceneRestore: true,
+    loadKey: waitingKey,
     loadTime: { start: new Date().getTime() }
   };
   var scope = this;
   this.assetManager.loadScene(sceneinfo, function (err, sceneState) {
-    scope.onSceneLoad(loadOptions, sceneState);
+    scope.onSceneLoad(loadOptions, sceneState, err);
   });
 };
 
@@ -1964,8 +2392,7 @@ SceneViewer.prototype.loadModelFromLocal = function (file) {
 SceneViewer.prototype.__loadModelFromLocal = function (file, opts, cb) {
   if (file) {
     opts = opts || {};
-    this.setCursorStyle('wait');
-    this.setIsModelLoading(true);
+    var waitingKey = this.addWaitingToQueue(SceneViewer.WAIT.LOAD_MODEL);
     var modelId = 'file.' + file.name;
     this.uilog.log(UILog.EVENT.MODEL_LOAD, null, { modelId: modelId, progress: 'started' });
     var loadOptions = {
@@ -1976,6 +2403,7 @@ SceneViewer.prototype.__loadModelFromLocal = function (file, opts, cb) {
     this.assetManager.loadModel(_.defaults({ file: file }, opts), function(err, res) {
       res.model.info.name = file.name;
       res.object3D.name = file.name;
+      scope.removeWaiting(waitingKey, SceneViewer.WAIT.LOAD_MODEL);
       if (err) {
         console.error('Error loading model', modelId, err);
         scope.onModelLoadError(modelId);
@@ -2050,23 +2478,21 @@ SceneViewer.prototype.loadArch = function (info) {
     console.log('Loading is in progress...');
     return;
   }
+  var waitingKey = this.addWaitingToQueue(SceneViewer.WAIT.LOAD_SCENE);
   this.clear();
-  this.showLoadingIcon(true);
   var scope = this;
   var loadOptions = {
     keepCurrentCamera: false,
     clearUndoStack: true,
     pushToUndoStack: true,
+    loadKey: waitingKey,
+    loadErrorMessage: 'Error loading arch file',
     loadTime: { start: new Date().getTime() }
   };
 
+  info.debugArch = this.debugArch;
   this.assetManager.loadArch(info, function (err, sceneState) {
-    if (err) {
-      scope.showError(err);
-      scope.showLoadingIcon(false);
-    } else {
-      scope.onSceneLoad(loadOptions, sceneState);
-    }
+    scope.onSceneLoad(loadOptions, sceneState, err);
   }, true);
 };
 
@@ -2137,14 +2563,18 @@ SceneViewer.prototype.createSceneWithOneModel = function (modelInstance, options
     this.addGroundToScene(sceneBBox.getWorldPosition(new THREE.Vector3(0.5, 0, 0.5)));
   }
 
-  this.setCursorStyle('initial');
+  //this.setCursorStyle('initial');
   if (options && options.clearUndoStack) {
-    this.undoStack.clear();
+    if (this.undoStack) {
+      this.undoStack.clear();
+    }
   }
   if (options && options.clearUILog) {
     this.uilog.clear();
   }
-  this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
+  if (this.undoStack) {
+    this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
+  }
   var objInfo = modelInstance.getUILogInfo(true);
   this.uilog.log(UILog.EVENT.SCENE_CREATE, null, objInfo);
   this.onSceneUpdated();
@@ -2187,8 +2617,6 @@ SceneViewer.prototype.onSceneChanged = function () {
 };
 
 SceneViewer.prototype.onModelLoadError = function (modelId) {
-  this.setCursorStyle('initial');
-  this.setIsModelLoading(false);
   this.uilog.log(UILog.EVENT.MODEL_LOAD, null, { modelId: modelId, progress: 'finished', status: 'ERROR' });
 };
 
@@ -2241,7 +2669,6 @@ SceneViewer.prototype.onModelLoad = function (loadOptions, modelInstance) {
     this.sceneState.resetCoordFrame(modelInstance.model.getUp(), modelInstance.model.getFront(), modelInstance.model.getUnit());
   }
 
-  this.setIsModelLoading(false);
   this.uilog.log(UILog.EVENT.MODEL_LOAD, null,
     { modelId: modelInstance.model.getFullID(), progress: 'finished', status: 'SUCCESS' });
 
@@ -2256,74 +2683,85 @@ SceneViewer.prototype.onModelLoad = function (loadOptions, modelInstance) {
   });
 
   this.Publish("ModelLoaded", modelInstance, { loadTime: loadOptions.loadTime });
-
-  if (modelInstance.model.isScan()) {
-    modelInstance.object3D.userData.isSupportObject = this.isScanSupport;
-    this.createSceneWithOneModel(modelInstance, { initModelInstance: false, clearUILog: true, clearUndoStack: true });
-    return;
-  }
-
-  var obj = modelInstance.object3D;
-  var objInfo = modelInstance.getUILogInfo(true);
-  if (this.contextQueryControls && this.contextQueryControls.active) {
-    // sceneState is updated by the contextQueryControls (old selected modelInstance is removed and new one is added)
-    this.contextQueryControls.onReplace(this.sceneState, modelInstance);
-    if (this.sceneState.lights.length === 0) {
-      // Do some lights and camera initialization for scene
-      var sceneBBox = Object3DUtil.getBoundingBox(this.sceneState.scene);
-      this.addDefaultLights(sceneBBox);
-    }
-    obj.visible = true;
-    this.onSceneUpdated();
-
-    this.uilog.log(UILog.EVENT.CONTEXT_QUERY_INSERT, null, objInfo);
-    this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.INSERT, { object: obj });
-
-    if (this.editControlsStateBeforeContextQuery) {
-      this.editControls.enabled = this.editControlsStateBeforeContextQuery.editControlsEnabled;
-    }
-    if (this.editControls.enabled) {
-      this.editControls.attach(modelInstance, this.contextQueryControls.placementInfo.attachmentIndex);
-    }
-  } else {
-    if (this.sceneState.isEmpty()) {
-      this.initSceneWithOneModel(modelInstance, loadOptions);
-      this.undoStack.clear();
-      this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
-      this.uilog.log(UILog.EVENT.MODEL_INSERT, null, objInfo);
-      this.onSceneUpdated();
+  if (!this.blockInserts) {
+    // TODO: Apply coloring scene to newly loaded modelInstance
+    if (this.colorBy === 'splitColors' && this.colorByOptions.object) {
+      SceneUtil.applyColorSchemeToNewModel(modelInstance, this.colorByOptions.object.colorBy, this.colorByOptions.object);
     } else {
-      // Always put model in middle of scene
-      if (loadOptions.placement === 'center' || loadOptions.placement == null) {
-        var sceneBb = Object3DUtil.getBoundingBox(this.sceneState.scene);
-        var center = sceneBb.centroid();
-        var sceneCenter = this.sceneState.scene.worldToLocal(center);
-        console.log("sceneCenter", sceneCenter);
-        Object3DUtil.placeObject3D(modelInstance.object3D, sceneCenter);
+      SceneUtil.applyColorSchemeToNewModel(modelInstance, this.colorBy, this.colorByOptions);
+    }
+
+    if (modelInstance.model.isScan()) {
+      modelInstance.object3D.userData.isSupportObject = this.isScanSupport;
+      if (this.isAutoCreateSceneForScan) {
+        this.createSceneWithOneModel(modelInstance, {initModelInstance: false, clearUILog: true, clearUndoStack: true});
+        return;
       }
-      this.sceneState.addObject(modelInstance);
+    }
+
+    var obj = modelInstance.object3D;
+    var objInfo = modelInstance.getUILogInfo(true);
+    if (this.contextQueryControls && this.contextQueryControls.active) {
+      // sceneState is updated by the contextQueryControls (old selected modelInstance is removed and new one is added)
+      this.contextQueryControls.onReplace(this.sceneState, modelInstance);
+      if (this.sceneState.lights.length === 0) {
+        // Do some lights and camera initialization for scene
+        var sceneBBox = Object3DUtil.getBoundingBox(this.sceneState.scene);
+        this.addDefaultLights(sceneBBox);
+      }
+      obj.visible = true;
+      this.onSceneUpdated();
+
+      this.uilog.log(UILog.EVENT.CONTEXT_QUERY_INSERT, null, objInfo);
+      this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.INSERT, { object: obj });
+
+      if (this.editControlsStateBeforeContextQuery) {
+        this.editControls.enabled = this.editControlsStateBeforeContextQuery.editControlsEnabled;
+      }
       if (this.editControls.enabled) {
-        // Adjust using edit controls
-        this.editControls.onInsert(modelInstance.object3D);
-        obj.visible = true;
-        if (this.objectSelectMode) {
-          //set as selected
-          modelInstance.object3D.userData.isSelected = true;
-          this.__updateObjectSelection(modelInstance.object3D);
+        this.editControls.attach(modelInstance, this.contextQueryControls.placementInfo.attachmentIndex);
+      }
+    } else {
+      if (this.sceneState.isEmpty()) {
+        this.initSceneWithOneModel(modelInstance, loadOptions);
+        if (this.undoStack) {
+          this.undoStack.clear();
+          this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
         }
+          
+        this.uilog.log(UILog.EVENT.MODEL_INSERT, null, objInfo);
         this.onSceneUpdated();
       } else {
-        // Done
-        this.Publish('ObjectPlaced', modelInstance, { object3D: modelInstance.object3D, opType: "INSERT" });
+        // Always put model in middle of scene
+        if (loadOptions.placement === 'center' || loadOptions.placement == null) {
+          var sceneBb = Object3DUtil.getBoundingBox(this.sceneState.scene);
+          var center = sceneBb.centroid();
+          var sceneCenter = this.sceneState.scene.worldToLocal(center);
+          console.log("sceneCenter", sceneCenter);
+          Object3DUtil.placeObject3D(modelInstance.object3D, sceneCenter);
+        }
+        this.sceneState.addObject(modelInstance);
+        if (this.editControls.enabled) {
+          // Adjust using edit controls
+          this.editControls.onInsert(modelInstance.object3D);
+          obj.visible = true;
+          if (this.objectSelectMode) {
+            //set as selected
+            modelInstance.object3D.userData.isSelected = true;
+            this.__updateObjectSelection(modelInstance.object3D);
+          }
+          this.onSceneUpdated();
+        } else {
+          // Done
+          this.Publish('ObjectPlaced', modelInstance, { object3D: modelInstance.object3D, opType: "INSERT" });
 
-        this.uilog.log(UILog.EVENT.MODEL_INSERT, null, objInfo);
-        obj.visible = true;
-        this.onSceneUpdated();
+          this.uilog.log(UILog.EVENT.MODEL_INSERT, null, objInfo);
+          obj.visible = true;
+          this.onSceneUpdated();
+        }
       }
     }
   }
-
-  this.setCursorStyle('initial');
 };
 
 SceneViewer.prototype.toggleVoxels = function () {
@@ -2358,6 +2796,26 @@ SceneViewer.prototype.applyScanOpacity = function (modelInstances, transparency)
   }
 };
 
+SceneViewer.prototype.__applyArchOpacity = function (opacity) {
+  const sceneState = this.sceneState;
+  const archObjects = sceneState.getArchObject3Ds();
+  archObjects.forEach((arch) => {
+    const meshes = Object3DUtil.getMeshList(arch, false);
+    meshes.forEach((surface) => {
+      const materials = (surface.material instanceof Array) ? surface.material : [surface.material];
+      materials.forEach((material) => {
+        if (material) {
+          if (material.opacityBackup == null) {
+            material.opacityBackup = material.opacity;
+          }
+          material.opacity = Math.min(material.opacityBackup, opacity);
+          material.transparent = material.opacity < 1;
+        }
+      });
+    });
+  });
+};
+
 SceneViewer.prototype.toggleVfModelVisibility = function () {
   this.showScan = !this.showScan;
 };
@@ -2380,182 +2838,6 @@ SceneViewer.prototype.highlightObjects = function (objects) {
   }
 };
 
-// TODO: Clean up
-SceneViewer.prototype.convertToPhysijsMeshes = function (node) {
-  // Go through children and convert meshes to physijs meshes
-  if (node instanceof THREE.Mesh) {
-    var newMesh = new Physijs.ConvexMesh(node.geometry, node.material, 10);
-    // Clones information from the old mesh into the new one
-    node.clone(newMesh);
-    return newMesh;
-  } else {
-    // Clone the node too (instead of just replacing the children...)
-    var newNode = node.clone(undefined, false);
-    if (node.children) {
-      for (var i = 0; i < node.children.length; i++) {
-        var newChild = this.convertToPhysijsMeshes(node.children[i]);
-        //node.children[i] = newChild;
-        newNode.add(newChild);
-      }
-    }
-    return newNode;
-  }
-};
-
-// TODO: Clean up
-SceneViewer.prototype.convertToPhysijsMergedMeshes = function (node) {
-  // Go through children and convert meshes to physijs meshes
-  if (node instanceof THREE.Mesh) {
-    var newMesh = new Physijs.ConvexMesh(node.geometry, node.material, 10);
-    // Clones information from the old mesh into the new one
-    node.clone(newMesh);
-    return newMesh;
-  } else {
-    // Clone the node too (instead of just replacing the children...)
-    var newNode = new Physijs.ConvexMesh(new THREE.Geometry());
-    node.clone(newNode, false);
-    if (node.children) {
-      var mergedGeometry = null;
-      var meshFaceMaterials = new THREE.MultiMaterial();
-      for (var i = 0; i < node.children.length; i++) {
-        if (node.children[i] instanceof THREE.Mesh) {
-          var materialIndex = meshFaceMaterials.materials.length;
-          if (!mergedGeometry) {
-            mergedGeometry = new THREE.Geometry();
-          }
-          THREE.GeometryUtils.merge(mergedGeometry, node.children[i], materialIndex);
-          meshFaceMaterials.materials.push(node.children[i].material);
-        } else {
-          var newChild = this.convertToPhysijsMergedMeshes(node.children[i]);
-          //node.children[i] = newChild;
-          newNode.add(newChild);
-        }
-      }
-      if (mergedGeometry) {
-        var newChild = new Physijs.ConvexMesh(mergedGeometry, meshFaceMaterials, 10);
-        newNode.add(newChild);
-      }
-    }
-    return newNode;
-  }
-};
-
-// TODO: Clean up
-// Experiment with physijs
-// Not quite working.
-// - Physijs doesn't like nested objects (we flatten the object and convert to Physijis Mesh
-//     Can experiment with having Physijs meshes with dummy geometries
-// - Physijs doesn't like shapes with lots of vertices (too slow)
-//     Try to have BoxMesh (much faster)
-SceneViewer.prototype.wrapScene = function (scene, roots, sceneBBox) {
-  if (this.usePhysijs) {
-    // Convert scene to physijs scene if using physijs
-
-    // Create physijs scene
-    var physijsScene = new Physijs.Scene({ fixedTimeStep: 1 / 120 });
-    physijsScene.setGravity(new THREE.Vector3(0, -50, 0));
-    physijsScene.addEventListener(
-      'update',
-      function () {
-        physijsScene.simulate(undefined, 2);
-        //  physics_stats.update();
-      }
-    );
-
-    // Add objects in scene to physijsScene
-    for (var i = 0; i < scene.children.length; i++) {
-      var metadata = scene.children[i].metadata;
-      var modelId = metadata.modelInstance.model.info.fullId;
-      //newChild = this.convertToPhysijsMergedMeshes(newChild);
-      var newChild = scene.children[i];
-      if (!modelId.startsWith('wss.room')) {
-        // TODO: id/name is lost
-        var flattened = GeometryUtil.flattenAndMergeMeshes(scene.children[i]);
-        console.log('id = ' + modelId + ', name = ' + metadata.modelInstance.model.info.name +
-          ', faces = ' + flattened.geometry.faces.length);
-        newChild = flattened;
-        //newChild = new Physijs.ConvexMesh(flattened.geometry, flattened.material, 10);
-      } else {
-        console.log('Skipping: ' + modelId);
-      }
-
-      // Now make selected models attached to physijs
-
-      // If tide (~5000 faces), make higher so it can drop
-      if (modelId === 'wss.c76add9451236ff190f95382f0ffdfb5') {
-        // folded towels - ~20000 faces, doesn't move (probably too slow)
-        //                if (modelId === "wss.1ee777624ac8375025009b04306ab688" ) {
-        // vacuum cleaner = ~1000 faces, will drop (not stable)
-        //                if (modelId === "wss.d4623c0713397098566636e42679cc7f") {
-        //                if (flattened && flattened.geometry.faces.length < 6000) {
-        newChild = new Physijs.ConvexMesh(newChild.geometry, newChild.material, 10);
-        newChild.position.y = newChild.position.y + 10;
-        newChild.position.__dirtyPosition = true;
-        console.log(newChild);
-      }
-
-      newChild.metadata = metadata;
-      physijsScene.add(newChild);
-    }
-
-    // For now, make a flat box geometry as the overall ground
-    // Materials
-    if (sceneBBox) {
-      var groundMaterial = Physijs.createMaterial(
-        Object3DUtil.getSimpleFalseColorMaterial(1),
-        0.8, // high friction
-        0.4 // low restitution
-      );
-
-      // Ground
-      var bbdims = sceneBBox.dimensions();
-      var centroid = sceneBBox.centroid();
-      var ground = new Physijs.BoxMesh(
-        new THREE.CubeGeometry(bbdims.x, bbdims.y, 1),
-        groundMaterial,
-        0 // mass
-      );
-      ground.position.set(centroid.x, centroid.y, sceneBBox.min.z);
-      //ground.receiveShadow = true;
-      physijsScene.add(ground);
-
-      var material = Object3DUtil.getSimpleFalseColorMaterial(2);
-      var boxGeometry = new THREE.CubeGeometry(5, 5, 5);
-      var shape = new Physijs.BoxMesh(
-        boxGeometry,
-        material
-      );
-      // Physijs can't handle shape nested in Object3D
-      // Create a dummy Physijs mesh with just place holder geometry (seems okay)
-      var nestedShape = new Physijs.ConvexMesh(
-        new THREE.Geometry(),
-        material
-      );
-      //                nestedShape.position.copy( centroid );
-      nestedShape.add(shape);
-      shape.position.copy(centroid);
-      physijsScene.add(shape);
-    }
-
-    if (roots) {
-      // TODO: Make the roots stationary
-      //                for (var i = 0; i < roots.length; i++) {
-      //                    var r = roots[i];
-      //                    var modelInstance = r.metadata.modelInstance;
-      //
-      //                }
-    }
-
-    // Start simulation (without this, things don't happen)
-    physijsScene.simulate();
-    physijsScene.selectables = scene.selectables;
-
-    return physijsScene;
-  } else {
-    return scene;
-  }
-};
-
 SceneViewer.prototype.__createDebugOBBMeshes = function(obbs) {
   var MeshHelpers = require('geo/MeshHelpers');
   var debugOBBs = new THREE.Group();
@@ -2570,20 +2852,27 @@ SceneViewer.prototype.__createDebugOBBMeshes = function(obbs) {
   return debugOBBs;
 };
 
-SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
-  this.showLoadingIcon(false);
+SceneViewer.prototype.onSceneLoad = function(loadOptions, sceneState, err) {
+  this.removeWaiting(loadOptions.loadKey, 'loadScene');
   loadOptions.loadTime.end = new Date().getTime();
   loadOptions.loadTime.duration = loadOptions.loadTime.end - loadOptions.loadTime.start;
   console.log('Load time for scene: ' + loadOptions.loadTime.duration);
 
-  // Errored abort!!!
-  if (!sceneState) {
+  if (err || !sceneState) {
+    // Errored abort!!!
+    if (err) {
+      console.error('Error loading scene', err);
+    }
     if (loadOptions.onError) {
       loadOptions.onError();
     }
-    this.showError('Error loading scene');
-    return;
+    this.showError(loadOptions.loadErrorMessage || 'Error loading scene');
+  } else {
+    this.__onSceneLoadSuccessful(loadOptions, sceneState);
   }
+};
+
+SceneViewer.prototype.__onSceneLoadSuccessful = function (loadOptions, sceneState) {
   //console.log(sceneState);
   console.time('onSceneLoad');
   var oldLights = this.sceneState.lights;
@@ -2593,7 +2882,6 @@ SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
   // Debugging
   //var obbs = this.__createDebugOBBMeshes(sceneState.getSavedOBBs());
   //basicScene.add(obbs);
-  var fullScene = sceneState.fullScene;
   this.sceneType = sceneState.sceneType ? sceneState.sceneType : this.sceneType;
   var sceneBBox = Object3DUtil.getBoundingBox(basicScene);
   var bbdims = sceneBBox.dimensions();
@@ -2608,13 +2896,10 @@ SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
   this.sceneState.compactify();  // Make sure that there are no missing models
   if (this.sceneHierarchy) { this.sceneHierarchy.setSceneState(this.sceneState); }
   if (this.bvhVisualizer) { this.bvhVisualizer.setSceneState(this.sceneState); }
-  if (this.sceneHierarchy) {
-    var wrappedScene = this.wrapScene(fullScene, this.sceneHierarchy.getRoots(), sceneBBox);
-    sceneState.fullScene = wrappedScene;
-  }
+  // if (this.imageCameraControl) { this.imageCameraControl.setSceneState(this.sceneState); }
+  //        this.modelInstances = scene.modelInstances;
   this.sceneVoxels.init(this.sceneState, this.showSceneVoxels);
   this.sceneState.fullScene.add(this.sceneVoxels.voxelNode);
-
 
   if (this.sceneState.selectedObjects) {
     this.setSelectedObjects(this.sceneState.selectedObjects.slice());
@@ -2656,7 +2941,9 @@ SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
       camera: this.camera,
       container: this.container,
       autoRotateCheckbox: $('#autoRotate'),
-      renderCallback: this.render.bind(this)
+      renderCallback: () => {
+        this.render();
+      }
     });
     this.__keepCurrentView = sceneState.setCurrentCameraControls(this.cameraControls);
   } else {
@@ -2669,16 +2956,21 @@ SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
     this.__keepCurrentView = sceneState.setCurrentCameraControls(this.cameraControls, 'current');
   }
 
-  this.cameraControlsPanel.setControls(this.cameraControls);
+  if (this.cameraControlsPanel) {
+    this.cameraControlsPanel.setControls(this.cameraControls);
+  }
   // Make sure things are displayed properly
-  this.showCeiling = this._showCeiling; // Make sure ceiling state is good...
+  this.showCeiling = this.__showCeiling; // Make sure ceiling state is good...
   this.showScene = this._showScene;
   this.showModels = this._showModels;
   this.showScan = this._showScan;
   this.showSceneVoxels = this._showSceneVoxels;
   this.onSceneChanged();
 
-  this.undoStack.sceneState = this.sceneState;
+  if (this.undoStack) {
+    this.undoStack.sceneState = this.sceneState;
+  }
+  
 
   if (this.colorBy) {
     this.colorBy = this.colorBy;  // Make sure scene is recolored
@@ -2722,13 +3014,17 @@ SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
   }
 
   if (loadOptions.clearUndoStack) {
-    this.undoStack.clear();
+    if (this.undoStack) {
+      this.undoStack.clear();
+    }
   }
   if (loadOptions.clearUILog) {
     this.uilog.clear();
   }
-  if (loadOptions.pushToUndoStack) {//only push if load was not triggered by undo/redo
-    this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
+  if (loadOptions.pushToUndoStack) { //only push if load was not triggered by undo/redo
+    if (this.undoStack) {
+      this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
+    }
     this.uilog.log(UILog.EVENT.SCENE_LOAD, null, {});
   }
 
@@ -2764,6 +3060,7 @@ SceneViewer.prototype.onSceneLoad = function (loadOptions, sceneState) {
   console.timeEnd('onSceneLoad');
 };
 
+
 SceneViewer.prototype.generateSucceededCallback = function (scenes) {
   if (scenes.length > 0) {
     // Load first scene
@@ -2793,6 +3090,12 @@ SceneViewer.prototype.resetCamera = function (options) {
   Viewer3D.prototype.resetCamera.call(this, options);
 };
 
+SceneViewer.prototype.refreshSceneMaterials = function() {
+  if (this.sceneState) {
+    this.__revertSceneMaterials();
+  }
+};
+
 SceneViewer.prototype.__revertObjectMaterials = function (object3D, nonrecursive) {
   Object3DUtil.revertMaterials(object3D, nonrecursive, true);
   if (this.__colorBy && this.__colorBy !== 'original') {
@@ -2810,7 +3113,7 @@ SceneViewer.prototype.__revertSceneMaterials = function (showAll) {
   }
   // Save scene materials
   if (this.__colorBy && this.__colorBy !== 'original') {
-    SceneUtil.colorScene(this.sceneState, this.__colorBy, { color: '#fef9ed' });
+    SceneUtil.colorScene(this.sceneState, this.__colorBy, this.colorByOptions);
   } else {
     this.sceneState.hideObjectSegmentation();
   }
@@ -2894,6 +3197,16 @@ SceneViewer.prototype.redisplay = function () {
   if (this.__perfStats) { this.__perfStats.end(); }
 };
 
+SceneViewer.prototype.highlightHovered = function(event, pickables, targetType) {
+  // console.log('highlight', event);
+  var highlightControls = this.editControls.dragdrop.highlightControls;
+  if (event) {
+    highlightControls.highlightIntersected(event, pickables, targetType);
+    return highlightControls.intersected;
+  } else {
+    highlightControls.clear();
+  }
+};
 
 SceneViewer.prototype.selectClicked = function (event) {
   if (this.checkSelectModeFn && !this.checkSelectModeFn(event)) {
@@ -3010,23 +3323,25 @@ SceneViewer.prototype.getClickedObject = function (event) {
 
 SceneViewer.prototype.onEditOpInit = function (command, cmdParams) {
   this.setContextQueryActive(false);
-  this.undoStack.prepareDeltaState(command, cmdParams);
+  if (this.undoStack) {
+    this.undoStack.prepareDeltaState(command, cmdParams);
+  }
 };
 
 SceneViewer.prototype.onSelectedInstanceChanged = function (modelInstance) {
   this.Publish('SelectedInstanceChanged', modelInstance);
-}
+};
 
 SceneViewer.prototype.onEditOpCancel = function (command, cmdParams) {
   // console.log({"event": "onEditOpDone", "command": command, "cmdParams": cmdParams});
 
-  if(command == Constants.CMDTYPE.INSERT){
+  if (command === Constants.CMDTYPE.INSERT) {
     var object = cmdParams.object;
     var modelInstance = object? Object3DUtil.getModelInstance(object) : null;
     this.Publish('ObjectInsertCancelled', modelInstance, { object3D: object, opType: command });
     // console.log({"event": "ObjectInsertCancelled", "modelInstance": modelInstance, "cmdParams":  { object3D: object, opType: command }});
   }
-}
+};
 
 SceneViewer.prototype.onEditOpDone = function (command, cmdParams) {
   // console.log({"event": "onEditOpDone", "command": command, "cmdParams": cmdParams});
@@ -3036,7 +3351,9 @@ SceneViewer.prototype.onEditOpDone = function (command, cmdParams) {
     var modelInstance = object? Object3DUtil.getModelInstance(object) : null;
     this.Publish('ObjectPlaced', modelInstance, { object3D: object, opType: command });
   }
-  this.undoStack.pushCurrentState(command, cmdParams);
+  if (this.undoStack) {
+    this.undoStack.pushCurrentState(command, cmdParams);
+  }
 };
 
 SceneViewer.prototype.deleteObject = function (obj, event) {
@@ -3048,7 +3365,9 @@ SceneViewer.prototype.deleteObject = function (obj, event) {
 
   var objInfo = mInst.getUILogInfo(true);
   this.uilog.log(UILog.EVENT.MODEL_DELETE, event, objInfo);
-  this.undoStack.pushCurrentState(Constants.CMDTYPE.DELETE);
+  if (this.undoStack) {
+    this.undoStack.pushCurrentState(Constants.CMDTYPE.DELETE);
+  }
   this.Publish('DeleteObject', obj, mInst);
 };
 
@@ -3121,6 +3440,9 @@ SceneViewer.prototype.__updateObjectSelection = function (object3D) {
   // Notify scene hierarchy of change in selection
   if (this.sceneHierarchy) {
     this.sceneHierarchy.updateObjectSelection(object3D, object3D.userData.isSelected);
+  }
+  if (this.sceneState.selectedObjects.length) {
+    console.log('selected: ' + this.sceneState.selectedObjects.map(obj => obj.userData.id));
   }
 };
 
@@ -3288,8 +3610,20 @@ SceneViewer.prototype.scaleModels = function (modelInstances, scaleBy, bbfaceInd
   }
 };
 
+SceneViewer.prototype.onKeyUp = function(event){
+  return this.editControls.onKeyUp(event);
+};
+
 SceneViewer.prototype.onKeyDown = function (event) {
   if (event.target.type && (event.target.type === 'text' || event.target.type === 'textarea')) return;
+  if (this.__sceneHierarchyContextMenuActivated) {
+    if (event.which === 27) {  // escape
+      this.sceneHierarchy.hideContextMenu();
+      this.__sceneHierarchyContextMenuActivated = null;
+    } else {
+      this.sceneHierarchy.contextMenuKeyPressed(event);
+    }
+  }
   if (this.contextQueryControls && this.contextQueryControls.active) {
     if (event.which === 27) {  // escape
       this.contextQueryControls.reset();
@@ -3305,33 +3639,13 @@ SceneViewer.prototype.onKeyDown = function (event) {
   }
 };
 
+
 SceneViewer.prototype.bindKeys = function () {
   var scope = this;
   var canvas = scope.renderer.domElement;
   keymap('esc', function () {
     if (scope.mouseMode) {
       scope.mouseMode = null;
-    }
-  });
-  keymap('o', function () {
-    var clusters = SceneUtil.clusterObjectsByBoundingBoxes(scope.sceneState.modelInstances);
-    _.map(clusters, function (c) {
-      var mesh = new MeshHelpers.BoxMinMax(c.bbox.min, c.bbox.max, Object3DUtil.TransparentMat);
-      scope.sceneState.debugNode.add(mesh);
-    });
-  });
-  keymap('shift-defmod-s', function () {
-    var exp = new OBJMTLExporter();
-    exp.export(scope.sceneState.scene, { name: scope.sceneState.info.fullId, texturePath: '../texture/' });
-  });
-  keymap({ on: 'shift-p', do: 'Previous Scene', target: canvas }, function () {
-    if (scope.allowScenePrevNext) {
-      scope.loadPrevScene();
-    }
-  });
-  keymap({ on: 'shift-n', do: 'Next Scene', target: canvas }, function () {
-    if (scope.allowScenePrevNext) {
-      scope.loadNextScene();
     }
   });
   keymap({ on: 'ctrl-i', do: 'Take screenshot', target: canvas }, function () {
@@ -3357,6 +3671,7 @@ SceneViewer.prototype.bindKeys = function () {
       FileUtil.saveJson(json, 'scene.json');
     }.bind(scope));
   });
+  // Main UI functions
   keymap({ on: 'defmod-z', do: 'Undo', target: canvas }, function (event) {
     scope.undo(event);
   });
@@ -3377,13 +3692,43 @@ SceneViewer.prototype.bindKeys = function () {
   keymap({ on: 'shift-r', do: 'Replace', target: canvas }, function (event) {
     scope.replace(event);
   });
+  keymap({ on: 'ctrl-m', do: 'Tumble orientation', target: canvas }, function (event) {
+    scope.tumble(event);
+  });
+  this.__bindSpecialKeys(keymap);
+
+  this.renderer.domElement.addEventListener('keyup', this.onKeyUp.bind(this), true);
+  this.renderer.domElement.addEventListener('keydown', this.onKeyDown.bind(this), true);
+};
+
+SceneViewer.prototype.__bindSpecialKeys = function(keymap) {
+  var scope = this;
+  var canvas = scope.renderer.domElement;
   keymap({ on: 'shift-s', do: 'Set scene type', target: canvas }, function (event) {
     if (scope.allowBBoxQuery) {
       scope.contextQueryControls.showSceneTypeDialog();
     }
   });
-  keymap({ on: 'ctrl-m', do: 'Tumble orientation', target: canvas }, function (event) {
-    scope.tumble(event);
+  keymap('o', function () {
+    var clusters = SceneUtil.clusterObjectsByBoundingBoxes(scope.sceneState.modelInstances);
+    _.map(clusters, function (c) {
+      var mesh = new MeshHelpers.BoxMinMax(c.bbox.min, c.bbox.max, Object3DUtil.TransparentMat);
+      scope.sceneState.debugNode.add(mesh);
+    });
+  });
+  keymap('shift-defmod-s', function () {
+    var exp = new OBJMTLExporter();
+    exp.export(scope.sceneState.scene, { name: scope.sceneState.info.fullId, texturePath: '../texture/' });
+  });
+  keymap({ on: 'shift-p', do: 'Previous Scene', target: canvas }, function () {
+    if (scope.allowScenePrevNext) {
+      scope.loadPrevScene();
+    }
+  });
+  keymap({ on: 'shift-n', do: 'Next Scene', target: canvas }, function () {
+    if (scope.allowScenePrevNext) {
+      scope.loadNextScene();
+    }
   });
   keymap({ on: 'ctrl-shift-v', do: 'Toggle showing voxels', target: canvas }, function () {
     scope.toggleVoxels();
@@ -3436,7 +3781,7 @@ SceneViewer.prototype.changeMaterials = function () {
 };
 
 SceneViewer.prototype.isContextQueryModeActive = function () {
-  return this.contextQueryControls.active;
+  return this.contextQueryControls && this.contextQueryControls.active;
 };
 
 SceneViewer.prototype.toggleContextQueryMode = function () {
@@ -3472,6 +3817,30 @@ SceneViewer.prototype.setContextQueryActive = function (flag) {
       }
     }
     this.contextQueryControls.active = flag;
+  }
+};
+
+SceneViewer.prototype.addWaiting = function(id, obj, queueName) {
+  this._waiting.addWaiting(id, obj, queueName);
+  this.setCursorStyle('wait');
+  if (this._waiting.hasWaiting(SceneViewer.WAIT.LOAD_SCENE)) {
+    this.showLoadingIcon(true);
+  }
+  if (this._waiting.hasWaiting(SceneViewer.WAIT.LOAD_MODEL)) {
+    this.setIsModelLoading(true);
+  }
+};
+
+SceneViewer.prototype.removeWaiting = function(id, queueName) {
+  this._waiting.removeWaiting(id, queueName);
+  if (this._waiting.isAllEmpty) {
+    this.setCursorStyle('initial');
+  }
+  if (this._waiting.isQueueEmpty(SceneViewer.WAIT.LOAD_SCENE)) {
+    this.showLoadingIcon(false);
+  }
+  if (this._waiting.isQueueEmpty(SceneViewer.WAIT.LOAD_MODEL)) {
+    this.setIsModelLoading(false);
   }
 };
 
@@ -3525,50 +3894,63 @@ SceneViewer.prototype.cut = function (event) {
 };
 
 SceneViewer.prototype.paste = function (event) {
+  if (this.blockInserts) {
+    return;
+  }
+
   var copiedObjectInfo = this.copiedObjectInfo;
   if (copiedObjectInfo) {
     var pastedObjectInfo = Object3DUtil.copyObjectWithModelInstances(copiedObjectInfo.object, copiedObjectInfo.modelInstances);
     this.sceneState.pasteObject(pastedObjectInfo.object, pastedObjectInfo.modelInstances);
+
+    var newModelInst = Object3DUtil.getModelInstance(pastedObjectInfo.object);
+    
     if (this.editControls.enabled) {
       this.editControls.onInsert(pastedObjectInfo.object);
     }
-    var newModelInst = Object3DUtil.getModelInstance(pastedObjectInfo.object);
+    // this.Publish('PasteStarted', newModelInst);
+    
+    // Logging
     var objInfo = newModelInst.getUILogInfo(true);
     this.uilog.log(UILog.EVENT.MODEL_PASTE, event, objInfo);
-    this.Publish('PasteCompleted');
+    this.Publish('PasteCompleted', newModelInst);
   }
 };
 
+SceneViewer.prototype.__postData = function(url, data) {
+  //var token = $("meta[name='csrf-token']").attr('content');
+  return $.ajax({
+    type: 'PUT',
+    url: url,
+    data: JSON.stringify(data),
+    dataType: 'json',
+    timeout: 10000,
+    // beforeSend: function (xhr) {
+    // xhr.setRequestHeader('X-CSRF-Token', token);
+    // }X
+  });
+};
+
 SceneViewer.prototype.saveScene = function (onSuccess, onError) {
-  function putViaJQuery(url, data) {
-    data = data || {};
+  if (this.onSaveUrl) {
+    var data = this.getSceneRecord({savePreview: true, stringify: true});
     if (window.globals.assignmentId) {
       data.assignmentId = window.globals.assignmentId;
     }
     if (window.globals.task_id) {
       data.task_id = window.globals.task_id;
     }
-    var token = $("meta[name='csrf-token']").attr('content');
-    return $.ajax({
-      type: 'PUT',
-      url: url,
-      data: JSON.stringify(data),
-      dataType: 'json',
-      timeout: 10000,
-      beforeSend: function (xhr) {
-        xhr.setRequestHeader('X-CSRF-Token', token);
-      }
-    });
-  }
-
-  if (this.onSaveUrl) {
-    var data = this.getSceneRecord({ savePreview: true });
-    console.log(data);
-    putViaJQuery(this.onSaveUrl, data).error(onError).success(onSuccess);
+    //console.log(data);
+    if (this.onSaveUrl === 'window.parent') {
+      window.parent.postMessage(data, "*");
+    } else {
+      this.__postData(this.onSaveUrl, data).error(onError).success(onSuccess);
+    }
   } else {
     if (onSuccess) {
       var sceneStateJson = this.sceneState.toJson(false, true);
       onSuccess(sceneStateJson);
+      //window.parent.postMessage(JSON.stringify(sceneStateJson), '*');
     } else {
       this.showError('Cannot save scene: No save url');
     }
@@ -3578,11 +3960,12 @@ SceneViewer.prototype.saveScene = function (onSuccess, onError) {
 /* Returns serialized JSON record for scene that can be saved */
 SceneViewer.prototype.getSceneRecord = function (opts) {
   opts = opts || {};
+
   var serialized = this.sceneState.toJson(false, true);
   var results = {
-    sceneJson: JSON.stringify(serialized),
-    ui_log: this.uilog.stringify(),
-    request_type: "save"
+    sceneJson: opts.stringify? JSON.stringify(serialized) : serialized,
+    ui_log: opts.stringify? this.uilog.stringify() : this.uilog,
+    sessionId: this.sessionId
   };
   if (opts.savePreview) {
     results.preview = this.getPreviewImageData();
@@ -3599,19 +3982,23 @@ SceneViewer.prototype.close = function () {
 };
 
 SceneViewer.prototype.undo = function (event) {
-  this.undoStack.undo();
-  if (this.editControls) {
-    this.editControls.update();
+  if (this.undoStack) {
+    this.undoStack.undo();
+    if (this.editControls) {
+      this.editControls.update();
+    }
+    this.uilog.log(UILog.EVENT.UNDOSTACK_UNDO, event, {});
   }
-  this.uilog.log(UILog.EVENT.UNDOSTACK_UNDO, event, {});
 };
 
 SceneViewer.prototype.redo = function (event) {
-  this.undoStack.redo();
-  if (this.editControls) {
-    this.editControls.update();
+  if (this.undoStack) {
+    this.undoStack.redo();
+    if (this.editControls) {
+      this.editControls.update();
+    }
+    this.uilog.log(UILog.EVENT.UNDOSTACK_REDO, event, {});
   }
-  this.uilog.log(UILog.EVENT.UNDOSTACK_REDO, event, {});
 };
 
 SceneViewer.prototype.delete = function (event) {
@@ -3640,7 +4027,6 @@ SceneViewer.prototype.getTutorial = function (tutorialName, params) {
   console.error('Unknown tutorial: ' + tutorialName);
   return null;
 };
-
 
 // Exports
 module.exports = SceneViewer;

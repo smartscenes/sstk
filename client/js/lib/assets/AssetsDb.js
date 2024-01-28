@@ -3,12 +3,12 @@
 
 'use strict';
 
-var Constants = require('Constants');
-var AssetLoader = require('assets/AssetLoader');
-var DataUtils = require('data/DataUtils');
-var IOUtil = require('io/IOUtil');
-var SolrQueryParser = require('search/SolrQueryParser');
-var _ = require('util/util');
+const Constants = require('Constants');
+const AssetLoader = require('assets/AssetLoader');
+const DataUtils = require('data/DataUtils');
+const IOUtil = require('io/IOUtil');
+const SolrQueryParser = require('search/SolrQueryParser');
+const _ = require('util/util');
 
 /**
  * Simple in memory database of assets
@@ -22,7 +22,7 @@ var _ = require('util/util');
  * @constructor
  * @memberOf assets
  */
-var AssetsDb = function (params) {
+const AssetsDb = function (params) {
   params = params || {};
   this.assetIdField = params.assetIdField || 'id';
   this.fieldOptions = params.fieldOptions;
@@ -37,11 +37,11 @@ var AssetsDb = function (params) {
 
 AssetsDb.prototype.__getSimpleFilter = function(queryTerms) {
   // Old style, simplified parsing
-  var queryPairs = queryTerms.map(function (x) { return x.split(':', 2); });
-  var filter = function (m) {
-    for (var i = 0; i < queryPairs.length; i++) {
-      var f = queryPairs[i][0];
-      var v = queryPairs[i][1];
+  const queryPairs = queryTerms.map(function (x) { return x.split(':', 2); });
+  const filter = function (m) {
+    for (let i = 0; i < queryPairs.length; i++) {
+      const f = queryPairs[i][0];
+      const v = queryPairs[i][1];
       if (v === '*') {
         if (m[f] === null || m[f] === undefined) {
           return false;
@@ -67,28 +67,28 @@ AssetsDb.prototype.__getSimpleFilter = function(queryTerms) {
  * @param callback Error first callback
  */
 AssetsDb.prototype.query = function (params, callback) {
-  var query = params.query;
-  var start = params.start || 0;
-  var limit = params.limit || 0;
+  let query = params.query;
+  const start = params.start || 0;
+  const limit = params.limit || 0;
   query = query.trim();
   if (query === '' || query === '*:*') {
-    var resp = this.getMatching(null, start, limit);
-    var data = { response: resp };
+    const resp = this.getMatching(null, start, limit);
+    const data = { response: resp };
     // parameters to callback: data, textStatus, jqXH
     callback(null, data);
   } else {
-    var queryTerms = query.split(' ');
+    const queryTerms = query.split(' ');
     if (queryTerms.length === 1 && queryTerms[0].startsWith('fullId:') && queryTerms[0].indexOf('*') < 0) {
       // Special handling if search by fullId
-      var assetInfo = this.getAssetInfo(queryTerms[0].substring('fullId:'.length));
-      var docs = [];
+      const assetInfo = this.getAssetInfo(queryTerms[0].substring('fullId:'.length));
+      const docs = [];
       if (assetInfo) {
         docs.push(assetInfo);
       }
-      var data = { response: { docs: docs, start: 0, numFound: docs.length } };
+      const data = { response: { docs: docs, start: 0, numFound: docs.length } };
       callback(null, data);
     } else {
-      var filter;
+      let filter;
       try {
         // Try parsing with special solrQueryParser
         filter = SolrQueryParser.getFilter(query);
@@ -99,8 +99,8 @@ AssetsDb.prototype.query = function (params, callback) {
         // Try simple filter
         filter = this.__getSimpleFilter(queryTerms);
       }
-      var resp = this.getMatching(filter, start, limit);
-      var data = {response: resp};
+      const resp = this.getMatching(filter, start, limit);
+      const data = {response: resp};
       // parameters to callback: data, textStatus, jqXH
       callback(null, data);
     }
@@ -113,7 +113,7 @@ AssetsDb.prototype.getFilter = function(query) {
   if (query == null || query === '' || query === '*:*') {
     return null;
   } else {
-    var filter;
+    let filter;
     try {
       // Try parsing with special solrQueryParser
       filter = SolrQueryParser.getFilter(query);
@@ -122,7 +122,7 @@ AssetsDb.prototype.getFilter = function(query) {
       console.error('Invalid query "' + query + '": ' + err.message);
       console.error(err);
       // Try simple filter
-      var queryTerms = query.split(' ');
+      const queryTerms = query.split(' ');
       filter = this.__getSimpleFilter(queryTerms);
     }
     return filter;
@@ -136,15 +136,15 @@ AssetsDb.prototype.getMatching = function (filter, start, limit, sort) {
   if (limit == null) {
     limit = 0;
   }
-  var matched = [];
-  var nMatched = 0;
-  var infos = this.assetInfos;
+  let matched = [];
+  let nMatched = 0;
+  let infos = this.assetInfos;
   if (sort) {
     infos = sort(infos);
   }
   if (filter) {
-    for (var i = 0; i < infos.length; i++) {
-      var m = infos[i];
+    for (let i = 0; i < infos.length; i++) {
+      const m = infos[i];
       if (filter(m)) {
         if (nMatched >= start && (limit <= 0 || matched.length < limit)) {
           matched.push(m);
@@ -167,7 +167,7 @@ AssetsDb.prototype.getMatching = function (filter, start, limit, sort) {
 };
 
 AssetsDb.prototype.getAssetInfo = function (assetId) {
-  var assetInfo = this.assetIdToInfo[assetId];
+  const assetInfo = this.assetIdToInfo[assetId];
   if (this.lazyConvertDataFn) {
     return assetInfo? this.lazyConvertDataFn(assetInfo) : null;
   } else {
@@ -185,10 +185,10 @@ AssetsDb.prototype.clear = function () {
 };
 
 AssetsDb.prototype.__loadAssetInfoFromAssetIdList = function (assetGroup, data) {
-  var lines = data.split('\n');
+  let lines = data.split('\n');
   lines = lines.map(function (line) { return line.trim(); })
     .filter(function (line) { return line.length > 0; });
-  var assetInfos = lines.map(function (s) {
+  const assetInfos = lines.map(function (s) {
     return { id: s };
   });
   console.log('Got ' + assetInfos.length + ' assets');
@@ -196,15 +196,15 @@ AssetsDb.prototype.__loadAssetInfoFromAssetIdList = function (assetGroup, data) 
 };
 
 AssetsDb.prototype.__updateAssetInfo = function(assetGroup, m) {
-  var assetIdField = this.assetIdField;
+  const assetIdField = this.assetIdField;
   if (assetGroup) {
     m['fullId'] = assetGroup.name + '.' + m[assetIdField];
     m['source'] = assetGroup.name;
     if (assetIdField !== 'id' && m['id'] == null) {
-      m['id'] = m[assetIdField];
+      m['id'] = String(m[assetIdField]);  // Ensures id is a string
     }
     if (assetGroup.assetFields && _.isArray(assetGroup.assetFields)) {
-      var loadInfo = assetGroup.getLoadInfo(m[assetIdField], m['format'], m);
+      const loadInfo = assetGroup.getLoadInfo(m[assetIdField], m['format'], m);
       _.defaults(m, _.pick(loadInfo, assetGroup.assetFields));
     }
   }
@@ -214,8 +214,8 @@ AssetsDb.prototype.__updateAssetInfo = function(assetGroup, m) {
 };
 
 AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
-  var scope = this;
-  var parsed = IOUtil.parseDelimited(data, { header: true, skipEmptyLines: true,
+  const scope = this;
+  const parsed = IOUtil.parseDelimited(data, { header: true, skipEmptyLines: true,
     dynamicTyping: function(fieldname) {
         // Make sure id is treated as a string, but other fields are dynamically typed
         if (fieldname === scope.assetIdField || fieldname === 'id') {
@@ -225,19 +225,19 @@ AssetsDb.prototype.__loadAssetInfoFromCsvData = function (assetGroup, data) {
         }
     }
   });
-  var splitFields = assetGroup.arrayFields;
+  let splitFields = assetGroup.arrayFields;
   if (!splitFields) {
     splitFields = _.get(Constants.assetTypes, [assetGroup.type, 'arrayFields']);
   }
-  var assetInfos = parsed.data;
+  let assetInfos = parsed.data;
   if (this.groupDataFn) {
     assetInfos = this.groupDataFn(assetInfos);
   }
-  for (var i = 0; i < assetInfos.length; i++) {
+  for (let i = 0; i < assetInfos.length; i++) {
     if (this.convertDataFn) {
       assetInfos[i] = this.convertDataFn(assetInfos[i]);
     }
-    var m = assetInfos[i];
+    const m = assetInfos[i];
     if (splitFields) {
       _.each(m, function(v,k) {
         if (splitFields.indexOf(k) >= 0 && v != undefined) {
@@ -262,7 +262,7 @@ AssetsDb.prototype.__loadAssetInfoFromJsonData = function (assetGroup, data) {
   if (typeof data === 'string') {
     data = JSON.parse(data);
   }
-  var assetInfos = data;
+  const assetInfos = data;
   console.log('Got ' + assetInfos.length + ' assets for ' + assetGroup.name);
   return assetInfos;
 };
@@ -271,14 +271,14 @@ AssetsDb.prototype.__loadAssetInfoFromJsonlData = function (assetGroup, data) {
   if (typeof data === 'string') {
     data = IOUtil.parseJsonl(data, { flatten: true });
   }
-  var assetInfos = data;
+  const assetInfos = data;
   console.log('Got ' + assetInfos.length + ' assets for ' + assetGroup.name);
   return assetInfos;
 };
 
 AssetsDb.prototype.loadAssetInfoFromData = function (assetGroup, data, filename, options) {
   options = options || {};
-  var assetInfos;
+  let assetInfos;
   if (filename.endsWith('json') || options.format === 'json') {
     assetInfos = this.__loadAssetInfoFromJsonData(assetGroup, data);
   } else if (filename.endsWith('jsonl') || options.format === 'jsonl') {
@@ -290,31 +290,39 @@ AssetsDb.prototype.loadAssetInfoFromData = function (assetGroup, data, filename,
   }
 
   this.assetIdField = options.assetIdField || this.assetIdField;
-  var assetIdField = this.assetIdField;
-  if (options.mode === 'merge' && options.assetField) {
-    for (var i = 0; i < assetInfos.length; i++) {
-      var m = assetInfos[i];
-      var fullId = assetGroup.name + '.' + m[assetIdField];
-      var asset = this.assetIdToInfo[fullId];
+  this.updateAssetInfos(assetInfos, assetGroup, options);
+}
+
+AssetsDb.prototype.updateAssetInfos = function(assetInfos, assetGroup, options) {
+  const assetIdField = this.assetIdField;
+  if (options && options.mode === 'merge' && options.assetField) {
+    for (let i = 0; i < assetInfos.length; i++) {
+      const m = assetInfos[i];
+      const fullId = assetGroup.name + '.' + m[assetIdField];
+      const asset = this.assetIdToInfo[fullId];
       _.set(asset, options.assetField, _.omit(m, [assetIdField, 'fullId', 'source']));
     }
   } else {
-    var assetIdToInfo = {};
-    for (var i = 0; i < assetInfos.length; i++) {
-      var m = assetInfos[i];
-      this.__updateAssetInfo(assetGroup, m);
-      m.isCustomAsset = true;
-      assetIdToInfo[m.fullId] = m;
-    }
-    this.assetInfos = assetInfos;
-    this.assetIdToInfo = assetIdToInfo;
-    this.fields = DataUtils.extractFieldsFromData(this.assetInfos, this.fieldOptions);
+    this.setAssetInfos(assetInfos, assetGroup);
   }
 };
 
+AssetsDb.prototype.setAssetInfos = function(assetInfos, assetGroup) {
+  const assetIdToInfo = {};
+  for (let i = 0; i < assetInfos.length; i++) {
+    const m = assetInfos[i];
+    this.__updateAssetInfo(assetGroup, m);
+    m.isCustomAsset = true;
+    assetIdToInfo[m.fullId] = m;
+  }
+  this.assetInfos = assetInfos;
+  this.assetIdToInfo = assetIdToInfo;
+  this.fields = DataUtils.extractFieldsFromData(this.assetInfos, this.fieldOptions);
+};
+
 AssetsDb.prototype.loadAssetInfo = function (assetGroup, file, callback, options) {
-  var scope = this;
-  var loader = new AssetLoader();
+  const scope = this;
+  const loader = new AssetLoader();
   return loader.loadErrorFirst(file, undefined, function(err, data) {
     if (!err) {
       scope.loadAssetInfoFromData(assetGroup, data, file.name || file, options);

@@ -1,14 +1,15 @@
 /* TODO: Develop this more, have assetsDb use this instead of its custom parsing */
 
-var self = {};
+const self = {};
 
-var lucenequeryparser = require('lucene-query-parser');
+const lucenequeryparser = require('lucene-query-parser');
+const _ = require('util/util');
 
 function simpleParse(query) {
-  var queryTerms = query.split(' ');
-  var queryFields = [];
-  for (var i = 0; i < queryTerms.length; i++) {
-    var p = queryTerms[i].split(':');
+  const queryTerms = query.split(' ');
+  const queryFields = [];
+  for (let i = 0; i < queryTerms.length; i++) {
+    const p = queryTerms[i].split(':');
     queryFields.push({ name: p[0], value: p[1] });
   }
   return queryFields;
@@ -16,7 +17,7 @@ function simpleParse(query) {
 self.simpleParse = simpleParse;
 
 function luceneParse(query, options) {
-  var results = lucenequeryparser.parse(query, options);
+  const results = lucenequeryparser.parse(query, options);
   //console.log(results);
   return results;
 }
@@ -52,26 +53,26 @@ function acceptAll() {
 }
 
 function orFilter() {
-  var fns = arguments;
+  const fns = arguments;
   return function() {
-    for (var i = 0; i < fns.length; i++) {
+    for (let i = 0; i < fns.length; i++) {
       if (fns[i].apply(null, arguments)) {
         return true;
       }
-      return false;
     }
+    return false;
   };
 }
 
 function andFilter() {
-  var fns = arguments;
+  const fns = arguments;
   return function() {
-    for (var i = 0; i < fns.length; i++) {
+    for (let i = 0; i < fns.length; i++) {
       if (!fns[i].apply(null, arguments)) {
         return false;
       }
-      return true;
     }
+    return true;
   };
 }
 
@@ -79,13 +80,19 @@ function termMatchFilterSingle(v, term) {
   if (term === '*') {
     if (v == undefined) {
       return false;
+    } else {
+      return true;
     }
   } else if (term.indexOf('*') >= 0) {
-    var regex = new RegExp(term.replace('*', '.*'));
-    return v.search(regex) >=0;
+    const regex = new RegExp(term.replace('*', '.*'));
+    return v && v.search(regex) >=0;
   } else if (term.startsWith('/') && term.endsWith('/')) {
-    var regex = new RegExp(term.substring(0, term.length-1));
-    return v.search(regex) >=0;
+    const regex = new RegExp(term.substring(0, term.length - 1));
+    return v && v.search(regex) >= 0;
+  } else if (term === 'true') {
+    return !!v && v != undefined;
+  } else if (term === 'false') {
+    return !v && v != undefined;
   } else if (v !== term) {
     return false;
   } else {
@@ -107,7 +114,7 @@ function exclusiveRangeFilterSingle(v, min, max) {
 
 function termMatchFilter(field, term) {
   return function(d) {
-    var v = d[field];
+    const v = d[field];
     if (Array.isArray(v)) {
       return _.any(v, function(x) { return termMatchFilterSingle(x, term); });
     } else {
@@ -119,7 +126,7 @@ function termMatchFilter(field, term) {
 function rangeFilter(field, min, max, isInclusive) {
   if (isInclusive) {
     return function(d) {
-      var v = d[field];
+      const v = d[field];
       if (Array.isArray(v)) {
         return _.any(v, function(x) { return inclusiveRangeFilterSingle(x, min, max); });
       } else {
@@ -128,7 +135,7 @@ function rangeFilter(field, min, max, isInclusive) {
     };
   } else {
     return function(d) {
-      var v = d[field];
+      const v = d[field];
       if (Array.isArray(v)) {
         return _.any(v, function(x) { return exclusiveRangeFilterSingle(x, min, max); });
       } else {
@@ -149,7 +156,7 @@ function parseToFilter(parse) {
       console.log(parse);
     }
   } else if (parse.operator) {
-    var composeFn;
+    let composeFn;
     if (parse.operator === 'AND') {
       composeFn = andFilter;
     } else if (parse.operator === 'OR') {
@@ -157,12 +164,12 @@ function parseToFilter(parse) {
     } else {
       throw new Error('Unsupported operator ' + parse.operator);
     }
-    var fl = parseToFilter(parse.left);
-    var fr = parseToFilter(parse.right);
+    const fl = parseToFilter(parse.left);
+    const fr = parseToFilter(parse.right);
     return composeFn(fl, fr);
   } else if (parse.left) {
     // Only the left side
-    var fl = parseToFilter(parse.left);
+    const fl = parseToFilter(parse.left);
     return fl;
   } else {
     // Accept all
@@ -171,11 +178,21 @@ function parseToFilter(parse) {
 }
 
 function getFilter(query) {
-  var parse = luceneParse(query);
+  const parse = luceneParse(query);
   return parseToFilter(parse);
 }
 
 self.getFilter = getFilter;
+
+function getFilterCached(query) {
+  if (!self.__queryCache) {
+    const AssetCache = require('assets/AssetCache');
+    self.__queryCache = new AssetCache(100);
+  }
+  return self.__queryCache.getOrElse(query, (q) => getFilter(q));
+}
+
+self.getFilterCached = getFilterCached;
 
 module.exports = self;
 

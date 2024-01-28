@@ -50,7 +50,7 @@ ModelInstanceVoxels.prototype.getWorldToGrid = function () {
     }
     var modelObject = this.modelInstance.getObject3D('Model');
     modelObject.updateMatrixWorld();
-    this._worldToGrid.getInverse(modelObject.matrixWorld);
+    this._worldToGrid.copy(modelObject.matrixWorld).invert();
     var modelToGrid = this.getModelToGrid();
     this._worldToGrid.multiplyMatrices(modelToGrid, this._worldToGrid);
     return this._worldToGrid;
@@ -75,7 +75,7 @@ ModelInstanceVoxels.prototype.updateTransform = function () {
   }
 };
 
-ModelInstanceVoxels.prototype.getModelObject3D = function() {
+ModelInstanceVoxels.prototype.getAssetObject3D = function() {
   return this.modelInstance.getObject3D('Model');
 };
 
@@ -85,6 +85,7 @@ ModelInstanceVoxels.prototype.createColorVoxels = function (opts, callback) {
     // Make a copy of our voxels and set the grid to be the returned grid
     var mv = new ModelInstanceVoxels({ voxelField: scope.voxelField });
     mv._useVoxelGridTransforms = scope._useVoxelGridTransforms;
+    // Need this because we track both the modelInstance and the model
     mv.init(scope.modelInstance);
     mv.setVoxelGrid(grid);
     callback(mv);

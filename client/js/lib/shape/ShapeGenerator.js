@@ -1,5 +1,6 @@
 var MaterialGenerator = require('materials/MaterialGenerator');
 var Object3DUtil = require('geo/Object3DUtil');
+var OBB = require('geo/OBB');
 var async = require('async');
 var _ = require('util/util');
 
@@ -10,7 +11,7 @@ var _ = require('util/util');
  */
 function ShapeGenerator() {
   this.materialGenerator = new MaterialGenerator();
-  this.generators = generators;
+  this.generators = ShapeGenerator.GENERATORS;
 }
 
 /**
@@ -35,7 +36,7 @@ ShapeGenerator.prototype.generate = function(opts, callback) {
             if (p0 && p1) {
               p0 = Object3DUtil.toVector3(p0);
               p1 = Object3DUtil.toVector3(p1);
-              var rod = Object3DUtil.makeCylinder(p0, p1, 0.1, 'gray');
+              var rod = Object3DUtil.makeCylinderStartEnd(p0, p1, 0.1, 'gray');
               object.add(rod);
             }
           }
@@ -72,12 +73,16 @@ ShapeGenerator.createMultiMaterialObject = function ( geometry, materials ) {
   }
 };
 
-var generators = {
+var GENERATORS = {
   'box': function (opts) {
     return ShapeGenerator.createMultiMaterialObject(
       // width, height, depth, widthSegments, heightSegments, depthSegments
       new THREE.BoxGeometry(opts.width || 80, opts.height || 80, opts.depth || 80,
         opts.widthSegments || 1, opts.heightSegments || 1, opts.depthSegments || 1), opts.materials);
+  },
+  'obb': function (opts) {
+    var obb = (opts instanceof THREE.OBB)? opts : OBB.fromJSON(opts);
+    return obb.toMesh(opts.materials);
   },
   'polygonal_prism': function(opts) {
     var shape = new THREE.Shape(opts.points);
@@ -94,7 +99,7 @@ var generators = {
   'cylinder': function (opts) {
     return ShapeGenerator.createMultiMaterialObject(
       // radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength
-      new THREE.CylinderGeometry(opts.radiusTop || opts.radius|| 40, opts.radiusBottom || opts.radius || 40, opts.height || 80,
+      new THREE.CylinderGeometry(opts.radiusTop || opts.radius || 40, opts.radiusBottom || opts.radius || 40, opts.height || 80,
         opts.radialSegments || 20, opts.heightSegments || 4), opts.materials);
   },
   'cone': function (opts) {
@@ -170,6 +175,8 @@ ShapeGenerator.prototype.__generateBasic = function(opts, cb) {
     }
   }
 };
+
+ShapeGenerator.GENERATORS = GENERATORS;
 
 module.exports = ShapeGenerator;
 

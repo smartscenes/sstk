@@ -63,6 +63,7 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
   var scene = sceneResult.scene || new THREE.Scene();
   var roots = [];
   var transforms = [];
+  var needParentingById = [];
   for (var i = 0; i < sceneResult.modelInstancesMeta.length; i++) {
     var metadata = sceneResult.modelInstancesMeta[i];
     if (metadata) {
@@ -72,8 +73,13 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
   for (var i = 0; i < sceneResult.modelInstances.length; i++) {
     var metadata = sceneResult.modelInstancesMeta[i];
     var modelInst = sceneResult.modelInstances[i];
-    if (metadata.userData) {
-      _.merge(modelInst.object3D.userData, metadata.userData);
+    if (modelInst) {
+      if (metadata.id != null) {
+        modelInst.object3D.userData.id = metadata.id;
+      }
+      if (metadata.userData) {
+        _.merge(modelInst.object3D.userData, metadata.userData);
+      }
     }
     this.setObjectFlags(sceneResult, modelInst);
     if (modelInst) {
@@ -151,15 +157,44 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
           parent.childIndices = [i];
         }
       } else {
-        roots.push(i);
+        if (metadata.parentId != null) {
+          needParentingById.push(i);
+        } else {
+          roots.push(i);
+        }
       }
     } else {
       transforms.push(null);
     }
   }
+  // complete scene state
+  sceneResult.scene = scene;
+  // update support hierarchy
   if (this.useSupportHierarchy) {
-    // Try to put model as child of parent
+    scene.updateMatrixWorld();
     var todo = roots.slice(0);
+    // Try to put model as child of parent
+    // Process those that are parented by id first
+    for (var j = 0; j < needParentingById.length; j++) {
+      var i = needParentingById[j];
+      var metadata = sceneResult.modelInstancesMeta[i];
+      var modelInst = sceneResult.modelInstances[i];
+      if (modelInst) {
+        var node = sceneResult.findNodeById(metadata.parentId);
+        if (node && modelInst.parent !== node) {
+          // console.log('attach to parent 1', modelInst.object3D, node, scene);
+          node.updateMatrixWorld();
+          modelInst.object3D.updateMatrixWorld();
+          var minv = new THREE.Matrix4();
+          minv.copy(node.matrixWorld).invert();
+          minv.multiplyMatrices(minv, scene.matrixWorld);
+          node.add(modelInst.object3D);
+          modelInst.applyTransform(minv);
+        }
+        todo.push(i);
+      }
+    }
+    // Process objects that go on top of other objects
     while (todo.length > 0) {
       var i = todo.shift();
       var metadata = sceneResult.modelInstancesMeta[i];
@@ -167,11 +202,12 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
       if (modelInst) {
         if (metadata.childIndices) {
           var minv = new THREE.Matrix4();
-          minv.getInverse(transforms[i]);
+          minv.copy(transforms[i]).invert();
           for (var j = 0; j < metadata.childIndices.length; j++) {
             var ci = metadata.childIndices[j];
             var child = sceneResult.modelInstances[ci];
             if (child) {
+              // console.log('attach to parent 2', modelInst.object3D, child.object3D, modelInst.object3D);
               modelInst.object3D.add(child.object3D);
               // Fix child transform to be relative to parent
               // cwm = pwm * cm
@@ -185,7 +221,6 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
       }
     }
   }
-  sceneResult.scene = scene;
   this.Publish('sceneLoaded', sceneResult);
   callback(sceneResult);
 };

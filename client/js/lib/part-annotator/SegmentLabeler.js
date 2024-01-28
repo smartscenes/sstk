@@ -1,9 +1,6 @@
-var BasePartLabeler = require('part-annotator/BasePartLabeler');
-var GeometryUtil = require('geo/GeometryUtil');
+var BaseSegmentLabeler = require('part-annotator/BaseSegmentLabeler');
 var Object3DUtil = require('geo/Object3DUtil');
-var Segments = require('geo/Segments');
 var BBox = require('geo/BBox');
-var OBB = require('geo/OBB');
 var _ = require('util/util');
 
 /**
@@ -15,37 +12,17 @@ var _ = require('util/util');
  * @param [params.segmentType='surfaces'] What kind of segment type to use.
  *   What you fill in here will depend on the segmentation types and names
  *   you specified in your metadata file for your asset.
- * @param [params.updateAnnotationStat] Callback for adjust annotation statistics when something is labeled/unlabeled.
+ * @param [params.targetElementType] Whether to use vertices or triangles for elements
+ * @param [params.updateAnnotationStats] Callback for adjust annotation statistics when something is labeled/unlabeled.
  * @param [params.onSegmentsLoaded] Callback for when segmentation was successfully loaded.
  * @extends BasePartLabeler
  */
 function SegmentLabeler(params) {
-  BasePartLabeler.call(this, params);
-  this.updateAnnotationStats = params.updateAnnotationStats;
-  this.onSegmentsLoaded = params.onSegmentsLoaded;
-
-  this._segmentType = params.segmentType || 'surfaces';
-  console.log('Segment type is ' + this.__segmentType);
-  this.segments = new Segments({
-    showNodeCallback: this.showNodeCallback,
-    skipSegmentedObject3D: true,
-    skipUnlabeledSegment: true
-  },  this._segmentType);
-  this.segments.rawSegmentColor = Object3DUtil.ClearColor;
+  BaseSegmentLabeler.call(this, params);
 }
 
-SegmentLabeler.prototype = Object.create(BasePartLabeler.prototype);
+SegmentLabeler.prototype = Object.create(BaseSegmentLabeler.prototype);
 SegmentLabeler.prototype.constructor = SegmentLabeler;
-
-Object.defineProperty(SegmentLabeler.prototype, 'segmentType', {
-  get: function () {return this._segmentType; },
-  set: function (v) {
-    if (v != undefined) {
-      this._segmentType = v;
-      this.segments.segmentType = v;
-    }
-  }
-});
 
 SegmentLabeler.prototype.labelFromExisting = function(labels, options) {
   options = options || {};
@@ -65,10 +42,10 @@ SegmentLabeler.prototype.labelFromExisting = function(labels, options) {
     }
     if (segGroup.segments && segGroup.segments.length > 0) {
       if (this.segments.dropMissingSegments) {
-        var segToVertIndices = mesh.userData.segToVertIndices;
+        var segToElemIndices = mesh.userData.segToElemIndices;
         var originalSize = segGroup.segments.length;
         _.remove(segGroup.segments , function(idx) {
-          return !segToVertIndices[idx] || segToVertIndices[idx].length === 0;
+          return !segToElemIndices[idx] || segToElemIndices[idx].length === 0;
         });
         var newSize = segGroup.segments.length;
         if (newSize !== originalSize) {
@@ -102,33 +79,19 @@ SegmentLabeler.prototype.labelFromExisting = function(labels, options) {
   console.timeEnd('labelFromExisting');
 };
 
-SegmentLabeler.prototype.restore = function(labels, savedLabelInfos, options) {
-  options = options || {};
-  console.time('restore');
-  // Assume just one mesh
+SegmentLabeler.prototype.__restoreLabel = function(createdLabelInfo, savedLabelInfo, options) {
   var mesh = this.segments.rawSegmentObject3D;
-  for (var i = 0; i < savedLabelInfos.length; i++) {
-    var savedLabelInfo = savedLabelInfos[i];
-    var segments = savedLabelInfo.segments || savedLabelInfo.segIndices;
-    var labelInfo = labels.createLabelInfo(savedLabelInfo.label, savedLabelInfo );
-    labels.appendButton(labelInfo);
-    labels.labelInfos[labelInfo.index] = labelInfo;
-    if (savedLabelInfo.initialPoint) {
-      labelInfo.initialPoint = savedLabelInfo.initialPoint;
-    }
-    if (savedLabelInfo.obb) {
-      labelInfo.obb = new OBB();
-      labelInfo.obb.fromJSON(savedLabelInfo.obb);
-    }
-    if (segments && segments.length > 0) {
-      for (var si = 0; si < segments.length; si++) {
-        var part = this.__segIdxToPart(mesh, null, segments[si]);
-        this.labelPart(part, labelInfo, {skipFitOBB: true});
-      }
+  var segments = savedLabelInfo.segments || savedLabelInfo.segIndices;
+  if (segments && segments.length > 0) {
+    for (var si = 0; si < segments.length; si++) {
+      var part = this.__segIdxToPart(mesh, null, segments[si]);
+      this.labelPart(part, createdLabelInfo, {skipFitOBB: true});
     }
   }
-  this.updateLabels(labels.labelInfos);
-  console.timeEnd('restore');
+};
+
+SegmentLabeler.prototype.partOverlapsOBB = function (part, obb) {
+  return this.segments.segmentHasPointInOBB(part.segmentIndex, obb);
 };
 
 SegmentLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
@@ -140,22 +103,17 @@ SegmentLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
   if (labelInfo) {
     changed[labelInfo.index] = labelInfo;
   }
-  var vert = new THREE.Vector3();
-  var segToV = mesh.userData.segToVertIndices;
-  var transform = mesh.matrixWorld;
-  for (var si in segToV) {
-    if (segToV.hasOwnProperty(si)) {
-      var vertIndices = segToV[si];
-      if (!vertIndices || vertIndices.length === 0) {
+  var segToE = mesh.userData.segToElemIndices;
+  for (var si in segToE) {
+    if (segToE.hasOwnProperty(si)) {
+      var elemIndices = segToE[si];
+      if (!elemIndices || elemIndices.length === 0) {
         continue;
       } // skip weird empty segments
 
       si = parseInt(si); // Make sure integer
       // Check if inOBB
-      var inOBB = _.all(vertIndices, function (vi) {
-        GeometryUtil.getGeometryVertex(mesh.geometry, vi, transform, vert);
-        return obb.isPointContained(vert);
-      });
+      var inOBB = scope.segments.segmentIsContainedInOBB(si, obb);
 
       // inOBB
       if (inOBB) {
@@ -190,25 +148,30 @@ SegmentLabeler.prototype.labelPartsInOBB = function (obb, labels, labelInfo) {
 
 SegmentLabeler.prototype.__label = function (part, labelInfo, opts) {
   opts = opts || {};
-  var segsChanged = false;
+  var segsChanged = [];
+  // segmentIndex can be array - why? to allow for special parts with multiple segments (good for hierarchical labeling)
+  var sis = Array.isArray(part.segmentIndex)? part.segmentIndex : [part.segmentIndex];
   if (labelInfo.segIndices) {
-    if (labelInfo.segIndices.indexOf(part.segmentIndex) < 0) {
-      labelInfo.segIndices.push(part.segmentIndex);
-      segsChanged = true;
+    for (var j = 0; j < sis.length; j++) {
+      var si = sis[j];
+      if (labelInfo.segIndices.indexOf(si) < 0) {
+        labelInfo.segIndices.push(si);
+        segsChanged.push(si);
+      }
     }
   } else {
-    labelInfo.segIndices = [part.segmentIndex];
+    labelInfo.segIndices = sis;
     if (part.point) {
       labelInfo.initialPoint = part.point.toArray();
     }
-    segsChanged = true;
+    segsChanged = sis;
   }
-  if (segsChanged) {
+  if (segsChanged.length) {
     if (!opts.skipFitOBB) {
       labelInfo.obb = this.segments.fitOBB('Raw', labelInfo.segIndices);
     }
     if (this.updateAnnotationStats) {
-      this.updateAnnotationStats(part.segmentIndex, +1);
+      this.updateAnnotationStats(sis, +1);
     }
   }
 };
@@ -245,20 +208,29 @@ SegmentLabeler.prototype.unlabelParts = function (parts, labelInfo) {
     var mesh = this.segments.rawSegmentObject3D;
     parts = labelInfo.segIndices.map(this.__segIdxToPart.bind(this, mesh, null));
   }
-  BasePartLabeler.prototype.unlabelParts.call(this, parts);
+  BaseSegmentLabeler.prototype.unlabelParts.call(this, parts);
 };
 
 SegmentLabeler.prototype.__unlabel = function (part, opts) {
   if (part) {
     opts = opts || {};
     var labelInfo = part.userData.labelInfo;
+    // segmentIndex can be array - why? to allow for special parts with multiple segments (good for hierarchical labeling)
+    var sis = Array.isArray(part.segmentIndex)? part.segmentIndex : [part.segmentIndex];
     if (labelInfo && labelInfo.segIndices) {
       //console.log('Removing ' + part.segmentIndex + ' from ' + labelInfo.name);
-      var i = labelInfo.segIndices.indexOf(part.segmentIndex);
-      if (i >= 0) {
-        labelInfo.segIndices.splice(i,1);
+      var removed = [];
+      for (var j = 0; j < sis.length; j++) {
+        var si = sis[j];
+        var i = labelInfo.segIndices.indexOf(si);
+        if (i >= 0) {
+          labelInfo.segIndices.splice(i, 1);
+          removed.push(si);
+        }
+      }
+      if (removed.length > 0) {
         if (this.updateAnnotationStats) {
-          this.updateAnnotationStats(part.segmentIndex, -1);
+          this.updateAnnotationStats(removed, -1);
         }
         if (labelInfo.segIndices.length > 0) {
           if (!opts.skipFitOBB) {
@@ -294,7 +266,7 @@ SegmentLabeler.prototype.colorParts = function (parts, labelInfo) {
     var mesh = this.segments.rawSegmentObject3D;
     parts = labelInfo.segIndices.map(this.__segIdxToPart.bind(this, mesh, null));
   }
-  BasePartLabeler.prototype.colorParts.call(this, parts, labelInfo);
+  BaseSegmentLabeler.prototype.colorParts.call(this, parts, labelInfo);
 };
 
 SegmentLabeler.prototype.colorPart = function (part, colorMaterial) {
@@ -311,20 +283,20 @@ SegmentLabeler.prototype.decolorPart = function (part) {
   }
 };
 
-SegmentLabeler.prototype.showParts = function (flag) {
-  this.segments.showSegments(flag);
-};
-
 //Returns the mesh given the mouse event. If no part selected, return false
 SegmentLabeler.prototype.__findPart = function (event) {
   var intersect = this.getIntersected(event);
   if (intersect) {
     //console.log(intersect);
     var u = intersect.descendant.userData;
-    if (u.vertToSegIndices) {
+    if (u.elemToSegIndices) {
       intersect.type = 'RawSegment';
       intersect.mesh = intersect.descendant;
-      intersect.segmentIndex = u.vertToSegIndices[intersect.face.a];
+      if (u.isVertSegments) {
+        intersect.segmentIndex = u.elemToSegIndices[intersect.face.a];
+      } else {
+        intersect.segmentIndex = u.elemToSegIndices[intersect.faceIndex];
+      }
       u.segs = u.segs || [];
       u.segs[intersect.segmentIndex] = u.segs[intersect.segmentIndex] || {};
       intersect.userData = u.segs[intersect.segmentIndex];
@@ -351,15 +323,6 @@ SegmentLabeler.prototype.__segIdxToPart = function (mesh, labelInfo, segIdx) {
 SegmentLabeler.prototype.hasParts = function (labelInfo) {
   //console.log(labelInfo);
   return labelInfo.segIndices && labelInfo.segIndices.length > 0;
-};
-
-SegmentLabeler.prototype.setTarget = function (modelInstance) {
-  this.segments.init(modelInstance);
-  this.segments.ensureSegments(function (err, res) {
-    if (!err && this.onSegmentsLoaded) {
-      this.onSegmentsLoaded(this.segments);
-    }
-  }.bind(this));
 };
 
 SegmentLabeler.prototype.merge = function(labelInfos, labels) {
@@ -391,13 +354,13 @@ SegmentLabeler.prototype.merge = function(labelInfos, labels) {
 SegmentLabeler.prototype.getLargestUnlabeled = function() {
   var mesh = this.segments.rawSegmentObject3D;
   var segs = mesh.userData.segs;
-  var segToVertIndices = mesh.userData.segToVertIndices;
+  var segToElemIndices = mesh.userData.segToElemIndices;
   var max = null;
-  for (var segId in segToVertIndices) {
-    if (!segToVertIndices.hasOwnProperty(segId)) { continue; }
+  for (var segId in segToElemIndices) {
+    if (!segToElemIndices.hasOwnProperty(segId)) { continue; }
     if (segs && segs[segId] && segs[segId].labelInfo) { continue; }
-    if (!max || max.vertIndices.length < segToVertIndices[segId].length) {
-      max = { segId: segId, vertIndices: segToVertIndices[segId] };
+    if (!max || max.elemIndices.length < segToElemIndices[segId].length) {
+      max = { segId: segId, elemIndices: segToElemIndices[segId] };
     }
   }
   if (max) {
@@ -409,6 +372,52 @@ SegmentLabeler.prototype.getLargestUnlabeled = function() {
 
 SegmentLabeler.prototype.compare = function(sg1, sg2) {
   return this.segments.compare(sg1, sg2);
+};
+
+SegmentLabeler.prototype.getAnnotations = function(options) {
+  var annotations = [];
+  var modelWorldInverse = new THREE.Matrix4();
+  var modelObject3D = this.segments.modelInstance.getObject3D('Model');
+  modelObject3D.updateMatrixWorld();
+  modelWorldInverse.copy(modelObject3D.matrixWorld).invert();
+  var validLabelInfos = this.getValidLabels();
+  if (validLabelInfos) {
+    var tmpPoint = new THREE.Vector3();
+    for (var i = 0; i < validLabelInfos.length; i++) {
+      var labelInfo = validLabelInfos[i];
+      if (labelInfo.fixed) continue;  // Skip the fixed set (pre-annotated by someone else)
+
+      // TODO: keep partId from original annotation (if appropriate)
+      var partId = annotations.length + 1;  // Make sure our part ids are one based
+      var objectId = (options.objectId != undefined)? options.objectId : partId; // Use prespecified objectId if given (otherwise, use partId)
+      if (labelInfo.segIndices && labelInfo.segIndices.length > 0) {
+        var obbWorld = this.segments.fitOBB('Raw', labelInfo.segIndices);
+        var obb = obbWorld.clone();
+        obb.applyMatrix4(modelWorldInverse);
+        if (options.debug && options.addOBB) {
+          options.addOBB(obb, labelInfo.colorMat, modelObject3D.matrixWorld);
+        }
+        var initialPoint;
+        if (labelInfo.initialPoint) {
+          tmpPoint.fromArray(labelInfo.initialPoint);
+          tmpPoint.applyMatrix4(modelWorldInverse);
+          initialPoint = tmpPoint.toArray();
+        }
+        annotations.push({
+          modelId: options.modelId,
+          partId: partId,
+          objectId: objectId,
+          label: labelInfo.label,
+          labelType: this.labelType,
+          obb: obb.toJSON(),
+          dominantNormal: obb.dominantNormal.toArray(),
+          initialPoint: initialPoint,
+          segments: labelInfo.segIndices
+        });
+      }
+    }
+  }//if labelInfos
+  return annotations;
 };
 
 module.exports = SegmentLabeler;

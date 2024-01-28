@@ -1,6 +1,6 @@
 var BasePartLabeler = require('part-annotator/BasePartLabeler');
 var Object3DUtil = require('geo/Object3DUtil');
-var GeometryUtil = require('geo/GeometryUtil');
+var GeometryUtil = require('geo/GeometryUtil');//
 var TessellateModifier = require('geo/TessellateModifier');
 var ConnectivityGraph = require('geo/ConnectivityGraph2');
 var _ = require('util/util');
@@ -11,7 +11,8 @@ require('three-modifiers');
  * @param params
  * @param params.minEdgeLength {float}
  * @param params.maxEdgeLength {float}
- * @param params.brushSize {float}
+ * @param params.brushSize {float} Current brush size
+ * @param params.mergeVertices {boolean} Whether vertices should be merged
  * @constructor
  * @extends BasePartLabeler
  */
@@ -20,6 +21,7 @@ function TriangleLabeler(params) {
   this.minEdgeLength = params.minEdgeLength;
   this.maxEdgeLength = params.maxEdgeLength;
   this.brushSize = params.brushSize;
+  this.mergeVertices = params.mergeVertices;
   this.defaultColor = new THREE.Color(0.5, 0.5, 0.5);
 }
 
@@ -82,12 +84,9 @@ TriangleLabeler.prototype.colorParts = function(parts, labelInfo) {
 };
 
 TriangleLabeler.prototype.__colorPart = function(part, color) {
-  part.face.color.copy(color);
+  GeometryUtil.colorTriVertices(part.mesh, [part.faceIndex], color);
   if (part.gathered && part.gathered.faceIndices.length > 1) {
-    for (var i = 0; i < part.gathered.faceIndices.length; i++) {
-      var fi = part.gathered.faceIndices[i];
-      part.mesh.geometry.faces[fi].color.copy(color);
-    }
+    GeometryUtil.colorTriVertices(part.mesh, part.gathered.faceIndices, color);
   }
   part.mesh.geometry.colorsNeedUpdate = true;
 };
@@ -248,14 +247,11 @@ TriangleLabeler.prototype.unlabelAll = function() {
 TriangleLabeler.prototype.__clearLabels = function(partsNode, defaultColor) {
   //var material = Object3DUtil.ClearMat;
   //Object3DUtil.applyMaterial(this.partsNode, material, false, true);
-  var material = new THREE.MeshPhongMaterial({ vertexColors: THREE.FaceColors });
+  var material = new THREE.MeshPhongMaterial({ vertexColors: true });
   Object3DUtil.traverseMeshes(partsNode, false, function(mesh) {
     mesh.material = material;
-    var faces = mesh.geometry.faces;
-    for (var i = 0; i < faces.length; i++) {
-      var f = faces[i];
-      f.color.copy(defaultColor);
-    }
+    GeometryUtil.ensureVertexColors(mesh.geometry);
+    GeometryUtil.colorVertices(mesh.geometry, defaultColor);
     mesh.geometry.colorsNeedUpdate = true;
     delete mesh.userData.faces;
   });
@@ -265,17 +261,18 @@ TriangleLabeler.prototype.setBrushSize = function(brushSize) {
   this.brushSize = brushSize;
   console.log('setBrushSize=' + brushSize);
 
+  var scope = this;
   Object3DUtil.traverseMeshes(this.partsNode, false, function(mesh) {
     if (brushSize) {
       // NOTE: Estimate of scale we need to multiply by
       var worldScale = new THREE.Vector3();
       mesh.getWorldScale(worldScale);
-      console.log(worldScale);
+      // console.log(worldScale);
       var wsl = Math.min(worldScale.x, worldScale.y, worldScale.z) || 1.0;
       var worldToLocalScale = 1.0 / wsl;
 
       if (!mesh.__searchHelper) {
-        mesh.__searchHelper = new ConnectivityGraph(mesh.geometry);
+        mesh.__searchHelper = new ConnectivityGraph(mesh.geometry, scope.mergeVertices);
       }
       mesh.userData.brushSize = worldToLocalScale*brushSize;
       mesh.userData.brushSizeSq = mesh.userData.brushSize*mesh.userData.brushSize;
@@ -327,13 +324,11 @@ TriangleLabeler.prototype.setTarget = function(target) {
       var worldToLocalScale = 1.0/wsl;
 
       // Clone geometry so that shared geometries can be colored independently
-      var smooth = new THREE.Geometry();
-      if (mesh.geometry instanceof THREE.BufferGeometry) {
-        // Convert from BufferGeometry into Geometry so we can use our tessellateModifier on it
-        // TODO: Implement tessellate directly on BufferGeometry
-        smooth.fromBufferGeometry(mesh.geometry);
-      } else {
+      var smooth = new THREE.BufferGeometry();
+      if (mesh.geometry.isBufferGeometry) {
         smooth.copy(mesh.geometry);
+      } else {
+        console.warn('TriangleLabeler only supports BufferGeometry');
       }
       //smooth.boundingSphere = null;
       //smooth.boundingBox = null;
@@ -352,22 +347,21 @@ TriangleLabeler.prototype.setTarget = function(target) {
         tessellateModifier.maxEdgeLength = mesh.userData.maxEdgeLength;
         //var m = Object3DUtil.getModelInstance(mesh, true);
         //var c = m? m.model.getCategory() : '';
-        //console.log('tesselateModifier: ' + tessellateModifier.maxEdgeLength + ' ' + c, worldScale);
-        tessellateModifier.modify(smooth);
+        //console.log('tesselateModifier: ' + tessellateModifier.maxEdgeLength, worldScale);
+        console.log('before tessellate ' + GeometryUtil.getGeometryVertexCount(smooth) + ' vertices, ' + GeometryUtil.getGeometryFaceCount(smooth) + ' faces');
+        smooth = tessellateModifier.modify(smooth);
+        console.log('after tessellate ' + GeometryUtil.getGeometryVertexCount(smooth) + ' vertices, ' + GeometryUtil.getGeometryFaceCount(smooth) + ' faces');
       }
-      smooth.computeFaceNormals();
       smooth.computeVertexNormals();
       smooth.computeBoundingSphere();
       smooth.computeBoundingBox();
-      if (smooth._bufferGeometry) {
-        smooth._bufferGeometry.setFromObject(mesh);
-      }
+
       //smooth.needsUpdate  = true;
-      smooth.verticesNeedUpdate = true;
+      //smooth.verticesNeedUpdate = true;
       //smooth.elementsNeedUpdate = true;
       //smooth.morphTargetsNeedUpdate = true;
       //smooth.uvsNeedUpdate = true;
-      smooth.normalsNeedUpdate = true;
+      //smooth.normalsNeedUpdate = true;
       //smooth.colorsNeedUpdate = true;
       //smooth.tangentsNeedUpdate = true;
 

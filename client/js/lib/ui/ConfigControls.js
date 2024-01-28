@@ -24,6 +24,7 @@ function ConfigControls(params) {
   this.container = params.container;
   this.prefix = params.prefix || '';
   this.options = params.options;
+  this.gui = $('<span></span>');
   this.init();
 }
 
@@ -34,9 +35,14 @@ ConfigControls.prototype.init = function () {
     for (var i = 0; i < this.options.length; i++) {
       var field = this.options[i];
       var elem = this.__createFieldElement(field);
-      this.container.append(elem);
+      this.gui.append(elem);
     }
+    this.container.append(this.gui);
   }
+};
+
+ConfigControls.prototype.reattach = function() {
+  this.container.append(this.gui);
 };
 
 ConfigControls.prototype.__createFieldElement = function (field) {
@@ -44,8 +50,18 @@ ConfigControls.prototype.__createFieldElement = function (field) {
   var fieldUi = $('<div></div>').attr('id', this.prefix + 'field_' + id);
 
   // Add label
-  var fieldLabel = $('<label></label>').text(field.text);
+  var label = (field.text != null)? field.text : field.name;
+  var fieldLabel = $('<label></label>').text(label);
   fieldUi.append(fieldLabel);
+
+  if (field['type'] == null && field['value'] != null) {
+    // try to guess what field type should be
+    if (typeof(field['value']) === 'boolean') {
+      field['type'] = 'boolean';
+    } else if (typeof(field('value')) === 'number') {
+      field['type'] = 'number';
+    }
+  }
 
   // Add input field
   var inputType = 'text';
@@ -151,7 +167,6 @@ ConfigControls.prototype.__setFieldValue = function(field, value) {
     return oldValue;
   }
 };
-
 
 // Exports
 module.exports = ConfigControls;

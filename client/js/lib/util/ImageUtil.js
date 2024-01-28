@@ -11,6 +11,16 @@ var _ = require('util/util');
 ImageUtil.DISABLE_IMAGE_RESIZE = false;
 
 /**
+ * Pixel buffer
+ * @typedef PixelBuffer
+ * @type {object}
+ * @property {ArrayBuffer} data - buffer of pixel values
+ * @property {int} width
+ * @property {int} height
+ * @property {int} channels - number of channel in pixels buffer (4 for RGBA)
+ * */
+
+/**
  * Extract image data from element
  * @param image
  * @return {{data: *, width: int, height: int}}
@@ -18,7 +28,6 @@ ImageUtil.DISABLE_IMAGE_RESIZE = false;
  */
 function getImageData(image) {
   if (image.data) {
-    console.log("Quick return");
     return { data: image.data, width: image.width, height: image.height, channels: image.channels };
 
   }
@@ -205,6 +214,7 @@ function makePowerOfTwo(image, callback) {
     callback(e, image);
   }
 }
+ImageUtil.makePowerOfTwo = makePowerOfTwo;
 
 function textureNeedsPowerOfTwo(texture) {
   return (texture.wrapS !== THREE.ClampToEdgeWrapping || texture.wrapT !== THREE.ClampToEdgeWrapping) ||
@@ -219,6 +229,102 @@ function ensurePowerOfTwo(image, texture, callback) {
   }
 }
 ImageUtil.ensurePowerOfTwo = ensurePowerOfTwo;
+
+function getIndexInfo(pixelBuffer, rect, getInfoFn, useHexColor, ignoreAlpha0) {
+  function createBBox() {
+    return { min: { x: +Infinity, y: +Infinity }, max: { x: -Infinity, y: -Infinity } };
+  }
+
+  function updateBBox(bbox, x, y) {
+    bbox.min.x = Math.min(bbox.min.x, x);
+    bbox.min.y = Math.min(bbox.min.y, y);
+    bbox.max.x = Math.max(bbox.max.x, x);
+    bbox.max.y = Math.max(bbox.max.y, y);
+  }
+
+  function finalizeBBox(bbox) {
+    bbox.mid = { x: (bbox.min.x + bbox.max.x)/2, y: (bbox.min.y + bbox.max.y)/2 };
+    bbox.dims = { x: (bbox.max.x - bbox.min.x), y: (bbox.max.y - bbox.min.y) };
+  }
+
+  // pixels should be UInt8Array where each pixel is RGBA
+  var indexInfo = {};
+  var pixels = pixelBuffer.data;
+  var stride = pixels.length / (pixelBuffer.width * pixelBuffer.height);
+  if (stride * pixelBuffer.width * pixelBuffer.height !== pixels.length) {
+    console.error(`Invalid pixel buffer size: width=${pixelBuffer.width}, height=${pixelBuffer.height}, bufferSize=${pixels.length}`);
+    return;
+  }
+  if (stride !== 1 && stride !== 4) {
+    console.error(`Unsupported pixel stride: stride=${stride}`);
+    return;
+  }
+  var pixelToIndex;
+  if (!pixelToIndex) {
+    if (stride === 4) {
+      if (useHexColor) {
+        pixelToIndex = function (pixels, i) {
+          var v = (pixels[i] << 16) ^ (pixels[i + 1] << 8) ^ (pixels[i + 2]);
+          return ('000000' + v.toString(16)).slice(-6);
+        };
+      } else {
+        pixelToIndex = function (pixels, i) {
+          return ((255 - pixels[i + 3]) << 24) ^ (pixels[i] << 16) ^ (pixels[i + 1] << 8) ^ (pixels[i + 2]);
+        };
+      }
+    } else {
+      pixelToIndex = function (pixels, i) {
+        return pixels[i];
+      };
+    }
+  }
+
+  var numElementsPerRow = stride * pixelBuffer.width;
+  if (!rect) {
+    rect = {
+      min: {x: 0, y: 0},
+      max: {x: pixelBuffer.width, y: pixelBuffer.height}
+    };
+  }
+  for (var x = rect.min.x; x < rect.max.x; x++) {
+    for (var y = rect.min.y; y < rect.max.y; y++) {
+      var i = numElementsPerRow * y + stride * x;
+      if (ignoreAlpha0 && stride === 4) {
+        if (pixels[i + 3] === 0) {
+          continue;
+        }
+      }
+      // Convert to ARGB
+      var index = pixelToIndex(pixels, i);
+      var info;
+      if (getInfoFn) {
+        info = getInfoFn(index);
+        if (info && info.index != null) {
+          index = info.index;
+        }
+      }
+      if (indexInfo[index] == null) {
+        indexInfo[index] = {
+          index: index,
+          bbox: createBBox(),
+          npixels: 0
+        };
+        if (info) {
+          _.defaults(indexInfo[index], info);
+        }
+      }
+      indexInfo[index].npixels++;
+      updateBBox(indexInfo[index].bbox, x, y);
+    }
+  }
+  _.forEach((v,k) => {
+    finalizeBBox(v.bbox);
+  });
+  return indexInfo;
+}
+
+ImageUtil.getIndexInfo = getIndexInfo;
+
 
 function getIndexCounts(pixels, remapIndexFn) {
   // pixels should be UInt8Array where each pixel is RGBA
@@ -370,6 +476,15 @@ function flipPixelsY(p, width, height) {
 }
 
 ImageUtil.flipPixelsY = flipPixelsY;
+
+function copyImageData(source) {
+  var target = {};
+  Object.assign(target, source);
+  target.data = new Uint8Array(source.data.buffer.slice(0));
+  return target;
+}
+
+ImageUtil.copyImageData = copyImageData;
 
 function encodePixels(array, encodingFn, targetData) {
   targetData = targetData || new Uint8Array(array.length);

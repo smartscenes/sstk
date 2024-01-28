@@ -24,11 +24,23 @@ THREE.ColladaExporter.prototype = {
 
   /**
    * Export Collada
-   * @param {THREE.Scene|THREE.Scenes[]} input   THREE.Scene or Array of THREE.Scenes
+   * @param {THREE.Scene} input   THREE.Scene or Array of THREE.Scenes
    * @param {Object} options options
    */
   export: function(input, options) {
-    this.parse(input, function(result) { if (options.callback) { options.callback(null, result); }}, options);
+    let cachedMatrix = null;
+    if (options && options.transform) {
+      cachedMatrix = input.matrix.clone();
+      input.applyMatrix4(options.transform);
+    }
+    this.parse(input, function(result) {
+        if (cachedMatrix) {
+          input.matrix.copy(cachedMatrix);
+          input.matrix.decompose(input.position, input.quaternion, input.scale);
+          input.matrixWorldNeedsUpdate = true;  // make sure matrixWorldNeedsUpdate is set
+        }
+        if (options.callback) { options.callback(null, result); }
+      }, options);
   },
 
   parse: function ( object, onDone, options = {} ) {

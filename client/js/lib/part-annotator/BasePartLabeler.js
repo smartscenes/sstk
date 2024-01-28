@@ -1,6 +1,9 @@
 'use strict';
 
 var PubSub = require('PubSub');
+var OBB = require('geo/OBB');
+var LabelParsers = require('part-annotator/LabelParsers');
+var _ = require('util/util');
 
 /**
  * Base class for labeling of parts of any whole.
@@ -12,6 +15,9 @@ var PubSub = require('PubSub');
  * @param params.getIntersected {BasePartLabeler.getIntersectedFn} Function to use for getting intersected mesh/triangle
  * @param params.isLabelable {BasePartLabeler.isLabelableFn} Function to use for determining is a part can be labeled or not
  * @param params.getDehighlightColor {BasePartLabeler.getDehighlightColorFn} Function to use for determining the color to apply when a part is dehighlighted
+ * @param params.labelParser {BasePartLabeler.LabelParser} Parses information from labels into LabelInfo
+ * @param params.specialLabels = {string[]} List of special labels that is allowed and will not be checked
+ * @param params.checkLabelsUnique {boolean} Whether to check if labels are unique
  * @constructor
  */
 function BasePartLabeler(params) {
@@ -22,6 +28,9 @@ function BasePartLabeler(params) {
   if (params.getDehighlightColor) {
     this.getDehighlightColor = params.getDehighlightColor;
   }
+  this.labelParser = LabelParsers.getLabelParser(params.labelParser);
+  this.specialLabels = params.specialLabels;
+  this.checkLabelsUnique = params.checkLabelsUnique;
 
   this.highlightedPart = null; //The currently selected part
   this.currentLabelInfo = null;
@@ -51,10 +60,14 @@ BasePartLabeler.prototype.updateLabels = function (labelInfos) {
   this.labelInfos = labelInfos;
 };
 
+BasePartLabeler.prototype.isValidLabel = function(labelInfo) {
+  return labelInfo && !labelInfo.removed && this.hasParts(labelInfo);
+};
+
 BasePartLabeler.prototype.getValidLabels = function() {
   if (this.labelInfos) {
     var scope = this;
-    return this.labelInfos.filter(function(x) { return x && !x.removed && scope.hasParts(x); });
+    return this.labelInfos.filter(function(x) { return scope.isValidLabel(x); });
   }
 };
 
@@ -234,6 +247,77 @@ BasePartLabeler.prototype.getDehighlightColor = function (part) {
   if (part && part.userData.labelInfo) {
     return part.userData.labelInfo.colorMat;
   }
+};
+
+BasePartLabeler.prototype.onReady = function(options) {
+};
+
+BasePartLabeler.prototype.restore = function(labels, savedLabelInfos, options) {
+  options = options || {};
+  console.time('restore');
+  // Assume just one mesh
+  for (var i = 0; i < savedLabelInfos.length; i++) {
+    var savedLabelInfo = savedLabelInfos[i];
+    var labelInfo = labels.createLabelInfo(savedLabelInfo.label, savedLabelInfo );
+    labels.appendButton(labelInfo);
+    labels.labelInfos[labelInfo.index] = labelInfo;
+    if (savedLabelInfo.initialPoint) {
+      labelInfo.initialPoint = savedLabelInfo.initialPoint;
+    }
+    if (savedLabelInfo.obb) {
+      labelInfo.obb = new OBB();
+      labelInfo.obb.fromJSON(savedLabelInfo.obb);
+    }
+    this.__restoreLabel(labelInfo, savedLabelInfo, options);
+  }
+  this.updateLabels(labels.labelInfos);
+  console.timeEnd('restore');
+};
+
+BasePartLabeler.prototype.__restoreLabel = function(createdLabelInfo, savedLabelInfo, options) {
+  console.error(this.constructor.name + '.__restoreLabel - Please implement me!!!');
+};
+
+BasePartLabeler.prototype.__isSpecialLabel = function(label) {
+  return this.specialLabels && (this.specialLabels.indexOf(label) >= 0);
+};
+
+BasePartLabeler.prototype.checkLabels = function() {
+  var statusMessages = [];
+  var validLabels = this.getValidLabels();
+  if (this.labelParser) {
+    var invalidIndices = [];
+    for (var i = 0; i < validLabels.length; i++) {
+      var labelInfo = validLabels[i];
+      if (this.__isSpecialLabel(labelInfo.label)) {
+        // Okay, special label
+      } else {
+        var parsed = this.labelParser.parse(labelInfo);
+        if (!parsed) {
+          var index = labelInfo.index;
+          statusMessages.push({'message': `Label "${labelInfo.label} (${index})" is invalid`, labelIndex: [index]});
+          invalidIndices.push(index);
+        }
+      }
+    }
+    if (invalidIndices.length > 0) {
+      statusMessages.unshift({ 'message': `There are ${invalidIndices.length} invalid labels.` +
+          'Labels should be of the form ' + this.labelParser.description, labelIndex: invalidIndices });
+    }
+  }
+  if (this.checkLabelsUnique) {
+    var labels = _.groupBy(validLabels, (labelInfo) => labelInfo.label);
+    _.forEach(labels, (labelInfos, label) => {
+      if (this.__isSpecialLabel(label)) {
+        // Okay
+      } else if (labelInfos.length > 1) {
+        var labelIndices = labelInfos.map(li => li.index);
+        statusMessages.push({ 'message': `Label ${label} is duplicated ${labelInfos.length} times`,
+          labelIndex: labelIndices });
+      }
+    });
+  }
+  return statusMessages;
 };
 
 module.exports = BasePartLabeler;

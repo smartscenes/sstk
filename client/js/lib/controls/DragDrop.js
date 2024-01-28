@@ -1,12 +1,13 @@
 'use strict';
 
-var Constants = require('Constants');
-var ModelInstance = require('model/ModelInstance');
-var Object3DUtil = require('geo/Object3DUtil');
-var HighlightControls = require('controls/HighlightControls');
-var PubSub = require('PubSub');
-var UILog = require('editor/UILog');
-var AttachmentBasedBoundingBoxHelper = require('geo/AttachmentBasedBoundingBoxHelper');
+const Constants = require('Constants');
+const ModelInstance = require('model/ModelInstance');
+const ObjectAttachment = require('model/ObjectAttachment');
+const Object3DUtil = require('geo/Object3DUtil');
+const HighlightControls = require('controls/HighlightControls');
+const PubSub = require('PubSub');
+const UILog = require('editor/UILog');
+const AttachmentBasedBoundingBoxHelper = require('geo/AttachmentBasedBoundingBoxHelper');
 
 /**
  * Controls that allows for drag and drop of a object in 3D.
@@ -26,11 +27,14 @@ var AttachmentBasedBoundingBoxHelper = require('geo/AttachmentBasedBoundingBoxHe
  * @param [params.attachToParent=false] {boolean} Whether to automatically attach to support parent or remain detached when putOnObject is true.
  * @param [params.useModelBase=false] {boolean} Whether to use model base ...
  * @param [params.useModelContactPoint=true] {boolean} Whether to use prespecified model contact points.
- * @param [params.putOnObject=true] {boolean} Whether objects need to be placed on an support object.
- * @param [params.allowFloating=false] {boolean} Whether to allow floating obejcts (if putOnObject is true - does this work?).
+ * @param [params.allowFloating=false] {boolean} Whether to allow floating objects (if putOnObject is true - does this work?).
+ * @param [params.movementMode=DragDrop.Movement.MOVE_ON_SUPPORT_OBJECTS] How drag drop movement works
  * @param [params.supportSurfaceChange=DragDrop.SSC.NONE] {DragDrop.SSC.NONE|DragDrop.SSC.SWITCH_ATTACHMENT|DragDrop.SSC.REORIENT_CHILD}
- *    Whether to visualize the bounding box of selected object.
+ *    What happens if the support surface changes
  * @param [params.useVisualizer=false] {boolean} Whether to visualize the bounding box of selected object.
+ * @param [params.restrictSupportToArch=false] {boolean} set to 'true' to restrict the placement of objects on arch surfaces.
+ * @param [params.allowedSupportObjectTypes=null] {string[]} array of allowed object types/categories for support.
+ * @param [params.highlightSupportOnHover=false] {boolean} whether to highlight support surface on hover
  * @memberOf controls
  * @constructor
  */
@@ -39,7 +43,7 @@ function DragDrop(params) {
 
   this.container = params.container;
   this.picker = params.picker;
-  this.controls = params.controls;
+  this.controls = params.controls;  // other controls
   this.sceneUpdatedCallback = params.sceneUpdatedCallback;
   this.useVisualizer = params.useVisualizer;
   this.uilog = params.uilog;
@@ -47,41 +51,103 @@ function DragDrop(params) {
   this.attachToParent = params.attachToParent;
   this.useModelBase = params.useModelBase;
   this.useModelContactPoint = (params.useModelContactPoint != undefined)? params.useModelContactPoint:true;
+  this.useWorldBBoxAttachments = false;  // Use world aabb face centers as attachments (or use oriented bounding box face centers as attachments)
   this.pickerPlaneSize = 100*Constants.metersToVirtualUnit;
 
   // Drag and drop is enabled
   this.enabled = (params.enabled != undefined)? params.enabled : false;
-  // Should we always try to have objects be supported?
-  this.putOnObject = (params.putOnObject != undefined)? params.putOnObject : true;
+
+  // Movement mode
+  this.__movementMode = (params.movementMode != null)? params.movementMode : DragDrop.Movement.MOVE_ON_SUPPORT_OBJECTS;
+  this.__putOnObject = (params.putOnObject != undefined)? params.putOnObject : true;
   // If putOnObject is true, but we didn't find parent object, do we allow the object to be floating in the air?
   this.allowFloating = (params.allowFloating != undefined)? params.allowFloating : false;
   // What to do when support surface changes
-  this.supportSurfaceChange = (params.supportSurfaceChange !== undefined) ? params.supportSurfaceChange : DragDrop.SSC.NONE;
+  this.__supportSurfaceChange = (params.supportSurfaceChange !== undefined) ? params.supportSurfaceChange : DragDrop.SSC.NONE;
   if (this.supportSurfaceChange === DragDrop.SSC.REORIENT_CHILD) {
     if (!this.useModelBase) {
       console.log('Using supportSurfaceChange REORIENT_CHILD - setting useModelBase to true');
       this.useModelBase = true;
     }
   }
+  // Can we place on any objects or just architecture elements
+  this.restrictSupportToArch = (params.restrictSupportToArch != undefined)? params.restrictSupportToArch : false;
+  this.allowedSupportObjectTypes = params.allowedSupportObjectTypes;
+  this.highlightSupportOnHover = (params.highlightSupportOnHover != undefined)? params.highlightSupportOnHover : false;
+
   // Different cursor stype to use
   this.cursorMoveStyle = 'none'; //'move';
 
   this.defaultCursor = 'auto';
 
-  this.userIsInserting = false;//true after user has clicked on a model, but before mouse enters container
-  this.insertMode = false;//true when user is in process of placing inserted model
+  this.__userIsInserting = false; //true after user has clicked on a model, but before mouse enters container
+  this.__insertMode = false; //true when user is in process of placing inserted model
 
-  this.shouldPush = false;//true when mouse is dragged
-  this.mouseDown = false;//used for determining mouse drag
+  this.__shouldPush = false; //true when mouse is dragged
+  this.__isMouseDown = false; //used for determining mouse drag
 
-  this.yTranslateOn = false;
-
+  this.__controlsEnabled = this.controls.enabled; // Backs up other control status
+  this.__modelMoveStarted = false; //used for log event filtering
+  this.__moveInteraction = null;
+  this.__insertInteraction = null;
   this.reset(params);
 }
 
 DragDrop.SSC = Constants.EditStrategy.SupportSurfaceChange;
+DragDrop.Movement = Constants.EditStrategy.MovementMode;
 DragDrop.prototype = Object.create(PubSub.prototype);
 DragDrop.prototype.constructor = DragDrop;
+
+// set true to restrict movement of objects to a plane
+Object.defineProperty(DragDrop.prototype, 'restrictMovementToPlane', {
+  get: function () { return this.putOnObject? this.movementMode === DragDrop.Movement.MOVE_ON_ATTACHMENT_PLANE : true; },
+  set: function (v) {
+    if (this.putOnObject) {
+      this.movementMode = (v? DragDrop.Movement.MOVE_ON_ATTACHMENT_PLANE : DragDrop.Movement.MOVE_ON_SUPPORT_OBJECTS);
+    }
+  }
+});
+
+// Should we always try to have objects be supported?
+Object.defineProperty(DragDrop.prototype, 'putOnObject', {
+  get: function () { return this.movementMode === DragDrop.Movement.MOVE_ON_SUPPORT_OBJECTS ||
+    this.movementMode === DragDrop.Movement.MOVE_ON_ATTACHMENT_PLANE; }
+});
+
+// Convert strings if needed
+Object.defineProperty(DragDrop.prototype, 'movementMode', {
+  get: function () { return this.__movementMode; },
+  set: function(v) {
+    let mode = v;
+    if (typeof(v) === 'string') {
+      if (v.length === 1) {
+        mode = parseInt(v);
+      } else {
+        mode = DragDrop.Movement[v];
+      }
+    }
+    this.__movementMode = mode;
+  }
+});
+
+Object.defineProperty(DragDrop.prototype, 'supportSurfaceChange', {
+  get: function () { return this.__supportSurfaceChange; },
+  set: function(v) {
+    let mode = v;
+    if (typeof(v) === 'string') {
+      if (v.length === 1) {
+        mode = parseInt(v);
+      } else {
+        mode = DragDrop.SSC[v];
+      }
+    }
+    this.__supportSurfaceChange = mode;
+  }
+});
+
+Object.defineProperty(DragDrop.prototype, 'insertMode', {
+  get: function () { return this.__insertMode; }
+});
 
 DragDrop.prototype.reset = function (params) {
   this.camera = params.camera;
@@ -91,6 +157,7 @@ DragDrop.prototype.reset = function (params) {
 
   // We have selected this object3D
   this.selected = null;
+  this.selectedObjectAttachment = null;
   // Our mouse is over this object3D
   this.intersected = null;
   // The plane that we will move in
@@ -115,6 +182,14 @@ DragDrop.prototype.reset = function (params) {
     offset: new THREE.Vector3()
   };
   this.highlightControls = this.createHighlightControls();
+
+  // private variables for keep track of state
+  this.__markActiveSupport(this.__oldParent, false);
+  this.__markActiveSupport(this.__newParent, false);
+  this.__markActiveSupport(this.__hoverParent, false);
+  this.__newParent = null;
+  this.__oldParent = null;
+  this.__hoverParent = null;
 };
 
 //Called after user selects model from side panel and model is loaded
@@ -122,58 +197,47 @@ DragDrop.prototype.onInsert = function (object3D) {
   if (this.enabled) {
     // Inserting an object, indicate the selected object
     this.selected = object3D;
+    this.selectedObjectAttachment = new ObjectAttachment(object3D);
     this.selected.visible = true;
 
     // Set booleans appropriately
-    this.shouldPush = true;
-    this.userIsInserting = true;
-    this.insertMode = true;
+    this.__shouldPush = true;
+    this.__userIsInserting = true;
+    this.__insertMode = true;
 
     this.container.style.cursor = this.cursorMoveStyle;
 
     // TODO: set appropriate attachment based on priors
-    var attachments = this.identifyAttachmentsForPlacement(object3D);
+    const attachments = this.__identifyAttachmentsForPlacement(this.selectedObjectAttachment);
     this.selectedPoint = attachments[this.placementInfo.attachmentIndex].world.pos;
 
-    this.oldParent = null;
+    this.__oldParent = null;
+
+    if (this.uilog) {
+      this.__insertInteraction = ModelInstance.getUILogInfo(object3D, true);
+      this.__insertInteraction.type = UILog.EVENT.MODEL_INSERT_END;
+      this.__insertInteraction['startTime'] = new Date().getTime();
+      this.uilog.log(UILog.EVENT.MODEL_INSERT_START, null, this.__insertInteraction);
+    }
   }
 };
 
-DragDrop.prototype.__identifyBoundingBoxAttachments = function(object3D) {
-  this.placementInfo.origBBox = Object3DUtil.getBoundingBox(object3D);
-  var bbfaceCenters = this.placementInfo.origBBox.getFaceCenters();
-  var attachmentPoints = [];
-  for (var i = 0; i < bbfaceCenters.length; i++) {
-    var p = Object3DUtil.FaceCenters01[i];
-    attachmentPoints.push({
-      type: 'bbface',
-      frame: 'worldBB',
-      bbfaceIndex: i,
-      local: {pos: p, out: Object3DUtil.OutNormals[i]},
-      world: {pos: bbfaceCenters[i], out: Object3DUtil.OutNormals[i]},
-      index: i
-    });
-  }
-  this.placementInfo.attachments = attachmentPoints;
-};
-
-DragDrop.prototype.identifyAttachmentsForPlacement = function (object3D) {
+DragDrop.prototype.__identifyAttachmentsForPlacement = function (objectAttachment) {
   // Assume attaching on the bottom
   // Conceptually, the different bbface centers represent possible attachment points for the object
-  var modelInstance = Object3DUtil.getModelInstance(object3D);
-  var u = object3D.userData;
-  var childWorldBBFaceIndex = u['childWorldBBFaceIndex'];
-  if (childWorldBBFaceIndex == undefined) {
-    childWorldBBFaceIndex = Constants.BBoxFaceCenters.BOTTOM;
-  }
-  this.placementInfo.childWorldBBFaceIndex = childWorldBBFaceIndex;
+  // TODO: default to different attachments based on object3D
+  const object3D = objectAttachment.object3D;
+  const modelInstance = objectAttachment.modelInstance;
+  const u = object3D.userData;
+  let childAttachmentIndex = u['attachmentIndex'];
+  let childWorldBBFaceIndex = u['childWorldBBFaceIndex'];
   if (modelInstance) {
     this.placementInfo.attachments = modelInstance.getCandidateAttachmentPoints();
     // HACKY!!! Find annotated attachment point if available...
-    var contactPointAttachmentIndex = -1;
+    let contactPointAttachmentIndex = -1;
     if (this.useModelContactPoint) {
-      var arr = this.placementInfo.attachments;
-      for (var i = 0; i < arr.length; i++) {
+      const arr = this.placementInfo.attachments;
+      for (let i = 0; i < arr.length; i++) {
         if (arr[i].type === 'annotated') {
           // Set attachmentIndex to this
           contactPointAttachmentIndex = i;
@@ -184,78 +248,136 @@ DragDrop.prototype.identifyAttachmentsForPlacement = function (object3D) {
     if (contactPointAttachmentIndex >= 0) {
       this.placementInfo.attachmentIndex = contactPointAttachmentIndex;
     } else {
-      this.__identifyBoundingBoxAttachments(object3D);
+      if (this.useWorldBBoxAttachments) {
+        this.placementInfo.attachments = objectAttachment.identifyWorldBoundingBoxAttachments();
+      }
       u['attachmentIndex'] = undefined;
-      this.placementInfo.attachmentIndex = childWorldBBFaceIndex;
+      //this.placementInfo.attachmentIndex = childWorldBBFaceIndex;
     }
   } else {
     // Some other thingy... code path not really tested
-    this.__identifyBoundingBoxAttachments(object3D);
+    this.placementInfo.attachments = objectAttachment.identifyWorldBoundingBoxAttachments();
     u['attachmentIndex'] = undefined;
-    this.placementInfo.attachmentIndex = childWorldBBFaceIndex;
+    //this.placementInfo.attachmentIndex = childWorldBBFaceIndex;
   }
-  this.updateAttachmentIndex(this.selected, this.placementInfo.attachmentIndex, this.placementInfo.childWorldBBFaceIndex);
+  if (childWorldBBFaceIndex == null && childAttachmentIndex == null) {
+    childAttachmentIndex = objectAttachment.getAttachmentIndex();
+    childWorldBBFaceIndex = objectAttachment.childAttachmentIndexToWorldBBFaceIndex(childAttachmentIndex);
+  } else if (this.supportSurfaceChange === DragDrop.SSC.REORIENT_CHILD) {
+    // use childWordBBFaceIndex
+    if (childWorldBBFaceIndex == null) {
+      childWorldBBFaceIndex = objectAttachment.childAttachmentIndexToWorldBBFaceIndex(childAttachmentIndex);
+    }
+  } else {
+    if (childAttachmentIndex == null) {
+      const info = objectAttachment.getAttachmentInfoFromWorldSurfaceInNormal(Object3DUtil.InNormals[childWorldBBFaceIndex]);
+      childAttachmentIndex = info.bbFaceIndexBase;
+    }
+  }
+  this.placementInfo.attachmentIndex = childAttachmentIndex;
+  this.placementInfo.childWorldBBFaceIndex = childWorldBBFaceIndex;
+
+  this.__updateAttachmentIndex(this.selectedObjectAttachment, this.placementInfo.attachmentIndex, this.placementInfo.childWorldBBFaceIndex);
   return this.placementInfo.attachments;
 };
 
-DragDrop.prototype.identifyAttachmentIndex = function (intersects) {
+DragDrop.prototype.__identifyAttachmentIndex = function (intersects) {
   // TODO: Depending on the normal of the support surface, pick appropriate face to attach
   // TODO: Decouple world bbox and object semantic frame
-  var norm = this.picker.getIntersectedNormal(intersects[0]);
-  var bbFaceIndexWorld = Object3DUtil.findClosestBBFaceByInNormal(norm);
-  if (bbFaceIndexWorld >= 0) {
+  const selected = this.selected;
+  if (this.supportSurfaceChange === DragDrop.SSC.NONE) {
+    // keep old attachmentIndex (if it exists)
+    const attachmentIndex = this.selectedObjectAttachment.getAttachmentIndex(selected);
+    const changed = this.placementInfo.attachmentIndex !== attachmentIndex;
+    this.placementInfo.attachmentIndex = attachmentIndex;
+    this.placementInfo.childWorldBBFaceIndex = this.selectedObjectAttachment.childAttachmentIndexToWorldBBFaceIndex(attachmentIndex);
+    return true;
+  }
+  // We need to do something based on the intersected surface
+  const worldSurfaceNorm = this.picker.getIntersectedNormal(intersects[0]);
+  const attachmentInfo = this.selectedObjectAttachment.getAttachmentInfoFromWorldSurfaceInNormal(worldSurfaceNorm);
+  const bbFaceIndexBase = attachmentInfo.bbFaceIndexBase;
+  const bbFaceIndexWorld = attachmentInfo.bbFaceIndexWorld;
+  if (bbFaceIndexBase >= 0) {
     if (this.supportSurfaceChange === DragDrop.SSC.SWITCH_ATTACHMENT) {
-      if (this.placementInfo.attachmentIndex >= 6) {
-        // Special, don't change // HACKY, HACKY
-        return this.placementInfo.childWorldBBFaceIndex === bbFaceIndexWorld;
-      } else {
-        if (bbFaceIndexWorld !== this.placementInfo.childWorldBBFaceIndex) {
-          this.placementInfo.attachmentIndex = bbFaceIndexWorld;
+      // switch child attachment face to side closest/compatible with the support surface
+      if (this.placementInfo.attachmentIndex >= 0 && this.placementInfo.attachmentIndex < 6) {
+        if (bbFaceIndexBase !== this.placementInfo.attachmentIndex) {
+          this.placementInfo.attachmentIndex = bbFaceIndexBase;
           this.placementInfo.childWorldBBFaceIndex = bbFaceIndexWorld;
-          this.updateAttachmentIndex(this.selected, this.placementInfo.attachmentIndex, bbFaceIndexWorld);
+          this.__updateAttachmentIndex(this.selectedObjectAttachment, this.placementInfo.attachmentIndex, bbFaceIndexWorld, worldSurfaceNorm);
         }
         return true;
+      } else {
+        // Special, don't change // HACKY, HACKY
+        return this.placementInfo.childWorldBBFaceIndex === bbFaceIndexWorld;
       }
     } else if (this.supportSurfaceChange === DragDrop.SSC.REORIENT_CHILD) {
       // Reorient so normal from attachment point is in same direction as the norm
-      var selected = this.selected;
-      var localObjInNormal = selected.userData['attachmentDir1'];
-      var quaternion = selected.getWorldQuaternion(new THREE.Quaternion());
-      var worldObjInNormal = localObjInNormal?
-        localObjInNormal.clone() : Object3DUtil.InNormals[Constants.BBoxFaceCenters.BOTTOM].clone();
-      worldObjInNormal.applyQuaternion(quaternion);
-      var targetInNormal1 = Object3DUtil.InNormals[bbFaceIndexWorld];
-      if (!targetInNormal1.equals(worldObjInNormal)) {
-        var targetInNormal2 = new THREE.Vector3();
-        targetInNormal2.crossVectors(targetInNormal1, worldObjInNormal).normalize();
-        var q = Object3DUtil.getAlignmentQuaternion(worldObjInNormal, targetInNormal2, targetInNormal1, targetInNormal2);
+      //console.log('SSC.REORIENT_CHILD');
+      // get current attachment index and what is the direction of the attachment normal (plus another orthogonal vector))
+      const currentAttachmentIndex = this.selectedObjectAttachment.getAttachmentIndex();
+      let baseAttachmentObjInNormal = selected.userData['attachmentBaseIn'];
+      let baseAttachmentObjDir2 = selected.userData['attachmentBaseDir2'];
+      if (baseAttachmentObjInNormal == null) {
+        this.placementInfo.childWorldBBFaceIndex = null;
+        baseAttachmentObjInNormal = this.selectedObjectAttachment.childAttachmentIndexToBaseInNorm(currentAttachmentIndex).clone();
+        const orientingDirIndex = (currentAttachmentIndex + 2) % 6;
+        baseAttachmentObjDir2 = Object3DUtil.InNormals[orientingDirIndex].clone();
+      }
+      const targetInNormal = attachmentInfo.baseInNorm;
+      if (!targetInNormal.equals(baseAttachmentObjInNormal)) {
+        const orientingDirIndex = (currentAttachmentIndex + 2) % 6;
+        const targetDir2 = Object3DUtil.InNormals[orientingDirIndex].clone();
+        // console.log('getting quaternion', baseAttachmentObjInNormal, baseAttachmentObjDir2, targetInNormal, targetDir2);
+        const q = Object3DUtil.getAlignmentQuaternion(baseAttachmentObjInNormal, baseAttachmentObjDir2, targetInNormal, targetDir2);
         selected.quaternion.multiplyQuaternions(selected.quaternion, q);
         selected.updateMatrix();
         Object3DUtil.clearCache(selected);
       }
+      // if (bbFaceIndexBase != currentAttachmentIndex) {
+      //   const attachmentInfo2 = this.selectedObjectAttachment.getAttachmentInfoFromWorldSurfaceInNormal(worldSurfaceNorm);
+      //   console.log('got attachInfo', currentAttachmentIndex, bbFaceIndexBase, attachmentInfo, attachmentInfo2);
+      // }
+      // NOTE: This shouldn't change
+      //console.log('got bbFaceIndexBase', currentAttachmentIndex, bbFaceIndexBase, bbFaceIndexWorld);
       if (bbFaceIndexWorld !== this.placementInfo.childWorldBBFaceIndex) {
-        this.Publish('AttachmentChanged', { bbFaceIndex: bbFaceIndexWorld });
+        //console.log('SSC.REORIENT_CHILD bbFaceIndexWorld changed: old=' + this.placementInfo.childWorldBBFaceIndex +', new=' + bbFaceIndexWorld);
+        //console.log('SSC.REORIENT_CHILD currentAttachmentIndex=' + currentAttachmentIndex + ', bbFaceIndexBase=' + bbFaceIndexBase);
+        this.placementInfo.attachmentIndex = currentAttachmentIndex;
+        this.placementInfo.childWorldBBFaceIndex = bbFaceIndexWorld;
+        this.__updateAttachmentIndex(this.selectedObjectAttachment, this.placementInfo.attachmentIndex, bbFaceIndexWorld, worldSurfaceNorm);
+        //this.Publish('AttachmentChanged', { bbFaceIndex: bbFaceIndexWorld });
       }
       this.placementInfo.childWorldBBFaceIndex = bbFaceIndexWorld;
       return true;
-    } else if (this.supportSurfaceChange === DragDrop.SSC.NONE) {
-      return this.placementInfo.childWorldBBFaceIndex === bbFaceIndexWorld;
     }
   } else {
+    console.log('Cannot determine bbFaceIndexBase');
     return false;
   }
 };
 
 DragDrop.prototype.onMouseMove = function (event) {
-  if (this.mouseDown) {
-    this.shouldPush = true;
+  if (this.__isMouseDown) {
+    this.__shouldPush = true;
   }
   if (!this.enabled) return true;
   event.preventDefault();
 
   if (this.selected) {
     this.mouse = this.picker.getCoordinates(this.container, event);
-    this.moveSelected(this.mouse.x, this.mouse.y);
+    this.__moveSelected(this.mouse.x, this.mouse.y);
+    if (!this.__insertMode) {
+      if (!this.__modelMoveStarted) {
+        this.__moveInteraction = ModelInstance.getUILogInfo(this.selected, true);
+        this.__moveInteraction.type = UILog.EVENT.MODEL_MOVE_END;
+        this.__moveInteraction['startTime'] = new Date().getTime();
+  
+        this.uilog.log(UILog.EVENT.MODEL_MOVE_START, event, this.__moveInteraction);
+        this.__modelMoveStarted = true;
+      }
+    }
     return false;
   } else {
     if (this.highlightControls) {
@@ -263,8 +385,17 @@ DragDrop.prototype.onMouseMove = function (event) {
       this.highlightControls.onMouseMove(event);
       this.intersected = this.highlightControls.intersected;
     }
+    if (this.highlightSupportOnHover) {
+      const supportParent = this.getSupportParent(this.intersected);
+      if (supportParent !== this.__hoverParent) {
+        this.__markActiveSupport(this.__hoverParent, false);
+        this.__hoverParent = supportParent;
+        this.__markActiveSupport(supportParent, true);
+      }
+    }
     if (this.intersected) {
       this.container.style.cursor = 'pointer';
+      return false; // Event handled
     } else {
       this.container.style.cursor = this.defaultCursor;
     }
@@ -297,22 +428,22 @@ DragDrop.prototype.clearHighlight = function () {
 DragDrop.prototype.isEditable = function (intersected) {
   if (this.allowAny) { return true; }
   else {
-    var modelInstance = Object3DUtil.getModelInstance(intersected.object);
-    return modelInstance && modelInstance.object3D.userData.isSelectable && modelInstance.object3D.userData.isEditable;
+    const modelInstance = Object3DUtil.getModelInstance(intersected.object);
+    return modelInstance && modelInstance.isDraggable;
   }
 };
 
 DragDrop.prototype.isSelectable = function (intersected) {
   if (this.allowAny) { return true; }
   else {
-    var modelInstance = Object3DUtil.getModelInstance(intersected.object);
+    const modelInstance = Object3DUtil.getModelInstance(intersected.object);
     return modelInstance && modelInstance.object3D.userData.isSelectable;
   }
 };
 
 DragDrop.prototype.createHighlightControls = function () {
-  var scope = this;
-  var highlightControls = new HighlightControls({
+  const scope = this;
+  const highlightControls = new HighlightControls({
     container: this.container,
     picker: this.picker,
     camera: this.camera,
@@ -327,35 +458,39 @@ DragDrop.prototype.createHighlightControls = function () {
   return highlightControls;
 };
 
-DragDrop.prototype.positionPlane = function (intersected, plane) {
-  // Position drag drop plane
+DragDrop.prototype.__positionPlane = function(plane, intersected) {
   plane.position.copy(intersected.point);
+  if (this.movementMode === DragDrop.Movement.MOVE_UP_DOWN) {
+    // assumes y up
+    plane.position.y = this.camera.position.y;
+  }
   //TODO(MS): Have plane be positioned on support surface for putOnObject mode
   plane.lookAt(this.camera.position);
 };
 
-DragDrop.prototype.getOffset = function (intersected) {
-  var offset = new THREE.Vector3();
+DragDrop.prototype.__getOffset = function (intersected) {
+  const offset = new THREE.Vector3();
   intersected.object.localToWorld(offset);
   offset.sub(intersected.point);
   return offset;
 };
 
 DragDrop.prototype.onMouseDown = function (event, intersected) {
-  this.mouseDown = true;
+  this.__isMouseDown = true;
+  this.__modelMoveStarted = false;
 
-  if (this.enabled && !this.insertMode) {
+  if (this.enabled && !this.__insertMode) {
     event.preventDefault();
     this.mouse = this.picker.getCoordinates(this.container, event);
     if (intersected === undefined) {
-      var pickables = (this.scene.pickables) ? this.scene.pickables : this.scene.children;
+      const pickables = (this.scene.pickables) ? this.scene.pickables : this.scene.children;
       intersected = this.picker.getFirstIntersected(this.mouse.x, this.mouse.y, this.camera, pickables);
     }
     if (intersected) {
-      this.positionPlane(intersected, this.plane);
-      var accept = this.isEditable(intersected);
+      this.__positionPlane(this.plane, intersected);
+      const accept = this.isEditable(intersected);
       if (accept) {
-        intersected.offset = this.getOffset(intersected);
+        intersected.offset = this.__getOffset(intersected);
         this.attach(intersected);
         return false;
       } else {
@@ -368,55 +503,23 @@ DragDrop.prototype.onMouseDown = function (event, intersected) {
   return true;
 };
 
-DragDrop.prototype.getAttachmentIndex = function(object) {
-  var u = object.userData;
-  var childAttachmentIndex = u['attachmentIndex'];
-  if (childAttachmentIndex == undefined) {
-    // TODO: Try to guess attachment index
-    childAttachmentIndex = Constants.BBoxFaceCenters.BOTTOM;
-  }
-  return childAttachmentIndex;
-};
-
-DragDrop.prototype.updateAttachmentIndex = function(object, childAttachmentIndex, childWorldBBFaceIndex) {
-  var modelInstance = Object3DUtil.getModelInstance(object);
-  if (modelInstance) {
-    if (childAttachmentIndex == undefined) {
-      childAttachmentIndex = this.getAttachmentIndex(modelInstance.object3D);
+DragDrop.prototype.__updateAttachmentIndex = function(objectAttachment, childAttachmentIndex, childWorldBBFaceIndex, supportSurfaceNorm) {
+  if (this.useModelBase) {
+    const attachment = objectAttachment.updateAttachment(this.placementInfo.attachments, childAttachmentIndex, childWorldBBFaceIndex, supportSurfaceNorm);
+    if (attachment) {
+      const childFaceWorldInNorm = attachment.world.out.clone().negate();
+      const surfaceNorm = supportSurfaceNorm? supportSurfaceNorm.clone() : childFaceWorldInNorm;
+      this.Publish('AttachmentChanged',
+        { bbFaceIndex: childWorldBBFaceIndex, faceNormal: childFaceWorldInNorm, surfaceNormal: surfaceNorm });
     }
-    if (childWorldBBFaceIndex == undefined) {
-      if (childAttachmentIndex >= 6) {
-        childWorldBBFaceIndex = Constants.BBoxFaceCenters.BOTTOM;
-      } else {
-        childWorldBBFaceIndex = childAttachmentIndex;
-      }
-    }
-    if (this.useModelBase) {
-      var u = modelInstance.object3D.userData;
-      if (!u['attachmentPoint'] || (u['attachmentIndex'] !== childAttachmentIndex)) {
-        // update attachments?
-        //this.placementInfo.attachments = modelInstance.getCandidateAttachmentPoints();
-        var attachment = this.placementInfo.attachments[childAttachmentIndex];
-        var p = attachment.local.pos;
-        modelInstance.setAttachmentPoint({ position: p, coordFrame: attachment.frame });
-        // Old logic
-        //var p = Object3DUtil.FaceCenters01[childAttachmentIndex];
-        //modelInstance.setAttachmentPoint({position: p, coordFrame: 'worldBB', useModelContactPoint: this.useModelContactPoint});
-        u['attachmentPoint'] = p;
-        u['attachmentIndex'] = childAttachmentIndex;
-        u['childWorldBBFaceIndex'] = childWorldBBFaceIndex;
-        //u['attachmentDir1'] = Object3DUtil.InNormals[childAttachmentIndex];
-        //u['attachmentDir2'] = Object3DUtil.InNormals[(childAttachmentIndex + 2) % 6];
-        this.Publish('AttachmentChanged', { bbFaceIndex: childWorldBBFaceIndex });
-      }
-    } else {
-      this.Publish('AttachmentChanged', { bbFaceIndex: childWorldBBFaceIndex });
-    }
+  } else {
+    this.Publish('AttachmentChanged', { bbFaceIndex: childWorldBBFaceIndex });
   }
 };
 
 DragDrop.prototype.attach = function (intersected) {
   this.selected = intersected.object;
+  this.selectedObjectAttachment = new ObjectAttachment(intersected.object);
   this.selectedPoint = intersected.point;
   this.Publish(Constants.EDIT_OPSTATE.INIT, Constants.CMDTYPE.MOVE, { object: this.selected });
 
@@ -427,241 +530,361 @@ DragDrop.prototype.attach = function (intersected) {
   // Save the relative position of point with respect to the 6 cube face centers...
   if (this.putOnObject) {
     this.detachSelectedFromParent();
-    this.setAllOffsets();
+    this.__setAllOffsets();
   }
-  if (this.controls) this.controls.enabled = false;
+  if (this.controls) {
+    this.__controlsEnabled = this.controls.enabled;
+    this.controls.enabled = false;
+  }
   this.container.style.cursor = this.cursorMoveStyle;
 };
 
 DragDrop.prototype.detach = function () {
   this.selected = null;
-  if (this.controls) this.controls.enabled = true;
+  this.selectedObjectAttachment = null;
+  if (this.controls) {
+    this.controls.enabled = this.__controlsEnabled;
+  }
   this.container.style.cursor = this.defaultCursor;
 };
 
 DragDrop.prototype.onMouseUp = function (event) {
-  if (event)
+  if (event) {
     event.preventDefault();
-  this.mouseDown = false;
-  var notHandled = true;
+  }
+  this.__isMouseDown = false;
+  this.__modelMoveStarted = false;
+  let notHandled = true;
   if (!this.enabled) return notHandled;
   if (this.selected) {
     if (this.putOnObject) {
-      this.newParent = this.newParent ? this.newParent : this.oldParent;
+      this.__markActiveSupport(this.__oldParent, false);
+      this.__markActiveSupport(this.__newParent, false);
+      this.__newParent = this.__newParent ? this.__newParent : this.__oldParent;
       if (this.attachToParent) {
-        Object3DUtil.attachToParent(this.selected, this.newParent, this.scene);
+        Object3DUtil.attachToParent(this.selected, this.__newParent, this.scene);
       }
       this.selected.visible = true;
       if (this.sceneUpdatedCallback) {
         this.sceneUpdatedCallback();
       }
     }
-    if (this.shouldPush) {
-      this.shouldPush = false;
-      if (this.insertMode) {
+    if (this.__shouldPush) {
+      this.__shouldPush = false;
+      if (this.__insertMode) {
         // What to log in the ui about this model
         this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.INSERT, { object: this.selected });
         if (this.uilog) {
-          var objInfo = ModelInstance.getUILogInfo(this.selected, true);
-          this.uilog.log(UILog.EVENT.MODEL_INSERT, event, objInfo);
+          // const objInfo = ModelInstance.getUILogInfo(this.selected, true);
+          const interactionType = this.__insertInteraction.type;
+          delete this.__insertInteraction.type;
+
+          this.uilog.log(interactionType, event, this.__insertInteraction);
         }
       } else {
         // What to log in the ui about this model
         this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.MOVE, { object: this.selected });
         if (this.uilog) {
-          var objInfo = ModelInstance.getUILogInfo(this.selected);
-          this.uilog.log(UILog.EVENT.MODEL_MOVE, event, objInfo);
+          // const objInfo = ModelInstance.getUILogInfo(this.selected, true);
+          // objInfo["startTime"] = modelMoveStartTime;
+          // this.uilog.log(UILog.EVENT.MODEL_MOVE, event, objInfo);
+          // this.uilog.log(UILog.EVENT.MODEL_MOVE_END, event, objInfo);
+          if (this.__moveInteraction) {
+            const interactionType = this.__moveInteraction.type;
+            delete this.__moveInteraction.type;
+            this.uilog.log(interactionType, event, this.__moveInteraction);
+            this.__moveInteraction = null;
+          }
         }
       }
     }
     notHandled = false;
   }
-  if (this.controls) this.controls.enabled = true;
+  if (this.controls) {
+    this.controls.enabled = this.__controlsEnabled;
+  }
   this.selected = null;
+  this.selectedObjectAttachment = null;
   this.container.style.cursor = this.defaultCursor;
-  this.shouldPush = false;
-  this.insertMode = false;
+  this.__shouldPush = false;
+  this.__insertMode = false;
   this.removeVisualizer();
+  this.__moveInteraction = null;
   return notHandled;
 };
 
-DragDrop.prototype.getSupportParent = function(intersects) {
-  var res = Object3DUtil.findFirstAncestor(intersects.descendant, function(node) {
-    return node.userData.isArticulatedNode || node === intersects.object;
-  });
-  return res.ancestor || intersects.object;
-};
-
-DragDrop.prototype.moveSelected = function (x, y) {
-  if (!this.yTranslateOn) {
-    if (this.putOnObject) {
-      //var pickables = (this.scene.pickables)? this.scene.pickables: this.scene.children;
-      var selectables = (this.scene.selectables) ? this.scene.selectables : this.scene.children;
-      var supportObjects = (this.scene.supportObjects) ? this.scene.supportObjects : selectables;
-      var ignored = [this.plane, this.selected];
-
-      // TODO: Should we just check if the object intersects???
-      // Figure out which other object the cursor intersects
-      //var screenOffset = new THREE.Vector2(0,0);
-      if (this.userIsInserting) {
-        var initialIntersected = this.picker.getIntersected(x, y, this.camera, supportObjects, ignored);
-        if (initialIntersected.length > 0) {
-          this.userIsInserting = false;
-          this.selected.visible = true;
-          var mouse3DLoc = initialIntersected[0].point;
-          // Make sure that attachment point set correctly
-          this.updateAttachmentIndex(this.selected, this.placementInfo.attachmentIndex, this.placementInfo.childWorldBBFaceIndex);
-          if (this.placementInfo.attachmentIndex >= 6) {
-            Object3DUtil.placeObject3DByOrigin(this.selected, mouse3DLoc);
-          } else {
-            Object3DUtil.placeObject3DByBBFaceCenter(this.selected, mouse3DLoc, this.placementInfo.attachmentIndex, this.placementInfo.childWorldBBFaceIndex);
-          }
-          this.detachSelectedFromParent();
-          this.setAllOffsets();
-        } else {
-          // Skip whatever is happening...
-          return;
-        }
-      }
-
-      var screenOffset = this.placementInfo.attachmentOffsetsScreen[this.placementInfo.attachmentIndex];
-      var intersects = this.picker.getIntersected(x + screenOffset.x, y + screenOffset.y,
-        this.camera, supportObjects, ignored);
-
-      var targetPoint;
-      if (intersects.length > 0) {//no intersect for movement after redo
-        // Figure out the supporting plane of that object
-        var ok = this.identifyAttachmentIndex(intersects);
-        if (ok) {
-          // Figure out where new position should be...
-          targetPoint = intersects[0].point.clone();
-          if (this.useModelBase) {
-            // Using model base - object is recentered to 0,0,0 at attachment point so we don't need the offset
-          } else {
-            // Not using model base, object origin remains the same, need to add offset to compensate
-            var selectedPointToAttachmentOffset = this.placementInfo.attachmentOffsets[this.placementInfo.attachmentIndex];
-            targetPoint.add(selectedPointToAttachmentOffset);
-          }
-          // Switch parent...
-          this.newParent = this.getSupportParent(intersects[0]);
-        }
-      } else if (this.allowFloating) {
-        // TODO: Have the plane be in the same orientation as the lastBBFaceIndex
-        var raycaster = this.picker.getRaycaster(x, y, this.camera);
-        var intersects = raycaster.intersectObject(this.plane);
-        if (intersects.length > 0) {
-          // Figure out where new position should be...
-          targetPoint = intersects[0].point.add(this.placementInfo.offset);
-        }
-        this.newParent = null;
-      }
-      if (targetPoint) {
-        var parent = this.selected.parent;
-        if (parent) {
-          parent.worldToLocal(targetPoint);
-        }
-        this.selected.position.copy(targetPoint);
-        this.selected.updateMatrix();
-        Object3DUtil.clearCache(this.selected);
-      }
-    } else {
-      // Maybe just move along the plane...
-      var raycaster = this.picker.getRaycaster(x, y, this.camera);
-      var intersects = raycaster.intersectObject(this.plane);
-      if (intersects.length > 0) {
-        // Figure out where new position should be...
-        var targetPoint = intersects[0].point.add(this.placementInfo.offset);
-        var parent = this.selected.parent;
-        if (parent) {
-          parent.worldToLocal(targetPoint);
-        }
-        this.selected.position.copy(targetPoint);
-        this.selected.updateMatrix();
-        Object3DUtil.clearCache(this.selected);
-      }
-    }
-    this.updateVisualizer();
-  } else {
-    var planeMesh = this.__ytranslatePlane;
-    if (!planeMesh) {
-      var projectionPlane = new THREE.PlaneBufferGeometry(10000, 10000, 8, 8);
-      var material = new THREE.MeshBasicMaterial({side: THREE.DoubleSide, visible: false});
-      this.__ytranslatePlane = new THREE.Mesh(projectionPlane, material);
-      this.__ytranslatePlane.name = 'YTranslatePlane';
-      this.ignore.push(this.__ytranslatePlane);
-      this.scene.add(this.__ytranslatePlane);
-      planeMesh = this.__ytranslatePlane;
-    }
-
-    var lookat = this.camera.position.clone();
-    lookat.y = 0;
-    planeMesh.lookAt(lookat);
-    if (this.placementInfo.attachmentIndex) {
-      planeMesh.position.copy(this.__getCurrentAttachmentPosition(this.placementInfo.attachmentIndex));
-    } else {
-      planeMesh.position.copy(this.selected.position);
-    }
-    planeMesh.updateMatrix();
-
-    var raycaster = this.picker.getRaycaster(this.mouse.x, this.mouse.y, this.camera);
-    var intersects = raycaster.intersectObject(planeMesh);
-    if (intersects.length > 0) {
-      var point = intersects[0].point;
-
-      Object3DUtil.detachFromParent(this.selected, this.scene);
-      this.selected.position.y = point.y;
-      this.selected.updateMatrix();
-      Object3DUtil.clearCache(this.selected);
-
-      this.updateVisualizer();
-    } else {
-      //console.log('no plane intersected')
-    }
+DragDrop.prototype.getSupportParent = function(object3D) {
+  if (object3D) {
+    const res = Object3DUtil.findFirstAncestor(object3D, function (node) {
+      return node.userData.isSupportObject;
+    });
+    return res.ancestor || object3D;
   }
 };
 
-DragDrop.prototype.__getCurrentAttachmentPosition = function(attachmentIndex) {
-  return Object3DUtil.getBBoxFaceCenter(this.selected, attachmentIndex);
+DragDrop.prototype.__isObjectType = function(obj3D, validTypes) {
+  for (let validType of validTypes) {
+    if (obj3D.userData.type === validType) {
+      return true;
+    }
+    const modelInstance = Object3DUtil.getModelInstance(obj3D, true);
+    if (modelInstance && modelInstance.model.hasCategory(validType)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+DragDrop.prototype.getSupportObjects = function() {
+  const selectables = (this.scene.selectables) ? this.scene.selectables : this.scene.children;
+  let supportObjects = (this.scene.supportObjects) ? this.scene.supportObjects : selectables;
+  if (this.restrictSupportToArch) {
+    // Filter out non room support objects
+    supportObjects = supportObjects.filter(obj3D => obj3D.userData.isArch);
+  }
+  if (this.allowedSupportObjectTypes) {
+    // Filter out support objects by type
+    supportObjects = supportObjects.filter(obj3D => this.__isObjectType(obj3D, this.allowedSupportObjectTypes));
+  }
+  return supportObjects;
+};
+
+DragDrop.prototype.__getRaycaster = function(x, y, camera) {
+  if (!this.__raycaster) {
+    this.__raycaster = new THREE.Raycaster();
+  }
+  this.__raycaster.setFromCamera({ x: x, y: y}, camera);
+  return this.__raycaster;
+};
+
+DragDrop.prototype.__positionObjectAtPoint = function(object, position) {
+  const parent = object.parent;
+  if (parent) {
+    parent.worldToLocal(position);
+  }
+  object.position.copy(position);
+  object.updateMatrix();
+  Object3DUtil.clearCache(object);
+};
+
+DragDrop.prototype.__moveObjectInPlane = (function() {
+  const intersectPoint = new THREE.Vector3();
+  return function(object, x, y, plane, finalOffset) {
+    const raycaster = this.__getRaycaster(x, y, this.camera);
+    // Find intersection
+    if (plane instanceof THREE.Plane) {
+      // Infinite plane
+      raycaster.ray.intersectPlane(plane, intersectPoint);
+    } else if (plane instanceof THREE.Object3D) {
+      // Finite plane (as mesh)
+      const intersects = raycaster.intersectObject(plane);
+      if (intersects.length) {
+        intersectPoint.copy(intersects[0].point);
+      }
+    } else {
+      console.warn('Unsupported plane type', plane);
+    }
+    if (intersectPoint) { // Move the object
+      if (finalOffset) {
+        intersectPoint.add(finalOffset);
+      }
+      this.__positionObjectAtPoint(object, intersectPoint);
+    }
+  };
+})();
+
+DragDrop.prototype.__moveSelectedUpDown = (function() {
+  const targetPoint = new THREE.Vector3();
+  return function (x, y) {
+    const object = this.selected;
+    object.getWorldPosition(targetPoint);
+
+    const raycaster = this.__getRaycaster(x, y, this.camera);
+    const intersects = raycaster.intersectObject(this.plane);
+    if (intersects.length) {
+      // assume y-up
+      targetPoint.y = intersects[0].point.y;
+      this.__positionObjectAtPoint(object, targetPoint);
+    }
+  };
+})();
+
+DragDrop.prototype.__moveSelectedOnPickingPlane = function (x, y) {
+  // Maybe just move along the picking plane...
+  this.__moveObjectInPlane(this.selected, x, y, this.plane, this.placementInfo.offset);
+};
+
+DragDrop.prototype.__handleInsertion = function(x,y, supportObjects, ignored) {
+  const initialIntersected = this.picker.getIntersected(x, y, this.camera, supportObjects, ignored);
+  if (initialIntersected.length > 0) {
+    this.__userIsInserting = false;
+    this.selected.visible = true;
+    const mouse3DLoc = initialIntersected[0].point;
+    // Make sure that attachment point set correctly
+    this.__updateAttachmentIndex(this.selectedObjectAttachment, this.placementInfo.attachmentIndex, this.placementInfo.childWorldBBFaceIndex);
+    if (this.placementInfo.attachmentIndex >= 0 && this.placementInfo.attachmentIndex < 6) {
+      Object3DUtil.placeObject3DByBBFaceCenter(this.selected, mouse3DLoc, this.placementInfo.attachmentIndex, this.placementInfo.childWorldBBFaceIndex);
+    } else {
+      Object3DUtil.placeObject3DByOrigin(this.selected, mouse3DLoc);
+    }
+    this.detachSelectedFromParent();
+    this.__setAllOffsets();
+    return initialIntersected[0];
+  }
+};
+
+DragDrop.prototype.__markActiveSupport = function(parent, flag) {
+  if (parent) {
+    parent.isActiveSupport = flag;
+  }
+};
+
+DragDrop.prototype.__moveSelectedOnSupportObjects = function (x, y) {
+  //const pickables = (this.scene.pickables)? this.scene.pickables: this.scene.children;
+  const supportObjects = this.getSupportObjects();
+  // supportObjects = [this.selected.parent];
+  // console.log({"Support objects": supportObjects});
+  const ignored = [this.plane, this.selected];
+
+  // TODO: Should we just check if the object intersects???
+  // Figure out which other object the cursor intersects
+  //const screenOffset = new THREE.Vector2(0,0);
+  if (this.__userIsInserting) {
+    const initialIntersected = this.__handleInsertion(x, y, supportObjects, ignored);
+    if (!initialIntersected) {
+      // Skip whatever else is happening...
+      return;
+    }
+  }
+
+  const screenOffset = this.placementInfo.attachmentOffsetsScreen[this.placementInfo.attachmentIndex] || { x: 0, y: 0 };
+  let intersects = this.picker.getIntersected(x + screenOffset.x, y + screenOffset.y,
+    this.camera, supportObjects, ignored);
+  // Make sure that the selected and intersects are truly distinct (should be handled by ignored)
+  // intersects = intersects.filter(x => !Object3DUtil.isDescendantOf(x.object, this.selected, true));
+
+  // unmark new parent as being active support
+  this.__markActiveSupport(this.__oldParent, false);
+  this.__markActiveSupport(this.__newParent, false);
+
+  let targetPoint;
+  if (intersects.length > 0) { //no intersect for movement after redo
+    // Figure out the supporting plane of that object
+    const ok = this.__identifyAttachmentIndex(intersects);
+    if (ok) {
+      // Figure out where new position should be...
+      targetPoint = intersects[0].point.clone();
+      if (this.useModelBase) {
+        // Using model base - object is recentered to 0,0,0 at attachment point so we don't need the offset
+      } else {
+        // Not using model base, object origin remains the same, need to add offset to compensate
+        const selectedPointToAttachmentOffset = this.placementInfo.attachmentOffsets[this.placementInfo.attachmentIndex];
+        targetPoint.add(selectedPointToAttachmentOffset);
+      }
+      // Switch parent...
+      this.__newParent = intersects[0].object;
+    }
+  } else if (this.allowFloating) {
+    // TODO: Have the plane be in the same orientation as the lastBBFaceIndex
+    const raycaster = this.picker.getRaycaster(x, y, this.camera);
+    intersects = raycaster.intersectObject(this.plane);
+    if (intersects.length > 0) {
+      // Figure out where new position should be...
+      targetPoint = intersects[0].point.add(this.placementInfo.offset);
+    }
+    this.__newParent = null;
+  }
+  if (targetPoint) {
+    this.__positionObjectAtPoint(this.selected, targetPoint);
+  }
+  // mark new parent as being active support
+  this.__markActiveSupport(this.__newParent, true);
+};
+
+DragDrop.prototype.__moveSelectedOnAttachmentPlane = function(x,y) {
+  if (this.__userIsInserting) {
+    const supportObjects = this.getSupportObjects();
+    const ignored = [this.plane, this.selected];
+    const initialIntersected = this.__handleInsertion(x, y, supportObjects, ignored);
+    if (!initialIntersected) {
+      // Skip whatever else is happening...
+      return;
+    }
+  }
+
+  // TODO: Check this logic
+  // Create attachment plane
+  const attachmentPlane = new THREE.Plane();
+  attachmentPlane.setFromNormalAndCoplanarPoint(this.selected.userData.attachmentWorldOut, this.selected.userData.attachmentWorldPos);
+
+  // Project cursor location point to attachment plane
+  const screenOffset = this.placementInfo.attachmentOffsetsScreen[this.placementInfo.attachmentIndex];
+  this.__moveObjectInPlane(this.selected, x + screenOffset.x, y + screenOffset.y, attachmentPlane, null);
+};
+
+DragDrop.prototype.__moveSelected = function (x, y) {
+  // console.log("Move Selected " + x + " " + y);
+  if (this.movementMode === DragDrop.Movement.MOVE_ON_PICKING_PLANE) {
+    this.__moveSelectedOnPickingPlane(x, y);
+  } else if (this.movementMode === DragDrop.Movement.MOVE_UP_DOWN) {
+    this.__moveSelectedUpDown(x, y);
+  } else if (this.movementMode === DragDrop.Movement.MOVE_ON_SUPPORT_OBJECTS) {
+    this.__moveSelectedOnSupportObjects(x, y);
+  } else if (this.movementMode === DragDrop.Movement.MOVE_ON_ATTACHMENT_PLANE) {
+    this.__moveSelectedOnAttachmentPlane(x, y);
+  } else {
+    console.log('Unsupported placementMode', this.movementMode);
+  }
+  this.updateVisualizer();
 };
 
 DragDrop.prototype.cancelInsertion = function () {
-  if (this.insertMode) {
-    var cancelledObject = this.selected;
-    this.shouldPush = false;
+  if (this.__insertMode) {
+    const cancelledObject = this.selected;
+    this.__shouldPush = false;
     this.onMouseUp();
+    
+    if (this.uilog) {
+      // const objInfo = ModelInstance.getUILogInfo(this.selected, true);
+      delete this.__insertInteraction.type;
+      this.uilog.log(UILog.EVENT.MODEL_INSERT_CANCELLED, null, this.__insertInteraction);
+    }
+    
     return cancelledObject;
   }
 };
 
 DragDrop.prototype.detachSelectedFromParent = function () {
-  this.newParent = null;
-  this.oldParent = this.selected.parent;
+  this.__markActiveSupport(this.__newParent, false);
+  this.__markActiveSupport(this.__oldParent, false);
+  this.__newParent = null;
+  this.__oldParent = this.selected.parent;
   Object3DUtil.detachFromParent(this.selected, this.scene);
 };
 
-DragDrop.prototype.setAllOffsets = function () {
-  var origPos = new THREE.Vector3();
+DragDrop.prototype.__setAllOffsets = function () {
+  const origPos = new THREE.Vector3();
   this.selected.localToWorld(origPos);
   // Original position (0,0,0) of the object in world coordinate
   this.placementInfo.origPosition = origPos;
   // Position of the original selected point of the object
   this.placementInfo.origSelectedPoint = this.selectedPoint;
-  var attachments = this.identifyAttachmentsForPlacement(this.selected);
+  const attachments = this.__identifyAttachmentsForPlacement(this.selectedObjectAttachment);
   // offset in world space from the (0,0,0) of the object to the different attachment points
   // this allows the position operation to work
   this.placementInfo.attachmentOffsets = attachments.map(function (att) {
-    var p = att.world.pos;
-    var selectedPointToAttachmentOffset = origPos.clone().sub(p);
+    const p = att.world.pos;
+    const selectedPointToAttachmentOffset = origPos.clone().sub(p);
     return selectedPointToAttachmentOffset;
   });
   // Get attachment offsets projects onto the screen from the clicked point
-  var camera = this.camera;
-  var x = this.mouse.x;
-  var y = this.mouse.y;
+  const camera = this.camera;
+  const x = this.mouse.x;
+  const y = this.mouse.y;
   this.placementInfo.attachmentOffsetsScreen = attachments.map(function (att) {
-    var p = att.world.pos;
-    var v = p.clone().project(camera);
-    var clickedToAttachmentOffset = new THREE.Vector2(v.x - x, v.y - y);
+    const p = att.world.pos;
+    const v = p.clone().project(camera);
+    const clickedToAttachmentOffset = new THREE.Vector2(v.x - x, v.y - y);
     return clickedToAttachmentOffset;
   });
 };
@@ -672,8 +895,8 @@ DragDrop.prototype.setAllOffsets = function () {
 DragDrop.prototype.createVisualizer = function () {
   if (this.selected && !this.visualizer) {
     // Create the bbox helper and use as the visualizer
-    this.visualizer = new AttachmentBasedBoundingBoxHelper(this.selected, this.placementInfo.childWorldBBFaceIndex, new THREE.Color('green'));
-    this.visualizer.scaleFactor = 1.05;
+    this.visualizer = new AttachmentBasedBoundingBoxHelper(this.selected, this.placementInfo.childWorldBBFaceIndex,
+      { color: 'green', scaleFactor: 1.05, showBBox: false });
     this.visualizer.update();
     this.scene.add(this.visualizer);
   }

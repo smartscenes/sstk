@@ -111,13 +111,14 @@ Picker.prototype.getIntersected = function (x, y, camera, objects, ignore, n, ra
  * @param objects {THREE.Object3D[]} Array of objects to intersect against
  * @param [ignore] {THREE.Object3D[]} Array of objects to ignore
  * @param [n] {int} Number of intersected objects to return
+ * @param [allowAllModelInstances] {boolean} Whether any model instance is allowed as intersected object
  * @returns {Intersect[]|*}
  */
-Picker.prototype.getIntersectedForRay = function (raycaster, objects, ignore, n) {
+Picker.prototype.getIntersectedForRay = function (raycaster, objects, ignore, n, allowAllModelInstances) {
   var intersected = raycaster.intersectObjects(objects, true);
   intersected = RaycasterUtil.filterClipped(intersected, this.__renderer);
   RaycasterUtil.sortIntersectionsByNormal(raycaster.ray, intersected);
-  return this.selectIntersectedObjects(intersected, objects, ignore, n);
+  return this.selectIntersectedObjects(intersected, objects, ignore, n, allowAllModelInstances);
 };
 
 Picker.prototype.selectIntersectedObjects = RaycasterUtil.selectIntersectedObjects;

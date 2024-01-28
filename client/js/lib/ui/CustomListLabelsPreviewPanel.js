@@ -26,23 +26,34 @@ class CustomListLabelsPreviewPanel extends LabelsPreviewPanel {
     const clearButton = $('#selectedClear');
     clearButton.click(() => this.clearList());
 
-    const saveButton = $('#selectedSave');
-    saveButton.click(() => this.saveLabelToIds());
+    const saveGroupedButton = $('#selectedSaveLabelToIds');
+    saveGroupedButton.click(() => this.saveLabelToIds());
+
+    const saveLabeledButton = $('#selectedSaveLabeled');
+    saveLabeledButton.click(() => this.saveLabeled());
 
     const saveIdsButton = $('#selectedSaveIds');
     saveIdsButton.click(() => this.saveIds());
 
-    const selectedLoad = UIUtil.createFileInput({
-      id: 'selectLoad',
-      label: 'Load',
-      style: 'existing',
-      hideFilename: true,
-      labelButton: $('#selectedLoad'),
-      loadFn: (file) => {
-          this.loadLabelToIds(file);
-      }
-    });
-    $('#selectedControls').append(selectedLoad.group);
+    this.__addLoadButton('selectedLoadLabelToIds', 'Load label to ids',
+      (file) => { this.loadLabelToIds(file); });
+    this.__addLoadButton('selectedLoadLabeled', 'Load labeled',
+      (file) => { this.loadLabeled(file); });
+  }
+
+  __addLoadButton(buttonId, label, callback) {
+    const button = $('#' + buttonId);
+    if (button.size()) {
+      const selectedLoad = UIUtil.createFileInput({
+        id: buttonId,
+        label: label,
+        style: 'existing',
+        hideFilename: true,
+        labelButton: button,
+        loadFn: callback
+      });
+      $('#selectedControls').append(selectedLoad.group);
+    }
   }
 
   // Add checked assets to selected list
@@ -118,7 +129,7 @@ class CustomListLabelsPreviewPanel extends LabelsPreviewPanel {
           UIUtil.showAlert('Error loading file');
         } else {
           console.log(data);
-          var assetIdToLabels = {};
+          const assetIdToLabels = {};
           for (let cat in data) {
             // console.log(cat);
             if (data.hasOwnProperty(cat)) {
@@ -134,6 +145,33 @@ class CustomListLabelsPreviewPanel extends LabelsPreviewPanel {
                 }
               }
             }
+          }
+          this.assetIdToLabelMods = _.mapValues(assetIdToLabels, labels => {
+            const res = {};
+            for (let label of labels) {
+              res[label] = {};
+            }
+            return res;
+          });
+          this.onLoaded(assetIdToLabels);
+        }
+      }.bind(this)
+    );
+  }
+
+  loadLabeled(tsvFile) {
+    console.log('loading labeled from ' + tsvFile);
+    FileUtil.loadDelimited(tsvFile, { header: false },
+      function (error, res) {
+        if (error) {
+          UIUtil.showAlert('Error loading file');
+        } else {
+          const data = res.data;
+          console.log(data);
+          const assetIdToLabels = {};
+          for (let entry of data) {
+            entry = { id: entry[0], labels: entry[1].split(',')};
+            assetIdToLabels[entry.id] = entry.labels;
           }
           this.assetIdToLabelMods = _.mapValues(assetIdToLabels, labels => {
             const res = {};

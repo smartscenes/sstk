@@ -41,6 +41,7 @@ var _ = require('util/util');
  * @property info {model.ModelInfo} The metadata associated with this model.
  */
 function Model(object3D, info) {
+  this.type = 'Model';
   this.init(object3D, info);
 }
 
@@ -48,8 +49,8 @@ Model.prototype.init = function (object3D, info) {
   this.__origObject3D = object3D;              // Original input model
   this.object3D = new THREE.Object3D();       // Physically scaled model
   this.object3D.add(this.__origObject3D);
-  this.object3D.userData.type = 'Model';
   this.object3D.userData = this.__origObject3D.userData;
+  this.object3D.userData.type = 'Model';
   this.nodeType = this.__origObject3D.type;
 
   if (!info) info = {};
@@ -118,6 +119,14 @@ Model.prototype.getAlignmentMatrix = function () {
     }
   }
   return matrix;
+};
+
+Model.prototype.getFrameInfo = function() {
+  return {
+    up: this.getUp(),
+    front: this.getFront(),
+    unit: this.getUnit(),
+  };
 };
 
 Model.prototype.applyMaterials = function () {

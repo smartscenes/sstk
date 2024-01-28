@@ -14,7 +14,7 @@ class PartConnectivityGraph {
     }
 
     isConnected(pid1, pid2) {
-        return this.getConnectedPartIds(pid1).has(pid2);
+        return this.connections[pid1] && this.connections[pid1].has(pid2);
     }
 
     remove(pid1, pid2, bidir=false) {
@@ -118,8 +118,37 @@ class PartConnectivityGraph {
         return new PartConnectivityGraph(this.connectivityAsArray(), parts, this.metadata);
     }
 
+    extractConnectivity(indices) {
+        const remapped = {};
+        indices.forEach((pid,i) => {
+            remapped[pid] = i;
+        });
+        const indicesSet = new Set(indices);
+        const copiedParts = indices.map((pid, i) => {
+            const p = this.parts[pid];
+            const cp = p? p.clone() : null;
+            if (cp) {
+                cp.object3D.userData.scenePid = cp.pid;
+                cp.pid = i;
+                cp.object3D.userData.pid = cp.pid;
+            }
+            return cp;
+        });
+        const extractedConnectivity = indices.map((pi) => {
+           const connected = this.getConnectedPartIds(pi)
+           const array = connected.filter(i => indicesSet.has(i));
+           return array.map(i => remapped[i]);
+        });
+        return { connectivity: new PartConnectivityGraph(extractedConnectivity, copiedParts, this.metadata), remapped: remapped }
+    }
+
     connectivityAsArray() {
         return this.connections.map(p => [...p]);
+    }
+
+    setConnectivityFromArray(connectivityArray) {
+        // TODO: check validity of connectivity array?
+        this.connections = connectivityArray.map(c => new Set(c));
     }
 
     withPartObject3Ds(idToObjs, clone) {
@@ -139,7 +168,12 @@ class PartConnectivityGraph {
 
     fromPartHierarchy(partHierarchy) {
         const nodes = partHierarchy.getNodes();
-        this.parts = nodes;
+        const parts = [];
+        // Assume that part pid is integer and can be indexed this way
+        for (let node of nodes) {
+            parts[node.pid] = node;
+        }
+        this.parts = parts;
         this.connections = [];
         nodes.forEach(n => {
             if (n.parent) {
@@ -173,7 +207,6 @@ class PartConnectivityGraph {
         if (this.metadata.modelId == null) {
             this.metadata.modelId = json.modelId || json.id;
         }
-
     }
 
     toJson() {

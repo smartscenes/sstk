@@ -1,5 +1,5 @@
-var Renderer = require('gfx/Renderer');
-var _ = require('util/util');
+const Renderer = require('gfx/Renderer');
+const _ = require('util/util');
 
 /**
  * Factor for creating more renderers
@@ -23,7 +23,7 @@ function RendererFactory(opts) {
 
 RendererFactory.prototype.getRenderer = function(name, opts) {
   if (!this.__cachedRenderers[name]) {
-    var rendererOpts = opts;
+    let rendererOpts = opts;
     if (opts.configSet && this.__rendererConfigs[opts.configSet]) {
       rendererOpts = _.defaults(Object.create(null), opts || {}, this.__rendererConfigs[opts.configSet]);
       if (rendererOpts.cameraArrayShape && !opts.width && !opts.height) {
@@ -50,6 +50,14 @@ RendererFactory.createOffscreenRenderer = function(opts) {
     reuseBuffers: true
   });
   return RendererFactory.createRenderer(opts);
+};
+
+RendererFactory.prototype.getOffscreenRenderer = function(name, opts) {
+  if (!this.__cachedRenderers[name]) {
+    console.log('Creating new renderer ' + name, opts);
+    this.__cachedRenderers[name] = RendererFactory.createRenderer(opts);
+  }
+  return this.__cachedRenderers[name];
 };
 
 module.exports = RendererFactory;

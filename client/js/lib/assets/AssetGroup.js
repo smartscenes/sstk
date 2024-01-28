@@ -134,6 +134,9 @@ function __getVariants(d, variants, interpolateOptions, vars, varyingKey) {
     var variant = crossProd[i];
     variant = _.cloneDeepWithReplaceVars(_.defaults(variant, defaults), variant, { optionalPrefix: interpolateOptions.variable });
     //variant = _.interpolate(_.defaults(variant, defaults), variant, interpolateOptions);
+    if (Array.isArray(variant.name)) {
+      variant.name = variant.name[i];
+    }
     variant.variantOf = d.name;
     variants.push(variant);
   }
@@ -181,7 +184,9 @@ AssetGroup.prototype.__normalizeData = function() {
   _.each(this.dataTypes, function(dataTypeInfo, dataType) {
     var noVariants = _.filter(dataTypeInfo.data, function(d) { return !d.variants; });
     var hasVariants = _.filter(dataTypeInfo.data, function(d) { return d.variants; });
+    // isInstanceDependent: number of variants depends on the specific asset (delay interpolation)
     var hasVariantsDependent = _.filter(hasVariants, function(d) { return d.variants.isInstanceDependent; });
+    // not instance dependent: can interpolate now
     var hasVariantsNotDependent = _.filter(hasVariants, function(d) { return !d.variants.isInstanceDependent; });
     var variants = __getAllVariants(hasVariantsNotDependent, interpolateOptions, {}, 'varying');
     dataTypeInfo.data = noVariants.concat(variants).concat(hasVariantsDependent);
@@ -210,7 +215,11 @@ AssetGroup.prototype.getDataTypes = function() {
 AssetGroup.prototype.__createInterpolated = function(params, vars, interpolateOptions) {
   var ignoreFields = ['assetInfoType', 'assetFields', 'data', 'dataByName', 'dataTypes'];
   var interpolated = _.pickBy(params, function(v,name) { return (ignoreFields.indexOf(name) < 0 && !name.startsWith('__')) && (_.isString(v) || _.isPlainObject(v)); });
-  interpolated = _.interpolate(interpolated, vars, interpolateOptions);
+  if (this.usesDeprecated) {
+    interpolated = _.cloneDeepWithReplaceVars(interpolated, vars, interpolateOptions);
+  } else {
+    interpolated = _.interpolate(interpolated, vars, interpolateOptions);
+  }
   _.extend(interpolated, vars);
   return interpolated;
 };
@@ -359,7 +368,6 @@ AssetGroup.prototype.getLoadInfo = function (id, dataName, metadata) {
 
     // TODO: refactor other code (Segments/Voxels to use more orderly data structure)
     loadInfo.dataInfo = loadDataInfo;
-    //console.log('loadInfo', loadInfo);
     return loadInfo;
   }
 };
@@ -506,6 +514,9 @@ AssetGroup.prototype.getAssetInfo = function(assetId) {
     if (!assetInfo) {
       return;
     }
+    var assetFields = this.__getAssetFields(assetInfo.id, assetInfo);
+    // merge in asset fields
+    _.defaults(assetInfo, assetFields);
     if (this.sounds && !assetInfo.sounds) {
       assetInfo.sounds = this.sounds.getModelSounds(assetInfo);
     }

@@ -1,4 +1,4 @@
-var _ = require('util/util');
+const _ = require('util/util');
 
 /**
  * Responsible for querying a Solr index
@@ -10,10 +10,10 @@ var _ = require('util/util');
  * @memberOf search
  */
 function SolrQuerier(opts) {
-  var url = opts.url;
+  let url = opts.url;
   if (url) {
     if (url.endsWith('/select') || url.endsWith('/fields')) {
-      var i = url.lastIndexOf('/');
+      const i = url.lastIndexOf('/');
       url = url.substring(0, i);
     }
     this.schemaUrl = url + '/fields';
@@ -23,18 +23,20 @@ function SolrQuerier(opts) {
   this.limit = opts.limit || 100;
 }
 
+SolrQuerier.MAX_BOOLEAN_CLAUSES = 512;
+
 SolrQuerier.prototype.escapeValue = function(str) {
-  var pattern = /([\!\*\+\-\=<>\&\|\(\)\[\]\{\}\^\~\?\:\\/" ])/g;
+  const pattern = /([\!\*\+\-\=<>\&\|\(\)\[\]\{\}\^\~\?\:\\/" ])/g;
   return str.replace(pattern, "\\$1");
 };
 
 SolrQuerier.prototype.quoteValue = function(str) {
-  var pattern = /(["])/g;
+  const pattern = /(["])/g;
   return '"' + str.replace(pattern, "\\$1") + '"';
 };
 
 SolrQuerier.prototype.getRandomSortOrder = function (rng) {
-  var seed = Math.floor((rng.random() * 1000000000) + 1);
+  const seed = Math.floor((rng.random() * 1000000000) + 1);
   return 'random_' + seed + ' desc';
 };
 
@@ -55,13 +57,16 @@ SolrQuerier.prototype.getQuery = function (field, values, escape) {
   }
   if (values instanceof Array) {
     if (values.length) {
-      var escaped = escape? _.map(values, function(x) { return escape(x); }) : values;
+      if (values.length > SolrQuerier.MAX_BOOLEAN_CLAUSES) {
+        console.warn('Long query, consider breaking it into several pieces');
+      }
+      const escaped = escape? _.map(values, function(x) { return escape(x); }) : values;
       return field + ':(' + escaped.join(' OR ') + ')';
     } else {
       return '';
     }
   } else {
-    var escaped = escape? escape(values) : values;
+    const escaped = escape? escape(values) : values;
     return field + ':' + escaped;
   }
 };
@@ -73,27 +78,27 @@ SolrQuerier.prototype.getQuery = function (field, values, escape) {
  * @returns {string}
  */
 SolrQuerier.prototype.getCompoundQuery = function (conj, terms) {
-  var scope = this;
-  var rest = Array.prototype.slice.call(arguments, 1);
-  var parts = _.map(rest, function(x) { return scope.getQuery(x.field, x.value, x.escape); });
+  const scope = this;
+  const rest = Array.prototype.slice.call(arguments, 1);
+  let parts = _.map(rest, function(x) { return scope.getQuery(x.field, x.value, x.escape); });
   parts = _.filter(parts, function(x) { return x.length; });
   return parts.join(' ' + conj + ' ');
 };
 
 SolrQuerier.prototype.getQueryUrl = function (params) {
   // Get base solr query URL
-  var solrUrl = params.url || this.searchUrl;
-  var queryData = this.__toQueryData(params);
+  const solrUrl = params.url || this.searchUrl;
+  const queryData = this.__toQueryData(params);
   // Construct query params string from query data
-  var queryParams = _.param(queryData);
+  const queryParams = _.param(queryData);
   // Return full query URL
   return solrUrl + '?' + queryParams;
 };
 
 SolrQuerier.prototype.getQueryOpts = function (params) {
   // Get base solr query URL
-  var solrUrl = params.url || this.searchUrl;
-  var queryData = this.__toQueryData(params);
+  const solrUrl = params.url || this.searchUrl;
+  const queryData = this.__toQueryData(params);
   return queryData;
 };
 
@@ -111,22 +116,22 @@ SolrQuerier.prototype.getQueryOpts = function (params) {
  * @param callback
  */
 SolrQuerier.prototype.query = function (params, callback) {
-  var solrUrl = params.url || this.searchUrl;
-  var queryData = this.__toQueryData(params);
-  return this.__query(solrUrl, queryData, _.getCallback(params, callback));
+  const solrUrl = params.url || this.searchUrl;
+  const queryData = this.__toQueryData(params);
+  return this.__query(solrUrl, queryData, _.getCallback(params, callback), params.solrQueryProxy);
 };
 
 SolrQuerier.prototype.__toQueryData = function(params) {
-  var solrQuery = params.query || '*:*';
+  const solrQuery = params.query || '*:*';
 
-  var start = params.start || 0;
-  var limit = params.limit || this.limit;
-  var fields = params.fields;
-  var format = params.format || 'json';
-  var filter = params.filter;
+  const start = params.start || 0;
+  const limit = params.limit || this.limit;
+  const fields = params.fields;
+  const format = params.format || 'json';
+  const filter = params.filter;
 
 // Setup queryData
-  var queryData = {
+  const queryData = {
     'q': solrQuery,
     'wt': format,
     'start': start,
@@ -141,9 +146,9 @@ SolrQuerier.prototype.__toQueryData = function(params) {
   }
   // NOTE: Add additional fields here
   // Filter down list of things that solr support
-  var otherValidFields = ['sort', 'group', 'group.query', 'group.limit'];
-  for (var i = 0; i < otherValidFields.length; i++) {
-    var f = otherValidFields[i];
+  const otherValidFields = ['sort', 'group', 'group.query', 'group.limit'];
+  for (let i = 0; i < otherValidFields.length; i++) {
+    const f = otherValidFields[i];
     if (params[f] != undefined && params[f] !== '') {
       queryData[f] = params[f];
     }
@@ -164,17 +169,17 @@ SolrQuerier.prototype.__toQueryData = function(params) {
  * @param callback Error first callback
  */
 SolrQuerier.prototype.facetFieldSearch = function (params, callback) {
-  var solrUrl = params.url || this.searchUrl;
-  var solrQuery = params.query || '*:*';
+  const solrUrl = params.url || this.searchUrl;
+  const solrQuery = params.query || '*:*';
 
-  var filter = params.filter;
-  var facetField = params['facet.field'] || params.facetField;
-  var facetSort = params['facet.sort'] || params.facetSort;
-  var facetLimit = params['facet.limit'] || params.facetLimit || -1;
-  var facetMinCount = params['facet.mincount'] || params.facetMinCount || 0;
+  const filter = params.filter;
+  const facetField = params['facet.field'] || params.facetField;
+  const facetSort = params['facet.sort'] || params.facetSort;
+  const facetLimit = params['facet.limit'] || params.facetLimit || -1;
+  const facetMinCount = params['facet.mincount'] || params.facetMinCount || 0;
 
   // Setup queryData
-  var queryData = {
+  const queryData = {
     'q': solrQuery,
     'fq': filter,
     'wt': 'json',
@@ -198,13 +203,13 @@ SolrQuerier.prototype.facetFieldSearch = function (params, callback) {
  * @param callback Error first callback
  */
 SolrQuerier.prototype.getStats = function (params, callback) {
-  var solrUrl = params.url || this.searchUrl;
-  var solrQuery = params.query || '*:*';
+  const solrUrl = params.url || this.searchUrl;
+  const solrQuery = params.query || '*:*';
 
-  var filter = params.filter;
-  var field = params.field;
+  const filter = params.filter;
+  const field = params.field;
 
-  var queryData = {
+  const queryData = {
     'q': solrQuery,
     'fq': filter,
     'wt': 'json',
@@ -222,9 +227,9 @@ SolrQuerier.prototype.getStats = function (params, callback) {
  * @param callback Error first callback
  */
 SolrQuerier.prototype.lookupFields = function (params, callback) {
-  var solrUrl = params.url || this.schemaUrl;
-  var method = 'GET';
-  var cb =  _.getCallback(params, callback);
+  const solrUrl = params.url || this.schemaUrl;
+  const method = 'GET';
+  const cb =  _.getCallback(params, callback);
   return _.ajax
   ({
     type: method,
@@ -236,19 +241,23 @@ SolrQuerier.prototype.lookupFields = function (params, callback) {
   });
 };
 
-SolrQuerier.prototype.__query = function (solrUrl, queryData, callback) {
-  var timeout = this.timeout;
-  return _.ajax
-  ({
-    type: 'POST',
-    url: solrUrl,
-    data: queryData,
-    dataType: 'jsonp',      // At some point, we might want to switch to a PHP script that queries Solr locally, and then we could use regular JSON again.
-    jsonp: 'json.wrf',      // Solr requires the JSONP callback to have this name.
-    traditional: true,      // If facet.field is array, it will become facet.field=a1&facet.field=a2 instead of facet.field[]=a1&facet.field[]=a2
-    callback: callback,
-    timeout: timeout       // in milliseconds. With JSONP, this is the only way to get the error handler to fire.
-  });
+SolrQuerier.prototype.__query = function (solrUrl, queryData, callback, solrQueryProxy) {
+  if (solrQueryProxy && solrQueryProxy.isActive) {
+    solrQueryProxy.query(solrUrl, queryData, callback);
+  } else {
+    const timeout = this.timeout;
+    return _.ajax
+    ({
+      type: 'POST',
+      url: solrUrl,
+      data: queryData,
+      dataType: 'jsonp',      // At some point, we might want to switch to a PHP script that queries Solr locally, and then we could use regular JSON again.
+      jsonp: 'json.wrf',      // Solr requires the JSONP callback to have this name.
+      traditional: true,      // If facet.field is array, it will become facet.field=a1&facet.field=a2 instead of facet.field[]=a1&facet.field[]=a2
+      callback: callback,
+      timeout: timeout       // in milliseconds. With JSONP, this is the only way to get the error handler to fire.
+    });
+  }
 };
 
 module.exports = SolrQuerier;

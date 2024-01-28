@@ -51,6 +51,9 @@ HouseLoader.prototype.parse = function(filename, data) {
     house = new House(JSON.parse(data));
   } else {
     house = new House(this.__parseHouseFormat(data));
+    if (this.debug) {
+      house.data = data;
+    }
   }
   if (this.debug) {
     checkHouse(house);
@@ -146,7 +149,7 @@ HouseLoader.prototype.__parseHouseFormat = function(data) {
   }
   if (header_version === '1.0') {
     return this.__parseHouseFormatv10(lines);
-  } else if (header_version === '1.1') {
+  } else if (header_version === '1.1' || header_version === '1.2') {
     return this.__parseHouseFormatv11(lines);
   } else {
     throw 'Unsupported house version';
@@ -622,6 +625,10 @@ House.prototype.setRegionOpacity = function(opacity) {
   });
 };
 
+House.prototype.getRegionShape = function(region) {
+  return Object3DUtil.findNode(region.object3D, function(x) { return x.userData.type === 'RegionShape'; });
+};
+
 House.prototype.setObjectsVisible = function(flag) {
   Object3DUtil.traverse(this.object3D, function(obj) {
     if (obj.userData.type === 'Object') {
@@ -648,6 +655,10 @@ House.prototype.recolor = function(colorFn, palette) {
       });
     }
   }
+};
+
+House.prototype.getRegionFloors = function(region) {
+  return region.surfaces.filter(surface => surface.labelCode === 'F');
 };
 
 House.prototype.createGeometry = function(opts) {
@@ -696,7 +707,6 @@ House.prototype.createGeometry = function(opts) {
             if (opts.includeParts['Surface']) {
               var geometry = new THREE.ShapeGeometry([shape]);
               //geometry.addShape(shape, { material: j});
-              geometry.computeFaceNormals();
               var mesh = new THREE.Mesh(geometry, Object3DUtil.getSimpleFalseColorMaterial(i));
               mesh.name = 'Surface' + j;
               mesh.userData.id = 'S' + j;
@@ -735,14 +745,19 @@ House.prototype.createGeometry = function(opts) {
     if (region.objects && region.objects.length && opts.includeParts['Object']) {
       var objectsGroup = new THREE.Group();
       objectsGroup.name = 'Objects';
+      objectsGroup.userData.type = 'RegionObjects';
       regionObject.add(objectsGroup);
       for (var j = 0; j < region.objects.length; j++) {
         var object = region.objects[j];
         // TODO: color (instance, category, mpr40)
-        var objectOBBSolid = new MeshHelpers.OBB(object.obb, 'yellow');
+        var objectColor = 'yellow';
+        if (object.category === 'unknown' || object.category === 'remove' || object.category == null) {
+          objectColor = 'white';
+        }
+        var objectOBBSolid = new MeshHelpers.OBB(object.obb, objectColor);
 //        var objectOBB = objectOBBSolid.toWireFrame(0.001*Constants.metersToVirtualUnit);
-        var objectOBB = objectOBBSolid.toWireFrame(0);
-        objectOBB.name = 'Object' + j + ' (' + object.category +')';
+        var objectOBB = objectOBBSolid.toWireFrame(0, false, objectColor);
+        objectOBB.name = 'Object' + object.index + ' (' + object.category + ')';
         objectOBB.userData.id = 'O' + j;
         objectOBB.userData.index = object.index;
         objectOBB.userData.type = 'Object';

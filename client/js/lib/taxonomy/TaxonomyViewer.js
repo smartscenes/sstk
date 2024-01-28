@@ -104,8 +104,7 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
       this.assetManager = new AssetManager(
         {
           autoAlignModels: true,
-          autoScaleModels: true,
-          useBuffers: true
+          autoScaleModels: true
         }
       );
 
@@ -677,7 +676,9 @@ define(['assets/AssetManager','search/SearchController', 'model-viewer/SingleMod
       }
       if (includeHypernyms) {
         return hyperSynsetField;
-      } else return synsetField;
+      } else {
+        return synsetField;
+      }
     };
 
     TaxonomyViewer.prototype.searchModels = function (query) {

@@ -196,9 +196,9 @@ function () {
   // Annotations
   Constants.submitUpdateMain = true;
   Constants.submitPartAnnotationsURL = Constants.baseUrl + '/part-annotations/submit';
-  Constants.retrievePartAnnotationsURL = Constants.baseUrl + '/query?qt=parts';
+  Constants.retrievePartAnnotationsURL = Constants.baseUrl + '/part-annotations/query';
   Constants.retrieveSegmentsAnnotationsURL = Constants.baseUrl + '/query?qt=segments';
-  Constants.retrieveAnnotationsURL = Constants.baseUrl + '/annotations/list';
+  Constants.listAnnotationsURL = Constants.baseUrl + '/annotations/list';
   Constants.submitAnnotationsURL = Constants.baseUrl + '/annotations/submit';
   Constants.retrieveAnnotationsURL = Constants.baseUrl + '/annotations/latest';
   Constants.submitSegmentsAnnotationsStatusURL = Constants.baseUrl + '/scans/segment-annotations/edit';
@@ -209,8 +209,7 @@ function () {
   Constants.shapenetQueryUrl = Constants.baseUrl + '/queryShapeNet';
 
   // Scene generation
-  Constants.text2sceneDataUrl = Constants.baseUrl + '/text2scene/';
-  Constants.sceneGenerationUrl = Constants.baseUrl + '/ws/scenes/interact';
+  Constants.sceneBuilderUrl = Constants.baseUrl + '/ws/libsg';
 
   // Visualizing parts
   Constants.getPartsUrl = Constants.baseUrl + '/ws/scenes/getParts';
@@ -277,6 +276,15 @@ function () {
     BACK:    5
   });
 
+  Constants.BBoxFaceNames = [
+    'left',
+    'right',
+    'bottom',
+    'top',
+    'front',
+    'back'
+  ];
+
   Constants.BBoxFaceCenters = Constants.BBoxFaces;
 
   Constants.BBoxFacesThetaPhi = [
@@ -298,8 +306,15 @@ function () {
     // Strategy for dealing with support surface change
     SupportSurfaceChange: {
       NONE: 0,
-      SWITCH_ATTACHMENT: 1,
-      REORIENT_CHILD: 2
+      SWITCH_ATTACHMENT: 1,  // Keep child orientation the same, just try to stick it to different surfaces
+      REORIENT_CHILD: 2      // Keep child attachment point/normal the same when trying to stick the object
+    },
+    MovementMode: {
+      MOVE_ON_PICKING_PLANE: 0,
+      MOVE_UP_DOWN: 1,
+      MOVE_ON_SUPPORT_OBJECTS: 2,
+      MOVE_ON_ATTACHMENT_PLANE: 3,
+      MOVE_ALONG_DIRECTION: 4
     }
   });
 

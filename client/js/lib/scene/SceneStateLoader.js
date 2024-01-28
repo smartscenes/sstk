@@ -18,6 +18,7 @@ function SceneStateLoader(params) {
   if (params.archOptions) {
     archCreatorOptions = _.defaultsDeep(Object.create(null), params.archOptions, archCreatorOptions);
   }
+  this.__archCreatorOptions = archCreatorOptions;
   this.archCreator = new ArchCreator(_.defaults({ assetManager: this.assetManager }, archCreatorOptions));
 }
 
@@ -39,7 +40,8 @@ SceneStateLoader.prototype.__loadArch = function(json, scene, customMaterials, c
   if (scene.arch) {
     var scope = this;
     if (scene.arch.ref != null && !scene.arch.elements) {
-      scope.assetManager.loadArch({ fullId: scene.arch.ref }, function(err, archRes) {
+      var loadOptions = { fullId: scene.arch.ref, archOptions: this.__archCreatorOptions };
+      scope.assetManager.loadArch(loadOptions, function(err, archRes) {
         if (err) {
           callback(err);
         } else {

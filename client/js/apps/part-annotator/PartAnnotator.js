@@ -5,20 +5,16 @@ var MeshAnnotationStats = require('part-annotator/MeshAnnotationStats');
 var ModelPartViewer = require('part-annotator/ModelPartViewer');
 var BasePartAnnotator = require('part-annotator/BasePartAnnotator')(ModelPartViewer);
 var Object3DUtil = require('geo/Object3DUtil');
-var UIUtil = require('ui/UIUtil');
-var FileUtil = require('io/FileUtil');
 var _ = require('util/util');
-
-require('physijs');
 
 /**
  * Annotation tool for labeling parts of meshes.  The output is a labeling on face-based segmentations.
- * Uses physijs to break apart parts that were already annotated (not working so well now).
  * @param params
  * @param [params.allowLevels=false] {boolean} Whether different resolution levels of painting are allowed.
  *   If so, can use pgup/pgdown and level slider control to adjust resolution level. Also url param.
  * @param [params.obbsVisible=false] {boolean} To show obbs of labeled segment groups or not. Toggle with 'b'.
  * @param [params.useSegments=false] {boolean} Whether custom segmentation should be used. Also url param.
+ * @param [params.segmentType] {string} What segmentation to use (default='surfaces')
  * @param [params.allowEditLabels=false] {boolean} Whether label names can be changed and new labels added. Also url param.
  * @param [params.startFrom=latest] {string|integer} What annotation to start from (used if taskMode is `fixup` or `coverage`)
  *   Possible values are `latest` (fixup from latest fixup (if available), otherwise from aggregation),
@@ -94,7 +90,7 @@ function PartAnnotator(params) {
     });
   }
   this.urlParams = _.getUrlParams();
-  var useSegments = params.useSegments || this.urlParams['useSegments'];
+  var selectedUrlParams = _.pick(this.urlParams, ['useSegments', 'segmentType']);
   var allowEditLabels = !!(params.allowEditLabels || this.urlParams['allowEditLabels']);
   if (allowEditLabels) {
     uihookups.push({
@@ -103,21 +99,8 @@ function PartAnnotator(params) {
       shortcut: 'ctrl-c'
     });
   }
-  this.debug = params.debug || this.urlParams['debug'];
-  if (this.debug) {
-    uihookups.push({
-      name: 'saveAnnotation',
-      click: function() { this.saveAnnotations(); }.bind(this),
-      shortcut: 'ctrl-s'
-    });
-    uihookups.push({
-      name: 'loadAnnotation',
-      click: function() { this.loadAnnotationsWithForm(); }.bind(this),
-      shortcut: 'ctrl-l'
-    });
-  }
   var defaults = {
-    appId: 'PartAnnotator.v3',
+    appId: 'PartAnnotator.v3-20220901',
     submitAnnotationsUrl: Constants.submitPartAnnotationsURL,
     retrieveAnnotationsUrl: Constants.retrievePartAnnotationsURL,
     useClippingPlanes: true,
@@ -125,7 +108,7 @@ function PartAnnotator(params) {
     itemIdField: 'modelId',
     expandObbAmount: 0.01*Constants.metersToVirtualUnit,
     breakItUp: {
-      usePhysics: true,
+      usePhysics: false,
       durationMillis: 1000
     },
     undo: {
@@ -285,16 +268,26 @@ function PartAnnotator(params) {
       }
     },
     obbsVisible: false,
-    useSegments: useSegments,
+    segmentType: 'surfaces',
     uihookups: _.keyBy(uihookups, 'name')
   };
-  params = _.defaultsDeep(Object.create(null), params, defaults);
+  params = _.defaultsDeep(Object.create(null), selectedUrlParams, params, defaults);
   this.breakItUpSettings = params.breakItUp;
   this.startFrom = Constants.getGlobalOrDefault('startFrom',
     this.urlParams['startFrom'] || params.startFrom);
 
   this.allowLevels = params.allowLevels;
   this.useSegments = params.useSegments;
+  this.segmentType = params.segmentType;
+  this.segmentOptions = null;
+  if (this.segmentType === 'connectivity') {
+    this.segmentOptions = {
+      method: 'connectivity',
+      similarity: -1,
+      includeFaceIndices: true,
+      condenseFaceIndices: false
+    };
+  }
   BasePartAnnotator.call(this, params);
 
   // Map of labelId to { label: label, meshIds: [list of ids], data: {} }
@@ -425,10 +418,11 @@ PartAnnotator.prototype.createLabeler = function () {
   var scope = this;
   var labeler;
   if (this.useSegments) {
-    console.log('Use SegmentHierarchyLabeler');
-    var SegmentHierarchyLabeler = require('part-annotator/SegmentHierarchyLabeler');
-    labeler = new SegmentHierarchyLabeler({
-      segmentType: 'surfaces',
+    console.log('Use MeshSegmentHierarchyLabeler');
+    var MeshSegmentHierarchyLabeler = require('part-annotator/MeshSegmentHierarchyLabeler');
+    labeler = new MeshSegmentHierarchyLabeler({
+      segmentType: scope.segmentType,
+      segmentOptions: scope.segmentOptions,
       getMeshId: function(m) { return m.userData.id; },
       showNodeCallback: function (node) {
         scope.debugNode.add(node);
@@ -469,6 +463,9 @@ PartAnnotator.prototype.createLabeler = function () {
       scope.levelSlider.slider('option', 'value', scope.labeler.hierarchyLevel);
     }
   });
+  this.metadata = this.metadata || {};
+  this.metadata['useSegments'] = true;
+  this.metadata['segmentType'] = labeler.segmentType;
   return labeler;
 };
 
@@ -507,6 +504,7 @@ PartAnnotator.prototype.__annotatorReady = function() {
   this.annotationStats = new MeshAnnotationStats({ meshes: this.__meshes, counter: this.modelProgressCounter });
 
   this.annotations = {};
+  this.labeler.onReady(this.__options);
   this.initLevelSelector(this.__options['levelSelector']);
 
   if (this.taskMode === 'fixup') {
@@ -519,6 +517,10 @@ PartAnnotator.prototype.__annotatorReady = function() {
   this.painter.enabled = true;
   if (this.undoStack) {
     this.initialState = this.undoStack.pushCurrentState(Constants.CMDTYPE.INIT);
+  }
+
+  if (this.allowCutting) {
+    this.initMeshCutter();
   }
 };
 
@@ -593,35 +595,10 @@ PartAnnotator.prototype.breakItUp = function () {
   var scope = this;
   var breakUpIds = _.map(partsToBreakUp, function(x) { return scope.labeler.getMeshId(x); });
   this.onEditOpInit('breakItUp', { ids: breakUpIds });
-
-  if (scope.breakItUpSettings.usePhysics) {
-    partsToBreakUp.forEach(function (mesh) {
-      var physmesh = new Physijs.BoxMesh(// Physijs mesh
-        mesh.geometry,
-        Physijs.createMaterial(// Physijs material
-          mesh.material,
-          0.4, // friction
-          0.8 // restitution
-        ),
-        10 // weight, 0 is for zero gravity
-      );
-
-      //Break up parts
-      Object3DUtil.setMatrix(physmesh, mesh.matrixWorld);
-      Object3DUtil.attachToParent(physmesh, scope.scene, scope.scene);
-      scope.removePart(mesh);
-      scope.removedParts.push(mesh);
-
-      setTimeout(function () {
-        scope.scene.remove(physmesh);
-      }, scope.breakItUpSettings.durationMillis);
-    });
-  } else {
-    partsToBreakUp.forEach(function (mesh) {
-      scope.removePart(mesh);
-      scope.removedParts.push(mesh);
-    });
-  }
+  partsToBreakUp.forEach(function (mesh) {
+    scope.removePart(mesh);
+    scope.removedParts.push(mesh);
+  });
   this.onEditOpDone('breakItUp', { ids: breakUpIds });
 };
 
@@ -646,7 +623,7 @@ PartAnnotator.prototype.getAnnotationStats = function (statsType) {
 
 PartAnnotator.prototype.saveAnnotations = function () {
   var annPartIdField = this.annPartIdField;
-  if (this.useSegments && this.labeler.segments.isCustomSegmentation) {
+  if (this.useSegments /*&& this.labeler.segments.isCustomSegmentation*/) {
     this.annPartIdField = 'segments';
   }
   BasePartAnnotator.prototype.saveAnnotations.call(this);
@@ -655,7 +632,7 @@ PartAnnotator.prototype.saveAnnotations = function () {
 
 
 /* Creates annotations and submits to backend */
-PartAnnotator.prototype.__submitAnnotations = function () {
+PartAnnotator.prototype.__submitAnnotations = function (gotoNext) {
   this.annotate();
   var modelId = this.modelId;
   if (!modelId) {
@@ -674,7 +651,7 @@ PartAnnotator.prototype.__submitAnnotations = function () {
   //  and the missing annotation stats, this is pretty much identical to the base functions
   this.timings.mark('annotationSubmit');
   var params = this.getAnnotationsJson(this.annotations, true);
-  this.__submitAnnotationData(params, modelId);
+  this.__submitAnnotationData(params, modelId, gotoNext);
 };
 
 PartAnnotator.prototype.getAnnotationsJson = function(annotations, includeScreenshot) {
@@ -699,7 +676,7 @@ PartAnnotator.prototype.getAnnotationsJson = function(annotations, includeScreen
   }
 
   // Get part labels (in case user has added label)
-  var partLabels = this.labeler.getLabels();
+  var partLabels = partAnnotations.map(ann => ann.label); 
 
   var screenshot = includeScreenshot?
     this.getImageData(this.screenshotMaxWidth, this.screenshotMaxHeight) : undefined;
@@ -718,11 +695,14 @@ PartAnnotator.prototype.getAnnotationsJson = function(annotations, includeScreen
     parts: partLabels,
     score: 100 // Constant
   });
-  if (this.useSegments && this.labeler.segments.isCustomSegmentation) {
-    params.segmentation = this.labeler.segments.segmentationJson;
-  }
 
   var data = {};
+  if (this.useSegments) {
+    if (this.labeler.segments.isCustomSegmentation) {
+      data.segmentation = this.labeler.segments.segmentationJson;
+    }
+  }
+
   var annStats = this.getAnnotationStats();
   if (annStats) {
     data['stats'] = annStats;
@@ -775,27 +755,6 @@ PartAnnotator.prototype.removePart = function (mesh) {
   // }
 };
 
-PartAnnotator.prototype.makeGround = function(dims) {
-  return new Physijs.BoxMesh(
-    new THREE.BoxGeometry(dims.x, dims.y, dims.z, 10, 10), // Three.js geometry
-    Physijs.createMaterial(Object3DUtil.ClearMat, 0.4, 0.8),
-    0 // weight, 0 is for zero gravity
-  );
-};
-
-PartAnnotator.prototype.createScene = function() {
-  Physijs.scripts.worker = Constants.baseUrl + '/client/js/vendor/physijs/physijs_worker.js';
-  Physijs.scripts.ammo = 'ammo.js';
-  this.scene = new Physijs.Scene();
-  this.scene.setGravity(new THREE.Vector3(0, -100, 0));
-  this.scene.name = 'scene';
-  this.scene.add(this.camera);
-  this.scene.add(this.debugNode);
-  this.scene.addEventListener('update', function () {
-    this.scene.simulate(undefined, 2);
-  }.bind(this));
-};
-
 PartAnnotator.prototype.render = function () {
   if (!this.renderer || !this.scene) return;
   for (var i = 5; i < this.scene.children.length - 5; i++) {
@@ -811,9 +770,6 @@ PartAnnotator.prototype.render = function () {
 PartAnnotator.prototype.animate = function () {
   requestAnimationFrame(this.animate.bind(this));
   this.render();
-  if (this.scene) {
-    this.scene.simulate();
-  }
 };
 
 PartAnnotator.prototype.initLevelSelector = function (levelSelectorConfig) {
@@ -868,27 +824,69 @@ PartAnnotator.prototype.loadLatestAnnotation = function (modelId) {
 };
 
 PartAnnotator.prototype.__labelFromExisting = function(opts) {
-  var anns = null;
+  var pastAnnotations = null;
+  var partAnnotations = null;
   this.metadata = this.metadata || {};
   this.metadata['startFrom'] = this.startFrom;
   var hasFixupAnnotations = this.__bestFixupAnnotation && this.__bestFixupAnnotation.length > 0;
-  if (this.startFrom === 'latest' && hasFixupAnnotations) {
-    anns = this.__bestFixupAnnotation;
-    console.log('Using fixup annotations from ' + anns[0].workerId + ', created at ' + anns[0].created_at);
+  if (this.startFrom === 'latest' && _.isPlainObject(this.__bestFixupAnnotation)) {
+    pastAnnotations = [this.__bestFixupAnnotation];
+    partAnnotations = this.__bestFixupAnnotation.parts;
+    var ann = pastAnnotations[0];
+    console.log('Using fixup annotations from ' + ann.workerId + ', created at ' + ann.created_at);
+  } else if (this.startFrom === 'latest' && hasFixupAnnotations) {
+    partAnnotations = this.__bestFixupAnnotation;
+    var ann = partAnnotations[0];
+    console.log('Using fixup annotations from ' + ann.workerId + ', created at ' + ann.created_at);
   } else if (this.startFrom === 'latest' || this.startFrom === 'aggr') {
     console.log('Using aggregated annotations');
   } else if (this.__rawAnnotations) {
     console.log('Using raw annotations ' + (this.__useCleanAnnotations ? 'cleaned' : ''));
-    anns = this.__rawAnnotations;
+    partAnnotations = this.__rawAnnotations;
   }
-  if (anns) {
-    var annIds = _.uniq(_.map(anns, function(ann) { return ann.annId; }));
+  var annIds;
+  if (pastAnnotations && pastAnnotations.length) {
+    annIds = _.uniq(_.map(pastAnnotations, function(ann) { return ann.id; }));
+  } else if (partAnnotations && partAnnotations.length) {
+    annIds = _.uniq(_.map(partAnnotations, function(ann) { return ann.annId; }));
+  }
+  if (annIds) {
     annIds.sort();
     this.metadata['startAnnotations'] = annIds.join(',');
+  }
+  if (partAnnotations) {
     opts.keepInstances = true;
-    opts.annotations = anns;
-    this.__trackUndo(false);
-    this.labeler.labelFromExisting(this.labelsPanel, opts);
+    opts.annotations = partAnnotations;
+    // convert from database
+    if (this.useSegments) {
+      for (let ann of partAnnotations) {
+        ann.partId = ann.partId.map(x => (typeof x === 'string')? parseInt(x) : x);
+      }
+    }
+    this.__applyAnnotations(pastAnnotations? pastAnnotations[0].data : null, opts);
+  }
+};
+
+PartAnnotator.prototype.__applyAnnotations = function(data, opts) {
+  // console.log('applyAnnotations', data, opts);
+  var enforceChecks = !!data;
+  data = data || {};
+  var metadata = data.metadata || {};
+  this.__trackUndo(false);
+  if (data.segmentation) {
+    this.labeler.applySegmentAnnotation(data, (err, res) => {
+      this.waitAll(() => {
+        this.labeler.labelFromExisting(this.labelsPanel, opts);
+        this.__trackUndo(true);
+      });
+    });
+  } else {
+    // check the segmentType is the same
+    if (!enforceChecks || metadata.segmentType === this.segmentType) {
+      this.labeler.labelFromExisting(this.labelsPanel, opts);
+    } else {
+      this.showAlert('Incompatible segment type', 'alert-danger');
+    }
     this.__trackUndo(true);
   }
 };
@@ -908,7 +906,7 @@ PartAnnotator.prototype.generateMissingGeometry = function(labelInfo) {
     obb: this.labeler.getLabelOBB(labelInfo),
     object3D: this.debugNode
   };
-  this.__shapeGenerator.generateMissingGeometryForPart(geometryInfo, function(err, obj) {
+  this.__shapeGenerator.generateMissingGeometryForPart(geometryInfo, {},function(err, obj) {
     if (err) {
       console.error('Error generating shape', err);
     } else if (obj) {
@@ -977,9 +975,47 @@ PartAnnotator.prototype.selectAll = function () {
   this.labelsPanel.selectAll();
 };
 
-PartAnnotator.prototype.__loadAnnotationsFromFile = function (data, options) {
+PartAnnotator.prototype.initMeshCutter = function() {
+  var MeshCutterControls = require('controls/MeshCutterControls');
+  var meshCutterControls = new MeshCutterControls({
+    container: this.container,
+    picker: this.picker,
+    camera: this.camera
+    // tesselator
+  });
+  meshCutterControls.init();
+  this.scene.add(meshCutterControls.stagingNode);
+  //this.meshCutterControls = meshCutterControls;
+  var scope = this;
+  this.labelsPanel.Subscribe('labelSelected', this, function(selected) {
+    if (meshCutterControls.enabled) {
+      if (!Array.isArray(selected)) {
+        selected = [selected];
+      }
+      scope.labeler.setPartsVisible(true, selected, true);
+    }
+  });
+  this.__uis['cut'] = {
+    controls: [meshCutterControls],
+    panels: [this.labelsPanel],
+    enter: function() {
+      meshCutterControls.attach(scope.labeler.getMeshedObject3D());
+      scope.setWireframeMode(true);
+    },
+    exit: function() {
+      meshCutterControls.detach();
+      scope.setWireframeMode(false);
+    }
+  };
+};
+
+PartAnnotator.prototype.__loadAnnotationsFromFile = function (json, options) {
+  if (json.modelId !== this.modelId) {
+    this.showAlert('Model id does not match!', 'alert-danger');
+    return;
+  }
   if (this.useSegments) {
-    var anns = _.map(data.annotations, (ann) => {
+    var anns = _.map(json.annotations, (ann) => {
       var res = _.clone(ann);
       if (res.segments) {
         res.partIds = res.segments;
@@ -987,19 +1023,11 @@ PartAnnotator.prototype.__loadAnnotationsFromFile = function (data, options) {
       }
       return res;
     });
-    this.__trackUndo(false);
-    this.labeler.applySegmentAnnotation(data, (err, res) => {
-//      var annIds = _.uniq(_.map(anns, function(ann) { return ann.annId; }));
-//      annIds.sort();
-//      this.metadata['startAnnotations'] = annIds.join(',');
-      this.waitAll(() => {
-        this.__trackUndo(false);
-        this.labeler.labelFromExisting(this.labelsPanel, { keepInstance: true, annotations: anns, isGrouped: true });
-        this.__trackUndo(true);
-      });
-    });
+    var data = json.data || {};
+    this.__applyAnnotations(data, { keepInstance: true, annotations: anns, isGrouped: true });
   } else {
-    console.log('Please implement support for loading annotations from file', data);
+    this.showAlert('Does not support loading from file', 'alert-danger');
+    console.log('Please implement support for loading annotations from file', json);
   }
 };
 

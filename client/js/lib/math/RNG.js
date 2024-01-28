@@ -54,6 +54,16 @@ RNG.prototype.uniform = function (min, max) {
   return min + (this.random() * (max - min));
 };
 
+// Return a random number sampled from the mean of n random variables drawn from the uniform distribution from 0 to 1
+// This is Bates distribution (https://en.wikipedia.org/wiki/Bates_distribution) and the final sample will be between 0-1
+RNG.prototype.bates = function(n) {
+  let r = 0;
+  for (let i = 0; i < n; i++) {
+    r += this.random();
+  }
+  return r / n;
+};
+
 /**
  * Returns element of arr chosen uniformly at random
  * @param arr

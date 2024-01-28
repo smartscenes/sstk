@@ -1,10 +1,12 @@
 var webpack = require('webpack');
-var argv = require('optimist').argv;
 var _ = require('lodash');
 var glob = require( 'glob' )
   , path = require( 'path' );
 
-var outpath = path.resolve(__dirname, argv.out || 'build');
+var cmd = require('commander')
+cmd.option('--out <out>', 'Build output', 'build')
+  .parse(process.argv)
+var outpath = path.resolve(__dirname, cmd.out);
 
 require('better-require')('json yaml');
 
@@ -61,6 +63,7 @@ var aliases = {
 
   // Visual search
   'visualsearch': 'vendor/visualsearch/visualsearch',
+  'underscore': 'lodash', // use lodash instead of underscore
 
   // Bootstrap
   'bootstrap': 'vendor/bootstrap.min',
@@ -69,6 +72,7 @@ var aliases = {
 
   // Three.js
   'three': 'vendor/three/three.min',
+  'three-geometry': 'vendor/three/geo/Geometry',
   'three-convexgeo': 'vendor/three/geo/ConvexGeometry',
   'three-convexhull': 'vendor/three/math/ConvexHull',
   'three-mirror': 'vendor/three/gfx/Mirror',
@@ -80,13 +84,12 @@ var aliases = {
   'three-controls': 'vendor/three/controls',
   'three-exporters': 'vendor/three/exporters',
   'three-modifiers': 'vendor/three/modifiers',
-  'three-renderers': 'vendor/three/renderers',
   'three-shaders': 'vendor/three/shaders',
   'stats': 'vendor/three/libs/stats.min',
   'system': 'vendor/three/libs/system.min',
   'tween': 'vendor/three/libs/tween.min',
   'dat.gui': 'vendor/three/libs/dat.gui.min',  // Dat gui
-  'physijs': 'vendor/physijs/physi',  // Physics plugin for Three.js
+  'lil.gui': 'vendor/three/libs/lil-gui.umd',  // Lil gui
   'voxel-mesh': 'vendor/voxel/voxel-mesh', // Voxel mesh
   'voxel-browser': 'vendor/voxel/voxel-browser', // Voxel browser
 
@@ -177,7 +180,9 @@ var webpackOptions = {
     'modelScaler': './js/apps/model-scaler',
     'modelTools': './js/apps/model-tools',
     'partAnnotator': './js/apps/part-annotator',
-    'scanNet': './js/apps/scan-net',
+    'rlsd': './js/apps/rlsd',
+    'scanAnnotator': './js/apps/scan-annotator',
+    'scanAnnotationsViewer': './js/apps/scan-annotator/ScanAnnotationsViewer',
     'sceneViewer': './js/apps/scene-viewer',
     'taxonomyViewer': './js/apps/taxonomy-viewer',
     'viz': './js/apps/viz',

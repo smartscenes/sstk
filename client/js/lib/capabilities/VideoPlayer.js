@@ -75,6 +75,20 @@ function VideoPlayer(params) {
     }
     return scope.isOn;
   };
+
+  this.destroy = function(notify) {
+    // Tell people that we are done
+    if (scope.videoTexture) {
+      if (scope.assetManager && notify) {
+        scope.assetManager.Publish('dynamicAssetUnloaded', scope.videoTexture);
+      }
+      scope.videoTexture.dispose();
+      scope.videoTexture = null;
+      scope.videoMaterial.dispose();
+      scope.videoMaterial = null;
+    }
+
+  };
 }
 
 module.exports = VideoPlayer;

@@ -1,5 +1,6 @@
 var Index = require('ds/Index');
 var GeometryUtil = require('geo/GeometryUtil');
+var _ = require('util/util');
 
 // NOTE: This ConnectivityGraph is very naive, faces are connected only if they share the exact same vertex.
 function ConnectivityGraph(geometry, remapVertices) {

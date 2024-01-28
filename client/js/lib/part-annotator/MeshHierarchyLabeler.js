@@ -29,14 +29,19 @@ MeshHierarchyLabeler.prototype.__findPart = function (event) {
   return intersected;
 };
 
-MeshHierarchyLabeler.prototype.labelPart = function (part, labelInfo, opts) {
+MeshHierarchyLabeler.prototype.labelPart = function (part, labelInfo, opts, labelDepth) {
+  labelDepth = labelDepth || 0;
   if (part.userData.level > 0) {
     for (var i = 0; i < part.children.length; i++) {
       var c = part.children[i];
-      this.labelPart(c, labelInfo, opts);
+      this.labelPart(c, labelInfo, { skipFitOBB: true }, labelDepth+1);
+    }
+    if (labelDepth === 0 && !(opts && opts.skipFitOBB)) {
+      // fit obb
+      this.__updateLabelOBB(labelInfo);
     }
   } else {
-    MeshLabeler.prototype.labelPart.call(this, part, labelInfo, opts);
+    MeshLabeler.prototype.labelPart.call(this, part, labelInfo, opts, labelDepth+1);
   }
 };
 

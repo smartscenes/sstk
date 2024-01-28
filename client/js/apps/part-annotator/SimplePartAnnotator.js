@@ -3,8 +3,6 @@
 var PartAnnotator = require('./PartAnnotator');
 var _ = require('util/util');
 
-require('physijs');
-
 /**
  * Most basic {@link PartAnnotator}, really not any different.
  * @constructor

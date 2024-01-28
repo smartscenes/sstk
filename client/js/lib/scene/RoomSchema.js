@@ -58,7 +58,7 @@ var fields = [
   },
   { name: 'modelIds', type: 'categorical', excludeFromFacet: false },
   { name: 'roomTypes', type: 'categorical',
-    description: 'Best guess at whether to room is a Bedroom, Bathroom, etc by the SUNCG team (each room can have multiple room types)',
+    description: 'Best guess at whether to room is a Bedroom, Bathroom, etc (each room can have multiple room types)',
     examples: [{ query: 'roomTypes:Bedroom', description: 'Rooms that are bedrooms' },
       { query: '!roomTypes:*', description: 'Rooms with unknown types' }]
   },

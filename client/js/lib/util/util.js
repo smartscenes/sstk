@@ -221,7 +221,7 @@ _.getUrlParam = function (name, defaultValue, parseFn) {
 
 // Stuffs arguments into object
 function processArguments(args, argNames) {
-  if (args.length === 1) {
+  if (args.length === 1 && args[0] != null && typeof(args[0]) === 'object') {
     // Assume single argument is object - return as is
     return args[0];
   } else {
@@ -302,6 +302,13 @@ function strhash( str ) {
   return hash;
 }
 _.strhash = strhash;
+
+_.uuidv4 = function() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
 
 function snapTo(n, d) {
   var i = Math.round(n/d);
@@ -552,8 +559,16 @@ _.cmd = {
   parseList: function(x, accum) { return parseList(x); },
   parseFloat: function(x, accum) { return parseFloat(x); },
   parseInt: function(x, accum) { return parseInt(x); },
+  parseIntList: function(x, accum) {
+    var list = parseList(x);
+    if (list) {
+      list = list.map(x => parseInt(x));
+    }
+    return list;
+  },
   parseVector: function(x, accum) { return parseVector(x); },
   parseRegex: function(x, accum) { return parseRegex(x); },
+  parseJson: function(x, accum) { return JSON.parse(x); },
   collect: function(x, accum) {
     accum.push(x);
     return accum;
@@ -945,6 +960,21 @@ _.mapKeysDeep = function(object, iteratee) {
     return object;
   }
 };
+
+function findMatchingsDeep(object, recurseKey, filter, matching) {
+  matching = matching || [];
+  if (object[recurseKey]) {
+    _.forEach(object[recurseKey], (obj) => {
+      findMatchingsDeep(obj, recurseKey, filter, matching);
+    });
+  } else {
+    if (filter(object)) {
+      matching.push(object);
+    }
+  }
+  return matching;
+}
+_.findMatchingDeep = findMatchingsDeep;
 
 // Put back aliases that were removed in lodash 4
 // (https://github.com/lodash/lodash/wiki/Changelog#notable-changes)

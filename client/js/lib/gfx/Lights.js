@@ -1,4 +1,11 @@
-var Lights = {};
+const Lights = {};
+
+/**
+ * Information about a light (see https://threejs.org/docs/#api/en/lights/Light)
+ * @typedef LightSpec
+ * @type {object}
+ * @memberOf gfx
+ */
 
 Object.defineProperty(THREE.Light.prototype, 'colorHex', {
   get: function () { return this.color.getHex(); },
@@ -7,9 +14,15 @@ Object.defineProperty(THREE.Light.prototype, 'colorHex', {
   }
 });
 
+/**
+ * Parses light specification and returns THREE.Light object
+ * @param lightSpec {LightSpec}
+ * @param objectLoader {THREE.ObjectLoader}
+ * @returns {THREE.Light}
+ */
 Lights.setupLight = function(lightSpec, objectLoader) {
   objectLoader = objectLoader || new THREE.ObjectLoader(THREE.DefaultLoadingManager);
-  var obj = objectLoader.parseObject(lightSpec);
+  const obj = objectLoader.parseObject(lightSpec);
   if (obj instanceof THREE.Light) {
     return obj;
   } else {
@@ -17,6 +30,12 @@ Lights.setupLight = function(lightSpec, objectLoader) {
   }
 };
 
+/**
+ * Parses light specification and returns THREE.Light object
+ * @param lightSpecs {LightSpec[]}
+ * @param objectLoader {THREE.ObjectLoader}
+ * @returns {THREE.Light[]}
+ */
 Lights.setupLights = function(lightSpecs, objectLoader) {
   objectLoader = objectLoader || new THREE.ObjectLoader(THREE.DefaultLoadingManager);
   return lightSpecs.map(x => Lights.setupLight(x, objectLoader));
@@ -27,7 +46,7 @@ Lights.getDefaultHemisphereLight = function(usePhysicalLights, otherLightsOn) {
   //   usePhysicallyCorrectLights off
   //   usePhysicallyCorrectLights without other lights enabled  (other lights not enabled = hemisphere lights high)
   //   usePhysicallyCorrectLights with    other lights enabled  (other lights enabled = hemisphere lights low)
-  var ambientIntensity = usePhysicalLights ? (otherLightsOn? 0.5 : 2.0) : 1.0;
+  let ambientIntensity = usePhysicalLights ? (otherLightsOn? 0.5 : 2.0) : 1.0;
   if (THREE.REVISION < 80) {
     ambientIntensity = 1.0;
   }
@@ -37,20 +56,20 @@ Lights.getDefaultHemisphereLight = function(usePhysicalLights, otherLightsOn) {
 
 Lights.addSimple2LightSetup = function (scene, position, doShadowMap) {
   position = position || new THREE.Vector3(-100, 100, 100);
-  var ambient = new THREE.AmbientLight(0x050505);
+  const ambient = new THREE.AmbientLight(0x050505);
 
-  var light0 = new THREE.PointLight(0xdadacd, 0.85);
-  var p0 = new THREE.Vector3();
+  const light0 = new THREE.PointLight(0xdadacd, 0.85);
+  const p0 = new THREE.Vector3();
   p0.copy(position);
   light0.position.copy(p0);
-  var light1 = new THREE.PointLight(0x030309, 0.03);
-  var p1 = new THREE.Vector3();
+  const light1 = new THREE.PointLight(0x030309, 0.03);
+  const p1 = new THREE.Vector3();
   p1.copy(position);
   p1.negate();
   light1.position.copy(p1);
 
   if (doShadowMap) {
-    var light = Lights.createSpotLightShadowMapped(1000);
+    const light = Lights.createSpotLightShadowMapped(1000);
     light.position.copy(light0.position);
     // light.onlyShadow = true;  // Removed https://github.com/mrdoob/three.js/issues/7825
     scene.add(light);
@@ -65,7 +84,7 @@ Lights.addSimple2LightSetup = function (scene, position, doShadowMap) {
 };
 
 Lights.createSpotLightShadowMapped = function (lightBoxSize) {
-  var light = new THREE.SpotLight(0xffffff, 1, 0, Math.PI, 1);
+  const light = new THREE.SpotLight(0xffffff, 1, 0, Math.PI, 1);
   light.target.position.set(0, 0, 0);
 
   light.castShadow = true;

@@ -1,0 +1,165 @@
+{
+    "scene_manager":{
+        "save_endpoint":{
+            "url_prefix": "${rlsdBaseUrl}/scene-manager/editor/"
+        },
+        "backend_url_prefix": "${rlsdBaseUrl}/api/scene-manager/",
+        "scene_json_endpoint": {
+            "url": "scenes/sceneMangerId/json"
+        }
+    },
+    "scene_wizard": {
+        "pose_suggestor_endpoint": {
+            "url": "${rlsdBaseUrl}/api/wizard/pose_suggester"
+        },
+        "shape_suggestor_endpoint": {
+            "url": "${rlsdBaseUrl}/api/wizard/shape_suggester"
+        },
+        "object_similarity_endpoint": {
+            "url": "${rlsdBaseUrl}/api/wizard/objects/similar"
+        }
+    },
+    "object_info_store":{
+        "label_field": "rlsd48Name",
+        "allowed_object_labels": [
+            "stove", "washing machine", "refrigerator", "oven", "microwave", "dishwasher", "clothes dryer", 
+            "chair", "seating", "sofa", "stool", "cabinet", "chest_of_drawers", "shelving", 
+            "bed", "tv_monitor", "table", "counter", "cushion", "lighting", "picture", "plant", "blinds", 
+            "curtain", "mirror", "toilet", "bathtub", "shower", "sink", "towel"
+        ]
+    },
+    "putOnArchOnly": {
+        "disable_wnlemmas": ["pillow", "cushion", "table lamp"],
+        "disable_mask_labels": ["pillow", "cushion", "lighting"]
+    },
+    "attachment_surface": {
+        "bottom": ["stove", "washing machine", "refrigerator", "oven", "microwave", "dishwasher", "clothes dryer", "chair",
+        "sofa", "stool", "cabinet", "chest_of_drawers", "bed", "table", "counter", "cushion", "plant", "toilet", "bathtub", "shower", "sink"],
+        "back": ["shelving", "tv_monitor", "lighting", "picture", "curtain", "mirror", "clothes"]
+    },
+    "search_query":{
+        "default_source":  "rlsd_model_groups_wayfair_3dw",
+        "label_query_mapping":[
+            {
+                "label": "stove",
+                "category": "stove_cat"
+            },
+            {
+                "label": "washing machine",
+                "category": "washer_cat"
+            },
+            {
+                "label": "refrigerator",
+                "category": "refrigerator_cat"
+            },
+            {
+                "label":"oven",
+                "category": "oven_cat"
+            },
+            {
+                "label": "microwave",
+                "category": "microwave_cat"
+            },
+            {
+                "label": "dishwasher",
+                "category": "dishwasher_cat"
+            },
+            {
+                "label": "clothes_dryer",
+                "category": "dryer_cat"
+            },
+            {
+                "label": "door",
+                "category": "door_cat"
+            },
+            {
+                "label": "window",
+                "category": "window_cat"
+            },
+            {
+                "label": "seating",
+                "category": "seating_group"
+            },
+            {
+                "label": "chair",
+                "category": "chair_group"
+            },
+            {
+                "label": "sofa",
+                "category": "sofa_group"
+            },
+            {
+                "label": "stool",
+                "category": "stool_group"
+            },
+            {
+                "label": "cabinet",
+                "category": "cabinet_group"
+            },
+            {
+                "label": "chest_of_drawers",
+                "category": "dresser_cat"
+            },
+            {
+                "label": "shelving",
+                "category": "shelving_group"
+            },
+            {
+                "label": "bed",
+                "category": "bed_cat"
+            },
+            {
+                "label": "tv_monitor",
+                "category": "tv_monitor_group"
+            },
+            {
+                "label": "table",
+                "category": "table_group"
+            },
+            {
+                "label": "counter",
+                "category": "counter_cat"
+            },
+            {
+                "label": "cushion",
+                "category": "cushion_cat"
+            },
+            {
+                "label": "lighting",
+                "category": "lighting_group"
+            },
+            {
+                "label": "picture",
+                "category": "picture_cat"
+            },
+            {
+                "label": "plant",
+                "category": "plant_cat"
+            },
+            {
+                "label": "curtain",
+                "category": "curtain_blind_group"
+            },
+            {
+                "label": "mirror",
+                "category": "mirror_group"
+            },
+            {
+                "label": "toilet",
+                "category": "toilet_cat"
+            },
+            {
+                "label": "bathtub",
+                "category": "bathtub_cat"
+            },
+            {
+                "label": "shower",
+                "category": "shower_stall_cat"
+            },
+            {
+                "label": "sink",
+                "category": "sink_group"
+            }
+        ]
+    }
+}

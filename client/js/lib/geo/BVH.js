@@ -318,6 +318,7 @@ function constructWithHAC(objects, params) {
     return vol;
   };
   var raycaster = new THREE.Raycaster();
+  //raycaster.intersectBackFaces = true;
   var bvhnodes = new Set(objects.map(function (o) { return new BVHNode([o], params); }));
 
   var cachedDistances = {};

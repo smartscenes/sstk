@@ -1,24 +1,43 @@
-'use strict';
+const SingleModelCanvas = require('model-viewer/SingleModelCanvas');
+const AssetManager = require('assets/AssetManager');
+const SearchController = require('search/SearchController');
+const _  = require('util/util');
+require('jquery-lazy');
 
-define(['model-viewer/SingleModelCanvas', 'assets/AssetManager', 'search/SearchController', 'util/util', 'jquery-lazy'],
-function (SingleModelCanvas, AssetManager, SearchController, _) {
-
-  function SimpleModelViewer(params) {
-    params = (params instanceof Element) ? { container: params } : params;
+class SimpleModelViewer {
+  constructor(params) {
+    params = (params instanceof Element) ? {container: params} : params;
+    const defaults = {
+      supportArticulated: false,
+      sources: ['models3d', 'wss', 'archive3d'],
+      skipLoadInitialModel: false,
+      instructionsPanel: '#instructions',
+      modelSearchPanel: '#modelSearchPanel',
+      instructionsHtml:
+        'Left click = Orbit view<br>' +
+        'Right click = Pan view<br>' +
+        'Mouse wheel = Zoom view<br>' +
+        'R = Reset camera'
+    };
+    params = _.defaults(Object.create(null), params, defaults);
+    this.urlParams = _.getUrlParams();
     this.init(params);
   }
-  SimpleModelViewer.prototype.constructor = SimpleModelViewer;
 
-  SimpleModelViewer.prototype.onModelLoad = function (modelInstance) {
+  onModelLoad(modelInstance) {
     // To be overriden by inheriting children
-  };
+  }
 
-  SimpleModelViewer.prototype.init = function (params) {
+  initPanels(params) {
+    // To be overriden by inheriting children
+  }
+
+  init(params) {
     this.container = params.container;
     this.assetManager = new AssetManager({
       autoAlignModels: true,
       autoScaleModels: true,
-      useBuffers: true
+      supportArticulated: params.supportArticulated
     });
 
     params.assetManager = this.assetManager;
@@ -29,38 +48,56 @@ function (SingleModelCanvas, AssetManager, SearchController, _) {
       searchSucceededCallback: this.searchSucceeded.bind(this),
       getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
       onClickResultCallback: this.singleModelCanvas.loadModel.bind(this.singleModelCanvas),
-      sources: ['models3d', 'wss', 'archive3d'],
       restrictModelSources: true,
       loadImagesLazy: true,
-      searchPanel: $('#modelSearchPanel')
+      searchPanel: params.modelSearchPanel? $(params.modelSearchPanel): null
     });
     this.assetManager.setSearchController(this.modelSearchController);
+    this.assetManager.watchDynamicAssets(this.singleModelCanvas, 'dynamicAssets');
 
-    var instructions = $('#instructions');
+    const instructions = params.instructionsPanel? $(params.instructionsPanel) : null;
     if (instructions) {
-      instructions.html(
-        'Left click = Orbit view<br>' +
-        'Right click = Pan view<br>' +
-        'Mouse wheel = Zoom view<br>' +
-        'R = Reset camera'
-      );
+      instructions.html(params.instructionsHtml);
     }
     $(document).keydown(this.keyHandler.bind(this));
-    this.handleUrlParams();
+    if (!params.skipLoadInitialModel) {
+      this.loadInitialModel();
+    }
+    this.initPanels(params);
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
-  };
+  }
 
-  SimpleModelViewer.prototype.handleUrlParams = function () {
-    var params = _.getUrlParams();
-    var modelId = params['modelId'];
-    var autoRotate = params['autoRotate'];
+  registerCustomAssets(assetFiles) {
+    var scope = this;
+    var p = new Promise(
+      function(resolve, reject) {
+        // Setup assetGroups
+        if (assetFiles) {
+          scope.assetManager.registerCustomAssetGroups({
+            assetFiles: assetFiles,
+            callback: function(err, results) {
+              resolve(results);
+            }
+          });
+        } else {
+          resolve([]);
+        }
+      }
+    );
+    return p;
+  }
+
+  loadInitialModel() {
+    const params = _.getUrlParams();
+    const modelId = params['modelId'] || params['fullId'];
+    const autoRotate = params['autoRotate'];
     this.showModel(modelId, autoRotate);
-  };
+  }
 
-  SimpleModelViewer.prototype.showModel = function(modelId, autoRotate) {
+  showModel(modelId, autoRotate) {
     console.log('modelId=' + modelId + ', autoRotate=' + autoRotate);
     if (modelId) {
-      var hasSearchTextBox = this.modelSearchController.setSearchText('fullId:' + modelId);
+      const hasSearchTextBox = this.modelSearchController.setSearchText('fullId:' + modelId);
       if (hasSearchTextBox) {
         this.modelSearchController.startSearch();
       } else {
@@ -71,29 +108,29 @@ function (SingleModelCanvas, AssetManager, SearchController, _) {
     if (autoRotate) {
       this.singleModelCanvas.controls.setAutoRotate(autoRotate);
     }
-  };
+  }
 
-  SimpleModelViewer.prototype.onWindowResize = function () {
+  onWindowResize() {
     this.modelSearchController.onResize();
-  };
+  }
 
-  SimpleModelViewer.prototype.searchSucceeded = function (source, resultList) {
+  searchSucceeded(source, resultList) {
     this.assetManager.cacheModelInfos(source, resultList);
-    var sourceType = this.assetManager.getSourceDataType(source);
+    const sourceType = this.assetManager.getSourceDataType(source);
     if (sourceType === 'model') {
       // Pick top choice and load it!
       if (resultList.length > 0) {
         this.modelSearchController.searchPanel.selectOnPage(this.modelSearchController.searchPanel.curStart);
       }
     }
-  };
+  }
 
-  SimpleModelViewer.prototype.redisplay = function () {
+  redisplay() {
     this.singleModelCanvas.redisplay();
-  };
+  }
 
-  SimpleModelViewer.prototype.keyHandler = function (event) {
-    var tagName = (event.target || event.srcElement).tagName;
+  keyHandler(event) {
+    const tagName = (event.target || event.srcElement).tagName;
     if (tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA') {
       return true;
     }
@@ -106,9 +143,8 @@ function (SingleModelCanvas, AssetManager, SearchController, _) {
         return true;
       }
     }
-  };
+  }
+}
 
-  // Exports
-  return SimpleModelViewer;
-
-});
+// Exports
+module.exports = SimpleModelViewer;

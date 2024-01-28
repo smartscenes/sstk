@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var AssetQuerier = require('query/AssetQuerier');
 var AssetManager = require('assets/AssetManager');
 var SceneSchema = require('scene/SceneSchema');
@@ -9,7 +10,7 @@ var _ = require('util/util');
 function SceneQuerier(options) {
   // Set reasonable defaults
   var defaults = {
-    viewerUrl: 'scene-viewer.html',
+    viewerUrl: Constants.baseUrl + '/scene-viewer.html',
     viewerWindowName: 'Scene Viewer',
     previewImageIndex: null,
     assetTypes: ['scene'],
@@ -75,7 +76,7 @@ SceneQuerier.prototype.__onSourceChanged = function(source) {
 };
 
 SceneQuerier.prototype.getViewResultUrl = function(fullId, result) {
-  return this.viewerUrl + '?allowEdit=false&sceneId=' + fullId;
+  return this.__getBaseViewerUrl() + '&sceneId=' + fullId;
 };
 
 SceneQuerier.prototype.showResult = function (source, id, result) {
@@ -89,20 +90,25 @@ SceneQuerier.prototype.showResult = function (source, id, result) {
   }
 };
 
+SceneQuerier.prototype.__getBaseViewerUrl = function() {
+  var extra = this.options.includeExtraAssets ? '&extra' : '';
+  return this.viewerUrl + '?allowEdit=false' + extra;
+};
+
 SceneQuerier.prototype.showScene = function (source, id) {
   var fullId = AssetManager.toFullId(source, id);
-  var url = this.viewerUrl + '?allowEdit=false&sceneId=' + fullId;
+  var url = this.__getBaseViewerUrl() + '&sceneId=' + fullId;
   this.openViewer(url, 'Scene Viewer');
 };
 
 SceneQuerier.prototype.showLevel = function (fullId, level) {
-  var url = this.viewerUrl + '?allowEdit=false&sceneId=' + fullId + '&floor=' + level;
+  var url = this.__getBaseViewerUrl() + '&sceneId=' + fullId + '&floor=' + level;
   this.openViewer(url, 'Scene Viewer');
 };
 
 SceneQuerier.prototype.showRoom = function (fullId, level, room, loadAll) {
   loadAll = !!loadAll;
-  var url = this.viewerUrl + '?allowEdit=false&loadAll=' + loadAll + '&sceneId=' + fullId + '&floor=' + level + '&room=' + room;
+  var url = this.__getBaseViewerUrl() + '&loadAll=' + loadAll + '&sceneId=' + fullId + '&floor=' + level + '&room=' + room;
   this.openViewer(url, 'Room Viewer');
 };
 

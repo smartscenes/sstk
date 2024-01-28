@@ -90,109 +90,119 @@ THREE.EDLShader = {
  * To output to screen set renderToScreens true
  * @class THREE.EDLPass
  */
-THREE.EDLPass = function ( scene, camera, width, height ) {
-  THREE.ShaderPass.call( this, THREE.EDLShader );
+class EDLPass extends THREE.ShaderPass {
+  constructor(scene, camera, width, height) {
+    super(THREE.EDLShader);
 
-  this.width = ( width !== undefined ) ? width : 512;
-  this.height = ( height !== undefined ) ? height : 256;
+    this.width = (width !== undefined) ? width : 512;
+    this.height = (height !== undefined) ? height : 256;
 
-  this.renderToScreen = false;
+    this.renderToScreen = false;
 
-  this.camera2 = camera;
-  this.scene2 = scene;
+    this.camera2 = camera;
+    this.scene2 = scene;
 
-  //Depth material
-  this.depthMaterial = new THREE.MeshDepthMaterial();
-  this.depthMaterial.depthPacking = THREE.RGBADepthPacking;
-  this.depthMaterial.blending = THREE.NoBlending;
+    //Depth material
+    this.depthMaterial = new THREE.MeshDepthMaterial();
+    this.depthMaterial.depthPacking = THREE.RGBADepthPacking;
+    this.depthMaterial.blending = THREE.NoBlending;
 
-  //Depth render target
-  this.depthRenderTarget = new THREE.WebGLRenderTarget( this.width, this.height,
-    { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter } );
+    //Depth render target
+    this.depthRenderTarget = new THREE.WebGLRenderTarget(this.width, this.height,
+      {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter});
 
-  //Shader uniforms
-  this.uniforms[ 'tDepth' ].value = this.depthRenderTarget.texture;
-  this.uniforms[ 'size' ].value.set( this.width, this.height );
-  this.uniforms[ 'cameraNear' ].value = this.camera2.near;
-  this.uniforms[ 'cameraFar' ].value = this.camera2.far;
+    //Shader uniforms
+    this.uniforms['tDepth'].value = this.depthRenderTarget.texture;
+    this.uniforms['size'].value.set(this.width, this.height);
+    this.uniforms['cameraNear'].value = this.camera2.near;
+    this.uniforms['cameraFar'].value = this.camera2.far;
 
-  this.uniforms[ 'radius' ].value = 1;
-  this.uniforms[ 'strength' ].value = 1;
-  this.uniforms[ 'onlyAO' ].value = false;
+    this.uniforms['radius'].value = 1;
+    this.uniforms['strength'].value = 1;
+    this.uniforms['onlyAO'].value = false;
+  }
 
   //Setters and getters for uniforms
-  var self = this;
-  Object.defineProperties(this, {
-    radius: {
-      get: function() { return self.uniforms[ 'radius' ].value; },
-      set: function( value ) { self.uniforms[ 'radius' ].value = value; }
-    },
-    strength: {
-      get: function() { return self.uniforms[ 'strength' ].value; },
-      set: function( value ) { self.uniforms[ 'strength' ].value = value; }
-    },
-    onlyAO: {
-      get: function() { return self.uniforms[ 'onlyAO' ].value; },
-      set: function( value ) { self.uniforms[ 'onlyAO' ].value = value; }
-    }
-  });
-};
+  get radius() {
+    return this.uniforms['radius'].value;
+  }
 
-THREE.EDLPass.prototype = Object.create( THREE.ShaderPass.prototype );
+  set radius(value) {
+    this.uniforms['radius'].value = value;
+  }
 
-/**
- * Render using this pass.
- *
- * @method THREE.EDLPass.render
- * @param {WebGLRenderer} renderer
- * @param {WebGLRenderTarget} writeBuffer Buffer to write output.
- * @param {WebGLRenderTarget} readBuffer Input buffer.
- * @param {Number} delta Delta time in milliseconds.
- * @param {Boolean} maskActive Not used in this pass.
- */
-THREE.EDLPass.prototype.render = function( renderer, writeBuffer, readBuffer, delta, maskActive ) {
-  // AXC: Save oldOverrideMaterial so it can be restored
-  var oldOverrideMaterial = this.scene2.overrideMaterial;
-  this.scene2.overrideMaterial = this.depthMaterial;
-  renderer.setRenderTarget( this.depthRenderTarget );
-  renderer.clear();
-  renderer.render( this.scene2, this.camera2 );
-  this.scene2.overrideMaterial = oldOverrideMaterial;
-  THREE.ShaderPass.prototype.render.call( this, renderer, writeBuffer, readBuffer, delta, maskActive );
-};
+  get strength() {
+    return this.uniforms['strength'].value;
+  }
+  set strength(value) {
+    this.uniforms['strength'].value = value;
+  }
 
-/**
- * Change scene to be renderer by this render pass.
- *
- * @method THREE.EDLPass.setScene
- * @param {Scene} scene
- */
-THREE.EDLPass.prototype.setScene = function(scene) {
-  this.scene2 = scene;
-};
+  get onlyAO() {
+    return this.uniforms['onlyAO'].value;
+  }
+  set onlyAO(value) {
+    this.uniforms['onlyAO'].value = value;
+  }
 
-/**
- * Set camera used by this render pass.
- *
- * @method THREE.EDLPass.setCamera
- * @param {Camera} camera
- */
-THREE.EDLPass.prototype.setCamera = function( camera ) {
-  this.camera2 = camera;
-  this.uniforms[ 'cameraNear' ].value = this.camera2.near;
-  this.uniforms[ 'cameraFar' ].value = this.camera2.far;
-};
+  /**
+   * Render using this pass.
+   *
+   * @method THREE.EDLPass.render
+   * @param {WebGLRenderer} renderer
+   * @param {WebGLRenderTarget} writeBuffer Buffer to write output.
+   * @param {WebGLRenderTarget} readBuffer Input buffer.
+   * @param {Number} delta Delta time in milliseconds.
+   * @param {Boolean} maskActive Not used in this pass.
+   */
+  render(renderer, writeBuffer, readBuffer, delta, maskActive) {
+    // AXC: Save oldOverrideMaterial so it can be restored
+    const oldOverrideMaterial = this.scene2.overrideMaterial;
+    this.scene2.overrideMaterial = this.depthMaterial;
+    renderer.setRenderTarget(this.depthRenderTarget);
+    renderer.clear();
+    renderer.render(this.scene2, this.camera2);
+    this.scene2.overrideMaterial = oldOverrideMaterial;
+    super.render(renderer, writeBuffer, readBuffer, delta, maskActive);
+  }
 
-/**
- * Set resolution of this render pass.
- *
- * @method THREE.EDLPass.setSize
- * @param {Number} width
- * @param {Number} height
- */
-THREE.EDLPass.prototype.setSize = function( width, height ) {
-  this.width = width;
-  this.height = height;
-  this.uniforms[ 'size' ].value.set( this.width, this.height );
-  this.depthRenderTarget.setSize( this.width, this.height );
-};
+  /**
+   * Change scene to be renderer by this render pass.
+   *
+   * @method THREE.EDLPass.setScene
+   * @param {Scene} scene
+   */
+  setScene(scene) {
+    this.scene2 = scene;
+  }
+
+  /**
+   * Set camera used by this render pass.
+   *
+   * @method THREE.EDLPass.setCamera
+   * @param {Camera} camera
+   */
+  setCamera(camera) {
+    this.camera2 = camera;
+    this.uniforms['cameraNear'].value = this.camera2.near;
+    this.uniforms['cameraFar'].value = this.camera2.far;
+  }
+
+  /**
+   * Set resolution of this render pass.
+   *
+   * @method THREE.EDLPass.setSize
+   * @param {Number} width
+   * @param {Number} height
+   */
+  setSize(width, height) {
+    this.width = width;
+    this.height = height;
+    this.uniforms['size'].value.set(this.width, this.height);
+    this.depthRenderTarget.setSize(this.width, this.height);
+  }
+}
+
+THREE.EDLPass = EDLPass;
+
+module.exports = EDLPass;

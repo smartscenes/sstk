@@ -1,6 +1,8 @@
 const DistanceMatrix = require('parts/DistanceMatrix');
 const Distances = require('geo/Distances');
 const DSUtil = require('ds/util');
+const ElemToLabelIndexBuffer = require('geo/seg/ElemToLabelIndexBuffer');
+const GeometryUtil = require('geo/GeometryUtil');
 const Object3DUtil = require('geo/Object3DUtil');
 const MeshSegmentator = require('geo/MeshSegmentator');
 const MeshFaces = require('geo/MeshFaces');
@@ -44,9 +46,9 @@ class ObjectSegmentator {
     if (opts.debug) {
       console.time('identifyConnectedComponentsByDistance');
     }
-    var distances = new DistanceMatrix([], true);
+    const distances = new DistanceMatrix([], true);
     //console.log(distances);
-    var connectedComponents = DSUtil.identifyConnectedComponentsWithCachedDistanceMatrix(nodes,
+    const connectedComponents = DSUtil.identifyConnectedComponentsWithCachedDistanceMatrix(nodes,
       _.range(0, nodes.length), distances, minDist,
       (m1, m2) => {
         return Distances.computeDistance(m1, m2, {all: true, shortCircuit: {maxDistSq: maxDistSq}});
@@ -61,17 +63,45 @@ class ObjectSegmentator {
     return { nodes: nodes, components: connectedComponents };
   }
 
+  getSegmentation(object3D, opts) {
+    const meshes = Object3DUtil.getMeshList(object3D);
+    let segmented = meshes.map(mesh => {
+      return { mesh: mesh, meshSegs: this.meshSegmentator.segment(mesh, opts) };
+    });
+    if (opts.format === 'trimesh') {
+      // each segment should be of the form {meshIndex: x, triIndex: [...] }
+      segmented = segmented.map((m, meshIndex) =>
+        _.flatten(m.meshSegs.map((meshFaces, i) => {
+          const faceIndices = opts.condenseFaceIndices?
+            _.toCondensedIndices(meshFaces.faceIndices) : meshFaces.faceIndices;
+          return {meshIndex: meshIndex, triIndex: faceIndices};
+        })));
+    } else if (opts.format === 'triIndexToSeg') {
+      // provide one buffer with triangle index to segment index
+      segmented = segmented.map((m, meshIndex) => {
+        const nTris = GeometryUtil.getGeometryFaceCount(m.mesh.geometry);
+        const buffer = new ElemToLabelIndexBuffer(nTris);
+        buffer.fromGroupedElemIndices(m.meshSegs, (g, i) => i, 'faceIndices');
+        return buffer;
+      });
+    } else if (opts.format === 'meshSegs') {
+    } else {
+      console.error('Cannot convert to unsupported mesh segmentation format', opts.format);
+    }
+    return segmented;
+  }
+
   segmentObject(object3D, opts) {
-    var converted = Object3DUtil.deepConvert(object3D, node => {
+    const converted = Object3DUtil.deepConvert(object3D, node => {
       if (node instanceof THREE.Mesh) {
-        var segmented = this.meshSegmentator.segment(node, opts);
+        const segmented = this.meshSegmentator.segment(node, opts);
         if (segmented.length > 1) {
-          var newNode = new THREE.Object3D();
+          const newNode = new THREE.Object3D();
           newNode.matrix.copy(node.matrix);
           newNode.matrix.decompose(newNode.position, newNode.quaternion, newNode.scale);
           newNode.matrixWorldNeedsUpdate = true;
-          for (var i = 0; i < segmented.length; i++) {
-            var m = segmented[i].toMesh();
+          for (let i = 0; i < segmented.length; i++) {
+            const m = segmented[i].toMesh();
             if (opts.includeFaceIndices) {
               m.userData.faceIndices = opts.condenseFaceIndices?
                 _.toCondensedIndices(segmented[i].faceIndices) : segmented[i].faceIndices;
@@ -92,26 +122,33 @@ class ObjectSegmentator {
 
   applyTriMeshSegmentation(object3D, segmentation, opts) {
     opts = opts || {};
-    var segmentationByMeshIndex = _.groupBy(segmentation, 'meshIndex');
-    var converted = Object3DUtil.deepConvert(object3D, node => {
+    const meshes = Object3DUtil.getMeshList(object3D);
+    for (let i = 0; i < meshes.length; i++) {
+      meshes[i].userData.meshIndex = i;
+    }
+    const segIndexField = opts.segIndexField || 'segIndex';
+    const segmentationByMeshIndex = _.groupBy(segmentation, 'meshIndex');
+    const converted = Object3DUtil.deepConvert(object3D, node => {
       if (node instanceof THREE.Mesh) {
-        var segmented = segmentationByMeshIndex[node.userData.index];
-        if (segmented.length > 1) {
-          var newNode = new THREE.Object3D();
+        // TODO: use meshIndex vs this vague variable index
+        const meshIndex = (node.userData.index != null)? node.userData.index : node.userData.meshIndex;
+        const segmented = segmentationByMeshIndex[meshIndex];
+        if (segmented && segmented.length > 1) {
+          const newNode = new THREE.Object3D();
           newNode.matrix.copy(node.matrix);
           newNode.matrix.decompose(newNode.position, newNode.quaternion, newNode.scale);
           newNode.matrixWorldNeedsUpdate = true;
-          for (var i = 0; i < segmented.length; i++) {
-            var faceIndices = segmented[i].triIndex;
-            var mf = new MeshFaces(node, faceIndices);
-            var m = mf.toMesh();
+          for (let i = 0; i < segmented.length; i++) {
+            const faceIndices = segmented[i].triIndex;
+            const mf = new MeshFaces(node, faceIndices);
+            const m = mf.toMesh();
             if (opts.includeFaceIndices) {
               m.userData.faceIndices = opts.condenseFaceIndices?
                 _.toCondensedIndices(faceIndices) : faceIndices;
             }
             Object3DUtil.clearTransform(m);
             newNode.add(m);
-            var segIndex = segmented[i].surfaceIndex;
+            const segIndex = segmented[i][segIndexField];
             m.userData.segIndex = segIndex;
             m.userData.id = segIndex;
           }
@@ -120,7 +157,7 @@ class ObjectSegmentator {
           if (segmented[0].triIndex && segmented[0].triIndex.length) {
             console.warn('Ignored triIndex for single mesh', node);
           }
-          var segIndex = segmented[0].surfaceIndex;
+          const segIndex = segmented[0][segIndexField];
           node.userData.segIndex = segIndex;
           node.userData.id = segIndex;
           return node;

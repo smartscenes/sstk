@@ -38,7 +38,11 @@ function getIndexMaterial(idx, color, palette) {
 
 function colorObj(obj, material, opts) {
   opts = opts || {};
-  var setMaterialMode = (Object3DUtil.getModelInstance(obj) != null)? Object3DUtil.MaterialsAllNonRecursive : Object3DUtil.MaterialsAll;
+  var setMaterialMode = opts.setMaterialMode;
+  if (setMaterialMode == null) {
+    setMaterialMode = (Object3DUtil.getModelInstance(obj) != null || obj.userData.isArch) ?
+      Object3DUtil.MaterialsAllNonRecursive : Object3DUtil.MaterialsAll;
+  }
   Object3DUtil.setMaterial(obj, material, setMaterialMode, true, function(node, m) {
     if (!opts.isTemporary) {
       node.__colorMaterial = m;
@@ -47,13 +51,27 @@ function colorObj(obj, material, opts) {
   });
 }
 
-SceneUtil.revertMaterial = function(obj, fullRevert) {
-  var nonrecursive = (Object3DUtil.getModelInstance(obj) != null);
+SceneUtil.revertMaterial = function(obj, fullRevert, clearColorMaterial, nonrecursive) {
+  if (nonrecursive == null) {
+    nonrecursive = (Object3DUtil.getModelInstance(obj) != null);
+  }
   Object3DUtil.revertMaterials(obj, nonrecursive, fullRevert);
+  if (clearColorMaterial) {
+    Object3DUtil.traverseMeshes(obj,
+      nonrecursive,
+      function (node) {
+        if (node.__colorMaterial) {
+          delete node.__colorMaterial;
+        }
+    });
+  }
 };
 
-SceneUtil.recolorObject = function(object3D) {
-  var setMaterialMode = (Object3DUtil.getModelInstance(object3D) != null) ? Object3DUtil.MaterialsAllNonRecursive : Object3DUtil.MaterialsAll;
+SceneUtil.recolorObject = function(object3D, setMaterialMode) {
+  if (setMaterialMode == null) {
+    setMaterialMode = (Object3DUtil.getModelInstance(object3D) != null) ?
+      Object3DUtil.MaterialsAllNonRecursive : Object3DUtil.MaterialsAll;
+  }
   Object3DUtil.setMaterial(object3D, function(node) {
     return node.__colorMaterial;
   }, setMaterialMode, true);
@@ -68,14 +86,25 @@ SceneUtil.revertMaterials = function(sceneState) {
     var object = sceneState.extraObjects[i];
     SceneUtil.revertMaterial(object);
   }
+  var archObjects = sceneState.getArchObject3Ds();
+  for (var i = 0; i < archObjects.length; i++) {
+    var object = archObjects[i];
+    SceneUtil.revertMaterial(object);
+  }
 };
 
 // TODO: deprecate category
-SceneUtil.ColorByOptions = [
+// ColorByTypes for whole scene
+SceneUtil.ColorByTypes = [
  'objectId', 'objectMaterialId', 'objectPartId', 'objectPartLabel', 'partId',
  'modelId', 'category', 'objectType', 'roomId', 'roomType', 'roomSurface',
  'materialId', 'material', 'texture', 'meshId',
  'depth', 'normal', 'wireframe', 'color'];
+
+// ColorByTypes for single object
+SceneUtil.ColorByTypesObject = [
+  'depth', 'normal', 'faceIndex', 'triuv', 'color'
+];
 
 /**
  * Recolors a scene
@@ -107,6 +136,8 @@ SceneUtil.ColorByOptions = [
  * @param [opts.palette] {Palette}
  * @param [opts.getId]
  * @param [opts.getObjectId]
+ * @param [opts.getCategory]
+ * @param [opts.modelIdCategoryMapping]
  * @param [opts.randomize]
  * @param [opts.rng]
  */
@@ -118,18 +149,48 @@ SceneUtil.colorScene = function(sceneState, colorBy, opts) {
   }
   if (loadIndex && _.size(loadIndex) > 0) {
     // Need to load these indices before calling color scene
-    async.eachOfSeries(loadIndex, function(item, key, cb) {
-      Index.import({ fs: opts.fs, filename: item, callback: function(err, index) {
-        if (index) {
-          opts[key] = index;
+    async.eachOfSeries(loadIndex, function (item, key, cb) {
+      Index.import({
+        fs: opts.fs, filename: item,
+        updateMetadataFn: function(index, metadata) {
+          if (metadata['hex'] != null && metadata['color'] == null) {
+            metadata['color'] = metadata['hex'];
+            if (index.__metadataFields.indexOf('color') < 0) {
+              index.__metadataFields.push('color');
+            }
+          }
+          console.log('update metadata', metadata);
+        },
+        callback: function (err, index) {
+          if (index) {
+            opts[key] = index;
+          }
+          cb(err, index);
         }
-        cb(err, index);
-      }});
-    }, function(err, res) {
-      SceneUtil.__colorScene(sceneState, colorBy, opts);
+      });
+    }, function (err, res) {
+      SceneUtil.__ensureGetCategory(opts, (err, res) => SceneUtil.__colorScene(sceneState, colorBy, opts));
     });
+  } else if (opts.modelIdCategoryMapping) {
+    SceneUtil.__ensureGetCategory(opts, (err, res) => SceneUtil.__colorScene(sceneState, colorBy, opts));
   } else {
     return SceneUtil.__colorScene(sceneState, colorBy, opts);
+  }
+};
+
+SceneUtil.__ensureGetCategory = function(opts, callback) {
+  if (!opts.getCategory && opts.modelIdCategoryMapping) {
+    var catMappingOpts = _.defaults(Object.create(null), { fs: opts.fs}, opts.modelIdCategoryMapping);
+    SceneUtil.modelIdMappingToGetCategoryFn(catMappingOpts.path, catMappingOpts, (err, res) => {
+      if (err) {
+        callback(err);
+      } else {
+        opts.getCategory = res;
+        callback(null, res);
+      }
+    });
+  } else {
+    callback();
   }
 };
 
@@ -209,6 +270,8 @@ SceneUtil.__colorScene = function (sceneState, colorBy, opts) {
       { segmentType: 'parts', segmentName: 'parts', recolorAlphaTexture: true }, opts, { useLabel: true }));
   } else if (colorBy === 'index') {
     return SceneUtil.__colorSceneByIndex(sceneState, opts);
+  } else if (colorBy === 'splitColors') {
+    return SceneUtil.__colorSceneUsingDifferentMaterials(sceneState, opts);
   } else if (colorBy) {
     var material = SceneUtil.__getColorByMaterial(colorBy, opts);
     if (material) {
@@ -223,6 +286,12 @@ SceneUtil.__colorScene = function (sceneState, colorBy, opts) {
 };
 
 SceneUtil.colorObject3D = function(object3D, opts) {
+  if (opts.ensureVertexColors) {
+    Object3DUtil.ensureVertexColors(object3D, true);
+    var vertexMat = new THREE.MeshBasicMaterial();
+    vertexMat.vertexColors = true;
+    colorObj(object3D, vertexMat, opts);
+  }
   if (opts.colorBy === 'vertexAttribute') {
     var attributeName = opts.color;
     Object3DUtil.colorVerticesUsingVertexAttribute(
@@ -254,6 +323,9 @@ SceneUtil.colorObject3D = function(object3D, opts) {
     Object3DUtil.colorVerticesUsingFaceAttribute(
       object3D, attributeName, opts.encodeIndex ? 'useRawAttribute' : false);
     return true;
+  } else if (opts.colorBy === 'triuv') {
+    Object3DUtil.colorVerticesAsRGB(object3D);
+    return true;
   } else {
     var material = SceneUtil.__getColorByMaterial(opts.colorBy, opts);
     if (material) {
@@ -274,21 +346,82 @@ SceneUtil.__getColorByMaterial = function(colorBy, opts) {
     return new THREE.MeshBasicMaterial({color: new THREE.Color(0), wireframe: true, side: THREE.DoubleSide});
   } else if (colorBy === 'color') {
     return Object3DUtil.getStandardMaterial(opts.color, opts.alpha);
+  } else {
+    console.log('unsupported colorBy mode ' + colorBy);
   }
 };
 
+SceneUtil.applyColorSchemeToNewModel = function(modelInstance, colorBy, opts) {
+  if (colorBy !== 'original') {
+    // TODO(AXC): this doesn't really handle all the coloring mode that we support
+    // it only handles ('original', 'depth', 'normal', 'wireframe', and 'color')
+    // see SceneUtil.__colorScene
+    var material = SceneUtil.__getColorByMaterial(colorBy, opts);
+    if (material) {
+      colorObj(modelInstance.object3D, material.clone(), opts);
+    }
+  }
+};
+
+SceneUtil.__colorSceneObjectsUsingMaterial = function (sceneState, material, opts) {
+  for (var i = 0; i < sceneState.modelInstances.length; i++) {
+    var modelInstance = sceneState.modelInstances[i];
+    if (material) {
+      colorObj(modelInstance.object3D, material.clone(), opts);
+    } else if (opts.colorBy === 'original') {
+      SceneUtil.revertMaterial(modelInstance.object3D, true, true);
+    }
+  }
+};
+
+SceneUtil.__colorSceneArchUsingMaterial = function (sceneState, archMaterial, opts) {
+  var archObjects = sceneState.getArchObject3Ds();
+  for (var i = 0; i < archObjects.length; i++) {
+    if (archMaterial) {
+      colorObj(archObjects[i], archMaterial.clone(), opts);
+    } else {
+      SceneUtil.revertMaterial(archObjects[i], true, true, true);
+    }
+  }
+};
+
+SceneUtil.colorSceneArch = function(sceneState, opts) {
+  if (opts.colorBy !== 'original') {
+    var archMaterial = SceneUtil.__getColorByMaterial(opts.colorBy, opts);
+    SceneUtil.__colorSceneArchUsingMaterial(sceneState, archMaterial, opts);
+  } else {
+    SceneUtil.__colorSceneArchUsingMaterial(sceneState, null, opts);
+  }
+};
+
+SceneUtil.__colorSceneUsingDifferentMaterials = function (sceneState, opts) {
+  opts = _.clone(opts);
+  opts.setMaterialMode = Object3DUtil.MaterialsAllNonRecursive;
+  if (opts.arch) {
+    this.colorSceneArch(sceneState, opts.arch);
+  }
+  if (opts.object) {
+    if (opts.object.colorBy !== 'original') {
+      var objMaterial = SceneUtil.__getColorByMaterial(opts.object.colorBy, opts.object);
+      SceneUtil.__colorSceneObjectsUsingMaterial(sceneState, objMaterial, opts.object);
+    } else {
+      SceneUtil.__colorSceneObjectsUsingMaterial(sceneState, null, opts.object);
+    }
+  }
+};
 
 SceneUtil.__colorSceneUsingMaterial = function (sceneState, opts) {
   opts = opts || {};
   var material = opts.material;
   for (var i = 0; i < sceneState.modelInstances.length; i++) {
     var modelInstance = sceneState.modelInstances[i];
-    colorObj(modelInstance.object3D, material, opts);
+    colorObj(modelInstance.object3D, material.clone(), opts);
   }
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
-    var object = sceneState.extraObjects[i];
-    colorObj(object, material, opts);
-  }
+      var object = sceneState.extraObjects[i];
+      colorObj(object, material.clone(), opts);
+    }
+
   if (opts.callback) {
     opts.callback(null, {});
   }
@@ -300,6 +433,7 @@ SceneUtil.__colorSceneByMaterial = function (sceneState, opts) {
   var palette = opts.palette || Colors.palettes.d3_unknown_category19p;
   var materialIndex = opts.materialIndex;
   var categoryIndex = opts.index || materialIndex || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   var rng = opts.rng || RNG.global;
 
@@ -403,9 +537,12 @@ SceneUtil.__colorSceneByIndex = function (sceneState, opts) {
 
 SceneUtil.__colorSceneByModelId = function (sceneState, opts) {
   opts = opts || {};
+  opts = _.clone(opts);
+  opts.setMaterialMode = Object3DUtil.MaterialsAllNonRecursive;
   var getMaterialFn = opts.getMaterialFn || getMaterial;
   var palette = opts.palette || Colors.palettes.d3_unknown_category19p;
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   for (var i = 0; i < sceneState.modelInstances.length; i++) {
     var modelInstance = sceneState.modelInstances[i];
@@ -425,9 +562,12 @@ SceneUtil.__colorSceneByModelId = function (sceneState, opts) {
 
 SceneUtil.__colorSceneByObjectId = function (sceneState, opts) {
   opts = opts || {};
+  opts = _.clone(opts);
+  opts.setMaterialMode = Object3DUtil.MaterialsAllNonRecursive;
   var getMaterialFn = opts.getMaterialFn || getMaterial;
   var palette = opts.palette || Colors.palettes.d3_unknown_category19p;
   var categoryIndex = opts.index || opts.objectIndex || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   for (var i = 0; i < sceneState.modelInstances.length; i++) {
     var modelInstance = sceneState.modelInstances[i];
@@ -443,8 +583,10 @@ SceneUtil.__colorSceneByObjectId = function (sceneState, opts) {
     }
     colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
-  for (var i = 0; i < sceneState.extraObjects.length; i++) {
-    var object = sceneState.extraObjects[i];
+  // TODO: handle extra objects that are not arch objects?
+  var extraObjects = sceneState.getArchObject3Ds();
+  for (var i = 0; i < extraObjects.length; i++) {
+    var object = extraObjects[i];
     var colorIdx = -1;
     if (opts.getIndex) {
       colorIdx = opts.getIndex(object);
@@ -486,6 +628,7 @@ SceneUtil.__colorSceneByMeshId = function (sceneState, opts) {
   var getMaterialFn = opts.getMaterialFn || getMaterial;
   var palette = opts.palette || Colors.palettes.d3_unknown_category19p;
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var addToIndex = !(opts.restrictToIndex && opts.index);
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   var meshes = Object3DUtil.getMeshList(sceneState.scene, true);
@@ -517,9 +660,12 @@ SceneUtil.__colorSceneByPartId = function (sceneState, opts) {
 
 SceneUtil.__colorSceneByObjectPart = function (sceneState, opts) {
   opts = opts || {};
+  opts = _.clone(opts);
+  opts.setMaterialMode = Object3DUtil.MaterialsAllNonRecursive;
   var getMaterialFn = opts.getMaterialFn || getMaterial;
   var palette = opts.palette || Colors.palettes.d3_unknown_category19p;
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   var objectIndex = null;
   if (opts.encodeIndex) {
@@ -589,8 +735,48 @@ SceneUtil.__colorSceneByObjectPart = function (sceneState, opts) {
   return categoryIndex;
 };
 
+/**
+ * Return a function that reads from a mappingFile and returns a function that takes a ModelInstance to a category
+ * @param mappingFile
+ * @param [opts.fs] {FileUtil}
+ * @param [opts.modelIdKey] {string} Key of modelId (default is 'id')
+ * @param [opts.categoryKey] {string} Key of category (default is 'category')
+ * @param [opts.useFullId] {boolean} Whether to use full id for lookup
+ * @param callback {function(err,function)}
+ */
+SceneUtil.modelIdMappingToGetCategoryFn = function(mappingFile, opts, callback) {
+  var AssetManager = require('assets/AssetManager');
+  opts = _.defaults(Object.create(null), opts || {},  {
+    modelIdKey: 'id',
+    categoryKey: 'category',
+    useFullId: false
+  });
+  opts.fs.loadDelimited(mappingFile, { keyBy: opts.modelIdKey }, (err, parsed) => {
+    if (err) {
+      callback(err);
+    } else if (parsed.error) {
+      callback(parsed.error, null);
+    } else {
+      var map = parsed.data;
+      var func = function (modelInstance) {
+        var fullId = modelInstance.model.getFullID();
+        var id = fullId;
+        if (!opts.useFullId) {
+          id = AssetManager.toSourceId(null, fullId).id;
+        }
+        // console.log(`lookup ${id} ${map[id]}`)
+        var element = map[id];
+        return element ? element[opts.categoryKey] : undefined;
+      };
+      callback(null, func);
+    }
+  });
+};
+
 SceneUtil.__colorSceneByObjectType = function (sceneState, opts) {
   opts = opts || {};
+  opts = _.clone(opts);
+  opts.setMaterialMode = Object3DUtil.MaterialsAllNonRecursive;
   var getCategory = opts.getCategory;
   var getMaterialFn = opts.getMaterialFn || getMaterial;
   var palette = opts.palette || Colors.concatPalettes('all-roomtypes',[
@@ -598,6 +784,7 @@ SceneUtil.__colorSceneByObjectType = function (sceneState, opts) {
     Colors.palettes.d3_category18p
   ]);
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   if (opts.restrictToIndex && opts.index) {
     var validCategories = new Set(opts.index.objects());
@@ -627,8 +814,10 @@ SceneUtil.__colorSceneByObjectType = function (sceneState, opts) {
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
     colorObj(modelInstance.object3D, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
-  for (var i = 0; i < sceneState.extraObjects.length; i++) {
-    var object = sceneState.extraObjects[i];
+  // TODO: handle extra objects that are not arch objects?
+  var extraObjects = sceneState.getArchObject3Ds();
+  for (var i = 0; i < extraObjects.length; i++) {
+    var object = extraObjects[i];
     var category = object.userData.type || object.name;
     var colorIdx = (category != undefined)? categoryIndex.indexOf(category, true) : unknownIdx;
     colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
@@ -648,6 +837,7 @@ SceneUtil.__colorSceneByRoomId = function (sceneState, opts) {
     ]);
   var rooms = sceneState.getRooms();
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   categoryIndex.indexOf('Wall', true);
   categoryIndex.indexOf('Outside', true);
@@ -664,7 +854,7 @@ SceneUtil.__colorSceneByRoomId = function (sceneState, opts) {
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
     var objRooms = object.userData.roomIds;
-    var inRoom = objRooms && objRooms.length > 0;
+    var inRoom = (objRooms && objRooms.length > 0) || (object.userData.type === 'Room');
     if (!inRoom) {
       var colorIdx = categoryIndex.indexOf('Outside', true);
       colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
@@ -679,12 +869,11 @@ SceneUtil.__colorSceneByRoomId = function (sceneState, opts) {
   }
 
   // Keep walls a nice lovely gray
-  for (var i = 0; i < sceneState.extraObjects.length; i++) {
-    var object = sceneState.extraObjects[i];
-    if (object.userData.type === 'Wall') {
-      var colorIdx = categoryIndex.indexOf('Wall', true);
-      colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
-    }
+  var walls = sceneState.getWalls();
+  for (var i = 0; i < walls.length; i++) {
+    var object = walls[i];
+    var colorIdx = categoryIndex.indexOf('Wall', true);
+    colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   if (opts.callback) {
     opts.callback(null, { index: categoryIndex });
@@ -703,6 +892,7 @@ SceneUtil.__colorSceneByRoomType = function (sceneState, opts) {
     //Colors.palettes.d3_category19p;
   var rooms = sceneState.getRooms();
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   categoryIndex.indexOf('Wall', true);
   categoryIndex.indexOf('Outside', true);
@@ -731,7 +921,7 @@ SceneUtil.__colorSceneByRoomType = function (sceneState, opts) {
   for (var i = 0; i < sceneState.extraObjects.length; i++) {
     var object = sceneState.extraObjects[i];
     var objRooms = object.userData.roomIds;
-    var inRoom = objRooms && objRooms.length > 0;
+    var inRoom = (objRooms && objRooms.length > 0) || (object.userData.type === 'Room');
     if (!inRoom) {
       var colorIdx = categoryIndex.indexOf('Outside', true);
       colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
@@ -747,12 +937,11 @@ SceneUtil.__colorSceneByRoomType = function (sceneState, opts) {
   }
 
   // Keep walls a nice lovely gray
-  for (var i = 0; i < sceneState.extraObjects.length; i++) {
-    var object = sceneState.extraObjects[i];
-    if (object.userData.type === 'Wall') {
-      var colorIdx = categoryIndex.indexOf('Wall', true);
-      colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
-    }
+  var walls = sceneState.getWalls();
+  for (var i = 0; i < walls.length; i++) {
+    var object = walls[i];
+    var colorIdx = categoryIndex.indexOf('Wall', true);
+    colorObj(object, getMaterialFn(colorIdx, categoryIndex.metadata(colorIdx, 'color'), palette), opts);
   }
   if (opts.callback) {
     opts.callback(null, { index: categoryIndex });
@@ -768,6 +957,7 @@ SceneUtil.__colorSceneByRoomSurface = function (sceneState, opts) {
     Colors.palettes.d3_category18p
   ]);
   var categoryIndex = opts.index || new Index();
+  categoryIndex.palette = palette;
   var unknownIdx = categoryIndex.indexOf('unknown', true);
   categoryIndex.indexOf('Outside', true);
 
@@ -1149,7 +1339,7 @@ SceneUtil.ensureObjectSegmentation = function(sceneState, opts) {
       if (!modelInstance.model.segmentations[opts.segmentType]) {
         var segmentationInfo = modelInstance.model.info[opts.segmentType];
         if (segmentationInfo) {
-          var IndexedSegmentation = require('geo/IndexedSegmentation');
+          var IndexedSegmentation = require('geo/seg/IndexedSegmentation');
           modelInstance.model.segmentations[opts.segmentType] = new IndexedSegmentation({
             filename: segmentationInfo.file,
             segmentType: opts.segmentType
@@ -1334,7 +1524,7 @@ SceneUtil.estimateFloorHeight = function(level, point, nsamples, maxDist, kNeigh
       //console.log('got closest', csamples);
       if (csamples.length === 1) { return csamples[0].y; }
       else {
-        var sum = _.sum(csamples, function(p) { return p.y; });
+        var sum = _.sumBy(csamples, function(p) { return p.y; });
         return sum/csamples.length;
       }
     }
@@ -1374,7 +1564,7 @@ SceneUtil.computeStatistics = function(sceneState, opts) {
     transform = opts.transform.clone();
   } else {
     var sceneTransformMatrixInverse = new THREE.Matrix4();
-    sceneTransformMatrixInverse.getInverse(sceneState.scene.matrixWorld);
+    sceneTransformMatrixInverse.copy(sceneState.scene.matrixWorld).invert();
     transform = sceneTransformMatrixInverse;
   }
   var scaleBy = opts.unit ? (sceneState.info.defaultUnit / opts.unit) : 1.0;
@@ -1812,16 +2002,17 @@ SceneUtil.detectOutlierObjects = function(sceneState, opts) {
   return { outliers: outliers, root: root };
 };
 
+// TODO: specify assetGroup to use for sceneStats
 SceneUtil.getAggregatedSceneStatistics = function(cache, cb, opts) {
   opts = opts || {};
   if (cache.aggregatedSceneStatistics) {
     setTimeout(function() { cb(null, cache.aggregatedSceneStatistics); }, 0);
   } else {
-    var p5dSceneAssetGroup = AssetGroups.getAssetGroup('p5dScene');
+    var sceneStatsAssetGroup = AssetGroups.getAssetGroup(opts.assetGroup);
     cache.aggregatedSceneStatistics = new SceneStatistics();
     cache.aggregatedSceneStatistics.importCsvs({
       fs: opts.fs || Constants.sys.fs,
-      basename: p5dSceneAssetGroup.rootPath + '/stats/suncg',
+      basename: sceneStatsAssetGroup.rootPath + '/stats/',
       stats: opts.stats || ['materials', 'relations'],
       callback: function(err, data) {
         if (err) {
@@ -1870,6 +2061,32 @@ SceneUtil.visualizeWallLines = function(sceneState, walls) {
   // Make sure debugNode is visible
   Object3DUtil.setVisible(sceneState.debugNode, true);
   return wallLines;
+};
+
+
+SceneUtil.identifyExteriorDoors = function(sceneState, opts) {
+  var doors = sceneState.findModelInstances(function(mi) {
+    return mi.model.isDoor() ;
+  });
+  var checkOpts = {
+    nsamples: 10,
+    isClearThreshold: 0.2,
+    callback: opts.sampleCallback
+  };
+  var exteriorDoors = [];
+  for (var i = 0; i < doors.length; i++) {
+    var door = doors[i];
+    var res = door.checkBBFaceClear(door, [sceneState.scene], Constants.BBoxFaces.FRONT, checkOpts);
+    // console.log('check front', res);
+    if (!res.isClear) {
+      res = door.checkBBFaceClear(door, [sceneState.scene], Constants.BBoxFaces.BACK, checkOpts);
+      // console.log('check back', res);
+    }
+    if (res.isClear) {
+      exteriorDoors.push(door);
+    }
+  }
+  return exteriorDoors;
 };
 
 module.exports = SceneUtil;

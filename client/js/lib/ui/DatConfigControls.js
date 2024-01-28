@@ -1,6 +1,6 @@
 'use strict';
 
-var dat = require('dat.gui');
+var dat = require('ui/datGui');
 
 /**
  * Config controls with dat gui
@@ -64,6 +64,10 @@ DatConfigControls.prototype.close = function() {
 
 DatConfigControls.prototype.open = function() {
   this.datgui.open();
+};
+
+DatConfigControls.prototype.reattach = function() {
+  this.container.append($(this.datgui.domElement));
 };
 
 // Exports

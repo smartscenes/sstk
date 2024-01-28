@@ -29,6 +29,7 @@ function CollisionProcessorRaycast(opts) {
   this.__vn = new THREE.Vector3(0, 0, 0);
   this.__fn = new THREE.Vector3(0, 0, 0);
   this.__raycaster = new THREE.Raycaster();
+  //this.__raycaster.intersectBackFaces = true;
 }
 CollisionProcessorRaycast.prototype = Object.create(CollisionProcessorNull.prototype);
 CollisionProcessorRaycast.prototype.constructor = CollisionProcessorRaycast;
@@ -134,7 +135,7 @@ CollisionProcessorRaycast.prototype.__intersectObjectBVH = function(raycaster) {
           if ( raycaster.ray.isIntersectionSphere( sphere ) === false ) continue;
 
           ray.copy(raycaster.ray);
-          inverseMatrix.getInverse(matrixWorld);
+          inverseMatrix.copy(matrixWorld).invert();
           ray.applyMatrix4(inverseMatrix);
 
           if (mesh.geometry.boundingBox !== null) {

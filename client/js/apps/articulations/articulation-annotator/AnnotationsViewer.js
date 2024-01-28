@@ -7,7 +7,7 @@ function AnnotationsViewer(params) {
 
   this.baseUrl = params.baseUrl || '';
   this.listUrl = this.baseUrl + '/articulation-annotations/list';
-  this.viewerUrlTemplate = _.template(this.baseUrl + '/motion-viewer?modelId=${ann.modelId}&task=motion-annotate&taskMode=fixup&startFrom=latest', { variable: 'ann'});
+  this.viewerUrlTemplate = _.template(this.baseUrl + '/motion-annotator?modelId=${ann.modelId}&task=motion-annotate&taskMode=fixup&startFrom=latest', { variable: 'ann'});
   this.annotateUrl = params.annotateUrl;
 //  this.editUrl = this.baseUrl + '/annotations/edit';
   this.editUrl = this.baseUrl + '/articulation-annotations/edit';

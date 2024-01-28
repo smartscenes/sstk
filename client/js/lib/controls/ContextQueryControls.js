@@ -107,6 +107,7 @@ function ContextQueryControls(params) {
     showSearchSourceOption: false,
     showSearchSortOption: false,
     showSearchBySize: false,
+    showSearchHistoryPrevNext: false,
     sortOrder: 'score desc',
     additionalSortOrder: 'id asc'
   };
@@ -462,7 +463,7 @@ ContextQueryControls.prototype.onReplace = function (sceneState, modelInstance) 
       );
       p.objFrameToWorldMat = transform;
       //var sceneTransformMatrixInverse = new THREE.Matrix4();
-      //sceneTransformMatrixInverse.getInverse(this.scene.matrixWorld);
+      //sceneTransformMatrixInverse.copy(this.scene.matrixWorld).invert();
       //p.objFrameToSceneMat = new THREE.Matrix4();
       //p.objFrameToSceneMat.multiplyMatrices(sceneTransformMatrixInverse, p.objFrameToWorldMat);
       // Get rotation out

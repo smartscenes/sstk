@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var AssetManager = require('assets/AssetManager');
 var SearchController = require('search/SearchController');
 var VisualSchemaSearch = require('ui/VisualSchemaSearch');
@@ -52,6 +53,7 @@ function AssetQuerier(options) {
   };
   this.urlParams = _.getUrlParams();
   options = _.defaults({}, this.urlParams, options, defaults);
+  this.options = options;
   this.init(options);
 }
 
@@ -64,7 +66,7 @@ AssetQuerier.prototype.init = function (options) {
         for (var i = 0; i < assetGroups.length; i++) {
           var assetGroup = assetGroups[i];
           //console.log('got assetGroup', assetGroup);
-          if (assetGroup.solrUrl && assetGroup.assetTypeInfo) {
+          if (assetGroup && assetGroup.solrUrl && assetGroup.assetTypeInfo) {
             var schemaClass = assetGroup.assetTypeInfo.schema;
             assetGroup.schemaUrl = assetGroup.solrUrl + '/schema/fields';
             assetGroup.searchUrl = assetGroup.solrUrl + '/select';
@@ -97,6 +99,19 @@ AssetQuerier.prototype.__initAssets = function (options) {
         scope.assetManager.registerCustomAssetGroups({
           assetFiles: options.assetFiles,
           callback: function(err, results) {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          }
+        });
+      } else if (options.includeExtraAssets) {
+        scope.assetManager.registerCustomAssetGroups({
+          assetFiles: Constants.extraAssetsFile,
+          filterByType: scope.assetTypes,
+          searchController: scope.searchController,
+          callback: function (err, results) {
             if (err) {
               reject(err);
             } else {
@@ -189,7 +204,7 @@ AssetQuerier.prototype.__initSearch = function (options) {
     selectImagePreviewFunc();
     this.searchController.searchPanel.addToSearchOptions(imageIndexElem);
   }
-  this.searchController.Subscribe('startSearch', this, function(searchTerm){
+  this.searchController.Subscribe('preStartSearch', this, function(searchTerm){
     // The search controller is about to start searching...
     // make sure our filters are in place
     //console.log('startSearch', this.selectedAssetType, this.visualSearch.getFilterString());

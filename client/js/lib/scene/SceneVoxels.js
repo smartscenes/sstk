@@ -4,6 +4,7 @@ var ModelVoxels = require('model/ModelVoxels');
 var ModelInstanceVoxels = require('model/ModelInstanceVoxels');
 var Object3DUtil = require('geo/Object3DUtil');
 
+// SceneVoxels as composite of model instance voxels
 var SceneVoxels = function (params) {
   this.sceneState = undefined;
   this.cachedModelVoxels = {};
@@ -31,6 +32,7 @@ SceneVoxels.prototype.setVisible = function (flag) {
 
 SceneVoxels.prototype.ensureVoxels = function () {
   // TODO: Review the caching logic
+  // TODO: rename voxelsField to modelVoxelsField to make clear these are model voxels
   //console.log('Ensuring voxels...');
   var voxelsField = this.sceneState.info.voxelsField;
   for (var i = 0; i < this.sceneState.modelInstances.length; i++) {

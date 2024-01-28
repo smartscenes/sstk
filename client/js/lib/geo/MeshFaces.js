@@ -1,5 +1,6 @@
 const GeometryUtil = require('geo/GeometryUtil');
 const OBBFitter = require('geo/OBBFitter');
+const BBox = require('geo/BBox');
 const TriangleAccessor = require('geo/TriangleAccessor');
 const _ = require('util/util');
 
@@ -19,7 +20,52 @@ class MeshFaces {
   }
 
   area(transform) {
-    _.sum(this.faceIndices, faceIndex => this.__triAccessor.getTriangleArea(faceIndex, transform));
+    return _.sumBy(this.faceIndices, faceIndex => this.__triAccessor.getTriangleArea(faceIndex, transform));
+  }
+
+  areaWeightedNormal(transform) {
+    var norm = new THREE.Vector3();
+    var tri = new THREE.Triangle();
+    var weightedNorm = new THREE.Vector3();
+    for (var i = 0; i < this.faceIndices.length; i++) {
+      var faceIndex = this.faceIndices[i];
+      this.__triAccessor.getTriangle(faceIndex, tri, transform);
+      var area = tri.getArea();
+      tri.getNormal(norm);
+      weightedNorm.addScaledVector(norm, area);
+    }
+    weightedNorm.normalize();
+    return weightedNorm;
+  }
+  getAreaRatio(condition, transform) {
+    var norm = new THREE.Vector3();
+    var tri = new THREE.Triangle();
+    var total = 0;
+    var satisfied = 0;
+    for (var i = 0; i < this.faceIndices.length; i++) {
+      var faceIndex = this.faceIndices[i];
+      this.__triAccessor.getTriangle(faceIndex, tri, transform);
+      var area = tri.getArea();
+      tri.getNormal(norm);
+      total += area;
+      if (condition(faceIndex, tri)) {
+        satisfied += area;
+      }
+    }
+    return { numerator: satisfied, denominator: total, value: satisfied/total };
+  }
+
+  aabb(transform) {
+    var bbox = new BBox();
+    var tri = new THREE.Triangle();
+    for (var i = 0; i < this.faceIndices.length; i++) {
+      var faceIndex = this.faceIndices[i];
+      this.__triAccessor.getTriangle(faceIndex, tri, transform);
+      bbox.includePoint(tri.a);
+      bbox.includePoint(tri.b);
+      bbox.includePoint(tri.c);
+    }
+    return bbox;
   }
 
   obb(opts) {
@@ -27,8 +73,11 @@ class MeshFaces {
     return OBBFitter.fitMeshOBB(this, opts);
   }
 
-  toMesh() {
+  toMesh(transform) {
     const extractedMesh = GeometryUtil.extractMesh(this.mesh, this.faceIndices, true);
+    if (transform) {
+      extractedMesh.geometry.applyMatrix4(transform);
+    }
     return extractedMesh;
   }
 }

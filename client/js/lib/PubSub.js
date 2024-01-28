@@ -93,6 +93,16 @@ PubSub.prototype.Unsubscribe = function (eventname, contextObj, optCallback) {
   return esubs.length - newsubs.length;
 };
 
+PubSub.prototype.UnsubscribeAll = function (eventname) {
+  var subs = this.subscribers;
+  var esubs = subs[eventname];
+  if (!esubs) {
+    return 0;
+  }
+  subs[eventname] = [];
+  return esubs.length;
+}
+
 /**
  * Publishes event
  * @param eventname {string} Name of event

@@ -13,6 +13,28 @@ var self = {};
 //  self.prompt = bootbox.prompt;
 //}
 
+self.MOUSEBUTTONS_LEFT = 0x01;
+self.MOUSEBUTTONS_RIGHT = 0x02;
+
+function isMouseButtonPressed(event, button) {
+  return !!(event.buttons & button);
+}
+self.isMouseButtonPressed = isMouseButtonPressed;
+self.isRightMouseButtonPressed = function(event) {
+  return isMouseButtonPressed(event, self.MOUSEBUTTONS_RIGHT);
+};
+self.isLeftMouseButtonPressed = function(event) {
+  return isMouseButtonPressed(event, self.MOUSEBUTTONS_LEFT);
+};
+
+self.addWaitingMessageToForm = function(dialog, message) {
+  const footer = dialog.find('.modal-footer');
+  if (message == null) {
+    message = 'Please wait...';
+  }
+  footer.prepend($('<p class="text-center mb-0"><i class="fa fa-spin fa-cog"></i>' + message + '</p>'));
+};
+
 function createGlyphIconButton(name) {
   return $('<button></button>')
     .attr('class', 'btn btn-default')
@@ -363,7 +385,8 @@ function createAlert(message, style, timeout, fontSize) {
   alertBox.append(alertMessage);
 
   if (timeout > 0) {
-    setTimeout(function () { destroyAlert(alertBox); }, timeout);
+    var timeoutId = setTimeout(function () { destroyAlert(alertBox); }, timeout);
+    alertBox.data('timeoutId', timeoutId);
   }
   alertMessage.html(message);
   alertBox.addClass(style);
@@ -379,14 +402,8 @@ function __showAlert(parent, message, style, timeout, fontSize) {
   return alertBox;
 }
 
-function showAlert(message, style, timeout, fontSize) {
-  __showAlert(null, message, style, timeout, fontSize);
-}
-
-self.showAlert = showAlert;
-
 function showAlertWithPanel(parent, message, style, timeout, fontSize) {
-  __showAlert(parent, message, style, timeout, fontSize);
+  return __showAlert(parent, message, style, timeout, fontSize);
 }
 
 self.showAlertWithPanel = showAlertWithPanel;
@@ -401,6 +418,34 @@ function showOverlayAlert(parent, message, style, timeout, fontSize) {
 }
 
 self.showOverlayAlert = showOverlayAlert;
+
+function showAlert(message, style, timeout, fontSize) {
+  var args = _.processArguments(arguments, ['message', 'style', 'timeout', 'fontSize']);
+  var alertBox = (args.id != null)? $('#alert-' + args.id) : null;
+  if (alertBox && alertBox.length) {
+    // alertBox is already there...
+    // clear old timeout, flash message
+    var oldTimeoutId = alertBox.data('timeoutId');
+    if (oldTimeoutId != null) {
+      clearTimeout(oldTimeoutId);
+    }
+    if (timeout > 0) {
+      setTimeout(function () { destroyAlert(alertBox); }, timeout);
+    }
+  } else {
+    if (args.overlay) {
+      alertBox = showOverlayAlert(args.parent, args.message, args.style, args.timeout, args.fontSize);
+    } else {
+      alertBox = __showAlert(args.parent, args.message, args.style, args.timeout, args.fontSize);
+    }
+    if (args.id) {
+      alertBox.attr('id', 'alert-' + args.id);
+    }
+  }
+  return alertBox;
+}
+
+self.showAlert = showAlert;
 
 function makeToggleable(controlElement, toggleable) {
   controlElement.click(function () {
@@ -466,6 +511,10 @@ function createButton(opts, keymap) {
 //    .attr('class', 'btn btn-default')
 //    .attr('role', 'button')
     .attr('value', opts.name);
+  if (opts.class != null) {
+    button.addClass(opts.class);
+  }
+
   var callback = (opts.callback != null)? opts.callback : opts.click;
   button.click(callback);
   if (opts.shortcut != null || opts.accessKey != null) {
@@ -477,14 +526,39 @@ function createButton(opts, keymap) {
 
 self.createButton = createButton;
 
-function addButtons(panel, items, keymap) {
+function addItems(panel, items, keymap) {
   _.forEach(items, (v,k) => {
-    if (v.items) {
-      var div = createPanel(v, keymap);
-      panel.append(div);
-    } else {
+    if (v.type === 'select') {
+      var select = createSelect(v);
+      if (select.label) {
+        panel.append(select.label);
+      }
+      if (select.label) {
+        panel.append(select.label);
+      }
+      panel.append(select.select);
+      v.element = select.select;
+    } else if (v.type === 'button') {
       var button = createButton(v, keymap);
       panel.append(button);
+      v.element = button;
+    } else if (v.type === 'checkbox') {
+      var checkbox = createCheckbox(v, v.defaultValue);
+      if (checkbox.label) {
+        panel.append(checkbox.label);
+      }
+      panel.append(checkbox.checkbox);
+      v.element = checkbox.checkbox;
+    } else {
+      if (v.items) {
+        var div = createPanel(v, keymap);
+        panel.append(div);
+        v.element = div;
+      } else {
+        var button = createButton(v, keymap);
+        panel.append(button);
+        v.element = button;
+      }
     }
   });
 }
@@ -495,11 +569,10 @@ function createPanel(options, keymap) {
     panel.append($('<label></label>').append(options.name)).append('&nbsp;');
   }
   if (options.items) {
-    addButtons(panel, options.items, keymap);
+    addItems(panel, options.items, keymap);
   }
   return panel;
 }
-
 self.createPanel = createPanel;
 
 function copy(selector) {

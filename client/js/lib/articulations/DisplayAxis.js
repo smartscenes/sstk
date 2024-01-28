@@ -9,6 +9,7 @@ class DisplayAxis {
 	 * @param [params.currentPointColor] {THREE.Color|number|string} Color for current position (default: blue)
 	 * @param [params.originPointColor] {THREE.Color|number|string} Color for axis origin (default: red)
 	 * @param [params.initialPointColor] {THREE.Color|number|string} Color for initial position (default: yellow)
+	 * @param [params.mainArrowColor] {THREE.Color|number|string} Color for main arrow (default: same as axis color)
 	 * @param [params.arrowHeadSize] {number} Size of arrow head (default: 0.2)
 	 * @param [param.defaultLength] {number} Length to use for axis (default: 1)
 	 * @param [param.showNegAxis] {boolean} Whether the negative axis is also shown (default: false)
@@ -16,6 +17,7 @@ class DisplayAxis {
 	constructor(params) {
 		this.articulation = params.articulation;
 		this.color = (params.color != null) ? params.color : 0x000000;
+		this.mainArrowColor = (params.mainArrowColor != null) ? params.mainArrowColor : this.color;
 		this.axisPointColor = (params.axisPointColor != null)? params.axisPointColor : 0x800080;
 		this.currentPointColor = (params.currentPointColor != null)? params.currentPointColor : 0x0000ff;
 		this.originPointColor = (params.originPointColor != null)? params.originPointColor : 0xff0000;
@@ -36,6 +38,7 @@ class DisplayAxis {
 
 		const axisColor = this.color;
 		this.arrowHelper1 = new THREE.ArrowHelper(this.__posAxis, new THREE.Vector3(0,0,0), length, axisColor, this.arrowHeadSize);
+		this.arrowHelper1.cone.material.color.set(this.mainArrowColor);
 		if (this.showNegAxis) {
 			this.arrowHelper2 = new THREE.ArrowHelper(this.__negAxis, new THREE.Vector3(0, 0, 0), length, axisColor, this.arrowHeadSize);
 		}
@@ -185,6 +188,14 @@ class DisplayAxis {
 		if (this.node.parent != null) {
 			this.node.parent.remove(this.node);
 		}
+	}
+
+	set visible(v) {
+		this.node.visible = v;
+	}
+
+	get visible() {
+		return this.node.visible;
 	}
 }
 

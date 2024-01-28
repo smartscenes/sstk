@@ -130,7 +130,7 @@ function JointCoordFrame(opts) {
     this.jointToBody = opts.jointToBody;
   }
   this.bodyToJoint = new THREE.Matrix4();
-  this.bodyToJoint.getInverse(this.jointToBody);
+  this.bodyToJoint.copy(this.jointToBody).invert();
 }
 
 JointCoordFrame.prototype.__computeBindTransforms = function(modelBindInverseTransform) {

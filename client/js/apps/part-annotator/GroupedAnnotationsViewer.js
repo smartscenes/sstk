@@ -47,7 +47,7 @@ function GroupedAnnotationsViewer(params) {
   this.assetGroup = params.assetGroup;
   this.groupBy = _.getUrlParam('groupBy', params.groupBy);
   this.filter = _.getUrlParam('filter', params.filter);
-  this.unannotatedOnly = _.getUrlParam('unannotated', params.unannotated);
+  this.unannotated = _.getUrlParam('unannotated', params.unannotated);
 
   // What image to show
   this.previewImageIndex = params.previewImageIndex || -1;
@@ -75,6 +75,19 @@ function GroupedAnnotationsViewer(params) {
   this.assetManager = new AssetManager({ previewImageIndex: this.previewImageIndex });
   this.ignoreGroupRegex = _.getUrlParam('ignoreGroupRegex', params.ignoreGroupRegex, _.parseRegex);
   this.onHoverCallback = params.onHoverCallback;
+  this.annotationSettings = {
+    // segment: {
+    //   annotateUrl: params.segmentAnnotateUrl || Constants.baseUrl + '/part-annotator-single'
+    //   listUrl: params.segmentAnnotationsUrl || Constants.baseUrl + '/part-annotations/list'
+    // },
+    articulate: {
+      annotateUrl: params.articulateUrl || Constants.baseUrl + '/motion-annotator',
+      annotateParams: params.articulateParams,
+      listUrl:  params.articulateAnnotationsUrl || Constants.baseUrl + '/articulation-annotations/list'
+    }
+  };
+  this.__groupedAnnotationsByType = {};
+
   window.addEventListener('resize', this.onWindowResize.bind(this), false);
 }
 
@@ -93,6 +106,34 @@ GroupedAnnotationsViewer.prototype.getAssetUrl = function(assetInfo, viewerUrl) 
 //    }
   }
   var url = viewerUrl + '?' + $.param(queryParams);
+  return url;
+};
+
+GroupedAnnotationsViewer.prototype.__getUrl = function(info, url, params, infoParams) {
+  if (params || infoParams) {
+    var queryParams = params? (infoParams? _.clone(params) : params) : {};
+    // parameters to be populated from info
+    for (var key in infoParams) {
+      var p = infoParams[key];
+      var value = (typeof(p) === 'function')? p(info) : info[p];
+      if (value != undefined) {
+        queryParams[key] = value;
+      }
+    }
+    return url + '?' + _.param(queryParams);
+  } else {
+    return url;
+  }
+};
+
+GroupedAnnotationsViewer.prototype.getArticulateUrl = function(assetInfo) {
+  var setting = this.annotationSettings.articulate;
+  var infoParams = {
+    partAnnotationId: 'articulateUsing',
+    articulateFrom: 'startFrom'
+  };
+  infoParams[this.assetIdField] = 'fullId';
+  var url = this.__getUrl(assetInfo, setting.annotateUrl, setting.annotateParams, infoParams);
   return url;
 };
 
@@ -190,6 +231,13 @@ GroupedAnnotationsViewer.prototype.init = function() {
       }
     },
     function(cb) {
+      scope.__queryArticulateAnnotations(function(err, anns) {
+        // console.log('got articulate annotations', anns);
+        scope.__groupedAnnotationsByType['articulate'] = anns? _.groupBy(anns, 'itemId') : {};
+        cb();
+      });
+    },
+    function(cb) {
       scope.__queryAnnotatedStats(function(err, annotationStats) {
         if (err) {
           UIUtil.showAlert('Error fetching existing annotations');
@@ -208,6 +256,23 @@ GroupedAnnotationsViewer.prototype.init = function() {
     } else {
       scope.__init();
     }
+  });
+};
+
+GroupedAnnotationsViewer.prototype.__queryArticulateAnnotations = function(callback) {
+  // TODO: this articulateAnnotationsUrl is for some other table, really should just use our annotations table
+  var setting = this.annotationSettings.articulate;
+  var queryUrl = setting.listUrl + '?format=json&full_id[$regex]=' + this.assetGroup.source + '[.].*';
+  _.getJSON(queryUrl, (err, res) => {
+    if (res) {
+      res.forEach(x => {
+        // TODO: should camel case rest
+        x.itemId = x.full_id;
+        delete x.full_id;
+        delete x.model_id;
+      });
+    }
+    callback(err, res);
   });
 };
 
@@ -262,6 +327,10 @@ GroupedAnnotationsViewer.prototype.__queryAnnotatedStats = function(callback) {
   });
 };
 
+GroupedAnnotationsViewer.prototype.__getAnnotationsForItemId = function(annType, itemId) {
+  return this.__groupedAnnotationsByType[annType][itemId];
+};
+
 GroupedAnnotationsViewer.prototype.__init = function() {
   // Construct a table
   var scope = this;
@@ -270,13 +339,14 @@ GroupedAnnotationsViewer.prototype.__init = function() {
   var table = $('<table></table>');
   var assetInfos = this.filter? this.assetGroup.assetDb.getMatching(
     this.assetGroup.assetDb.getFilter(this.filter)).docs : this.assetGroup.assetDb.assetInfos;
+  var annotatedAssetInfos = assetInfos.filter(assetInfo => scope.__annotatedByItemId[assetInfo.fullId]);
 
   var groupedAssetInfos = _.groupByMulti(assetInfos, this.groupBy);
 
   //console.log(groupedAssetInfos);
   var stats = { counts: {}, hists: {} };
   stats.counts.totalAssets = assetInfos.length;
-  stats.counts.totalAssetsAnnotated = _.size(scope.__annotatedByItemId);
+  stats.counts.totalAssetsAnnotated = _.size(annotatedAssetInfos);
 
   var sortedGroups = [];
   for (var groupName in groupedAssetInfos) {
@@ -293,14 +363,18 @@ GroupedAnnotationsViewer.prototype.__init = function() {
     if (groupInfos) {
       group = _.map(groupInfos, function(assetInfo) {
         var annotatedStats = scope.__annotatedByItemId[assetInfo.fullId];
+        var articulated = scope.__getAnnotationsForItemId('articulate', assetInfo.fullId);
         return {
           assetInfo: assetInfo,
           nAnns: annotatedStats? annotatedStats.nentries : 0,
-          progress: annotatedStats? annotatedStats.progress : null
+          progress: annotatedStats? annotatedStats.progress : null,
+          nArticulated: articulated? articulated.length : 0,
         };
       });
-      if (this.unannotatedOnly) {
-        group = group.filter(function(x) { return x.nAnns == 0; });
+      if (this.unannotated) {
+        group = group.filter(function(x) { return x.nAnns === 0; });
+      } else if (this.unannotated === false) {
+        group = group.filter(function(x) { return x.nAnns > 0; });
       }
 
       if (this.groupedSortBy) {
@@ -334,16 +408,17 @@ GroupedAnnotationsViewer.prototype.__init = function() {
     var group = g.group;
     var groupName = g.name;
 
-    var row = $('<tr></tr>');
-    row.append($('<td></td>')
-      .append(groupName)
-      .append('<br/>')
-      .append(g.nGroupAnns + '/' + g.nGroupEntries)
-    );
-    var childCell = $('<td></td>');
-    row.append(childCell);
-    if (group) {
-      var t2 = $('<table></table>');
+    if (group && group.length) {
+      var row = $('<tr></tr>');
+      row.append($('<td></td>')
+        .append(groupName)
+        .append('<br/>')
+        .append(g.nGroupAnns + '/' + g.nGroupEntries)
+      );
+      var childCell = $('<td></td>');
+      row.append(childCell);
+
+      var t2 = $('<table class="group-entries"></table>');
       var r2 = $('<tr></tr>');
       for (var j = 0; j < group.length; j++) {
         var groupEntry = group[j];
@@ -353,6 +428,7 @@ GroupedAnnotationsViewer.prototype.__init = function() {
           assetDetails.setIds = assetInfo.setIds;
         }
         var nAnns = groupEntry.nAnns;
+        var nArticulateAnns = groupEntry.nArticulated;
         var div = $('<td></td>');
         div.append(assetInfo.id);
         div.append('<br/>');
@@ -373,12 +449,23 @@ GroupedAnnotationsViewer.prototype.__init = function() {
           annsButton.removeClass('btn-primary').addClass('btn-success');
         }
         div.append(annsButton);
+
+        // Show button for motion annotation
+        if (this.annotationSettings.articulate.annotateParams !== false) {
+          var btnClass = (nArticulateAnns === 0)? (nAnns > 0? 'btn-warning' : 'btn-default' ) : ((nAnns >= nTargetAnns)? 'btn-success' : 'btn-primary');
+          var articulateButton = this.getButtonLink('Articulate (' + nArticulateAnns + ')',
+            this.getArticulateUrl(assetInfo), 'Articulate annotated segments', btnClass)
+            .attr('target', '_blank');
+          div.append('<br/>').append(articulateButton);
+        }
+
         r2.append(div);
       }
       t2.append(r2);
       childCell.append(t2);
+
+      table.append(row);
     }
-    table.append(row);
   }
   var c = stats.counts;
   summary.append(
@@ -390,8 +477,7 @@ GroupedAnnotationsViewer.prototype.__init = function() {
     bind: 'event',
     threshold: 50,
     visibleOnly: true,
-    parent: this.container,
-    appendScroll: this.container
+    parent: this.container
   });
   this.loadingElement.hide();
 };

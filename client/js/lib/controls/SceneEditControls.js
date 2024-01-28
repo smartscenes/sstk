@@ -1,11 +1,12 @@
 'use strict';
 
-var Constants = require('Constants');
-var Manipulator = require('controls/Manipulator');
-var DragDrop = require('controls/DragDrop');
-var PubSub = require('PubSub');
-var Object3DUtil = require('geo/Object3DUtil');
-var ModelInstance = require('model/ModelInstance');
+const Constants = require('Constants');
+const Manipulator = require('controls/Manipulator');
+const DragDrop = require('controls/DragDrop');
+const AttachmentPlaneVisualizer = require('controls/AttachmentPlaneVisualizer');
+const PubSub = require('PubSub');
+const Object3DUtil = require('geo/Object3DUtil');
+const ModelInstance = require('model/ModelInstance');
 
 /**
  * Combined controls for scene editing (includes movement using drag drop, and scaling/rotation via Manipulator)
@@ -13,11 +14,14 @@ var ModelInstance = require('model/ModelInstance');
  * @param params.enabled {boolean} If this scene edit controls is enabled
  * @param params.allowRotation {boolean} Whether to allow rotation
  * @param params.allowScaling {boolean} Whether to allow scaling
+ * @param params.useVisualizer {boolean} Whether to use a visualizer
  * @param params.useThreeTransformControls {boolean} Whether to use three.js transform controls
+ * @param params.putOnArchOnly {boolean} set False to allow placement of objects on other non-arch objects.
+ * @param params.restrictToSurface {boolean} set True to stick the object onto currently attached surface
  * @constructor
  * @memberOf controls
  */
-var SceneEditControls = function (params) {
+const SceneEditControls = function (params) {
   PubSub.call(this);
 
   // The app using the edit controls
@@ -31,7 +35,8 @@ var SceneEditControls = function (params) {
 
   this.enabled = params.enabled;
   this.allowRotation = params.allowRotation;
-  this.allowScaling  = params.allowScaling; 
+  this.allowScaling  = params.allowScaling;
+  this.useVisualizer = params.useVisualizer;
 
   this.useThreeTransformControls = params.useThreeTransformControls || false;
   this.useModelBase = true;
@@ -53,14 +58,31 @@ var SceneEditControls = function (params) {
 
   this.dragdrop = null;
   this.manipulator = null;
+  this.attachmentVisualizer = null;
 
   this._transformMode = 'scale';
+
+  this.putOnArchOnly = params.putOnArchOnly;
+  this.restrictToSurface = params.restrictToSurface;
+
+  this.manipulatorSizeMultiplier = params.manipulatorSizeMultiplier;
+  this.manipulatorFixedRotationAxis = params.manipulatorFixedRotationAxis;
 
   this.init();
 };
 
 SceneEditControls.prototype = Object.create(PubSub.prototype);
 SceneEditControls.prototype.constructor = SceneEditControls;
+
+SceneEditControls.prototype.setPutOnArchOnly = function(val) {
+  this.putOnArchOnly = val;
+  this.dragdrop.restrictSupportToArch = val;
+};
+
+SceneEditControls.prototype.setRestrictToSurface = function(val) {
+  this.restrictToSurface = val;
+  this.dragdrop.restrictMovementToPlane = val;
+};
 
 SceneEditControls.prototype.reset = function (params) {
   if (params) {
@@ -79,6 +101,9 @@ SceneEditControls.prototype.reset = function (params) {
     if (this.manipulator) {
       this.manipulator.reset(params);
     }
+    if (this.attachmentVisualizer)  {
+      this.attachmentVisualizer.reset(params);
+    }
   }
   this.detach();
 };
@@ -86,10 +111,21 @@ SceneEditControls.prototype.reset = function (params) {
 SceneEditControls.prototype.init = function () {
   this.initManipulator();
   this.initDragDrop();
+  this.initVisualizer();
   this.Subscribe(Constants.EDIT_OPSTATE.INIT, this.app, this.app.onEditOpInit.bind(this.app));
   this.Subscribe(Constants.EDIT_OPSTATE.DONE, this.app, this.app.onEditOpDone.bind(this.app));
   this.Subscribe(Constants.EDIT_OPSTATE.CANCEL, this.app, this.app.onEditOpCancel.bind(this.app));
-  this.Subscribe("SelectedInstanceChanged", this.app, this.app.onSelectedInstanceChanged.bind(this.app));
+  this.Subscribe('SelectedInstanceChanged', this.app, this.app.onSelectedInstanceChanged.bind(this.app));
+};
+
+SceneEditControls.prototype.initVisualizer = function() {
+  if (this.useVisualizer) {
+    this.attachmentVisualizer = new AttachmentPlaneVisualizer({
+      scene: this.scene,
+      enabled: true,
+      useModelBase: this.useModelBase
+    });
+  }
 };
 
 SceneEditControls.prototype.initDragDrop = function () {
@@ -105,19 +141,25 @@ SceneEditControls.prototype.initDragDrop = function () {
     attachToParent: true,
     supportSurfaceChange: this.supportSurfaceChange,
     useModelBase: this.useModelBase,
-    uilog: this.uilog
+    uilog: this.uilog,
+    putOnArchOnly: this.putOnArchOnly
   });
   this.dragdrop.Subscribe(Constants.EDIT_OPSTATE.INIT, this.app, this.app.onEditOpInit.bind(this.app));
   this.dragdrop.Subscribe(Constants.EDIT_OPSTATE.DONE, this.app, this.app.onEditOpDone.bind(this.app));
 
-  this.dragdrop.Subscribe("HighlightChanged", this, function(object3d, isHighlight){
-    this.Publish("HighlightChanged", object3d, isHighlight);
+  this.dragdrop.Subscribe('HighlightChanged', this, function(object3d, isHighlight) {
+    this.Publish('HighlightChanged', object3d, isHighlight);
     // console.log({"callback": "HighlightChanged", "object3d": object3d, "isHighlight": isHighlight});
   });
 
   this.dragdrop.Subscribe('AttachmentChanged', this, function (attachment) {
     if (attachment && attachment.bbFaceIndex !== undefined) {
-      this.manipulator.setAttachmentFace(attachment.bbFaceIndex);
+      if (this.manipulator) {
+        this.manipulator.setAttachmentFace(attachment.bbFaceIndex, attachment.faceNormal);
+      }
+      if (this.attachmentVisualizer) {
+        this.attachmentVisualizer.setAttachmentFace(attachment.bbFaceIndex, attachment.surfaceNormal);
+      }
     }
   }.bind(this));
 };
@@ -136,8 +178,10 @@ SceneEditControls.prototype.initManipulator = function () {
     useModelBase: this.useModelBase,
     uilog: this.uilog,
     allowRotation: this.allowRotation,
-    allowScaling: this.allowScaling
-    });
+    allowScaling: this.allowScaling,
+    manipulatorSizeMultiplier: this.manipulatorSizeMultiplier,
+    manipulatorFixedRotationAxis: this.manipulatorFixedRotationAxis
+  });
   this.manipulator.Subscribe(Constants.EDIT_OPSTATE.INIT, this.app, this.app.onEditOpInit.bind(this.app));
   this.manipulator.Subscribe(Constants.EDIT_OPSTATE.DONE, this.app, this.app.onEditOpDone.bind(this.app));
   this.manipulator.Subscribe(Constants.EDIT_OPSTATE.INIT, this, function () {
@@ -151,6 +195,9 @@ SceneEditControls.prototype.initManipulator = function () {
 SceneEditControls.prototype.update = function () {
   if (this.manipulator) {
     this.manipulator.update();
+  }
+  if (this.attachmentVisualizer) {
+    this.attachmentVisualizer.update();
   }
   // if (this.transformControls) {
   //   this.transformControls.update();
@@ -168,8 +215,8 @@ SceneEditControls.prototype.ensureTransformControls = function() {
 };
 
 SceneEditControls.prototype.attach = function (modelInstanceOrObject, attachmentIndex) {
-  var modelInstance = (modelInstanceOrObject instanceof ModelInstance) ? modelInstanceOrObject : undefined;
-  var object = modelInstanceOrObject.object3D || modelInstanceOrObject;
+  let modelInstance = (modelInstanceOrObject instanceof ModelInstance) ? modelInstanceOrObject : undefined;
+  const object = modelInstanceOrObject.object3D || modelInstanceOrObject;
   if (!modelInstance) {
     modelInstance = Object3DUtil.getModelInstance(object);
   }
@@ -189,6 +236,9 @@ SceneEditControls.prototype.attach = function (modelInstanceOrObject, attachment
       this.manipulator.attach(modelInstance);
     }
   }
+  if (this.attachmentVisualizer) {
+    this.attachmentVisualizer.attach(modelInstance);
+  }
 };
 
 SceneEditControls.prototype.detach = function () {
@@ -199,6 +249,9 @@ SceneEditControls.prototype.detach = function () {
   }
   if (this.manipulator) {
     this.manipulator.detach();
+  }
+  if (this.attachmentVisualizer) {
+    this.attachmentVisualizer.detach();
   }
   if (this.transformControls) {
     this.transformControls.detach();
@@ -211,14 +264,14 @@ SceneEditControls.prototype.onInsert = function (object) {
     if (this.dragdrop) {
       this.dragdrop.onInsert(object);
     }
-    var modelInstance = Object3DUtil.getModelInstance(object);
+    const modelInstance = Object3DUtil.getModelInstance(object);
     this.attach(modelInstance);
     this.Publish('SelectedInstanceChanged', modelInstance);
   }
 };
 
 SceneEditControls.prototype.cancelInsertion = function () {
-  var cancelled;
+  let cancelled;
   if (this.enabled && this.dragdrop) {
     cancelled = this.dragdrop.cancelInsertion();
   }
@@ -232,22 +285,26 @@ SceneEditControls.prototype.setCursorStyle = function (style) {
   this.dragdrop.defaultCursor = style;
 };
 
+SceneEditControls.prototype.getCursorStyle = function() {
+  return this.container.style.cursor;
+}
+
 SceneEditControls.prototype.onMouseUp = function (event) {
   if (this.transformControls && this.transformControls.axis) {
     // transform controls in effect...
     return;
   }
   if (this.enabled) {
-    var notHandled1 = this.dragdrop.onMouseUp(event);
-    var notHandled2 = this.manipulator.onMouseUp(event);
+    const notHandled1 = this.dragdrop.onMouseUp(event);
+    const notHandled2 = this.manipulator.onMouseUp(event);
     return notHandled1 && notHandled2;
   }
 };
 
 SceneEditControls.prototype.select = function (event) {
-  var fullScene = this.scene;
-  var selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
-  var picked = this.getIntersected(event, selectables);
+  const fullScene = this.scene;
+  const selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
+  const picked = this.getIntersected(event, selectables);
   if (picked) {
     console.log('selected point', picked.point);
   }
@@ -255,9 +312,9 @@ SceneEditControls.prototype.select = function (event) {
 };
 
 SceneEditControls.prototype.selectMesh = function (event) {
-  var fullScene = this.scene;
-  var selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
-  var picked = this.getIntersected(event, selectables);
+  const fullScene = this.scene;
+  const selectables = (fullScene.selectables) ? fullScene.selectables : fullScene.children;
+  const picked = this.getIntersected(event, selectables);
   if (picked) {
     console.log('selected point', picked.point);
   }
@@ -265,21 +322,21 @@ SceneEditControls.prototype.selectMesh = function (event) {
 };
 
 SceneEditControls.prototype.pick = function (event) {
-  var fullScene = this.scene;
-  var pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
-  var picked = this.getIntersected(event, pickables);
+  const fullScene = this.scene;
+  const pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
+  const picked = this.getIntersected(event, pickables);
   return picked? picked.object : null;
 };
 
 SceneEditControls.prototype.getIntersected = function (event, object3Ds) {
   object3Ds = object3Ds || this.scene.children;
-  // var mouse = this.picker.getCoordinates(this.container, event);
-  // var intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, object3Ds, this.dragdrop.ignore);
+  // const mouse = this.picker.getCoordinates(this.container, event);
+  // const intersects = this.picker.getIntersected(mouse.x, mouse.y, this.cameraControls.camera, object3Ds, this.dragdrop.ignore);
   // if (intersects.length > 0) {
   //   return intersects[0];
   // }
   // return null;
-  var intersects = this.picker.pick({
+  const intersects = this.picker.pick({
     targetType: 'object',
     container: this.container,
     position: { clientX: event.clientX, clientY: event.clientY },
@@ -299,22 +356,23 @@ SceneEditControls.prototype.onMouseDown = function (event) {
   if (this.enabled) {
     event.preventDefault();
 
-    var fullScene = this.scene;
+    const fullScene = this.scene;
 
-    var pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
-    var intersected = this.getIntersected(event, pickables);
+    const pickables = (fullScene.pickables) ? fullScene.pickables : fullScene.children;
+    const intersected = this.getIntersected(event, pickables);
 
     if (!this.dragdrop.insertMode) {
-      var notHandled = this.manipulator.onMouseDown(event, intersected);
+      let notHandled = this.manipulator.onMouseDown(event, intersected);
       if (!notHandled) return notHandled;
 
-      this.dragdrop.onMouseDown(event, intersected);
+      notHandled = this.dragdrop.onMouseDown(event, intersected);
+      // if(!notHandled) return notHandled;
 
-      var modelInstance;
-      var clickedObject = null;
+      let modelInstance;
+      let clickedObject = null;
       if (intersected) {
         modelInstance = Object3DUtil.getModelInstance(intersected.object);
-        if (modelInstance && modelInstance.object3D.userData.isSelectable && modelInstance.object3D.userData.isEditable) {
+        if (modelInstance && modelInstance.isDraggable) {
           clickedObject = modelInstance.object3D;
         } else if (this.allowAny) {
           clickedObject = intersected.object;
@@ -323,18 +381,45 @@ SceneEditControls.prototype.onMouseDown = function (event) {
 
       // Check if selected instance changed
       if (this.selected !== clickedObject) {
+        this.__selectObject(clickedObject, modelInstance);
         if (clickedObject) {
-          this.attach(modelInstance || clickedObject);
-          this.Publish('SelectedInstanceChanged', modelInstance || clickedObject);
           return false;
-        } else {
-          this.detach();
-          this.Publish('SelectedInstanceChanged', null);
         }
       }
+      if (!notHandled) {
+        return notHandled;
+      }
+    } else {
+      return false; // Insert mode placement happens. So event handled.
     }
   }
   return true;
+};
+
+SceneEditControls.prototype.__selectObject = function(object3D, modelInstance) {
+  if (object3D) {
+    this.attach(modelInstance || object3D);
+    this.Publish('SelectedInstanceChanged', modelInstance || object3D);
+  } else {
+    this.detach();
+    this.Publish('SelectedInstanceChanged', null);
+  }
+};
+
+SceneEditControls.prototype.highlightObject = function(object3D, flag) {
+  console.log('highlightObject', object3D);
+  const highlightControls = this.dragdrop.highlightControls;
+  if (highlightControls) {
+    if (flag) {
+      highlightControls.highlight(object3D);
+    } else {
+      highlightControls.unhighlight(object3D);
+    }
+  }
+};
+
+SceneEditControls.prototype.selectObject = function(object3D) {
+  this.__selectObject(object3D, object3D? Object3DUtil.getModelInstance(object3D) : null);
 };
 
 SceneEditControls.prototype.onMouseMove = function (event) {
@@ -344,8 +429,9 @@ SceneEditControls.prototype.onMouseMove = function (event) {
     return;
   }
   if (this.enabled) {
-    var notHandled1 = this.dragdrop.onMouseMove(event);
-    var notHandled2 = this.manipulator.onMouseMove(event);
+    const notHandled1 = this.dragdrop.onMouseMove(event);
+    const notHandled2 = this.manipulator.onMouseMove(event);
+    // console.log("nh1 " + notHandled1.toString() + " nh2 " + notHandled2.toString());
     return (notHandled1 && notHandled2);
   }
   return true;
@@ -359,30 +445,23 @@ SceneEditControls.prototype.onMouseLeave = function (event) {
 };
 
 SceneEditControls.prototype.onKeyUp = function (event) {
-  // if (event.which === 17) {  // ctrl
-  //   this.dragdrop.yTranslateOn = false;
-  // }
+  // Not handled
+  return true;
 };
 
 SceneEditControls.prototype.onKeyDown = function (event) {
   if (this.useThreeTransformControls) {
-    var notHandled = this.handleTransformControllerKeys(event);
+    const notHandled = this.handleTransformControllerKeys(event);
     if (!notHandled) return notHandled;
   }
 
   switch (event.which) {
     case 81:  // Q debug
-      if (this.selected) {
-        this.dragdrop.updateAttachmentIndex(this.selected,
-          (this.dragdrop.getAttachmentIndex(this.selected) + 1) % 6);
-      } else {
-        console.log('Nothing selected');
-      }
       return false;
     case 117: // F6
       this.useThreeTransformControls = !this.useThreeTransformControls;
       if (this.selected) {
-        var object = this.selected;
+        const object = this.selected;
         this.detach(object);
         this.attach(object);
       }
@@ -411,7 +490,7 @@ SceneEditControls.prototype.onKeyDown = function (event) {
     case 8: // backspace
       return !this.deleteSelected(event);
     case 27: //escape
-      var obj = this.cancelInsertion();
+      const obj = this.cancelInsertion();
       if (obj) {//this part of the code is here because the editControls doesn't have access to sceneState
         this.app.deleteObject(obj, event);
       }
@@ -420,9 +499,6 @@ SceneEditControls.prototype.onKeyDown = function (event) {
         this.cameraControls.controls.enabled = true;
       }
       return true;
-    // case 17: // ctrl
-    //   this.dragdrop.yTranslateOn = true;
-    //   return false;
     default:
       break;
   }
@@ -431,7 +507,7 @@ SceneEditControls.prototype.onKeyDown = function (event) {
 
 SceneEditControls.prototype.scaleSelected = function(scaleBy, event) {
   if (this.manipulator.modelInstance) {
-    var cmdParams = {object: this.manipulator.modelInstance, scaleBy: scaleBy};
+    const cmdParams = {object: this.manipulator.modelInstance, scaleBy: scaleBy};
     this.Publish(Constants.EDIT_OPSTATE.INIT, Constants.CMDTYPE.SCALE, cmdParams);
     this.app.scaleModels([this.manipulator.modelInstance], scaleBy, this.manipulator.getAttachmentFace());
     this.manipulator.updateRotationCircle(scaleBy, 0);
@@ -445,9 +521,9 @@ SceneEditControls.prototype.scaleSelected = function(scaleBy, event) {
 
 SceneEditControls.prototype.rotateSelected = function(rotateBy, event) {
   if (this.manipulator.modelInstance) {
-    var cmdParams = { object: this.manipulator.modelInstance, rotateBy: rotateBy };
+    const cmdParams = { object: this.manipulator.modelInstance, rotateBy: rotateBy };
     this.Publish(Constants.EDIT_OPSTATE.INIT, Constants.CMDTYPE.ROTATE, cmdParams);
-    var axis = this.manipulator.getRotationAxis();
+    const axis = this.manipulator.getRotationAxis();
     this.app.rotateModels([this.manipulator.modelInstance], axis, rotateBy, this.manipulator.getAttachmentFace());
     this.manipulator.updateRotationCircle(1, rotateBy);
     this.Publish(Constants.EDIT_OPSTATE.DONE, Constants.CMDTYPE.ROTATE, cmdParams);
@@ -515,11 +591,13 @@ SceneEditControls.prototype.handleTransformControllerKeys = function (event) {
 };
 
 SceneEditControls.prototype.updateDatGui = function(datgui) {
-  var gui = datgui.getFolder('controls');
+  const gui = datgui.getFolder('controls');
   gui.add(this, 'controlMode', ['basic', 'translate', 'rotate', 'scale']).name('control').listen();
   if (this.dragdrop) {
-    gui.add(this.dragdrop, 'putOnObject').name('support').listen();
+    gui.add(this.dragdrop, 'movementMode', Constants.EditStrategy.MovementMode).name('movement').listen();
+    gui.add(this.dragdrop, 'supportSurfaceChange', Constants.EditStrategy.SupportSurfaceChange).name('support change').listen();
   }
+  return gui;
 };
 
 
@@ -528,7 +606,7 @@ Object.defineProperty(SceneEditControls.prototype, 'controlMode', {
     return this.useThreeTransformControls? this._transformMode : 'basic';
   },
   set: function (m) {
-    var prevUseThreeTransformControls;
+    const prevUseThreeTransformControls = this.useThreeTransformControls;
     if (m === 'basic') {
       this.useThreeTransformControls = false;
     } else {
@@ -539,7 +617,7 @@ Object.defineProperty(SceneEditControls.prototype, 'controlMode', {
       }
     }
     if (prevUseThreeTransformControls !== this.useThreeTransformControls && this.selected) {
-      var object = this.selected;
+      const object = this.selected;
       this.detach(object);
       this.attach(object);
     }

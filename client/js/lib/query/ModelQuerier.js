@@ -1,5 +1,6 @@
 'use strict';
 
+var Constants = require('Constants');
 var AssetQuerier = require('query/AssetQuerier');
 var ModelSchema = require('model/ModelSchema');
 var _ = require('util/util');
@@ -18,7 +19,7 @@ var _ = require('util/util');
 function ModelQuerier(options) {
   // Set reasonable defaults
   var defaults = {
-    viewerUrl: 'view-model',
+    viewerUrl: Constants.baseUrl + '/view-model',
     viewerWindowName: 'Model Viewer',
     previewImageIndex: 13,
     assetTypes: ['model'],
@@ -32,7 +33,8 @@ ModelQuerier.prototype = Object.create(AssetQuerier.prototype);
 ModelQuerier.prototype.constructor = ModelQuerier;
 
 ModelQuerier.prototype.getViewResultUrl = function(fullId, result) {
-  return this.viewerUrl + '?modelId=' + fullId;
+  var extra = this.options.includeExtraAssets ? '&extra' : '';
+  return this.viewerUrl + '?modelId=' + fullId + extra;
 };
 
 // Exports

@@ -8,7 +8,17 @@ var BinaryView = require('util/BinaryView');
  * @constructor
  * @memberof loaders
  */
-var BinvoxLoader = function () {
+var BinvoxLoader = function (params) {
+  this.setOptions(params);
+};
+
+/**
+ * Set options
+ * @param options
+ * @param [options.swapyz] Whether yz should be swapped
+ */
+BinvoxLoader.prototype.setOptions = function(options) {
+  this.options = options || {};
 };
 
 // binary is a jbinary object
@@ -91,17 +101,24 @@ BinvoxLoader.prototype.parse = function (filename, binary) {
   // Can use ndarray
   var nbytes = Math.ceil(grid.size / 8);
   var voxelsBuffer = new Uint8Array(nbytes);
+  grid.options = Object.assign({}, this.options); // shallow copy
   /* globals BitView */
   grid.voxels = new BitView(voxelsBuffer.buffer);
+  // TODO: is there a change to binvox output (for now, handle with swapyz)?
+  // See https://www.patrickmin.com/binvox/binvox.html (y runs fastest)
+  grid.getVoxelIndex = function(x ,y, z) {
+    return grid.options.swapyz? x * grid.width * grid.height + y * grid.width + z :
+      x * grid.width * grid.height + z * grid.width + y;
+  };
   grid.isVoxelSet = function (x, y, z) {
-    var vi = x * grid.width * grid.height + z * grid.width + y;
+    var vi = grid.getVoxelIndex(x,y,z);
     return (vi >= 0 && vi < grid.size) ? grid.voxels.getBit(vi) : 0;
   };
   grid.getVoxel = function (x, y, z) {
     return grid.isVoxelSet(x,y,z);
   };
   grid.setVoxel = function (x, y, z, flag) {
-    var vi = x * grid.width * grid.height + z * grid.width + y;
+    var vi = grid.getVoxelIndex(x,y,z);
     if (vi >= 0 && vi < grid.size) {
       grid.voxels.setBit(vi, flag);
     }
@@ -152,7 +169,7 @@ BinvoxLoader.prototype.updateGridTransforms = function (grid) {
   var quaternion = new THREE.Quaternion();
   grid.gridToWorld.compose(grid.binvoxTranslate, quaternion,
     new THREE.Vector3(voxelScale, voxelScale, voxelScale));
-  grid.worldToGrid.getInverse(grid.gridToWorld);
+  grid.worldToGrid.copy(grid.gridToWorld).invert();
   grid.voxelSize = voxelScale;
 };
 

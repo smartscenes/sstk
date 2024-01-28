@@ -7,7 +7,7 @@ require('three-convexgeo');
 var ConvexGeometryUtil = {};
 
 ConvexGeometryUtil.pointsToConvexGeometry = function(points) {
-  return new THREE.ConvexBufferGeometry.fromPoints(points);
+  return new THREE.ConvexGeometry.fromPoints(points);
 };
 
 ConvexGeometryUtil.meshesToConvexGeometry = function(meshes) {

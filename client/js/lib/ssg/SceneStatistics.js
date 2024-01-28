@@ -14,6 +14,7 @@ var attachmentTypes = ['left','right','bottom','top','front','back'];
  * @memberOf ssg
  */
 function SceneStatistics() {
+  this.textureAssetGroup = null; // TODO: specify textureAssetGroup
   // Materials
   this.__materialIndex = new Index({name: 'material', filename: 'materials'});
   this.__textureIndex = new Index({name: 'texture', filename: 'textures'});
@@ -138,7 +139,7 @@ SceneStatistics.prototype.getTexturedMaterialCounts = function(textureSet) {
     return this.__objectTexturedMaterialCounts;
   } else {
     // Break textures apart by set and then return appropriate set
-    var textureAssets = AssetGroups.getAssetGroup('p5dTexture');
+    var textureAssets = AssetGroups.getAssetGroup(this.textureAssetGroup);
     if (textureAssets && textureAssets.assetDb) {
       var assetInfos = textureAssets.assetDb.assetInfos;
       var splits = _.groupBy(assetInfos, 'split');

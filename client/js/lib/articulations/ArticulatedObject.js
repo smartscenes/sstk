@@ -73,7 +73,7 @@ class ArticulatedObject extends THREE.Object3D {
                 userData.articulatablePartId = part.pid;
                 userData.isArticulatedNode = true;
                 this.articulatableNodes[part.pid] = part.object3D;
-                const arts = _.isArray(part.articulation)? part.articulation : [part.articulation];
+                const arts = _.isArray(part.articulation) ? part.articulation : [part.articulation];
                 for (let art of arts) {
                     this.articulations.push(
                       new Articulation({
@@ -101,8 +101,8 @@ class ArticulatedObject extends THREE.Object3D {
         } else {
             super.copy(other, recursive);
             this.articulations = other.articulations.map(x => x.clone());
-            const nodes = Object3DUtil.findNodes(this,(node) => node.userData.pid != null);
-            const idToObj = _.keyBy(nodes, (node) => node.userData.pid );
+            const nodes = Object3DUtil.findNodes(this, (node) => node.userData.pid != null);
+            const idToObj = _.keyBy(nodes, (node) => node.userData.pid);
             this.connectivityGraph = other.connectivityGraph.withPartObject3Ds(idToObj, true);
             this.articulatableNodes = other.articulatableNodes.map(n => this.__findArticulatableNode(n.userData.partId));
         }
@@ -115,7 +115,7 @@ class ArticulatedObject extends THREE.Object3D {
     }
 
     clone(recursive) {
-        return new this.constructor().copy( this, recursive );
+        return new this.constructor().copy(this, recursive);
     }
 
     getNumArticulations() {
@@ -128,6 +128,12 @@ class ArticulatedObject extends THREE.Object3D {
 
     getArticulationState(artIndex) {
         return this.articulationStates[artIndex];
+    }
+
+    setArticulationMotionStateValues(stateValues) {
+        for (let sv of stateValues) {
+            this.articulationStates[sv.artIndex].articulation.setMotionStateValue(sv.name, sv.value);
+        }
     }
 
     findArticulationIndex(filter) {
@@ -166,8 +172,8 @@ class ArticulatedObject extends THREE.Object3D {
         // Combined structure with articulations and parts information
         const json = this.connectivityGraph.toJson();
         json.version = "articulated-parts@0.0.1";
-        json.metadata = { connectivity: json.metadata };
-        json.articulations = this.articulations.map(art => art? art.toJson() : undefined);
+        json.metadata = {connectivity: json.metadata};
+        json.articulations = this.articulations.map(art => art ? art.toJson() : undefined);
         for (let part of json.parts) {
             if (part) {
                 let articulationIds = this.findArticulationIndices(art => art.pid === part.pid);
@@ -190,7 +196,7 @@ class ArticulatedObject extends THREE.Object3D {
         // Take children and merge them
         if (staticNode) {
             const mergedNode = GeometryUtil.mergeMeshes(staticNode);
-            const obb = OBBFitter.fitMeshOBB(mergedNode, { constrainedVertical: true });
+            const obb = OBBFitter.fitMeshOBB(mergedNode, {constrainedVertical: true});
             staticPartId = pid;
             mergedNode.name = 'Part' + pid;
             mergedNode.userData.type = 'Part';
@@ -210,13 +216,13 @@ class ArticulatedObject extends THREE.Object3D {
             let newPart;
             if (node instanceof THREE.Mesh) {
                 // Okay
-                const obb = origPart.obb? origPart.obb.clone() : OBBFitter.fitMeshOBB(node, { constrainedVertical: true });
+                const obb = origPart.obb ? origPart.obb.clone() : OBBFitter.fitMeshOBB(node, {constrainedVertical: true});
                 newPart = new Part(pid, origPart.label, origPart.name, obb, node);
                 newPart.sourceParts = [origParts[node.userData.partId]];
             } else {
                 const linkedNodes = node.children.filter(n => n.userData.articulatablePartId === node.userData.partId);
                 const mergedNode = GeometryUtil.mergeMeshes(linkedNodes);
-                const obb = OBBFitter.fitMeshOBB(mergedNode, { constrainedVertical: true });
+                const obb = OBBFitter.fitMeshOBB(mergedNode, {constrainedVertical: true});
                 mergedNode.name = 'Part' + pid;
                 mergedNode.userData.type = 'Part';
                 mergedNode.userData.isArticulated = true;
@@ -239,12 +245,12 @@ class ArticulatedObject extends THREE.Object3D {
         for (let i = 0; i < newParts.length; i++) {
             connectivity[i] = [];
         }
-        const articulations = this.articulations.map( x => {
+        const articulations = this.articulations.map(x => {
             const origPart = origParts[x.pid];
             const c = x.clone();
             c.pid = partIdRemap[x.pid];
-            c.base = (origPart.parentId != undefined)? [partIdRemap[origPart.parentId]] :
-                (staticPartId != undefined)? [staticPartId] : [];
+            c.base = (origPart.parentId != undefined) ? [partIdRemap[origPart.parentId]] :
+              (staticPartId != undefined) ? [staticPartId] : [];
             connectivity[c.pid] = connectivity[c.pid] || [];
             for (let baseId of c.base) {
                 //connectivity[baseId] = connectivity[baseId] || [];
@@ -253,7 +259,7 @@ class ArticulatedObject extends THREE.Object3D {
             }
             return c;
         });
-        const cgmeta = this.connectivityGraph.metadata? _.clone(this.connectivityGraph.metadata) : undefined;
+        const cgmeta = this.connectivityGraph.metadata ? _.clone(this.connectivityGraph.metadata) : undefined;
         if (cgmeta) {
             cgmeta.condensed = true;
         }
@@ -271,7 +277,7 @@ class ArticulatedObject extends THREE.Object3D {
         const articulatablePids = pids.articulatablePids;
         const staticPids = pids.staticPids;
         const filteredStaticPids = _.filter(staticPids,
-                pid => parts[pid] && parts[pid].object3D && parts[pid].parentId == null);
+          pid => parts[pid] && parts[pid].object3D && parts[pid].parentId == null);
 
         if (filteredStaticPids.length > 0) {
             const staticNode = new THREE.Group();
@@ -318,7 +324,12 @@ class ArticulatedObject extends THREE.Object3D {
                 this.articulatableNodes[pid] = partNode;
             }
         }
+    }
 
+    populateArticulationUserData() {
+        for (let artState of this.articulationStates) {
+            artState.articulatedNode.userData.articulation = artState.toJson();
+        }
     }
 
     __identifyArticulatablePids() {
@@ -329,7 +340,8 @@ class ArticulatedObject extends THREE.Object3D {
         const parts = this.connectivityGraph.parts;
         const articulationsByPartId = _.groupBy(this.articulations, 'pid');
         const articulatablePids = _.keys(articulationsByPartId).map(x => parseInt(x));
-        const remainingPids = new Set(_.range(0, parts.length));
+        const otherPids = _.range(0, parts.length).filter(pid => parts[pid]);
+        const remainingPids = new Set(otherPids);
         // console.log('remaining', remainingPids, articulationsByPartId);
         _.each(articulationsByPartId, (arts, pid) => {
             pid = parseInt(pid);
@@ -339,12 +351,12 @@ class ArticulatedObject extends THREE.Object3D {
             }
             // Let's just handle one articulation
             const basePids = new Set(_.uniq(_.flatMap(arts, 'base')));
-            const stopPids = new Set([...basePids,...articulatablePids]);
+            const stopPids = new Set([...basePids, ...articulatablePids]);
             stopPids.add(pid);
             const childPids = this.connectivityGraph.getConnectedPartIdsDeep([pid],
-                    id => stopPids.has(id), id => !basePids.has(id));
+              id => stopPids.has(id), id => !basePids.has(id));
             part.baseIds = [...basePids];
-            part.childIds = [...childPids].filter(cid => cid !== pid);
+            part.childIds = [...childPids].filter(cid => cid != pid);  // sometimes the cid / pid are ints/strings...
             for (let cid of part.childIds) {
                 if (parts[cid].parentId != null) {
                     console.log(`Part ${cid} already parented to ${parts[cid].parentId}`);
@@ -354,6 +366,7 @@ class ArticulatedObject extends THREE.Object3D {
             }
             remainingPids.delete(pid);
         });
+        // console.log('static pids', remainingPids, 'articulated pids', articulatablePids);
         // console.log(this.connectivityGraph.parts);
         // Make sure articulatablePids are in order (parent, then descendants)
         const rootArticulatablePids = articulatablePids.filter(pid => parts[pid].parentId == null);
@@ -376,7 +389,110 @@ class ArticulatedObject extends THREE.Object3D {
             }
         }
         //console.log(sortedArticulatablePids);
-        return { rootArticulatablePids: rootArticulatablePids, articulatablePids: sortedArticulatablePids, staticPids: [...remainingPids] };
+        return {
+            rootArticulatablePids: rootArticulatablePids,
+            articulatablePids: sortedArticulatablePids,
+            staticPids: [...remainingPids]
+        };
+    }
+
+    static toArticulated(object3D) {
+        if (object3D instanceof ArticulatedObject) {
+            return object3D;
+        } else if (object3D && object3D.userData.articulations && object3D.userData.partsConnectivity) {
+            let partsConnectivity = PartConnectivityGraph.fromJson(object3D.userData.partsConnectivity);
+            const nodes = Object3DUtil.findNodes(object3D, (node) => node.userData.pid != null);
+            const idToObj = _.keyBy(nodes, (node) => node.userData.pid);
+            partsConnectivity = partsConnectivity.withPartObject3Ds(idToObj, true);
+            let articulations = object3D.userData.articulations;
+            if (!Array.isArray(articulations)) {
+                articulations = [articulations];
+            }
+            const articulatedObject3D = new ArticulatedObject(articulations, partsConnectivity);
+            articulatedObject3D.name = object3D.name;
+            return articulatedObject3D;
+        }
+    }
+
+    static toArticulatedHierarchical(object3D) {
+        const articulatedObject = ArticulatedObject.toArticulated(object3D);
+        if (articulatedObject) {
+            return articulatedObject;
+        } else {
+            const uuidToArticulatedObject = {};
+            Object3DUtil.traverse(object3D,
+              (node) => {
+                  const articulated = ArticulatedObject.toArticulated(node);
+                  uuidToArticulatedObject[node.uuid] = articulated;
+                  return articulated == null;
+              }, (node) => {
+                  const converted = _.map(node.children, (child) => {
+                      return uuidToArticulatedObject[child.uuid] || child;
+                  });
+                  Object3DUtil.removeAllChildren(node);
+                  for (let i = 0; i < converted.length; i++) {
+                      node.add(converted[i]);
+                  }
+              });
+        }
+        return object3D;
+    }
+
+    static populateArticulationUserData(object3D) {
+        Object3DUtil.traverse(object3D,
+          (node) => {
+              if (node instanceof ArticulatedObject) {
+                  node.populateArticulationUserData();
+              }
+              return true;
+          });
+    }
+
+    static createArticulatedScene(name, inputConnectivityGraph, pidToArticulations, ignorePartLabels = []) {
+        const scene = new THREE.Scene();
+        scene.name = name;
+        // console.log('metadata', this.currentConnectivityGraph.metadata);
+        const validParts = inputConnectivityGraph.parts.filter(p => ignorePartLabels.indexOf(p.label) < 0);
+        const partsByObjectInstId = _.groupBy(validParts, 'objectInstId');
+        _.forEach(partsByObjectInstId, (parts, objectInstId) => {
+            // console.log('parts', parts, objectInstId);
+            // console.log('got object', objectInstId, 'with ', parts.length, 'parts');
+            const pids = parts.map(p => p.pid);
+            const extracted = inputConnectivityGraph.extractConnectivity(pids);
+            const connectivityGraph = extracted.connectivity;
+            const remapped = extracted.remapped;
+            const extractedArticulations = [];
+            pids.forEach(pid => {
+                const anns = pidToArticulations(pid);
+                if (anns) {
+                    //console.log('got ' + anns.length + ' articulations for part ' + pid);
+                    for (let ann of anns) {
+                        const copy = Object.assign({}, ann);
+                        copy.pid = remapped[copy.pid];
+                        copy.base = copy.base.map(bpid => remapped[bpid])
+                        extractedArticulations.push(copy)
+                    }
+                }
+            });
+            let object;
+            if (extractedArticulations.length) {
+                object = new ArticulatedObject(extractedArticulations, connectivityGraph);
+                object.userData.partsConnectivity = connectivityGraph.toJson();
+                object.userData.articulations = extractedArticulations;
+            } else {
+                object = new THREE.Object3D();
+                for (let part of connectivityGraph.parts) {
+                    object.add(part.object3D);
+                }
+            }
+            if (objectInstId !== 'undefined') {
+                object.name = objectInstId;
+            } else {
+                object.name = 'unnamed'
+            }
+            scene.add(object);
+        });
+        return scene;
     }
 }
 

@@ -1,4 +1,5 @@
 const RNG = require('math/RNG');
+const {get} = require("lodash");
 const MatrixUtil = {};
 
 function axisPairToOrthoMatrix(_v1, _v2) {
@@ -39,7 +40,7 @@ MatrixUtil.getAlignmentMatrix = function (objectUp, objectFront, targetUp, targe
   var targetM = MatrixUtil.axisPairToOrthoMatrix(targetUp, targetFront);
   var transform = new THREE.Matrix4();
   var objMinv = new THREE.Matrix4();
-  objMinv.getInverse(objM);
+  objMinv.copy(objM).invert();
   transform.multiplyMatrices(targetM, objMinv);
   return transform;
 };
@@ -53,7 +54,8 @@ MatrixUtil.getAlignmentMatrix = function (objectUp, objectFront, targetUp, targe
  * @param targetFront Target front vector
  */
 MatrixUtil.getAlignmentQuaternion = function (objectUp, objectFront, targetUp, targetFront) {
-  var m = MatrixUtil.getAlignmentMatrix(objectUp, objectFront, targetUp, targetFront);
+  var m = arguments.length === 4? MatrixUtil.getAlignmentMatrix(objectUp, objectFront, targetUp, targetFront) :
+    MatrixUtil.getAlignmentMatrixSingle(arguments[0], arguments[1]);
   var position = new THREE.Vector3();
   var scale = new THREE.Vector3();
   var quaternion = new THREE.Quaternion();
@@ -76,7 +78,21 @@ function getRotationMatrixFromZ(axis) {
 }
 MatrixUtil.getRotationMatrixFromZ = getRotationMatrixFromZ;
 
-function getOrthogonal(axis, rng = RNG.global) {
+function getOrthogonalComponent(axis, vector, normalize) {
+  const w = axis.clone().normalize();
+  const lengthInNormalDir = vector.dot(axis);
+  const partInNormalDir = w.multiplyScalar(lengthInNormalDir);
+  const v = vector.clone();
+  v.sub(partInNormalDir);
+  if (normalize && v.lengthSq() > 0) {
+    v.normalize();
+  }
+  return v;
+}
+
+MatrixUtil.getOrthogonalComponent = getOrthogonalComponent;
+
+function getOrthogonal(axis, initial = null, rng = RNG.global) {
   const w = axis.clone().normalize();
   // Get random perpendicular to normal
   const axes = [new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)];
@@ -85,13 +101,16 @@ function getOrthogonal(axis, rng = RNG.global) {
       return c;
     }
   }
+  let out;
+  if (initial) {
+    out = getOrthogonalComponent(axis, initial, true);
+    if (out.lengthSq() > 0) {
+      return out;
+    }
+  }
   const rand = new THREE.Vector3(rng.random(), rng.random(), rng.random()).normalize();
-  const randLengthInNormalDir = rand.dot(axis);
-  const randPartInNormalDir = w.multiplyScalar(randLengthInNormalDir);
-  const v = rand.clone();
-  v.sub(randPartInNormalDir);
-  v.normalize();
-  return v;
+  out = getOrthogonalComponent(axis, rand, true);
+  return out;
 }
 MatrixUtil.getOrthogonal = getOrthogonal;
 

@@ -9,60 +9,16 @@ function VoxelMesh(data, options, three) {
   this.data = data;
   this.scale = options.scaleFactor || new this.THREE.Vector3(1, 1, 1);
 
-  var name = "CreateVoxelMesh-mesher";
+  var name = 'CreateVoxelMesh-mesher';
   console.time(name);
   var result = options.mesher(data.voxels, data.dims, options);
   console.timeEnd(name);
   //this.meshed = result;
-  var useBufferGeometry = options.useBufferGeometry;
-  name = (useBufferGeometry)? "CreateVoxelMesh-createBufferGeometry" : "CreateVoxelMesh-createGeometry";
+  name = 'CreateVoxelMesh-createBufferGeometry';
   console.time(name);
-  if (useBufferGeometry) {
-    this.createBufferGeometry(result);
-  } else {
-    this.createGeometry(result);
-  }
+  this.createBufferGeometry(result);
   console.timeEnd(name);
 }
-
-VoxelMesh.prototype.createGeometry = function(result) {
-  var geometry = this.geometry = new this.THREE.Geometry();
-  geometry.vertices.length = 0;
-  geometry.faces.length = 0;
-
-  for (var i = 0; i < result.vertices.length; ++i) {
-    var q = result.vertices[i];
-    geometry.vertices.push(new this.THREE.Vector3(q[0], q[1], q[2]));
-  }
-
-  for (var i = 0; i < result.faces.length; ++i) {
-    //geometry.faceVertexUvs[0].push(this.faceVertexUv(result, i));
-
-    var q = result.faces[i];
-    if (q.length === 5) {
-      var color = new this.THREE.Color(q[4] & 0xffffff);
-      var f1 = new this.THREE.Face3(q[0], q[1], q[3]);
-      f1.color = color;
-      geometry.faces.push(f1);
-      var f2 = new this.THREE.Face3(q[1], q[2], q[3]);
-      f2.color = color;
-      geometry.faces.push(f2);
-    } else if (q.length === 4) {
-      var f = new this.THREE.Face3(q[0], q[1], q[2]);
-      f.color = new this.THREE.Color(q[3] & 0xffffff);
-      geometry.faces.push(f);
-    }
-  }
-
-  geometry.computeFaceNormals();
-
-  geometry.verticesNeedUpdate = true;
-  geometry.elementsNeedUpdate = true;
-  geometry.normalsNeedUpdate = true;
-
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-};
 
 // Utility routines
 VoxelMesh.prototype.createBufferGeometry = function(result) {
@@ -115,14 +71,14 @@ VoxelMesh.prototype.createBufferGeometry = function(result) {
     }
   }
 
-  geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( positions ), 3 ) );
-  geometry.addAttribute( 'normal', new THREE.BufferAttribute( new Float32Array( normals ), 3 ) );
+  geometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array( positions ), 3 ) );
+  geometry.setAttribute( 'normal', new THREE.BufferAttribute( new Float32Array( normals ), 3 ) );
   //geometry.addAttribute( 'uv', new THREE.BufferAttribute( new Float32Array( uvs ), 2 ) );
-  geometry.addAttribute( 'color', new THREE.BufferAttribute(new Float32Array( colors ), 3 ) );
+  geometry.setAttribute( 'color', new THREE.BufferAttribute(new Float32Array( colors ), 3 ) );
   //geometry.offsets[0] = {start: 0, count: indices.length, index: 0};   //very important!
   geometry.verticesArray = geometry.attributes['position'].array;
 
-  geometry.computeFaceNormals();
+  geometry.computeVertexNormals();
 
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();

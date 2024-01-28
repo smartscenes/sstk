@@ -14,7 +14,7 @@ var _ = require('util/util');
 function TriangleAccessor(mesh) {
   this.mesh = mesh;
   this.geo = mesh.geometry;
-  this.isBufferGeometry = mesh.geometry instanceof THREE.BufferGeometry;
+  this.isBufferGeometry = mesh.geometry.isBufferGeometry;
   this.V = this.isBufferGeometry ? this.geo.attributes.position.array : this.geo.vertices;
   this.F = this.isBufferGeometry ? null : this.geo.faces;
 }
@@ -125,9 +125,8 @@ TriangleAccessor.prototype.getTriangleVertexIndices = function(i) {
 
 TriangleAccessor.prototype.getTriangleArea = (function() {
   var tri = new THREE.Triangle();
-  var scope = this;
   return function(i, transform) {
-    scope.getTriangle(i, tri, transform);
+    this.getTriangle(i, tri, transform);
     return tri.getArea();
   };
 }());

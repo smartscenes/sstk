@@ -36,28 +36,31 @@ var FaceIDShader = {
   ].join("\n")
 };
 
-var FaceIDMaterial = function () {
-  THREE.ShaderMaterial.call(this, {
-    uniforms: {
-      baseId: { type: "f", value: 0 },
-      size: { type: "f", value: 0.01 },
-      scale: { type: "f", value: 400 }
-    },
-    vertexShader: FaceIDShader.vertexShader,
-    fragmentShader: FaceIDShader.fragmentShader
-  });
-};
-FaceIDMaterial.prototype = Object.create(THREE.ShaderMaterial.prototype);
-FaceIDMaterial.prototype.constructor = FaceIDMaterial;
-FaceIDMaterial.prototype.setBaseID = function (baseId) {
-  this.uniforms.baseId.value = baseId;
-};
-FaceIDMaterial.prototype.setPointSize = function (size) {
-  this.uniforms.size.value = size;
-};
-FaceIDMaterial.prototype.setPointScale = function (scale) {
-  this.uniforms.scale.value = scale;
-};
+class FaceIDMaterial extends THREE.ShaderMaterial {
+  constructor() {
+    super({
+      uniforms: {
+        baseId: {type: "f", value: 0},
+        size: {type: "f", value: 0.01},
+        scale: {type: "f", value: 400}
+      },
+      vertexShader: FaceIDShader.vertexShader,
+      fragmentShader: FaceIDShader.fragmentShader
+    });
+  }
+
+  setBaseID(baseId) {
+    this.uniforms.baseId.value = baseId;
+  }
+
+  setPointSize(size) {
+    this.uniforms.size.value = size;
+  }
+
+  setPointScale(scale) {
+    this.uniforms.scale.value = scale;
+  }
+}
 
 // flag to override Object3D copy such that it keeps reference to original Object3D
 THREE.Object3D.keepOriginalObjectReference = false;
@@ -86,7 +89,7 @@ THREE.Mesh.prototype.raycastWithID = ( function () {
   return function (elID, raycaster) {
     var geometry = this.geometry;
     var attributes = geometry.attributes;
-    inverseMatrix.getInverse(this.matrixWorld);
+    inverseMatrix.copy(this.matrixWorld).invert();
     ray.copy(raycaster.ray).applyMatrix4(inverseMatrix);
     var a, b, c;
     if (geometry.index != undefined) {
@@ -139,10 +142,10 @@ THREE.Line.prototype.raycastWithID = (function () {
   var interSegment = new THREE.Vector3();
   var interRay = new THREE.Vector3();
   return function (elID, raycaster) {
-    inverseMatrix.getInverse(this.matrixWorld);
+    inverseMatrix.copy(this.matrixWorld).invert();
     ray.copy(raycaster.ray).applyMatrix4(inverseMatrix);
     var geometry = this.geometry;
-    if (geometry instanceof THREE.BufferGeometry) {
+    if (geometry.isBufferGeometry) {
 
       var attributes = geometry.attributes;
 
@@ -177,7 +180,7 @@ THREE.Line.prototype.raycastWithID = (function () {
 
 })();
 
-THREE.PointCloud.prototype.raycastWithID = ( function () {
+THREE.Points.prototype.raycastWithID = ( function () {
 
   var inverseMatrix = new THREE.Matrix4();
   var ray = new THREE.Ray();
@@ -186,7 +189,7 @@ THREE.PointCloud.prototype.raycastWithID = ( function () {
     var object = this;
     var geometry = object.geometry;
 
-    inverseMatrix.getInverse(this.matrixWorld);
+    inverseMatrix.copy(this.matrixWorld).invert();
     ray.copy(raycaster.ray).applyMatrix4(inverseMatrix);
     var position = new THREE.Vector3();
 
@@ -398,13 +401,8 @@ THREE.GPUPicker.prototype._addElementID = function (object, baseId) {
       __pickingGeometry = object.geometry.__pickingGeometry;
     } else {
       __pickingGeometry = object.geometry;
-      // convert geometry to buffer geometry
-      if (object.geometry instanceof THREE.Geometry) {
-        if (this.debug) console.log("convert geometry to buffer geometry");
-        __pickingGeometry = new THREE.BufferGeometry().setFromObject(object);
-      }
       var units = 1;
-      if (object instanceof THREE.PointCloud) {
+      if (object instanceof THREE.Points) {
         units = 1;
       } else if (object instanceof THREE.Line) {
         units = 2;

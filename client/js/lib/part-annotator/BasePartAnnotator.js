@@ -39,19 +39,88 @@ function BasePartAnnotatorFactory(baseClass) {
    * @param [params.obbsVisible=false] {boolean} To show obbs of labeled segment groups or not.
    * @param [params.allowPass=false] {boolean} Whether passing of this item is allowed
    * @param [params.allowHierarchy=false] {boolean} Whether grouping of labels into hierarchy is allowed
+   * @param [params.allowCutting=false] {boolean} Whether mesh cutting is allowed
    * @param [params.expandObbAmount=0] {number} Number of virtual unit to expand obb by with labeling obb
    * @param [params.taskMode] Annotator task mode (fixup, verify)
+   * @param [params.annotationType] Annotation type (segment or segment-triindices)
+   * @param [params.debug] Whether to enable debugging for the interface
    * @constructor BasePartAnnotator
    */
   function BasePartAnnotator(params) {
     // Default configuration
     this.isAnnotator = true;
+    this.debug = params.debug || this.getUrlParams()['debug'];
+    var uihookups = [];
+    if (params.allowNext !== false) {
+      uihookups.push(      {
+          name: 'next',
+          element: '#nextBtn',
+          click: this.submitAnnotations.bind(this, true),
+          shortcut: 'shift-n'
+        }
+      );
+    } else {
+      $('#nextBtn').hide();
+    }
+    if (params.allowSave) {
+      uihookups.push({
+        name: 'save',
+        element: '#saveBtn',
+        click: this.submitAnnotations.bind(this, false),
+        shortcut: 'shift-s'
+      });
+    } else {
+      $('#saveBtn').hide();
+    }
+    uihookups.push.apply(uihookups, [
+      {
+        name: 'clear',
+        click: this.checkedClearAnnotations.bind(this),
+        shortcut: 'ctrl-shift-k'
+      },
+      {
+        name: 'toggleShowSelectedOnlyMode',
+        click: function() {
+          this.showSelectedOnlyMode = !this.showSelectedOnlyMode;
+        }.bind(this),
+        shortcut: 'ctrl-shift-t'
+      },
+      {
+        name: 'pass',
+        element: '#passBtn',
+        click: this.pass.bind(this)
+      },
+      {
+        name: 'undo',
+        click: this.undo.bind(this),
+        shortcut: 'defmod-z'
+      },
+      {
+        name: 'redo',
+        click: this.redo.bind(this),
+        shortcut: 'defmod-y'
+      }
+    ]);
+    if (this.debug) {
+      uihookups.push({
+        name: 'saveAnnotation',
+        click: function() { this.saveAnnotations(); }.bind(this),
+        shortcut: 'ctrl-s'
+      });
+      uihookups.push({
+        name: 'loadAnnotation',
+        click: function() { this.loadAnnotationsWithForm(); }.bind(this),
+        shortcut: 'ctrl-l'
+      });
+    };
     var defaults = {
       appId: 'BasePartAnnotator.v1',
       screenshotMaxWidth: 100,
       screenshotMaxHeight: 100,
       enforceUserId: true,
       expandObbAmount: 0,
+      annoFileExt: 'parts.json',            // Extension to use when exporting annotations to file
+      storeAnnotationsInDataField: false,   // Whether to store the annotations as part of the data field
       undo: {
         enabled: false,
         stackSize: 20
@@ -77,45 +146,14 @@ function BasePartAnnotatorFactory(baseClass) {
       clearAnnotationOptions: {
         clearLabels: false               // Whether to clear labels when all annotations are cleared
       },
-      uihookups: _.keyBy([
-        {
-          name: 'next',
-          element: '#nextBtn',
-          click: this.submitAnnotations.bind(this),
-          shortcut: 'shift-n'
-        },
-        {
-          name: 'clear',
-          click: this.checkedClearAnnotations.bind(this),
-          shortcut: 'ctrl-shift-k'
-        },
-        {
-          name: 'toggleShowSelectedOnlyMode',
-          click: function() {
-            this.showSelectedOnlyMode = !this.showSelectedOnlyMode;
-          }.bind(this),
-          shortcut: 'ctrl-shift-t'
-        },
-        {
-          name: 'pass',
-          element: '#passBtn',
-          click: this.pass.bind(this)
-        },
-        {
-          name: 'undo',
-          click: this.undo.bind(this),
-          shortcut: 'defmod-z'
-        },
-        {
-          name: 'redo',
-          click: this.redo.bind(this),
-          shortcut: 'defmod-y'
-        }
-      ], 'name')
+      uihookups: _.keyBy(uihookups, 'name')
     };
     var annotationModes = ['label'];
     if (params.allowHierarchy) {
       annotationModes.push('group');
+    }
+    if (params.allowCutting) {
+      annotationModes.push('cut');
     }
     if (annotationModes.length > 1) {
       defaults['uihookups']['toggleAnnotationMode'] = {
@@ -127,6 +165,7 @@ function BasePartAnnotatorFactory(baseClass) {
     params = _.defaultsDeep(Object.create(null), params, defaults);
     baseClass.call(this, params);
 
+    this.annotationType = params.annotationType;
     this.allowPass = params.allowPass;
     this.defaultClearAnnotationOptions = params.clearAnnotationOptions;
     this.enforceUserId = params.enforceUserId;
@@ -146,6 +185,7 @@ function BasePartAnnotatorFactory(baseClass) {
     this.annotationModes = annotationModes;
     this.__annotationModeIndex = 0;
     this.allowHierarchy = params.allowHierarchy;
+    this.allowCutting = params.allowCutting;
 
     if (this.allowPass) {
       $('#passBtn').removeClass('hidden');
@@ -168,7 +208,7 @@ function BasePartAnnotatorFactory(baseClass) {
       scope.onPartChanged(part);
     });
     this.painter.Subscribe('SelectPart', this, function(part) {
-      if (part && part.usesrData.labelInfo) {
+      if (part && part.userData.labelInfo) {
         scope.labelsPanel.selectLabel(part.userData.labelInfo);
       }
     });
@@ -193,6 +233,7 @@ function BasePartAnnotatorFactory(baseClass) {
 
     // Other parameters
     this.__expandObbAmount = params.expandObbAmount;
+    this.__mainModelOpacity = 1;
 
     // Did we successfully submit our annotations (if not there will be prompt asking if we want to leave this interface)
     this.__annotationsSubmitted = false;
@@ -219,6 +260,25 @@ function BasePartAnnotatorFactory(baseClass) {
         this.showSelectedOnlyWithUnknown();
       } else {
         this.showAll();
+      }
+    }
+  });
+
+  Object.defineProperty(BasePartAnnotator.prototype, 'mainModelOpacity', {
+    get: function () {return this.__mainModelOpacity; },
+    set: function (v) {
+      this.__mainModelOpacity = v;
+      if (this.__modelInstance) {
+        Object3DUtil.setOpacity(this.__modelInstance.object3D, v);
+      }
+    }
+  });
+
+  Object.defineProperty(BasePartAnnotator.prototype, 'mainModelVisible', {
+    get: function () {return !!(this.__modelInstance && this.__modelInstance.object3D.visible); },
+    set: function (v) {
+      if (this.__modelInstance) {
+        Object3DUtil.setVisible(this.__modelInstance.object3D, v);
       }
     }
   });
@@ -290,14 +350,20 @@ function BasePartAnnotatorFactory(baseClass) {
   BasePartAnnotator.prototype.setupDatGui = function () {
     if (this.useDatGui) {
       baseClass.prototype.setupDatGui.call(this);
+      this.datgui.add(this, 'mainModelOpacity', 0, 1).name('Reference opacity').listen();
+      this.datgui.add(this, 'mainModelVisible').name('Reference visible').listen();
       this.datgui.add(this, '__expandObbAmount', 0, 0.1*Constants.metersToVirtualUnit).name('Expand OBB By').listen();
+      this.datgui.add(this, 'saveAnnotations').name('Export annotations');
+      this.datgui.add(this, 'loadAnnotationsWithForm').name('Import annotations');
     }
   };
 
-  BasePartAnnotator.prototype.onSubmitSuccessful = function() {
+  BasePartAnnotator.prototype.onSubmitSuccessful = function(gotoNext) {
     // Close the annotator
     this.__annotationsSubmitted = true;
-    this.onClose();
+    if (gotoNext) {
+      this.onClose();
+    }
   };
 
   BasePartAnnotator.prototype.checkUnsavedChanges = function() {
@@ -424,12 +490,21 @@ function BasePartAnnotatorFactory(baseClass) {
   BasePartAnnotator.prototype.annotate = function (debug) {
   };
 
+  /**
+   * Get array of annotated parts
+   * @returns array of annotated parts
+   */
   BasePartAnnotator.prototype.getPartAnnotations = function() {
     this.annotate();
     return this.annotations;
   };
 
   BasePartAnnotator.prototype.saveAnnotations = function () {
+    if (this.labeler && this.labeler.checkLabels) {
+      var messages = this.labeler.checkLabels();
+      console.log('Check labels', messages);
+    }
+
     // Save part annotations to file
     var annotations = this.getPartAnnotations();
     if (annotations.length === 0) {
@@ -438,9 +513,17 @@ function BasePartAnnotatorFactory(baseClass) {
     }
 
     this.timings.mark('annotationSave');
-    var filename = (this.itemId != null)? this.itemId + '.parts.json' : 'parts.json';
-    var data = this.getAnnotationsJson(annotations);
-    FileUtil.saveJson(data, filename);
+    var fileExt = this.__options.annoFileExt;
+    var filename = (this.itemId != null)? this.itemId + '.' + fileExt : fileExt;
+    if (this.enforceUserId) {
+      this.authenticate(() => {
+        var data = this.getAnnotationsJson(annotations);
+        FileUtil.saveJson(data, filename);
+      });
+    } else {
+      var data = this.getAnnotationsJson(annotations);
+      FileUtil.saveJson(data, filename);
+    }
   };
 
   BasePartAnnotator.prototype.__loadAnnotationsFromFile = function (data, options) {
@@ -477,19 +560,19 @@ function BasePartAnnotatorFactory(baseClass) {
   };
 
   /* Creates annotations and submits to backend */
-  BasePartAnnotator.prototype.submitAnnotations = function () {
+  BasePartAnnotator.prototype.submitAnnotations = function (gotoNext) {
     var scope = this;
     if (this.enforceUserId) {
       this.authenticate(function() {
-        scope.__submitAnnotations();
+        scope.__submitAnnotations(gotoNext);
       });
     } else {
-      scope.__submitAnnotations();
+      scope.__submitAnnotations(gotoNext);
     }
   };
 
   // Implementation
-  BasePartAnnotator.prototype.__submitAnnotations = function () {
+  BasePartAnnotator.prototype.__submitAnnotations = function (gotoNext) {
     //console.log('got user ' + scope.userId);
     this.annotate();
 
@@ -501,18 +584,46 @@ function BasePartAnnotatorFactory(baseClass) {
 
     this.timings.mark('annotationSubmit');
     var params = this.getAnnotationsJson(this.annotations, true);
-    this.__submitAnnotationData(params, this.itemId);
+    this.__submitAnnotationData(params, this.itemId, gotoNext);
+  };
+
+  BasePartAnnotator.prototype.__updateAnnotationHistory = function (annotations) {
+    if (annotations && annotations.length) {
+      console.log('annotations', annotations);
+      this.annotationHistory = [];
+      if (annotations[0].annotationHistory) {
+        this.annotationHistory = annotations[0].annotationHistory.slice();
+        this.annotationHistory.unshift({
+          annId: annotations[0].id,
+          timings: annotations[0].data.timings,
+          stats: annotations[0].data.stats
+        });
+      } else {
+        for (var i = 0; i < annotations.length; i++) {
+          if (annotations[i].data) {
+            this.annotationHistory.push({
+              annId: annotations[i].id,
+              timings: annotations[i].data.timings,
+              stats: annotations[i].data.stats
+            });
+          }
+        }
+      }
+    } else {
+      this.annotationHistory = null;
+    }
   };
 
   BasePartAnnotator.prototype.getAnnotationsJson = function(partAnnotations, includeScreenshot) {
     // Get part labels (in case user has added label)
-    var partLabels = this.labeler.getLabels();
+    var partLabels = partAnnotations.map(ann => ann.label);
 
     var screenshot = includeScreenshot?
       this.getImageData(this.screenshotMaxWidth, this.screenshotMaxHeight) : undefined;
     var itemId = this.itemId;
     var params = {
       appId: this.appId,
+      type: this.annotationType,
       sessionId: Constants.getGlobalOrDefault('sessionId', 'local-session'),
       condition: Constants.getGlobalOrDefault('condition', 'test'),
       task: Constants.getGlobal('task'),
@@ -539,10 +650,17 @@ function BasePartAnnotatorFactory(baseClass) {
       data['form'] = this.form;
     }
     params['data'] = data;
+    if (this.__options.storeAnnotationsInDataField) {
+      data.annotations = partAnnotations;
+      delete params['annotations'];
+    }
+    if (this.annotationHistory) {
+      data['annotationHistory'] = this.annotationHistory;
+    }
     return params;
   };
 
-  BasePartAnnotator.prototype.__submitAnnotationData = function (data, itemId) {
+  BasePartAnnotator.prototype.__submitAnnotationData = function (data, itemId, gotoNext) {
     $.ajax({
       type: 'POST',
       url: this.submitAnnotationsUrl,
@@ -552,13 +670,16 @@ function BasePartAnnotatorFactory(baseClass) {
       success: function (res) {
         console.log(res);
         if (res.code === 200) {
+          UIUtil.showAlert('Part annotations successfully submitted', 'alert-success');
           console.log('Part annotations successfully submitted for ' + itemId);
-          this.onSubmitSuccessful();
+          this.onSubmitSuccessful(gotoNext);
         } else {
+          UIUtil.showAlert('Error submitting annotations', 'alert-danger');
           console.error('Error submitting annotations: ' + res.status);
         }
       }.bind(this),
       error: function () {
+        UIUtil.showAlert('Error submitting annotations', 'alert-danger');
         console.error('Error submitting annotations for ' + itemId);
       }
     });
@@ -638,9 +759,16 @@ function BasePartAnnotatorFactory(baseClass) {
         that.removeWaiting(waitingKey);
       },
       error: function (jqXHR, textStatus, errorThrown) {
-        console.error('Error retrieving annotations for '  + params.modelId);
-        console.log(errorThrown);
-        callback('Error retrieving annotations for '  + params.modelId, null);
+        var itemId = params.modelId != null? params.modelId : params.itemId;
+        var status = _.get(jqXHR.responseJSON, 'status');
+        if (status === 'No matching annotation') {
+          console.log('No annotations for ' + itemId);
+          callback(null);
+        } else {
+          console.error('Error retrieving annotations for ' + itemId);
+          console.log(errorThrown);
+          callback('Error retrieving annotations for ' + itemId, null);
+        }
         that.removeWaiting(waitingKey);
       }
     });
@@ -656,7 +784,7 @@ function BasePartAnnotatorFactory(baseClass) {
 
   // Some helpful actions on labels
   BasePartAnnotator.prototype.fillSelected = function(fill) {
-    // filter out selected that don't have any segIndices
+    // filter out selected that don't have any parts
     var selected = this.getAllSelectedWithParts();
     if (selected && selected.length) {
       this.onEditOpInit('fill', { labelInfo: selected, fill: fill });

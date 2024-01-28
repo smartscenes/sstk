@@ -2,6 +2,8 @@
 
 var Colors = require('util/Colors');
 var _ = require('util/util');
+require('three-geometry');
+require('three-modifiers');
 
 // Patch THREE.Triangle with convenience function
 if (!_.isFunction(THREE.Triangle.prototype.getVertex)) {
@@ -69,6 +71,13 @@ GeometryUtil.triangleAreaWithTransform = (function () {
   };
 }());
 
+GeometryUtil.ensureVertexColors = function(geometry) {
+  if (geometry.attributes.colors == null) {
+    const nverts = GeometryUtil.getGeometryVertexCount(geometry);
+    geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( new ArrayBuffer(12*nverts), 3 ) );
+  }
+};
+
 /**
  * Colors vertices
  * @param geometry {THREE.Geometry|THREE.BufferGeometry} Geometry to color
@@ -78,8 +87,9 @@ GeometryUtil.triangleAreaWithTransform = (function () {
  */
 GeometryUtil.colorVertices = function(geometry, color, vertices, alpha) {
   if (geometry instanceof THREE.Geometry) {
+    console.warn('Deprecated Geometry');
     if (vertices) {
-      console.error('colorVertices for a specific subset of vertices not supported for THREE.Geometry');
+      console.error('GeometryUtil.colorVertices for a specific subset of vertices not supported for THREE.Geometry');
     } else {
       var nfaces = GeometryUtil.getGeometryFaceCount(geometry);
       for (var i = 0; i < nfaces; i++) {
@@ -88,41 +98,51 @@ GeometryUtil.colorVertices = function(geometry, color, vertices, alpha) {
       }
       geometry.colorsNeedUpdate = true;
     }
-  } else if (geometry instanceof THREE.BufferGeometry) {
-    var vcolors = geometry.attributes.color.array;
+  } else if (geometry.isBufferGeometry) {
+    var vcolors = geometry.attributes.color;
+    var currentColor = new THREE.Color();
     // A set
+    // TODO: handle attribute buffer normalization
     if (vertices) {
       for (var v = 0; v < vertices.length; v++) {
         var vi = vertices[v];
-        var i = vi*3;
         if (alpha != null) {
-          vcolors[i] = vcolors[i]*alpha + (1-alpha)*color.r;
-          vcolors[i + 1] = vcolors[i+1]*alpha + (1-alpha)*color.g;
-          vcolors[i + 2] = vcolors[i+2]*alpha + (1-alpha)*color.b;
+          currentColor.fromBufferAttribute(vcolors, vi);
+          currentColor.lerpColors(color, currentColor, alpha);
+          vcolors.setXYZ(vi, currentColor.r, currentColor.g, currentColor.b);
         } else {
-          vcolors[i] = color.r;
-          vcolors[i + 1] = color.g;
-          vcolors[i + 2] = color.b;
+          vcolors.setXYZ(vi, color.r, color.g, color.b);
         }
       }
     } else {
-      for (var i = 0; i < vcolors.length; i+=3) {
+      for (var vi = 0; vi < vcolors.count; vi++) {
         if (alpha != null) {
-          vcolors[i] = vcolors[i]*alpha + (1-alpha)*color.r;
-          vcolors[i + 1] = vcolors[i+1]*alpha + (1-alpha)*color.g;
-          vcolors[i + 2] = vcolors[i+2]*alpha + (1-alpha)*color.b;
+          currentColor.fromBufferAttribute(vcolors, vi);
+          currentColor.lerpColors(color, currentColor, alpha);
+          vcolors.setXYZ(vi, currentColor.r, currentColor.g, currentColor.b);
         } else {
-          vcolors[i] = color.r;
-          vcolors[i + 1] = color.g;
-          vcolors[i + 2] = color.b;
+          vcolors.setXYZ(vi, color.r, color.g, color.b);
         }
       }
     }
     geometry.attributes.color.needsUpdate = true;
   } else {
-    console.error('colorVertices not supported for geometry', geometry);
+    console.error('GeometryUtil.colorVertices not supported for geometry', geometry);
   }
 };
+
+function getBufferAttributeStride(bufferAttribute) {
+  return bufferAttribute.isInterleavedBufferAttribute? bufferAttribute.data.stride : bufferAttribute.itemSize;
+}
+
+function getBufferAttributeOffset(bufferAttribute) {
+  return bufferAttribute.isInterleavedBufferAttribute? bufferAttribute.offset : 0;
+}
+
+function getBufferAttributeIndex(bufferAttribute, i) {
+  return bufferAttribute.isInterleavedBufferAttribute?
+    (i*bufferAttribute.data.stride + bufferAttribute.offset) : i*bufferAttribute.itemSize;
+}
 
 /**
  * Colors vertices
@@ -133,11 +153,12 @@ GeometryUtil.colorVertices = function(geometry, color, vertices, alpha) {
 GeometryUtil.colorVerticesUsingFunction = function(geometry, colorFn, vertices, transform) {
   if (geometry instanceof THREE.BufferGeometry) {
     //console.log('color vertices with function');
-    var pos = geometry.attributes['position'].array;
-    var vcolors = geometry.attributes.color.array;
+    var pos = geometry.attributes['position'];
+    var vcolors = geometry.attributes.color;
+
     var v = new THREE.Vector3();
     function getVertex(s) {
-      v.set(pos[s], pos[s + 1], pos[s + 2]);
+      v.fromBufferAttribute(pos, s);
       if (transform) {
         v.applyMatrix4(transform);
       }
@@ -148,24 +169,51 @@ GeometryUtil.colorVerticesUsingFunction = function(geometry, colorFn, vertices, 
     if (vertices) {
       for (var v = 0; v < vertices.length; v++) {
         var vi = vertices[v];
-        var i = vi*3;
-        var color = colorFn(getVertex(i));
-        vcolors[i] = color.r;
-        vcolors[i+1] = color.g;
-        vcolors[i+2] = color.b;
+        var color = colorFn(getVertex(vi));
+        // TODO: handle attribute buffer normalization
+        vcolors.setXYZ(vi, color.r, color.g, color.b);
       }
     } else {
-      for (var i = 0; i < vcolors.length; i+=3) {
-        var color = colorFn(getVertex(i));
-        vcolors[i] = color.r;
-        vcolors[i+1] = color.g;
-        vcolors[i+2] = color.b;
+      for (var vi = 0; vi < vcolors.count; vi++) {
+        var color = colorFn(getVertex(vi));
+        // TODO: handle attribute buffer normalization
+        vcolors.setXYZ(vi, color.r, color.g, color.b);
       }
     }
     geometry.attributes.color.needsUpdate = true;
   } else {
     console.error('GeometryUtil.colorVerticesUsingFunction not supported for geometry');
   }
+};
+
+GeometryUtil.colorElemVertices = function(mesh, elements, elementStride, useGeomIndex, c) {
+  var geometry = mesh.geometry;
+  if (geometry instanceof THREE.BufferGeometry) {
+    var vcolors = geometry.attributes.color;
+    if (!vcolors) {
+      GeometryUtil.ensureVertexColors(geometry);
+      vcolors = geometry.attributes.color;
+    }
+    var indices = geometry.index? geometry.index.array : null;
+    if (vcolors) {
+      for (var e = 0; e < elements.length; e++) {
+        var ei = elements[e];
+        var viStart = ei * elementStride;
+        for (var v = viStart; v < viStart + elementStride; v++) {
+          var vi = (useGeomIndex) ? indices[v] : v;
+          // TODO: handle attribute buffer normalization
+          vcolors.setXYZ(vi, c.r, c.g, c.b);
+        }
+      }
+      geometry.attributes.color.needsUpdate = true;
+    }
+  } else {
+    console.error('GeometryUtil.colorElemVertices not supported for geometry', geometry);
+  }
+};
+
+GeometryUtil.colorTriVertices = function(mesh, triIndices, c) {
+  GeometryUtil.colorElemVertices(mesh, triIndices, 3, mesh.geometry.index, c);
 };
 
 /**
@@ -185,23 +233,22 @@ GeometryUtil.grayOutVertices = function(mesh, center, maxRadius, grayColor) {
   var currColor = new THREE.Color();
   var rSq = maxRadius*maxRadius;
   var geometry = mesh.geometry;
-  var vcolors = geometry.attributes.color.array;
+  var vcolors = geometry.attributes.color;
   GeometryUtil.forMeshVertices(mesh, function(p, attributes) {
     var distanceSq = center.distanceToSquared(p);
     var grayRatio = _.clamp(distanceSq/rSq, 0, 1);
     currColor.fromArray(attributes[0]);
     var c = Colors.interpolateColor(currColor, grayColor, { weight: grayRatio });
     var vi = attributes[1];
-    var i = vi*3;
-    vcolors[i] = c.r;
-    vcolors[i+1] = c.g;
-    vcolors[i+2] = c.b;
+    // TODO: handle attribute buffer normalization
+    vcolors.setXYZ(vi, c.r, c.g, c.b);
   }, [{name: 'color', stride: 3}, {name: 'index'}]);
   geometry.attributes.color.needsUpdate = true;
 };
 
 GeometryUtil.colorCylinderVertices = function(geometry, color1, color2) {
   if (geometry instanceof THREE.Geometry) {
+    console.warn('Deprecated Geometry');
     var nfaces = GeometryUtil.getGeometryFaceCount(geometry);
     var verts = geometry.vertices;
     for (var i = 0; i < nfaces; i++) {
@@ -220,9 +267,9 @@ GeometryUtil.getGeometryVertexCount = function (geometry) {
   if (verts) {
     return verts.length;
   } else if (geometry instanceof THREE.BufferGeometry) {
-    var pos = geometry.attributes['position'].array;
+    var pos = geometry.attributes['position'];
     if (pos) {
-      return pos.length / 3;
+      return pos.count;
     } else {
       console.warn('No vertices for BufferedGeometry');
     }
@@ -237,10 +284,9 @@ GeometryUtil.copyGeometryVertex = function (vertex, geometry, index) {
   if (verts) {
     vertex.copy(verts[index]);
   } else if (geometry instanceof THREE.BufferGeometry) {
-    var pos = geometry.attributes['position'].array;
+    var pos = geometry.attributes['position'];
     if (pos) {
-      var s = index * 3;
-      vertex.set(pos[s], pos[s + 1], pos[s + 2]);
+      vertex.fromBufferAttribute(pos, index);
     } else {
       console.warn('No vertices for BufferedGeometry');
     }
@@ -283,7 +329,7 @@ GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform,
 
   function getMaterialOrVertexColor(material, vc) {
     // TODO: Figure out color here...
-    if (material.vertexColors === THREE.VertexColors && vc) {
+    if (material.vertexColors && vc) {
       return vc;
     } else if (material.color) {
       var v = material.color;
@@ -335,10 +381,11 @@ GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform,
         }
       }
     } else if (geometry instanceof THREE.BufferGeometry) {
-      var pos = geometry.attributes['position'].array;
+      var pos = geometry.attributes['position'];
       if (pos) {
-        for (var s = 0, vi = 0; s < pos.length; s += 3, vi++) {
-          v.set(pos[s], pos[s + 1], pos[s + 2]);
+        var nverts = pos.count;
+        for (var vi = 0; vi < nverts; vi++) {
+          v.fromBufferAttribute(pos, vi);
           if (transform) {
             v.applyMatrix4(transform);
           }
@@ -392,13 +439,57 @@ GeometryUtil.forMeshVerticesWithTransform = function (mesh, callback, transform,
   }
 };
 
-GeometryUtil.forFaceVerticesWithTransform = function (geometry, transform, callback) {
-  GeometryUtil.forFaceVertexIndices(geometry, function (iFace, vIndices) {
+GeometryUtil.forFaceVerticesWithTransform = function (geometryWithFaceIndices, transform, callback) {
+  var geometry = geometryWithFaceIndices.geometry? geometryWithFaceIndices.geometry : geometryWithFaceIndices;
+  GeometryUtil.forFaceVertexIndices(geometryWithFaceIndices, function (iFace, vIndices) {
     var v0 = GeometryUtil.getGeometryVertex(geometry, vIndices[0], transform);
     var v1 = GeometryUtil.getGeometryVertex(geometry, vIndices[1], transform);
     var v2 = GeometryUtil.getGeometryVertex(geometry, vIndices[2], transform);
     callback(v0, v1, v2, iFace);
   });
+};
+
+/**
+ * iterates over points until function return true.  Returns true if stopped due to
+ * @param mesh {THREE.Mesh}
+ * @param elements {int[]}
+ * @param elementsStride {int}
+ * @param useGeomIndex {bool} Whether to use geometry index
+ * @param fn {function}
+ * @param [tempPos] {THREE.Vector3} temporary vector3 for holding vertex position
+ * @returns {boolean}
+ */
+GeometryUtil.forElemVerticesUntil = function(mesh,  elements, elementStride, useGeomIndex, fn, tempPos) {
+  var pos = tempPos || new THREE.Vector3();
+  var worldMatrix = mesh.matrixWorld;
+  var geom = mesh.geometry;
+  var indices = mesh.geometry.index? mesh.geometry.index.array : null;
+  for (var e = 0; e < elements.length; e++) {
+    var ei = elements[e];
+    var viStart = ei*elementStride;
+    for (var v = viStart; v < viStart + elementStride; v++) {
+      var vi = (useGeomIndex)? indices[v] : v;
+      pos = GeometryUtil.getGeometryVertex(geom, vi, worldMatrix, pos);
+      if (fn) {
+        var stop = fn(pos);
+        if (stop) { return true; }
+      }
+    }
+  }
+  return false;
+};
+
+GeometryUtil.forMeshOrPartialMeshVertices = function(meshOrPartial, fn, includeFacesOnly) {
+  if (meshOrPartial.mesh && meshOrPartial.faceIndices) {
+    return GeometryUtil.forTriVerticesUntil(meshOrPartial.mesh, meshOrPartial.faceIndices, fn);
+  } else {
+    // TODO: handle includeFacesOnly
+    return GeometryUtil.forMeshVertices(meshOrPartial, fn);
+  }
+};
+
+GeometryUtil.forTriVerticesUntil = function(mesh, triIndices, fn, tempPos) {
+  return GeometryUtil.forElemVerticesUntil(mesh, triIndices, 3, mesh.geometry.index, fn, tempPos);
 };
 
 GeometryUtil.getVertices = function (root, verts) {
@@ -417,6 +508,49 @@ GeometryUtil.getVertices = function (root, verts) {
   return result;
 };
 
+GeometryUtil.getVerticesForVertIndices = function(mesh, indices, out) {
+  var points = out || [];
+  var worldMatrix = mesh.matrixWorld;
+  for (var i = 0; i < indices.length; i++) {
+    var vi = indices[i];
+    points.push(GeometryUtil.getGeometryVertex(mesh.geometry, vi, worldMatrix));
+  }
+  return points;
+};
+
+GeometryUtil.getVerticesForTriIndices = function(mesh, triIndices, out) {
+  var points = out || [];
+  var worldMatrix = mesh.matrixWorld;
+  var vertIndex = mesh.geometry.index? mesh.geometry.index.array : null;
+  for (var i = 0; i < triIndices.length; i++) {
+    var ti = triIndices[i];
+    var viStart = ti*3;
+    for (var v = viStart; v < viStart + 3; v++) {
+      var vi = (vertIndex)? vertIndex[v] : v;
+      points.push(GeometryUtil.getGeometryVertex(mesh.geometry, vi, worldMatrix));
+    }
+  }
+  return points;
+};
+
+GeometryUtil.getVertIndicesForElemIndices = function(mesh, elemIndices, elementStride, useGeomIndex, out) {
+  var vertIndices = out || [];
+  var vertIndex = mesh.geometry.index? mesh.geometry.index.array : null;
+  for (var i = 0; i < elemIndices.length; i++) {
+    var ti = elemIndices[i];
+    var viStart = ti*elementStride;
+    for (var v = viStart; v < viStart + elementStride; v++) {
+      var vi = (useGeomIndex)? vertIndex[v] : v;
+      vertIndices.push(vi);
+    }
+  }
+  return vertIndices;
+};
+
+GeometryUtil.getVertIndicesForTriIndices = function(mesh, indices, out) {
+  return GeometryUtil.getVertIndicesForElemIndices(mesh, indices, 3, mesh.geometry.index, out);
+};
+
 GeometryUtil.getGeometryFaceCount = function (geometry) {
   var faces = geometry.faces;
   if (faces) {
@@ -427,7 +561,7 @@ GeometryUtil.getGeometryFaceCount = function (geometry) {
     // Get actual number of vertices (indices)
     if (geometry.indices) {
       nVerts = geometry.indices.length;
-    } else if (geometry instanceof THREE.BufferGeometry && geometry.index) {
+    } else if (geometry.isBufferGeometry && geometry.index) {
       nVerts = geometry.index.array.length;
      }
     return nVerts / 3;
@@ -438,10 +572,11 @@ GeometryUtil.getMaterialGroups = function(geometry) {
   if (geometry.groups) {
     return geometry.groups;
   } else if (geometry instanceof THREE.Geometry) {
+    console.warn('Deprecated Geometry');
     var groups = [];
     for (var i = 0; i < geometry.faces.length; i++) {
       var materialIndex = geometry.faces[i].materialIndex;
-      groups[materialIndex] = groups[materialIndex] || { count: 0, materialIndex: materialIndex };
+      groups[materialIndex] = groups[materialIndex] || { count: 0, materialIndex: materialIndex, start: 0 };
       groups[materialIndex].count+=3;
     }
     return groups;
@@ -478,6 +613,17 @@ GeometryUtil.getSurfaceAreaFiltered = function (geometry, transform, filter) {
   return area;
 };
 
+GeometryUtil.getSurfaceAreaTriIndices = function (geometry, triIndices, transform, filter) {
+  var area = 0;
+  GeometryUtil.forFaceVerticesWithTransform({ geometry: geometry, faceIndices: triIndices }, transform,
+    function (v0, v1, v2, iFace) {
+      if (!filter || filter(v0, v1, v2, iFace)) {
+        area += GeometryUtil.triangleArea(v0, v1, v2);
+      }
+  });
+  return area;
+};
+
 GeometryUtil.getFaceMaterialIndex = function (geometry, iface) {
   // Assumes faces are basically triangles
   if (geometry.faces) {
@@ -507,7 +653,7 @@ GeometryUtil.getFaceVertexIndices = function (geometry, iface) {
     var j = iface*3;
     var indices = geometry.indices;
     return [indices[j], indices[j + 1], indices[j + 2]];
-  } else if (geometry instanceof THREE.BufferGeometry) {
+  } else if (geometry.isBufferGeometry) {
     if (geometry.index) {
       var j = iface*3;
       var indices = geometry.index.array;
@@ -519,7 +665,67 @@ GeometryUtil.getFaceVertexIndices = function (geometry, iface) {
   }
 };
 
-GeometryUtil.forFaceVertexIndices = function (geometry, callback, attributes) {
+GeometryUtil.forFaceVertexIndices = function (geometryWithFaceIndices, callback, attributes) {
+  if (geometryWithFaceIndices.geometry && geometryWithFaceIndices.faceIndices) {
+    return GeometryUtil.__forFaceVertexIndicesForFaces(geometryWithFaceIndices.geometry, geometryWithFaceIndices.faceIndices, callback, attributes);
+  } else {
+    return GeometryUtil.__forFaceVertexIndices(geometryWithFaceIndices, callback, attributes);
+  }
+};
+
+GeometryUtil.__forFaceVertexIndicesForFaces = function (geometry, faceIndices, callback, attributes) {
+  if (geometry.customFaceAttributes && attributes) {
+    var cb = callback;
+    var faceattrs = geometry.customFaceAttributes;
+    //console.log(attributes, _.keys(faceattrs));
+    callback = function(iface, verts) {
+      var values = [];
+      for (var j = 0; j < attributes.length; j++) {
+        var a = attributes[j];
+        var attrValue = faceattrs[a.name][iface];
+        values.push(attrValue);
+      }
+      cb(iface, verts, values);
+    };
+  }
+
+  var faces = geometry.faces;
+  if (faces) {
+    for (var i = 0; i < faceIndices.length; i++) {
+      var fi = faceIndices[i];
+      var face = faces[fi];
+      if (face instanceof THREE.Face3) {
+        callback(fi, [face.a, face.b, face.c]);
+      } else if (face instanceof THREE.Face4) {
+        callback(fi, [face.a, face.b, face.c, face.d]);
+      }
+    }
+  } else if (geometry.indices) {
+    var indices = geometry.indices;
+    for (var i=0; i < faceIndices.length; i++) {
+      var fi = faceIndices[i];
+      var j = fi*3;
+      callback(fi, [indices[j], indices[j + 1], indices[j + 2]]);
+    }
+  } else if (geometry.isBufferGeometry) {
+    if (geometry.index) {
+      var indices = geometry.index.array;
+      for (var i=0; i < faceIndices.length; i++) {
+        var fi = faceIndices[i];
+        var j = fi*3;
+        callback(fi, [indices[j], indices[j + 1], indices[j + 2]]);
+      }
+    } else if (geometry.attributes['position']) {
+      for (var i=0; i < faceIndices.length; i++) {
+        var fi = faceIndices[i];
+        var j = fi*3;
+        callback(fi, [j, j+1, j+2]);
+      }
+    }
+  }
+};
+
+GeometryUtil.__forFaceVertexIndices = function (geometry, callback, attributes) {
   // Assumes faces are basically triangles
   var nfaces = GeometryUtil.getGeometryFaceCount(geometry);
   if (nfaces == 0) {
@@ -557,7 +763,7 @@ GeometryUtil.forFaceVertexIndices = function (geometry, callback, attributes) {
     for (var i=0, j=0; i < nfaces; i++, j+=3) {
       callback(i, [indices[j], indices[j + 1], indices[j + 2]]);
     }
-  } else if (geometry instanceof THREE.BufferGeometry) {
+  } else if (geometry.isBufferGeometry) {
     if (geometry.index) {
       var indices = geometry.index.array;
       for (var i=0, j=0; i < nfaces; i++, j+=3) {
@@ -571,27 +777,44 @@ GeometryUtil.forFaceVertexIndices = function (geometry, callback, attributes) {
   }
 };
 // Utility functions
-function createCropped(arrayType, nVerts, croppedToOrigIndex, origArray, stride) {
-  var attrs = new arrayType(nVerts * stride);
+function copyArraySlice(nVerts, croppedToOrigIndex, targetArray, origArray, itemSize,
+                        targetStride, targetOffset, sourceStride, sourceOffset) {
   // Crops all entries unrelated to cropped
-  var k = 0;
   for (var vi = 0; vi < nVerts; vi++) {
     var ovi = croppedToOrigIndex[vi];
-    var start = stride * ovi;
-    for (var j = 0; j < stride; j++) {
-      if (start + j >= origArray.length) {
-        console.warn('Invalid access of index at ' + (start+j));
+    var targetStart = targetStride * vi + targetOffset;
+    var sourceStart = sourceStride * ovi + sourceOffset;
+    for (var j = 0; j < itemSize; j++) {
+      if (sourceStart + j >= origArray.length) {
+        console.warn('Invalid access of index at ' + (sourceStart+j));
       }
-      attrs[k] = origArray[start + j];
-      k++;
+      targetArray[targetStart + j] = origArray[sourceStart + j];
     }
   }
-  return attrs;
+  return targetArray;
 }
 
-function createCroppedFloat32(nVerts, croppedToOrigIndex, origArray, itemSize) {
-  var attrs = createCropped(Float32Array, nVerts, croppedToOrigIndex, origArray, itemSize);
-  return new THREE.BufferAttribute(attrs, itemSize);
+function copyBufferAttributes(targetBufferAttr, sourceBufferAttr, croppedToOrigIndex) {
+  // Copies cropped entries
+  //for (var vi = 0; vi < targetBufferAttr.count; vi++) {
+    //var ovi = croppedToOrigIndex[vi];
+    // this only works if target and source buffer are the same type
+    // targetBufferAttr.copyAt(vi, sourceBufferAttr, ovi);
+  //}
+  var sourceStride = getBufferAttributeStride(sourceBufferAttr);
+  var sourceOffset = getBufferAttributeOffset(sourceBufferAttr);
+  var targetStride = getBufferAttributeStride(targetBufferAttr);
+  var targetOffset = getBufferAttributeOffset(targetBufferAttr);
+  copyArraySlice(targetBufferAttr.count, croppedToOrigIndex, targetBufferAttr.array, sourceBufferAttr.array,
+    targetBufferAttr.itemSize, targetStride, targetOffset, sourceStride, sourceOffset);
+}
+
+function createCroppedBufferAttribute(nVerts, croppedToOrigIndex, origBufferAttr) {
+  var arrayType = origBufferAttr.array.constructor;
+  var array = new arrayType(nVerts * origBufferAttr.itemSize);
+  var croppedBufferAttr = new THREE.BufferAttribute(array, origBufferAttr.itemSize, origBufferAttr.normalized);
+  copyBufferAttributes(croppedBufferAttr, origBufferAttr, croppedToOrigIndex);
+  return croppedBufferAttr;
 }
 
 function buildIndexMap(triIndices, origVertIndices) {
@@ -667,11 +890,11 @@ GeometryUtil.extractMesh = function (mesh, triIndices, keepMaterialGroups) {
   for (var i = 0; i < attrs.length; i++) {
     var attr = attrs[i];
     if (origAttrs[attr.name]) {
-      myGeometry.setAttribute(attr.name, createCroppedFloat32(
-        indexMap.nCropped, indexMap.croppedToOrig,
-        origAttrs[attr.name].array, attr.size));
+      myGeometry.setAttribute(attr.name, createCroppedBufferAttribute(
+        indexMap.nCropped, indexMap.croppedToOrig, origAttrs[attr.name]));
     }
   }
+  //console.log('original geom', origGeom, 'cropped geom', myGeometry, 'mapping', indexMap);
 
   // Set non-attributes for new geometry
   var newIndexLength = myGeometry.index.array.length;
@@ -760,7 +983,7 @@ GeometryUtil.vertIndicesToTriIndices = function (mesh, vertIndices) {
 
   // Get triangle indices
   var origGeom = mesh.geometry;
-  if (origGeom instanceof THREE.BufferGeometry) {
+  if (origGeom.isBufferGeometry) {
     var indexArray = (origGeom.index) ? origGeom.index.array : undefined;
     if (indexArray) {
       var nTris = 0;
@@ -799,63 +1022,6 @@ GeometryUtil.extractMeshVertIndices = function (mesh, vertIndices, keepMaterialG
   var triIndices = GeometryUtil.vertIndicesToTriIndices(mesh, vertIndices);
   var extracted = GeometryUtil.extractMesh(mesh, triIndices, keepMaterialGroups);
   return extracted;
-};
-
-// Convert segToVertIndices to segToTriIndices
-GeometryUtil.segVertIndicesToSegTriIndices = function (mesh, vertToSegIndices) {
-  // NOTE: maybe buggy...
-  // Convert from vertIndices to triIndices
-  var segToTriIndices = [];
-
-  function add(iTri, a) {
-    var iSeg = vertToSegIndices[a];
-    if (iSeg != undefined) {
-      if (!segToTriIndices[iSeg]) {
-        segToTriIndices[iSeg] = [iTri];
-      } else {
-        segToTriIndices[iSeg].push(iTri);
-      }
-    }
-  }
-
-  function addTri(iTri, a, b, c) {
-    add(iTri, a);
-    add(iTri, b);
-    add(iTri, c);
-  }
-
-  // Get triangle indices
-  var origGeom = mesh.geometry;
-  if (origGeom instanceof THREE.BufferGeometry) {
-    var indexArray = (origGeom.index) ? origGeom.index.array : undefined;
-    if (indexArray) {
-      var nTris = 0;
-      for (var i = 0; i < indexArray.length; i += 3) {
-        // Check if all indices are in our vertIndices, if so add triIndex
-        addTri(nTris, indexArray[i], indexArray[i + 1], indexArray[i + 2]);
-        nTris++;
-      }
-    } else {
-      var nVerts = GeometryUtil.getGeometryVertexCount(origGeom);
-      var nTris = 0;
-      for (var i = 0; i < nVerts; i += 3) {
-        // Check if all indices are in our vertIndices, if so add triIndex
-        addTri(nTris, i, i+1, i+2);
-        nTris++;
-      }
-    }
-  } else {
-    for (var nTri = 0; nTri < origGeom.faces.length; nTri++) {
-      var tri = origGeom.faces[nTri];
-      addTri(nTri, tri.a, tri.b, tri.c);
-    }
-  }
-  for (var i in segToTriIndices) {
-    if (segToTriIndices.hasOwnProperty(i)) {
-      segToTriIndices[i] = _.uniq(segToTriIndices[i]);
-    }
-  }
-  return segToTriIndices;
 };
 
 GeometryUtil.extractParts = function(geometry, segmentation, parts) {
@@ -1151,6 +1317,60 @@ GeometryUtil.splitMesh = function(mesh, options) {
   return splitMeshes;
 };
 
+function generateDefaultUvs(bufferGeometry, attrField) {
+  var n = new THREE.Vector3();
+  var positions = bufferGeometry.getAttribute('position');
+  var numVertices = positions.count;
+  var uvs = new THREE.BufferAttribute(new Float32Array(numVertices * 2), 2);
+  for (var i = 0; i < numVertices; i++) {
+    n.fromBufferAttribute(positions, i);
+    n.normalize();
+    var yaw = 0.5 - Math.atan( n.z, - n.x ) / ( 2.0 * Math.PI );
+    var pitch = 0.5 - Math.asin( n.y ) / Math.PI;
+    uvs.setXY(i, yaw, pitch);
+  }
+  if (attrField) {
+    bufferGeometry.setAttribute(attrField, uvs);
+  }
+  return uvs;
+}
+
+function createMergedBufferGeometry(bufferGeometries) {
+  var allAttributes = [];
+  for (var i = 0; i < bufferGeometries.length; i++) {
+    var bufferGeometry = bufferGeometries[i];
+    var attributes = Object.keys(bufferGeometry.attributes);
+    for (var j = 0; j < attributes.length; j++) {
+      if (allAttributes.indexOf(attributes[j]) < 0) {
+        allAttributes.push(attributes[j]);
+      }
+    }
+  }
+  for (var i = 0; i < bufferGeometries.length; i++) {
+    var bufferGeometry = bufferGeometries[i];
+    var bufferAttributes = Object.keys(bufferGeometry.attributes);
+    // ensure all buffer geometries have normal, uv
+    if (allAttributes.indexOf('uv') >= 0 && bufferAttributes.indexOf('uv') < 0) {
+      generateDefaultUvs(bufferGeometry, 'uv');
+    }
+    if (allAttributes.indexOf('uv2') >= 0 && bufferAttributes.indexOf('uv2') < 0) {
+      generateDefaultUvs(bufferGeometry, 'uv2');
+    }
+    if (allAttributes.indexOf('normal') >= 0 && bufferAttributes.indexOf('normal') < 0) {
+      bufferGeometry.computeVertexNormals();
+    }
+  }
+  var mergedGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries(bufferGeometries, true);
+  if (mergedGeometry) {
+    THREE.BufferGeometryUtils.mergeGroups(mergedGeometry);
+  }
+  if (!mergedGeometry) {
+    console.error('Error merging geometries', allAttributes);
+  }
+  return mergedGeometry;
+}
+
+// NOTE: this function will not work correctly if the input is an array unless they have the parent
 GeometryUtil.mergeMeshes = function (input) {
   if (input instanceof THREE.Mesh) {
     return input;
@@ -1158,20 +1378,22 @@ GeometryUtil.mergeMeshes = function (input) {
     return GeometryUtil.mergeMeshes(input.children);
   } else if (Array.isArray(input)) {
     if (input.length > 1) {
-      var mergedGeometry = new THREE.Geometry();
+      var bufferGeometries = [];
       var meshFaceMaterials = [];
       for (var i = 0; i < input.length; i++) {
         var mesh = GeometryUtil.mergeMeshes(input[i]);
         if (mesh instanceof THREE.Mesh) {
           var materials = GeometryUtil.getMaterials(mesh.material);
-          var materialIndex = meshFaceMaterials.length;
-          var geom = GeometryUtil.toGeometry(mesh.geometry);
-          mergedGeometry.merge(geom, mesh.matrix, materialIndex);
           for (var j = 0; j < materials.length; j++) {
             meshFaceMaterials.push(materials[j]);
           }
+          var bufferGeometry = GeometryUtil.toBufferGeometry(mesh.geometry);
+          bufferGeometry = bufferGeometry.clone();
+          bufferGeometry.applyMatrix4(mesh.matrix);
+          bufferGeometries.push(bufferGeometry);
         }
       }
+      var mergedGeometry = createMergedBufferGeometry(bufferGeometries);
       return new THREE.Mesh(mergedGeometry, new THREE.MultiMaterial(meshFaceMaterials));
     } else {
       return GeometryUtil.mergeMeshes(input[0]);
@@ -1198,7 +1420,7 @@ GeometryUtil.mergeMeshesWithTransform = function (input, opts) {
   if (!Array.isArray(input)) {
     toMerge = [input];
   }
-  var mergedGeometry = new THREE.Geometry();
+  var bufferGeometries = [];
   var meshFaceMaterials = [];
   //console.log('merging ', toMerge.length);
   for (var i = 0; i < toMerge.length; i++) {
@@ -1207,28 +1429,24 @@ GeometryUtil.mergeMeshesWithTransform = function (input, opts) {
     m.traverse(function(node) {
       if (node instanceof THREE.Mesh) {
         var materialIndex = meshFaceMaterials.length;
-        var geom = GeometryUtil.toGeometry(node.geometry);
+        var bufferGeometry = GeometryUtil.toBufferGeometry(node.geometry);
         var t = node.matrixWorld;
         if (transform) {
           t = node.transform.clone();
           t.multiply(node.matrixWorld);
         }
-        mergedGeometry.merge(geom, t, materialIndex);
-        if (Array.isArray(node.material)) {
-          for (var j = 0; j < node.material.length; j++) {
-            meshFaceMaterials.push(node.material[j]);
-          }
-        } else if (node.material instanceof THREE.MultiMaterial) {
-          for (var j = 0; j < node.material.materials.length; j++) {
-            meshFaceMaterials.push(node.material.materials[j]);
-          }
-        } else {
-          meshFaceMaterials.push(node.material);
+        bufferGeometry = bufferGeometry.clone();
+        bufferGeometry.applyMatrix4(t);
+        bufferGeometries.push(bufferGeometry);
+        var materials = GeometryUtil.getMaterials(node.material);
+        for (var j = 0; j < materials.length; j++) {
+          meshFaceMaterials.push(materials[j]);
         }
       }
     });
   }
   //console.log('merged mesh', mergedGeometry, meshFaceMaterials);
+  var mergedGeometry = createMergedBufferGeometry(bufferGeometries);
   return new THREE.Mesh(mergedGeometry, new THREE.MultiMaterial(meshFaceMaterials));
 };
 
@@ -1266,6 +1484,7 @@ GeometryUtil.__flatten = function (root, node, matrix) {
 
 GeometryUtil.toBufferGeometry = function (geom) {
   if (geom instanceof THREE.Geometry) {
+    console.warn('Deprecated Geometry');
     var newGeom = new THREE.BufferGeometry();
     newGeom.fromGeometry(geom);
     //newGeom.verticesArray = newGeom.attributes['position'].array;
@@ -1278,6 +1497,7 @@ GeometryUtil.toBufferGeometry = function (geom) {
 };
 
 GeometryUtil.toGeometry = function (geom) {
+  console.warn('Deprecated toGeometry');
   if (geom instanceof THREE.Geometry) {
     return geom;
   } else if (geom instanceof THREE.BufferGeometry) {
@@ -1384,7 +1604,7 @@ GeometryUtil.toNonIndexed = function (geom) {
     return array2;
   }
 
-  if (geom instanceof THREE.BufferGeometry && geom.index) {
+  if (geom.isBufferGeometry && geom.index) {
     var res = geom.toNonIndexed();
     res.customFaceAttributes = geom.customFaceAttributes;
     if (geom.customVertexAttributes) {
@@ -1397,16 +1617,30 @@ GeometryUtil.toNonIndexed = function (geom) {
   }
 };
 
+GeometryUtil.toIndexedBufferGeometry = function(geom) {
+  if (!geom.index) {
+    var nVerts = geom.attributes.position.count;
+    var indexSize = nVerts;
+    var index = (nVerts < 65536) ?
+      new Uint16Array(indexSize) : new Uint32Array(indexSize);
+    for (var i = 0; i < indexSize; i++) {
+      index[i] = i;
+    }
+    geom.setIndex(new THREE.BufferAttribute(index, 1));
+  }
+  return geom;
+};
+
 GeometryUtil.createBufferedGeometry = function(params) {
   var geom = new THREE.BufferGeometry();
-  if (params.positions.length/3 < 65536) {
+  var nVerts = params.positions.count;
+  if (nVerts < 65536) {
     geom.setIndex(new THREE.BufferAttribute(new Uint16Array(params.indices), 1));
   } else {
     geom.setIndex(new THREE.BufferAttribute(new Uint32Array(params.indices), 1));
   }
   geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(params.positions), 3));
   geom.groups[0] = { start: 0, count: params.indices.length, index: 0 };   //very important!
-  geom.computeFaceNormals();
   geom.computeVertexNormals();
   geom.computeBoundingSphere();
   return geom;
@@ -1422,7 +1656,6 @@ GeometryUtil.flipForMirroring = function(geometry) {
   GeometryUtil.__flipFaceVertices(geometry);
   geometry.isFlipped = !geometry.isFlipped;
   //GeometryUtil.__flipNormals(geometry);
-  //geometry.computeFaceNormals();
   //geometry.computeVertexNormals();
   geometry.verticesNeedUpdate = false;
   geometry.elementsNeedUpdate = false;
@@ -1433,6 +1666,7 @@ GeometryUtil.flipForMirroring = function(geometry) {
 
 GeometryUtil.__flipNormals = function (geo) {
   if (geo instanceof THREE.Geometry) {
+    console.warn('Deprecated Geometry');
     geo.verticesNeedUpdate = true;
     geo.normalsNeedUpdate = true;
     for (var i = 0; i < geo.faces.length; i++) {
@@ -1444,7 +1678,6 @@ GeometryUtil.__flipNormals = function (geo) {
         face.vertexNormals[2].negate();
       }
     }
-    //geo.computeFaceNormals();
     //geo.computeVertexNormals();
   } else {
     console.error('GeometryUtil.__flipNormals: Unsupported geometry ', geo);
@@ -1453,6 +1686,7 @@ GeometryUtil.__flipNormals = function (geo) {
 
 GeometryUtil.__flipFaceVertices = function(geometry) {
   if (geometry instanceof THREE.Geometry) {
+    console.warn('Deprecated Geometry');
     //console.log(geometry);
     for (var i = 0; i < geometry.faces.length; i++) {
       var face = geometry.faces[i];
@@ -1485,19 +1719,8 @@ GeometryUtil.__flipFaceVertices = function(geometry) {
         }
       }
     }
-  } else if (geometry instanceof THREE.BufferGeometry) {
-    if (!geometry.index) {
-      // Make sure it is indexed
-      var pos = geometry.attributes['position'].array;
-      var nVerts = pos.length / 3;
-      var indexSize = nVerts;
-      var index = (nVerts < 65536) ?
-        new Uint16Array(indexSize) : new Uint32Array(indexSize);
-      for (var i = 0; i < indexSize; i++) {
-        index[i] = i;
-      }
-      geometry.setIndex(new THREE.BufferAttribute(index, 1));
-    }
+  } else if (geometry.isBufferGeometry) {
+    GeometryUtil.toIndexedBufferGeometry(geometry);
     // Swap every 2nd/3rd index
     var indices = geometry.index.array;
     for (var i = 0; i < indices.length; i+=3) {
@@ -1510,34 +1733,88 @@ GeometryUtil.__flipFaceVertices = function(geometry) {
   }
 };
 
-GeometryUtil.createVPTreeVertex = function (geometry, transform) {
-  var VPTreeFactory = require('ds/VPTree');
-  return VPTreeFactory.build(GeometryUtil.getGeometryVertexCount(geometry), function(a,b) {
-    var v1 = GeometryUtil.getGeometryVertex(geometry, a, transform);
-    var v2 = GeometryUtil.getGeometryVertex(geometry, b, transform);
-    return v1.distanceTo(v2);
-  });
-};
-
-GeometryUtil.getVertexMapping = function (srcGeo, tgtGeo, maxDist) {
-  maxDist = maxDist || 1e-2;
-
-  var tgtVPtree = GeometryUtil.createVPTreeVertex(tgtGeo);
-  var distFun = function(q, v) {
-    var v1 = GeometryUtil.getGeometryVertex(srcGeo, q);
-    var v2 = GeometryUtil.getGeometryVertex(tgtGeo, v);
+function __getGeometryVertexDiffFn(g1, g2, t1, t2) {
+  var v1 = new THREE.Vector3();
+  var v2 = new THREE.Vector3();
+  return function(a,b) {
+    GeometryUtil.getGeometryVertex(g1, a, t1, v1);
+    GeometryUtil.getGeometryVertex(g2, b, t2, v2);
     return v1.distanceTo(v2);
   };
+}
+
+GeometryUtil.createVPTreeVertex = function (geometry, transform) {
+  var VPTreeFactory = require('ds/VPTree');
+  var distFn = __getGeometryVertexDiffFn(geometry, geometry, transform, transform);
+  return VPTreeFactory.build(GeometryUtil.getGeometryVertexCount(geometry), distFn);
+};
+
+GeometryUtil.getVertexMapping = function (srcGeo, tgtGeo, maxDist, t1, t2) {
+  maxDist = maxDist || Infinity; //1e-2;
+
+  var tgtVPtree = GeometryUtil.createVPTreeVertex(tgtGeo, t2);
+  var distFn = __getGeometryVertexDiffFn(srcGeo, tgtGeo, t1, t2);
 
   var srcNumVerts = GeometryUtil.getGeometryVertexCount(srcGeo);
   var vertexMapping = [];
   for (var i = 0; i < srcNumVerts; i++) {
-    var results = tgtVPtree.search(i, 1, maxDist, distFun);
+    var results = tgtVPtree.search(i, 1, maxDist, distFn);
     if (results.length) {
       vertexMapping[i] = results[0].i;
     }
   }
   return vertexMapping;
+};
+
+GeometryUtil.getTriCentroids = function (geometry, transform) {
+  var ntris = GeometryUtil.getGeometryFaceCount(geometry);
+  var centroids = new Float32Array(ntris*3);
+  var triangle = new THREE.Triangle();
+  var midpoint = new THREE.Vector3();
+  GeometryUtil.forFaceVerticesWithTransform(geometry, transform, (v0, v1, v2, iFace) =>  {
+    triangle.set(v0, v1, v2);
+    triangle.getMidpoint(midpoint);
+    var ci = iFace*3;
+    centroids[ci] = midpoint.x;
+    centroids[ci+1] = midpoint.y;
+    centroids[ci+2] = midpoint.z;
+  });
+  return centroids;
+};
+
+function __getGeometryCentroidDiffFn(cent1, cent2) {
+  var v1 = new THREE.Vector3();
+  var v2 = new THREE.Vector3();
+  return function(a,b) {
+    var c1 = a*3;
+    v1.set(cent1[c1], cent1[c1+1], cent1[c1+2]);
+    var c2 = b*3;
+    v2.set(cent2[c2], cent2[c2+1], cent2[c2+2]);
+    return v1.distanceTo(v2);
+  };
+}
+
+GeometryUtil.getTriCentroidMapping = function (srcGeo, tgtGeo, maxDist, t1, t2) {
+  maxDist = maxDist || Infinity; //1e-2;
+
+  var srcTriCentroids = GeometryUtil.getTriCentroids(srcGeo, t1);
+  var tgtTriCentroids = GeometryUtil.getTriCentroids(tgtGeo, t2);
+
+  var VPTreeFactory = require('ds/VPTree');
+  var tgtDistFn = __getGeometryCentroidDiffFn(tgtTriCentroids, tgtTriCentroids);
+  var tgtVPtree = VPTreeFactory.build(GeometryUtil.getGeometryFaceCount(tgtGeo), tgtDistFn);
+
+  var distFn = __getGeometryCentroidDiffFn(srcTriCentroids, tgtTriCentroids);
+
+  var srcNumTris = GeometryUtil.getGeometryFaceCount(srcGeo);
+  var triMapping = [];
+  for (var i = 0; i < srcNumTris; i++) {
+    var results = tgtVPtree.search(i, 1, maxDist, distFn);
+    if (results.length) {
+      triMapping[i] = results[0].i;
+    }
+  }
+  return triMapping;
 };
 
 GeometryUtil.isMeshInOBB = function(mesh, obb) {

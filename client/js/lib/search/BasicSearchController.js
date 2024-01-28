@@ -27,6 +27,7 @@ function BasicSearchController(params) {
   };
   params = _.defaults(Object.create(null), params, defaults);
 
+  this.name = params.name || 'searchController';
   this.rng = params.rng || RNG.global;
   this.boostFields = params.boostFields;
   this.encodeQuery = params.encodeQuery;
@@ -239,6 +240,7 @@ BasicSearchController.prototype.getQuerySortOrder = function () {
   return '';
 };
 
+// TODO: convert to error first callback
 BasicSearchController.prototype.searchByIds = function (source, ids, searchSucceededCallback, searchFailedCallback) {
   if (!ids || ids.length === 0) {
     searchFailedCallback('Please specify ids for searchByIds');
@@ -257,9 +259,14 @@ BasicSearchController.prototype.searchByIds = function (source, ids, searchSucce
   this.query(
     {
       source: source, query: query, order: sortOrder, start: 0, limit: ids.length,
-      success: searchSucceededCallback,
-      error: searchFailedCallback
-    });
+    }, (err, res) => {
+      if (err) {
+        if (searchFailedCallback) searchFailedCallback(err);
+      } else {
+        if (searchFailedCallback) searchSucceededCallback(res);
+      }
+    }
+  );
 };
 
 BasicSearchController.prototype.getQuery = function (field, values) {
@@ -287,7 +294,7 @@ BasicSearchController.prototype.registerSearchModule = function (source, searchM
   if (typeof searchModule === 'string') {
     // Just a solr url
     this.searchUrls[source] = searchModule;
-    if (searchModule === this.searchUrls['models3d']) {
+    if (searchModule === this.searchUrls['models3d'] || searchModule === this.searchUrls['scenes']) {
       var assetGroups = AssetGroups.getAssetGroups();
       this.__updateSearchFilterForAssetGroup(assetGroups[source]);
     }

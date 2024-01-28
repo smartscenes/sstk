@@ -7,9 +7,6 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('scene', 'ssj', require('scene/WssSceneLoader'));
   assetManager.registerAssetLoader('scene', '*', require('scene/SceneLoader'));
 
-  // TODO: Move some of this out of the main STK
-  assetManager.registerAssetLoader('scene', 'suncg', require('scene/SUNCGLoader'));
-
   // TODO: Have assetManager use these fancy loaders!
   assetManager.registerAssetLoader('mesh', 'ply', require('loaders/PLYLoader'));
   assetManager.registerAssetLoader('mesh', 'obj', require('loaders/OBJLoader'));
@@ -27,7 +24,6 @@ AssetLoaders.registerDefaultLoaders = function(assetManager) {
   assetManager.registerAssetLoader('navmesh', 'navmesh', require('loaders/NavMeshLoader'));
   assetManager.registerAssetLoader('house', 'house', require('loaders/HouseTxtLoader'));
   assetManager.registerAssetLoader('labelMapping', '*', require('util/LabelMapping').Loader);
-  assetManager.registerAssetLoader('parts', 'obj', require('loaders/OBJPartLoader'));
   assetManager.registerAssetLoader('custom', '*', require('loaders/BasicLoader'));
 };
 

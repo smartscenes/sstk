@@ -4,6 +4,7 @@ var Constants = require('Constants');
 var AssetLoader = require('assets/AssetLoader');
 var Segments = require('geo/Segments');
 var Voxels = require('model/ModelInstanceVoxels');
+var ModelInfo = require('model/ModelInfo');
 var Object3DUtil = require('geo/Object3DUtil');
 var OBBAlignPanel = require('ui/OBBAlignPanel');
 var LabelRemap = require('util/LabelRemap');
@@ -32,6 +33,7 @@ var _ = require('util/util');
  * @param [params.allowVoxels] {boolean} Whether to load voxels (false by default)
  * @param [params.allowObbAdjustment] {boolean} Whether to allow adjustment of obbs (false by default)
  * @param [params.allowSelectParts] {boolean} Whether to allow for part selection using mouse (true by default)
+ * @param [params.allowAllSupportedParts] {boolean} Whether to allow for all support parts to be shown in the parts panel
  * @param [params.partTypes] {string[]}
  * @param [params.labelTypes] {string[]}
  * @param [params.defaultPartType] {string}
@@ -55,6 +57,8 @@ function PartsPanel(params) {
   this.allowVoxels = (params.allowVoxels != undefined)? params.allowVoxels : true;
   this.allowObbAdjustment = (params.allowObbAdjustment != undefined)? params.allowObbAdjustment : false;
   this.allowSelectParts = (params.allowSelectParts != undefined)? params.allowSelectParts : true;
+  this.allowAllSupportedParts = (params.allowAllSupportedParts != undefined)? params.allowAllSupportedParts : false;
+  this.includeDefaultLabelRemaps = (params.includeDefaultLabelRemaps != undefined)? params.includeDefaultLabelRemaps : true;
   this.partTypes = params.partTypes;
   this.labelTypes = params.labelTypes;
   this.defaultPartType = params.defaultPartType || 'none';
@@ -73,8 +77,8 @@ function PartsPanel(params) {
     treePanel: $('#treePanel'),
     controlsPanel: $('#treePanelControls'),
     buttonsPanel: $('#treePanelButtons'),
-    submitPartAnnotationsUrl:  Constants.submitAnnotationsURL,
-    retrievePartAnnotationsUrl:  Constants.retrieveAnnotationsURL,
+    submitPartAnnotationsUrl: Constants.submitAnnotationsURL,
+    retrievePartAnnotationsUrl: Constants.retrieveAnnotationsURL,
     filterEmptyGeometries: false,
     showMultiMaterial: false,
     collapseNestedPaths: false,
@@ -86,42 +90,35 @@ function PartsPanel(params) {
   });
 
   // surfaces and voxels
-  this.segmentTypes = params.segmentTypes || ['meshes', 'mtl-groups', 'surfaces', 'surfaces-coarse', 'surfaces-fine', 'surfaces-finest'];
+  this.defaultSegmentTypes = ['meshes', 'mtl-groups', 'surfaces', 'surfaces-coarse', 'surfaces-fine', 'surfaces-finest'];
+  this.segmentTypes = params.segmentTypes || this.defaultSegmentTypes;
+  this.__options = params;
   this.segmentsByType = _.keyBy(_.map(this.segmentTypes,
     function(segType) {
       return new Segments(params, segType);
     }), 'segmentType');
+  this.segmentsByType['meshes'].notTrueSegmentation = true;
+  this.segmentsByType['mtl-groups'].notTrueSegmentation = true;
 
   this.surfaces = this.segmentsByType['surfaces'];
   this.surfaces.Subscribe('segmentsUpdated', this, function() {
-    this.__colorSegments(this.surfaces, 'surfaces', this.labelType);
-    if (this.labelsPanel && this.partType === 'surfaces') {
-      this.__updateLabelsPanel(this.surfaces.getLabels(), this.__getLabelColorIndex());
-    }
-    if (this.surfaces.segmentedObject3DHierarchical) {
-      this.meshHierarchy.detach(this.getDebugNode());
-      this.meshHierarchy.setSegmented(this.surfaces.segmentedObject3DHierarchical);
-      this.meshHierarchy.attach(this.getDebugNode());
-      //console.log(this.meshHierarchy.partsNode);
-    }
-    if (this.__obbAlignPanel) {
-      this.__obbAlignPanel.retrieveAnnotations();
-    }
+    this.__onSegmentsLoaded(this.surfaces, 'surfaces');
   }.bind(this));
   this.meshes = this.segmentsByType['meshes'];
   this.materials = this.segmentsByType['mtl-groups'];
 
   // Voxels
-  this.voxelColorFields = params.voxelColorFields || ['voxels-color-32-surface-old', 'voxels-color-128-surface-old',
-    'voxels-color-32-surface', 'voxels-color-32-solid',
-    'voxels-color-64-surface', 'voxels-color-64-solid',
-    'voxels-color-128-surface', 'voxels-color-128-solid',
-    'voxels-color-256-surface', 'voxels-color-256-solid',
-    'voxels-color-32-surface-filtered', 'voxels-color-32-solid-filtered',
-    'voxels-color-64-surface-filtered', 'voxels-color-64-solid-filtered',
-    'voxels-color-128-surface-filtered', 'voxels-color-128-solid-filtered'
+  this.defaultVoxelsColorFields = [
+    // 'voxels-color-32-surface', 'voxels-color-32-solid',
+    // 'voxels-color-64-surface', 'voxels-color-64-solid',
+    // 'voxels-color-128-surface', 'voxels-color-128-solid',
+    // 'voxels-color-256-surface', 'voxels-color-256-solid',
+    // 'voxels-color-32-surface-filtered', 'voxels-color-32-solid-filtered',
+    // 'voxels-color-64-surface-filtered', 'voxels-color-64-solid-filtered',
+    // 'voxels-color-128-surface-filtered', 'voxels-color-128-solid-filtered'
   ];
-  this.voxelFields = ['voxels-solid', 'voxels-surface', 'voxels-solid-256', 'voxels-labeled'].concat(this.voxelColorFields);
+  this.voxelColorFields = params.voxelColorFields || this.defaultVoxelsColorFields;
+  this.voxelFields = ['voxels-solid', 'voxels-surface', 'voxels-labeled'].concat(this.voxelColorFields);
   this.voxelsByType = _.keyBy(_.map(this.voxelFields,
     function(voxelField) {
       return new Voxels({ voxelsField: voxelField });
@@ -141,9 +138,28 @@ function PartsPanel(params) {
   }
 
   this.useColorSequence = params.useColorSequence;
-  this.surfaces.showOBBs = params.showOBBs;
+  this.showOBBs = !!params.showOBBs;
   this.init();
 }
+
+PartsPanel.prototype.__onSegmentsLoaded = function(segments, partType) {
+  segments.showOBBs = this.showOBBs;
+  segments.useColorSequence = this.useColorSequence;
+  this.__colorSegments(segments, partType, this.labelType);
+  if (this.labelsPanel && this.partType === partType) {
+    this.__updateLabelsPanel(segments.getLabels(), this.__getLabelColorIndex());
+  }
+  //console.log('onSegmentsLoaded', segments.segmentedObject3DHierarchical);
+  if (segments.segmentedObject3DHierarchical) {
+    this.meshHierarchy.detach(this.getDebugNode());
+    this.meshHierarchy.setSegmented(segments.segmentedObject3DHierarchical);
+    this.meshHierarchy.attach(this.getDebugNode());
+    //console.log(this.meshHierarchy.partsNode);
+  }
+  if (this.__obbAlignPanel && partType === this.__obbAlignPanel.segments.segmentType) {
+    this.__obbAlignPanel.retrieveAnnotations();
+  }
+};
 
 PartsPanel.prototype.__initDefaultLabelRemaps = function() {
   var labelMappingCategory = 'category';
@@ -177,6 +193,29 @@ PartsPanel.prototype.initLabelRemaps = function(labelMappings, labelMappingCateg
   });
 };
 
+Object.defineProperty(PartsPanel.prototype, 'useColorSequence', {
+  get: function () { return this.__useColorSequence; },
+  set: function (flag) {
+    this.__useColorSequence = flag;
+    _.each(this.segmentsByType, function (s, t) {
+      s.useColorSequence = flag;
+    });
+  }
+});
+
+Object.defineProperty(PartsPanel.prototype, 'showOBBs', {
+  get: function () { return this.__showOBBs; },
+  set: function (flag) {
+    this.__showOBBs = flag;
+    _.each(this.segmentsByType, function (s, t) {
+      s.showOBBs = flag;
+    });
+    if (this.__isSegmentationType(this.partType)) {
+      this.__colorSegments(this.segmentsByType[this.partType], this.partType, this.labelType);
+    }
+  }
+});
+
 PartsPanel.prototype.__initSegmentsPanel = function(options) {
   var scope = this;
   var panel = options.panel;
@@ -187,9 +226,6 @@ PartsPanel.prototype.__initSegmentsPanel = function(options) {
   if (this.useColorSequence != null) {
     function updateUseColorSequenceFlag(flag) {
       scope.useColorSequence = flag;
-      _.each(scope.segmentsByType, function (s, t) {
-        s.useColorSequence = flag;
-      });
     }
 
     var keepSegmentColorsCheckbox = UIUtil.createCheckbox({
@@ -203,37 +239,59 @@ PartsPanel.prototype.__initSegmentsPanel = function(options) {
 
   // Show OBBs
   function updateShowOBBsFlag(flag) {
-    scope.surfaces.showOBBs = flag;
-    if (scope.partType === 'surfaces') {
-      scope.__colorSegments(scope.surfaces, scope.partType, scope.labelType);
-    }
+    scope.showOBBs = flag;
   }
 
   var showSegmentOBBsCheckbox = UIUtil.createCheckbox({
     id: 'showSegmentOBBs',
-    text: 'Show segment OBBs',
+    text: 'Show part OBBs',
     change: updateShowOBBsFlag
-  }, scope.surfaces.showOBBs);
-  updateShowOBBsFlag(scope.surfaces.showOBBs);
+  }, scope.showOBBs);
+  updateShowOBBsFlag(scope.showOBBs);
   panel.append(showSegmentOBBsCheckbox.checkbox).append(showSegmentOBBsCheckbox.label);
-
-  if (scope.allowObbAdjustment) {
-    scope.__obbAlignPanel = new OBBAlignPanel({
-      app: this.app,
-      panel: options.panel,
-      segments: this.surfaces,
-      submitAnnotationsUrl:  Constants.submitAnnotationsURL,
-      retrieveAnnotationsUrl:  Constants.retrieveAnnotationsURL
-    });
-    scope.__obbAlignPanel.init();
-  }
+  this.__initOBBAlignerPanel(options);
 };
+
+PartsPanel.prototype.__initOBBAlignerPanel = function(options) {
+  var scope = this;
+  if (scope.allowObbAdjustment) {
+    var obbAlignPartType = options.obbAlignPartType || 'surfaces';
+    var obbAlignSegments = this.segmentsByType[obbAlignPartType];
+    if (obbAlignSegments) {
+      console.log('Use obb align part type ' + obbAlignPartType);
+      scope.__obbAlignPanel = new OBBAlignPanel({
+        app: this.app,
+        panel: options.panel,
+        saveLabelInfo: true,
+        segments: obbAlignSegments,
+        task: options.obbAlignTask,
+        submitAnnotationsUrl: Constants.submitAnnotationsURL,
+        retrieveAnnotationsUrl: Constants.retrieveAnnotationsURL,
+      });
+      scope.__obbAlignPanel.init();
+      scope.__obbAlignPanel.Subscribe('OBBUpdated', this, (info) => {
+        // console.log('got', 'OBBUpdated', info, this.labelType);
+        if (info.labelUpdate && info.labelType === this.labelType) {
+          var labelIndex = info.component.labelIndex;
+          if (labelIndex != null) {
+            var labelInfo = this.labelsPanel.labelInfos[labelIndex];
+            this.labelsPanel.updateInfo(labelInfo, info.labelUpdate);
+          }
+        }
+      });
+    } else {
+      console.warn('No segments for obb align part type ' + obbAlignPartType);
+    }
+  }
+}
 
 PartsPanel.prototype.init = function () {
   this.labelTypeSelect = $('#labelType');//$('<select></select>');
   // TODO: Add materials and meshes
   this.defaultLabelTypes = this.labelTypes || ['Raw', 'Segment', 'Category', 'Label', 'Object'];
-  this.__initDefaultLabelRemaps();
+  if (this.includeDefaultLabelRemaps) {
+    this.__initDefaultLabelRemaps();
+  }
   for (var i = 0; i < this.defaultLabelTypes.length; i++) {
     var s = this.defaultLabelTypes[i];
     this.labelTypeSelect.append('<option value="' + s + '">' + s + '</option>');
@@ -291,7 +349,8 @@ PartsPanel.prototype.init = function () {
   }.bind(this));
 
   this.__initSegmentsPanel({
-    panel: $('#showSegmentsDiv')
+    panel: $('#showSegmentsDiv'),
+    obbAlignPartType: this.__options.obbAlignPartType
   });
 
   var partsConfigControls = $('#partsConfigControls');
@@ -361,8 +420,8 @@ PartsPanel.prototype.setLabelColorIndex = function (labelType, index, callback, 
 };
 
 PartsPanel.prototype.__colorSegments = function(segments, partType, labelType) {
-  //console.log('colorSegments', partType, labelType);
   var labelColors =  this.__getLabelColorIndex(partType, labelType);
+  // console.log('colorSegments', partType, labelType, labelColors);
   if (labelColors && labelColors.labelToId) {
     segments.colorSegments(labelType, labelColors.labelToId, function(x) {
         var label = x? x.split(':')[0] : x;
@@ -373,6 +432,12 @@ PartsPanel.prototype.__colorSegments = function(segments, partType, labelType) {
   }
 };
 
+/**
+ * Update panel of labels
+ * @param rawLabels {string[]|LabelInfo[]} Array of labels or labelInfos
+ * @param labelColors {util.LabelRemap.LabelSet}
+ * @private
+ */
 PartsPanel.prototype.__updateLabelsPanel = function(rawLabels, labelColors) {
   var colorIndex = labelColors;
   var labels = rawLabels;
@@ -391,7 +456,8 @@ PartsPanel.prototype.__getLabelColorIndex = function (partType, labelType) {
   partType = partType || this.partType;
   labelType = labelType || this.labelType;
   if (this.__labelColors) {
-    if (partType === 'surfaces') {
+    var isSegmentation = this.__isSegmentationType(partType);
+    if (isSegmentation) {
       return this.__labelColors[labelType] || _.clone(defaultColors);
     } else {
       return this.__labelColors[partType] || _.clone(defaultColors);
@@ -406,10 +472,15 @@ PartsPanel.prototype.setLabelType = function (labelType) {
     this.labelTypeSelect.val(labelType);
   }
   this.labelType = labelType;
-  if (this.partType === 'surfaces') {
-    this.__colorSegments(this.surfaces, this.partType, this.labelType);
+  var isSegmentation = this.__isSegmentationType(this.partType);
+  if (isSegmentation) {
+    var segs = this.segmentsByType[this.partType];
+    this.__colorSegments(segs, this.partType, this.labelType);
     if (this.labelsPanel) {
-      this.__updateLabelsPanel(this.surfaces.getLabels(), this.__getLabelColorIndex());
+      this.__updateLabelsPanel(segs.getLabels(), this.__getLabelColorIndex());
+    }
+    if (this.__obbAlignPanel) {
+      this.__obbAlignPanel.refresh(labelType);
     }
   }
 };
@@ -418,8 +489,9 @@ PartsPanel.prototype.__showLabelsPanel = function (flag) {
   if (this.labelsPanel) {
     if (this.partType === 'voxels-labeled') {
       this.__updateLabelsPanel(this.labeledVoxels.getLabels(), this.labeledVoxels.labelColorIndex);
-    } else if (this.partType === 'surfaces') {
-      this.__updateLabelsPanel(this.surfaces.getLabels(), this.__getLabelColorIndex());
+    } else if (this.__isSegmentationType(this.partType)) {
+      var segs = this.segmentsByType[this.partType];
+      this.__updateLabelsPanel(segs.getLabels() || [], this.__getLabelColorIndex());
     } else {
       this.__updateLabelsPanel([], this.__getLabelColorIndex());
     }
@@ -440,10 +512,7 @@ PartsPanel.prototype.onSelectLabel = function (labelInfo) {
       if (labelInfo.isAll) {
         this.__colorSegments(s, this.partType, this.labelType);
       } else {
-        var slabelData = s.labelData[labelInfo.index];
-        if (slabelData) {
-          s.highlightSegments(slabelData.segmentGroups, s.useColorSequence ? slabelData.material : null);
-        }
+        s.setSelectedLabel(labelInfo);
       }
     }
   }
@@ -469,14 +538,22 @@ PartsPanel.prototype.setPartType = function (partType) {
     this.partType = partType;
   }
   // TODO: These checks don't work before the surfaces are loaded...
-  this.__showElement('#showSegmentsDiv',  this.partType === 'surfaces' /*&& this.surfaces.obbsObject3D != undefined*/);
-  this.__showElement('#labelTypeSelectDiv', this.partType === 'surfaces' /*&& this.surfaces.rawSegmentObject3D != undefined*/);
-  this.__showLabelsPanel(this.partType === 'surfaces' || this.partType === 'voxels-labeled');
+  var isSegmentation = this.__isSegmentationType(this.partType);
+  //this.__showElement('#showSegmentsDiv',  this.partType === 'surfaces' /*&& this.surfaces.obbsObject3D != undefined*/);
+  //this.__showElement('#labelTypeSelectDiv', this.partType === 'surfaces' /*&& this.surfaces.rawSegmentObject3D != undefined*/);
+  //this.__showLabelsPanel(this.partType === 'surfaces' || this.partType === 'voxels-labeled');
+  this.__showElement('#showSegmentsDiv',  isSegmentation);
+  this.__showElement('#labelTypeSelectDiv', isSegmentation);
+  var isLabeledSegmentation = isSegmentation && this.segmentsByType[this.partType].getLabels();
+  this.__showLabelsPanel(isLabeledSegmentation || this.partType === 'voxels-labeled');
   this.__showPartType(this.partType, true);
 };
 
 PartsPanel.prototype.__isSegmentationType = function (partType) {
-  return this.segmentTypes.indexOf(partType) >= 2;
+  var segs = this.segmentsByType[partType];
+  var isSeg = segs && !segs.notTrueSegmentation;
+  // console.log('isSeg', partType, isSeg, segs);
+  return isSeg;
 };
 
 PartsPanel.prototype.__showPartType = function (partType, flag) {
@@ -487,22 +564,29 @@ PartsPanel.prototype.__showPartType = function (partType, flag) {
   console.log('showing part type', partType, flag);
   if (partType === 'none') {
     Object3DUtil.setVisible(this.origObject3D, flag);
-  } else if (partType === 'surfaces') {
-    this.surfaces.showSegments(flag);
-    if (flag) {
-      this.__colorSegments(this.surfaces, partType, this.labelType);
+    if (this.meshHierarchy.showSegmented) {
+      this.meshHierarchy.detach(this.getDebugNode());
+      this.meshHierarchy.restoreOriginalHierarchy();
+      this.meshHierarchy.attach(this.getDebugNode());
     }
   } else if (this.segmentsByType[this.partType]) {
     var s = this.segmentsByType[this.partType];
     s.showSegments(flag);
     if (flag && this.__isSegmentationType(this.partType)) {
-      s.colorSegments('Raw', this.__getLabelColorIndex(partType));
+      this.__colorSegments(s, partType, this.labelType);
+    }
+    if (s.segmentedObject3DHierarchical) {
+      this.meshHierarchy.detach(this.getDebugNode());
+      this.meshHierarchy.setSegmented(s.segmentedObject3DHierarchical);
+      this.meshHierarchy.attach(this.getDebugNode());
     }
   } else if (this.voxelsByType[this.partType]) {
     console.log('Showing voxels', this.partType, flag);
     var v = this.voxelsByType[this.partType];
     v.showVoxels(flag);
     v.setSliceMode(false);
+  } else {
+    console.warn('Unknown part type', partType);
   }
 };
 
@@ -530,16 +614,58 @@ PartsPanel.prototype.addCustomVoxels = function(name, voxels) {
       Object3DUtil.dispose(node);
     }
   }
+  voxels.isCustom = true;
   this.voxelsByType[name] = voxels;
-  Object3DUtil.setVisible(voxels.getVoxelNode(), false);
-  this.showNodeCallback(voxels.getVoxelNode());
+  var voxelNode = voxels.getVoxelNode();
+  if (voxelNode) {
+    Object3DUtil.setVisible(voxels.getVoxelNode(), false);
+    this.showNodeCallback(voxels.getVoxelNode());
+  } else {
+    console.warn('No voxels for ' + name);
+  }
+  // Add to part menu
   var partTypeIndex = this.partTypes.indexOf(name);
   if (partTypeIndex < 0) {
     this.partTypes.push(name);
     this.partTypeSelect.append('<option value="' + name + '">' + name + '</option>');
   }
-  this._setOptionDisabled(this.partTypeSelect, 'voxels-color-custom', false);
+  this._setOptionDisabled(this.partTypeSelect, name, false);
   this.setPartType(name);
+};
+
+PartsPanel.prototype.addCustomSegments = function(name, segments) {
+  console.log('add custom segments', name);
+  if (this.segmentsByType[name]) {
+    // Clear previous segments
+    //var oldSegments = this.segmentsByType[name];
+    // oldSegments.clearVoxelSlice(this.getDebugNode());
+    // var node = oldSegments.getVoxelNode();
+    // if (node) {
+    //   this.getDebugNode().remove(node);
+    //   Object3DUtil.dispose(node);
+    // }
+  }
+  segments.isCustom = true;
+  this.segmentsByType[name] = segments;
+  segments.showSegments(false);
+  // Add to part menu
+  var partTypeIndex = this.partTypes.indexOf(name);
+  if (partTypeIndex < 0) {
+    this.partTypes.push(name);
+    this.partTypeSelect.append('<option value="' + name + '">' + name + '</option>');
+  }
+  this._setOptionDisabled(this.partTypeSelect, name, false);
+  this.setPartType(name);
+  if (this.allowObbAdjustment && name === this.__options.obbAlignPartType) {
+    this.__initOBBAlignerPanel({
+      panel: $('#showSegmentsDiv'),
+      obbAlignPartType: this.__options.obbAlignPartType,
+      obbAlignTask: this.__options.obbAlignTask
+    });
+  }
+  this.segmentsByType[name].Subscribe('segmentsUpdated', this, function() {
+    this.__onSegmentsLoaded(this.segmentsByType[name], name);
+  }.bind(this));
 };
 
 PartsPanel.prototype._setOptionDisabled = function (select, opt, flag) {
@@ -570,6 +696,42 @@ PartsPanel.prototype.setTarget = function (modelInstance) {
     this.modelId = modelInstance.model.info.modelId;
   }
   this.origObject3D = modelInstance.object3D;
+
+  if (this.allowAllSupportedParts) {
+    // Check if there are other segments and voxels that are supported that we don't know about
+    var requestedPartTypes = this.__options.partTypes;
+    var filter = function(name) { return (requestedPartTypes)? requestedPartTypes.indexOf(name) >= 0 : true; };
+    var segMetadata = ModelInfo.getMetadataForDataType(modelInstance.model.info, 'segment');
+    if (segMetadata) {
+      var supportedSegments = segMetadata.data || [];
+      for (var i = 0; i < supportedSegments.length; i++) {
+        var name = supportedSegments[i].name;
+        if (!this.segmentsByType[name] && filter(name)) {
+          this.addCustomSegments(name, new Segments(this.__options, name));
+        }
+      }
+    }
+    var partsMetadata = ModelInfo.getMetadataForDataType(modelInstance.model.info, 'parts');
+    if (partsMetadata) {
+      var supportedParts = partsMetadata.data || [];
+      for (var i = 0; i < supportedParts.length; i++) {
+        var name = supportedParts[i].name;
+        if (!this.segmentsByType[name] && filter(name)) {
+          this.addCustomSegments(name, new Segments(this.__options, name));
+        }
+      }
+    }
+    var voxMetadata = ModelInfo.getMetadataForDataType(modelInstance.model.info, 'voxel') || [];
+    if (voxMetadata) {
+      var supportedVoxels = voxMetadata.data || [];
+      for (var i = 0; i < supportedVoxels.length; i++) {
+        var name = supportedVoxels[i].name;
+        if (!this.voxelsByType[name] && filter(name)) {
+          this.addCustomVoxels(name, new Voxels({voxelsField: name}));
+        }
+      }
+    }
+  }
 
   _.each(this.segmentsByType, function(s,t) {
     s.init(modelInstance);

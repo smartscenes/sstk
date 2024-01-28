@@ -48,17 +48,8 @@ ModelMaterialsPanel.prototype.update = function (defaultOption) {
 
 ModelMaterialsPanel.prototype.createResizedImage = function (elem, width, height) {
   //var img;
-  if (elem instanceof HTMLCanvasElement) {
+  if (elem instanceof HTMLCanvasElement || elem instanceof HTMLImageElement || elem instanceof ImageBitmap) {
     // console.log('isHTMLCanvasElement', elem.width, elem.height);
-    var canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext('2d').drawImage(elem, 0, 0, width, height);
-    return canvas;
-    //img = new Image();
-    //img.src = canvas.toDataURL('image/png');
-  } else if (elem instanceof HTMLImageElement) {
-    // console.log('isHTMLImageElement', elem.width, elem.height);
     var canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -100,10 +91,20 @@ ModelMaterialsPanel.prototype.getResizedImage = function (id, elem, width, heigh
 ModelMaterialsPanel.prototype.getMaterialPreview = function (material, width, height) {
   var img;
   if (material && material.map && material.map.image) {
-    img = this.getResizedImage(material.map.uuid, material.map.image, width, height);
+    if (material.map.isCompressedTexture) {
+      console.log('Skipping preview of compressed texture', material.map.uuid);
+    } else {
+      img = this.getResizedImage(material.map.uuid, material.map.image, width, height);
+    }
   } else if (material && material.bumpMap && material.bumpMap.image) {
-    img = this.getResizedImage(material.bumpMap.uuid, material.bumpMap.image, width, height);
-  } else {
+    if (material.map.isCompressedTexture) {
+      console.log('Skipping preview of compressed texture', material.bumpMap.uuid);
+    } else {
+      img = this.getResizedImage(material.bumpMap.uuid, material.bumpMap.image, width, height);
+    }
+  }
+
+  if (!img) {
     img = $('<div></div>')
       .css('display', 'inline-block')
       .css('width', width + 'px')

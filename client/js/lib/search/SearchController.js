@@ -22,9 +22,9 @@ function SearchController(params) {
       'volume', 'weight', 'staticFrictionForce',
       'isCornerPiece', 'isContainerLike', 'materialsCategory',
       'setIds', 'componentIds',
-      'isSingleCleanObject', 'hasNestedObjects', 'hasMultipleObjects', 'isAligned',
+      'isSingleCleanObject', 'hasNestedObjects', 'hasMultipleObjects', 'isArrangement', 'isAligned',
       'support', 'symType',
-      'unit', 'up', 'front', 'nfaces',
+      'unit', 'up', 'front', 'nfaces', 'nvertices',
       'scenes', 'datasets', 'datatags',
       'nrooms', 'nlevels', 'nmodels', 'nobjects', 'ndoors', 'nwindows', 'nwalls', 'npeople', 'nmisc', // scenes
       'levelRating', 'overallRating', // scene ratings
@@ -40,7 +40,11 @@ function SearchController(params) {
   var scope = this;
   this.searchPanel = new SearchPanel(_.defaults({
       sources: this.sources,
-      searchModule: this
+      searchModule: this,
+      showCrumbs: params.showCrumbs,
+      rootCrumb: params.rootCrumb,
+      additionalSearchOpts: { solrQueryProxy: params.solrSearchQueryProxy },
+      showRecent: params.showRecent
     },
     params));
   // Forward all events from searchPanel
@@ -77,9 +81,23 @@ function SearchController(params) {
 SearchController.prototype = Object.create(BasicSearchController.prototype);
 SearchController.prototype.constructor = SearchController;
 
+SearchController.prototype.addRecent = function(info) {
+  this.searchPanel.addRecent(info);
+};
+
+
+Object.defineProperty(SearchController.prototype, 'primarySortOrder', {
+  get: function() { return this.searchPanel.sortOrder; },
+  set: function(v) { this.searchPanel.sortOrder = v; }
+});
 Object.defineProperty(SearchController.prototype, 'isSearchBySize', {
   get: function () { return this.searchPanel.isSearchBySize; },
   set: function (v) { this.searchPanel.isSearchBySize = v; }
+});
+
+Object.defineProperty(SearchController.prototype, 'crumbs', {
+  get: function () { return this.searchPanel.crumbs; },
+  set: function (v) { this.searchPanel.crumbs = v; }
 });
 
 Object.defineProperty(SearchController.prototype, 'source', {
@@ -132,7 +150,7 @@ SearchController.prototype.refreshSearch = function () {
 };
 
 SearchController.prototype.search = function (query, callback, searchDisplayOptions) {
-  this.searchPanel.search(query, callback, searchDisplayOptions);
+  return this.searchPanel.search(query, callback, searchDisplayOptions);
 };
 
 SearchController.prototype.searchByIds = function (source, ids, searchSucceededCallback, searchFailedCallback) {
@@ -147,35 +165,49 @@ SearchController.prototype.searchByIds = function (source, ids, searchSucceededC
   BasicSearchController.prototype.searchByIds.call(this, source, ids, searchSucceededCallback, searchFailedCallback);
 };
 
+
+
 SearchController.prototype.getQuerySortOrder = function () {
   return this.searchPanel.getQuerySortOrder();
 };
 
-// Model similarity searches
-
-SearchController.prototype.modelSimilaritySearch = function (modelId, similarity, start, limit,
-                                                            searchSucceededCallback, searchFailedCallback) {
-  if (!searchSucceededCallback) {
+// Search with a custom search querier and show results in search panel
+SearchController.prototype.__getSearchCallbacks = function(source, idField, searchSucceededCb, searchFailedCb, toData) {
+  const scope = this;
+  if (!searchSucceededCb) {
     // Use default search succeeded callback
-    searchSucceededCallback = function (data) {
-      var models = data.results;
-      if (models) {
-        var modelIds = models.map(function (m) { return m.modelId; });
-        var options = { ordering: models, idField: 'modelId' };
-        this.searchByIds(this.source, modelIds,
-          this.searchPanel.searchSucceeded.bind(this.searchPanel, options), this.searchPanel.searchFailed.bind(this.searchPanel));
+    searchSucceededCb = function(json) {
+      var data = toData? toData(json) : json;
+      var results = data.results;
+      if (results) {
+        var resultIds = results.map(function (m) { return m[idField]; });
+        var options = { ordering: results, idField: idField };
+        scope.searchByIds(source, resultIds,
+          (data) => scope.searchPanel.searchSucceeded(options, data),
+          (err) => scope.searchPanel.searchFailed(err));
       } else {
-        if (data.message) {
-          this.searchPanel.showSearchFailedMessage(data.message);
-        }
+        var message = (data.message != null)? data.message : 'Cannot find matching results';
+        scope.searchPanel.searchFailed(message);
       }
-    }.bind(this);
+    };
   }
-  if (!searchFailedCallback) {
+  if (!searchFailedCb) {
     // Use default search failed callback
-    searchFailedCallback = this.searchPanel.searchFailed.bind(this.searchPanel);
+    searchFailedCb = function(err) { scope.searchPanel.searchFailed(err); };
   }
 
+  return { succeeded: searchSucceededCb, failed: searchFailedCb };
+};
+
+SearchController.prototype.initiateCustomSearch = function(querier, queryData, source, idField, searchSucceededCallback, searchFailedCallback) {
+  source = (source == null)? this.source : source;
+  var callbacks = this.__getSearchCallbacks(source, idField, searchSucceededCallback, searchFailedCallback);
+  return querier.query(queryData, callbacks.succeeded, callbacks.failed);
+};
+
+// Model similarity searches
+SearchController.prototype.modelSimilaritySearch = function (modelId, similarity, start, limit, searchSucceededCallback, searchFailedCallback) {
+  var callbacks = this.__getSearchCallbacks(this.source, 'modelId', searchSucceededCallback, searchFailedCallback);
   var url = Constants.models3dSimilaritySearchUrl;
   var queryData = {
     'modelId': modelId,
@@ -191,37 +223,17 @@ SearchController.prototype.modelSimilaritySearch = function (modelId, similarity
         contentType: 'application/json;charset=utf-8',
         data: JSON.stringify(queryData),
         dataType: 'json',
-        success: searchSucceededCallback,
-        error: searchFailedCallback,
+        success: callbacks.succeeded,
+        error: callbacks.failed,
         timeout: 10000      // in milliseconds. With JSONP, this is the only way to get the error handler to fire.
       });
 };
 
 // More advanced model text search (using custom nlp)
-SearchController.prototype.modelTextSearch = function (text, sceneState, limit,
-                                                      searchSucceededCallback, searchFailedCallback) {
-  if (!searchSucceededCallback) {
-    // Use default search succeeded callback
-    searchSucceededCallback = function(json) {
-      var data = json.results;
-      var models = data.results;
-      if (models && models.length > 0) {
-        var modelIds = models.map(function (m) { return m.modelId; });
-        var options = { ordering: models, idField: 'modelId' };
-        this.searchByIds(this.source, modelIds,
-          this.searchPanel.searchSucceeded.bind(this.searchPanel, options), this.searchPanel.searchFailed.bind(this.searchPanel));
-      } else {
-        if (data.message) {
-          this.searchPanel.showSearchFailedMessage(data.message);
-        }
-      }
-    }.bind(this);
-  }
-  if (!searchFailedCallback) {
-    // Use default search failed callback
-    searchFailedCallback = this.searchPanel.searchFailed.bind(this.searchPanel);
-  }
-
+SearchController.prototype.modelTextSearch = function (text, sceneState, limit, searchSucceededCallback, searchFailedCallback) {
+  var callbacks = this.__getSearchCallbacks(this.source, 'modelId', searchSucceededCallback, searchFailedCallback, function(json) {
+    return json.results;
+  });
   var url = Constants.models3dTextSearchUrl;
   var queryData = {
       'text': text,
@@ -237,8 +249,8 @@ SearchController.prototype.modelTextSearch = function (text, sceneState, limit,
       contentType: 'application/json;charset=utf-8',
       data: JSON.stringify(queryData),
       dataType: 'json',
-      success: searchSucceededCallback,
-      error: searchFailedCallback,
+      success: callbacks.succeeded,
+      error: callbacks.failed,
       timeout: timeout      // in milliseconds. With JSONP, this is the only way to get the error handler to fire.
     });
 };

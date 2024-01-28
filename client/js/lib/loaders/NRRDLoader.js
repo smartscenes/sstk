@@ -1,7 +1,7 @@
 'use strict';
 
 //var BinaryView = require('util/BinaryView');
-var zlib = require('pako');
+var fflate = require('fflate');
 var Grid = require('geo/Grid');
 var _ = require('util/util');
 
@@ -12,6 +12,11 @@ var _ = require('util/util');
  */
 var NRRDLoader = function (params) {
   this.GridType = params.GridType || Grid;
+  this.setOptions(params);
+};
+
+NRRDLoader.prototype.setOptions = function(options) {
+  this.options = options || {};
 };
 
 /**
@@ -274,7 +279,7 @@ NRRDLoader.prototype.__parse = function ( filename, data ) {
     // here we start the unzipping and get a typed Uint8Array back
     //var inflate = new Zlib.Gunzip( new Uint8Array( _data ) );
     //_data = inflate.decompress();
-    _data = zlib.ungzip(new Uint8Array(_data));
+    _data = fflate.decompressSync(new Uint8Array(_data));
   } else if ( headerObject.encoding === 'ascii' || headerObject.encoding === 'text' || headerObject.encoding === 'txt' || headerObject.encoding === 'hex' ) {
     _data = parseDataAsText( _data );
   } else if ( headerObject.encoding === 'raw' ) {
@@ -334,7 +339,7 @@ NRRDLoader.prototype.__parse = function ( filename, data ) {
   }
 
   volume.worldToGrid = new THREE.Matrix4();
-  volume.worldToGrid.getInverse( volume.gridToWorld );
+  volume.worldToGrid.copy( volume.gridToWorld ).invert();
   //volume.RASDimensions = ( new THREE.Vector3( volume.xLength, volume.yLength, volume.zLength ) ).applyMatrix4( volume.matrix ).round().toArray().map( Math.abs );
   return volume;
 };
