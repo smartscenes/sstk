@@ -9,7 +9,7 @@ function __getTempFilename(prefix, ext) {
   return os.tmpdir() + '/' + prefix + '_' + token + '.' + ext;
 }
 
-function OffscreenRendererFactory (baseRendererClass) {
+function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
   var OffscreenRenderer = function (params) {
     var gl = require('gl');
     // var _gl = gl(1000, 1000);  // gl context will be resized later
@@ -34,6 +34,10 @@ function OffscreenRendererFactory (baseRendererClass) {
   OffscreenRenderer.prototype.super = baseRendererClass.prototype;
   OffscreenRenderer.prototype.constructor = OffscreenRenderer;
 
+  OffscreenRenderer.prototype.makePowerOfTwo = function(image) {
+    return ImageUtil.makePowerOfTwoSync(image);
+  };
+
   OffscreenRenderer.prototype.setSize = function(width, height) {
     if (width !== this.width || height !== this.height) {
       console.warn('Set size is not properly supported in offscreen mode');
@@ -52,7 +56,27 @@ function OffscreenRendererFactory (baseRendererClass) {
     this.writePNG(pngfile, this.width, this.height, pixels);
     var viewlogFilename = (opts? opts.viewlogFilename : null) || this.viewlogFilename;
     if (viewlogFilename) {
-      this.logCameraInfo(viewlogFilename, camera, { filename: pngfile, logdata: opts? opts.logdata : null });
+      var logdata = opts? opts.logdata : null;
+      var getIndexInfoFn = null;
+      if (opts && opts.includeIndexInfo) {
+        if (opts.index) {
+          var colorToIndexMap = opts.index.colorToIndex(Colors);
+          getIndexInfoFn = function(v) {
+            var index = colorToIndexMap[v];
+            return {
+              index: index,
+              color: v,
+              label: opts.index.get(index)
+            };
+          };
+        }
+        const indexInfo = ImageUtil.getIndexInfo({ data: pixels, width: this.width, height: this.height }, null, getIndexInfoFn, true);
+        if (logdata) {
+          logdata = _.defaults({indexInfo: indexInfo}, logdata);
+        }
+      }
+
+      this.logCameraInfo(viewlogFilename, camera, { filename: pngfile,  logdata: logdata });
     }
     if (this.compress) {
       this.__fs.execSync('pngquant -f --ext .png ' + pngfile, { encoding: 'utf8' });
@@ -109,6 +133,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     var cameraControls = opts.cameraControls;
     var targetBBox = opts.targetBBox;
     var basename = opts.basename;
+    var format = opts.videoFormat;
     var onDone = opts.callback;
     var tilt = opts.tilt || 60;
     var theta = tilt  / 180 * Math.PI;
@@ -136,7 +161,7 @@ function OffscreenRendererFactory (baseRendererClass) {
       setTimeout(function () { callback(); });
     }, function () {
       if (!opts.skipVideo) {
-        scope.pngSeqToVideo(basename + '-%04d.png', basename + '.mp4',
+        scope.pngSeqToVideo(basename + '-%04d.png', basename + '.' + format,
           {width: scope.width, height: scope.height, framerate: framerate});
       }
       onDone();
@@ -147,19 +172,9 @@ function OffscreenRendererFactory (baseRendererClass) {
   OffscreenRenderer.prototype.renderAllViews = function (scene, opts) {
     var cameraControls = opts.cameraControls;
     var targetBBox = opts.targetBBox;
-    var basename = opts.basename;
-    var onDone = opts.callback;
 
     var views = cameraControls.generateViews(targetBBox, this.width, this.height);
-    var scope = this;
-    async.forEachSeries(views, function (view, callback) {
-      cameraControls.viewTarget(view);
-      var pngfile = basename + '-' + view.name + '.png';
-      scope.renderToPng(scene, cameraControls.camera, pngfile, opts);
-      setTimeout(function () { callback(); });
-    }, function () {
-      onDone();
-    });
+    this.renderViews(scene, views, opts);
   };
 
   // Renders specified views of scene and saves into pngs
@@ -171,9 +186,12 @@ function OffscreenRendererFactory (baseRendererClass) {
     var scope = this;
     async.forEachOfSeries(views, function (view, i, callback) {
       cameraControls.viewTarget(view);
-      var name = (view.name != null)? view.name : ((view.id != null)? view.id : i);
-      var pngfile = basename + '-' + name + '.png';
-      scope.renderToPng(scene, cameraControls.camera, pngfile, opts);
+      const name = (view.name != null) ? view.name : ((view.id != null) ? view.id : i);
+      const pngfile = basename + '-' + name + '.png';
+      const renderOpts = _.clone(opts);
+      renderOpts.logdata = _.defaults({cameraConfig: cameraControls.lastViewConfig},
+        opts.logdata || {});
+      scope.renderToPng(scene, cameraControls.camera, pngfile, renderOpts);
       setTimeout(function () { callback(); });
     }, function () {
       onDone();
@@ -251,9 +269,30 @@ function OffscreenRendererFactory (baseRendererClass) {
 
   // converts png sequence input to video file out (uses ffmpeg)
   OffscreenRenderer.prototype.pngSeqToVideo = function (input, out, opts) {
+    if (out.endsWith('.mp4')) {
+      this.pngSeqToMp4(input, out, opts);
+    } else if (out.endsWith('.webp')) {
+      this.pngSeqToWebp(input, out, opts);
+    } else if (out.endsWith('.gif')) {
+      this.pngSeqToGif(input, out, opts);
+    } else {
+      console.log('Skipping video output: unsupported video type ' + out);
+    }
+  };
+
+  OffscreenRenderer.prototype.pngSeqToWebp = function (input, out, opts) {
+    var framerate = opts.framerate || 25;
+    var cmdWithArgs = ['ffmpeg', '-y', '-i', input, '-loop','0',
+      '-filter:v', 'fps=fps=30', '-r', framerate, out];
+    var cmdline = cmdWithArgs.join(' ');
+    this.__fs.execSync(cmdline);
+  };
+
+  // converts png sequence input to video file out (uses ffmpeg)
+  OffscreenRenderer.prototype.pngSeqToMp4 = function (input, out, opts) {
     var tmpfilename = __getTempFilename('white', 'png');
     //console.log(tmpfilename);
-    var whitePixels = new Array(opts.width * opts.height * 4).fill(255);
+    var whitePixels = new Uint8Array(opts.width * opts.height * 4).fill(255);
     this.writePNG(tmpfilename, opts.width, opts.height, whitePixels);
     var framerate = opts.framerate || 25;
     var cmdWithArgs = ['ffmpeg', '-y', '-loop','1','-i',tmpfilename,
@@ -277,7 +316,7 @@ function OffscreenRendererFactory (baseRendererClass) {
     var cmdWithArgs = ['convert','-dispose', 'background', '-delay', delay, input, '-loop','0', out];
     var cmdline = cmdWithArgs.join(' ');
     this.__fs.execSync(cmdline);
-    this.__fs.execSync('rm -f ' + input);
+    //this.__fs.execSync('rm -f ' + input);
   };
 
   // converts gif sequence input to gif file out (uses convert)

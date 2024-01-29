@@ -65,7 +65,7 @@ function colorize_by_face(loadInfo, basename, incrBy, callback) {
     var worldToModelTransform = null;
     // obj.updateMatrixWorld();
     // var worldToModelTransform = new THREE.Matrix4();
-    // worldToModelTransform.getInverse(target.matrixWorld);
+    // worldToModelTransform.copy(target.matrixWorld).invert();
 
     async.forEachOfSeries(customFaceAttributes,
       function (faceAttribute, index, cb) {
@@ -95,7 +95,7 @@ function colorize_by_vertex(loadInfo, basename, incrBy, callback) {
     var worldToModelTransform = null;
     // obj.updateMatrixWorld();
     // var worldToModelTransform = new THREE.Matrix4();
-    // worldToModelTransform.getInverse(target.matrixWorld);
+    // worldToModelTransform.copy(target.matrixWorld).invert();
 
     async.forEachOfSeries(customAttributes,
       function (attribute, index, cb) {

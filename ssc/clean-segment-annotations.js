@@ -159,7 +159,7 @@ function cleanAnnotations(loadInfo, outfile, segments, aggregatedStats) {
   var modelWorldInverse = new THREE.Matrix4();
   var modelObject3D = segments.modelInstance.getObject3D('Model');
   modelObject3D.updateMatrixWorld();
-  modelWorldInverse.getInverse(modelObject3D.matrixWorld);
+  modelWorldInverse.copy(modelObject3D.matrixWorld).invert();
   for (var i = 0; i < segGroups.length; i++) {
     var segGroup = segGroups[i];
     segGroup.obb = segments.fitOBB('Raw', segGroup.segments);

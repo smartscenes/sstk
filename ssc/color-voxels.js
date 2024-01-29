@@ -79,22 +79,7 @@ function processIds(assetsDb) {
           }
         });
       }
-      function waitImages() {
-        STK.util.waitImagesLoaded(onDrained);
-      }
-      if (cmd.color_by) {
-        STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
-          color: cmd.color,
-          loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
-          encodeIndex: cmd.encode_index,
-          writeIndex: cmd.write_index? basename + '/' + id : null,
-          restrictToIndex: cmd.restrict_to_color_index,
-          fs: STK.fs,
-          callback: function() { waitImages(); }
-        });
-      } else {
-        waitImages();
-      }
+      STK.util.waitImagesLoaded(onDrained);
     }, function (error) {
       console.error('Error loading ' + fullId, error);
     }, metadata);

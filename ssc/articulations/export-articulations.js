@@ -7,7 +7,7 @@ const _ = STK.util;
 const cmd = require('commander');
 cmd
     .version(VERSION)
-    .description('Precompute necessary data for articulations project')
+    .description('Export articulations as json files')
     .option('--id <id>', 'Model id')
     .option('--source <source>', 'Model source')
     .option('--annotation_filename <filename>', 'Annotations filename')

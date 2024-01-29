@@ -5,6 +5,7 @@ var path = require('path');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
+var render_helper = require("./ssc-render-helper");
 var THREE = global.THREE;
 var _ = STK.util;
 
@@ -17,7 +18,8 @@ cmd
   .option('--input_format <format>', 'Input file format to use')
   .option('--input_type <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')
-  .option('--output_format <format>', 'Output file format to use', /^(obj|gltf|ply)$/, 'obj')
+  .option('--assetGroups <groups>', 'Asset groups (scene or model) to load', STK.util.cmd.parseList)
+  .option('--output_format <format>', 'Output file format to use', /^(obj|gltf|glb|ply)$/, 'obj')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--world_up <vector3>', STK.util.cmd.parseVector)
   .option('--world_front <vector3>', STK.util.cmd.parseVector)
@@ -40,29 +42,41 @@ cmd
   .option('--ensure_unique_object_name [flag]', 'Whether to ensure object names in the output obj file are unique', STK.util.cmd.parseBoolean, true)
   .option('--uv_scale <scale>', 'Whether to scale the UV (e.g. 0.01)', STK.util.cmd.parseFloat)
   .option('--embed_images [flag]', 'Whether embed images (for gltf)', STK.util.cmd.parseBoolean, true)
+  .option('--material_type <material_type>')
+  // options for hiding some parts of the scene
+  .option('--show_ceiling [flag]', 'Whether to show ceiling or not', STK.util.cmd.parseBoolean, true)
+  .option('--hide_nonparent_arch [flag]', 'Whether to hide arch nodes that are not support parents', STK.util.cmd.parseBoolean, false)
+  .option('--hide_empty_regions [flag]', 'Whether to hide empty regions', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 STK.Constants.setVirtualUnit(1);  // set to meters
 STK.Constants.setWorldUpFront(STK.geo.Object3DUtil.toVector3(cmd.world_up), STK.geo.Object3DUtil.toVector3(cmd.world_front));
+if (cmd.material_type) {
+  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type);
+}
 
 // Parse arguments and initialize globals
 if (!cmd.input) {
   console.error('Please specify --input <filename>');
   process.exit(-1);
 }
+
 var files = cmd.getInputs(cmd.input);
+var output_basename = cmd.output;
+
+// Need to have search controller before registering assets
+var useSearchController = cmd.use_search_controller;
+var auto_align_models = (cmd.assetType === 'model')? cmd.auto_align : false;
+var assetManager = new STK.assets.AssetManager({
+  autoAlignModels: auto_align_models, autoScaleModels: cmd.auto_scale, assetCacheSize: 100,
+  useColladaScale: false, convertUpAxis: false,
+  searchController: useSearchController? new STK.search.BasicSearchController() : null
+});
+
 var assetSources = cmd.getAssetSources(cmd.input_type, files, cmd.assetGroups);
 if (assetSources) {
   STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
 }
-
-var output_basename = cmd.output;
-var useSearchController = cmd.use_search_controller;
-var assetManager = new STK.assets.AssetManager({
-  autoAlignModels: cmd.auto_align, autoScaleModels: cmd.auto_scale, assetCacheSize: 100,
-  useColladaScale: false, convertUpAxis: false,
-  searchController: useSearchController? new STK.search.BasicSearchController() : null
-});
 
 var sceneDefaults = { includeCeiling: true, attachWallsToRooms: true };
 if (cmd.scene) {
@@ -105,13 +119,15 @@ var nodeNameFunc = function (node) {
 };
 
 // TODO: Support different exporters
-var objExporter;
+var meshExporter;
+var output_is_gltf = false;
 if (cmd.output_format === 'obj') {
-  objExporter = new STK.exporters.OBJMTLExporter({ fs: STK.fs });
-} else if (cmd.output_format === 'gltf') {
-  objExporter = new STK.exporters.GLTFExporter({ fs: STK.fs });
+  meshExporter = new STK.exporters.OBJMTLExporter({ fs: STK.fs });
+} else if (cmd.output_format === 'gltf' || cmd.output_format === 'glb') {
+  output_is_gltf = true;
+  meshExporter = new STK.exporters.GLTFExporter({ fs: STK.fs });
 } else if (cmd.output_format === 'ply') {
-  objExporter = new STK.exporters.PLYExporter({ fs: STK.fs });
+  meshExporter = new STK.exporters.PLYExporter({ fs: STK.fs });
 }
 
 function processFiles() {
@@ -154,7 +170,7 @@ function processFiles() {
       var metadata = {};
       if (cmd.input_type === 'id') {
         info = { fullId: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
-        metadata.id = id;
+        metadata.id = file;
       } else if (cmd.input_type === 'path') {
         info = { file: file, format: cmd.input_format, assetType: cmd.assetType, defaultMaterialType: THREE.MeshPhongMaterial };
         metadata.path = file;
@@ -182,7 +198,8 @@ function processFiles() {
 
       console.log('Load asset', info);
       timings.start('load');
-      assetManager.loadAsset(info, function (err, asset) {
+      let loadFunc = info.assetType === 'model' ? 'loadAsset' : 'loadAssetAsScene';
+      assetManager[loadFunc](info, function (err, asset) {
         timings.stop('load');
         var sceneState;
         var rootObject;
@@ -230,7 +247,7 @@ function processFiles() {
         var noTransforms = !transformInfo.hasTransforms;
         var sceneTransformMatrixInverse = new THREE.Matrix4();
         if (noTransforms) {
-          sceneTransformMatrixInverse.getInverse(sceneState.scene.matrixWorld);
+          sceneTransformMatrixInverse.copy(sceneState.scene.matrixWorld).invert();
           if (cmd.mirror) {
             var t = STK.geo.Object3DUtil.getReflectionMatrix(cmd.mirror);
             sceneTransformMatrixInverse.premultiply(t);
@@ -242,7 +259,7 @@ function processFiles() {
           }
           metadata.transform = sceneState.scene.matrixWorld.toArray();
         }
-        if (cmd.output_format === 'gltf') {
+        if (output_is_gltf) {
           // NOTE: gltf export entire hierarchy with transform
           // So if we want to export with transform, need to make sure that the transform is included
           if (rootObject && sceneState.scene !== rootObject) {
@@ -260,7 +277,7 @@ function processFiles() {
           skipMtl: false,
           binary: true,  // for gltf
           embedImages: cmd.embed_images, // for gltf
-          forcePowerOfTwoTextures: true, // for gltf
+          forcePowerOfTwoTextures: false, // for gltf (TODO: determine if still supported and if so, make option)
           skipCameras: true, // for gltf
           exportTextures: exportTexturesFlag,
           handleMaterialSide: cmd.handle_material_side,
@@ -282,7 +299,7 @@ function processFiles() {
         function waitImages() {
           STK.util.waitImagesLoaded(function () {
             timings.start('export');
-            exportScene(objExporter, exportOpts, sceneState, function (err, result) {
+            exportScene(meshExporter, exportOpts, sceneState, function (err, result) {
               if (cmd.compress) {
                 var objfile = basename + '/' + scenename + '.obj';
                 //console.log('Compressing ' + objfile);
@@ -295,27 +312,16 @@ function processFiles() {
               metadata['bboxes'] = bboxes;
               metadata['timings'] = timings;
               metadata['command'] = process.argv;
-              if (result && cmd.output_format !== 'gltf') {
+              if (result && !output_is_gltf) {
                 _.defaults(metadata, result);
               }
-              STK.fs.writeToFile(basename + '/' + scenename + ".metadata.json", JSON.stringify(metadata));
+              STK.fs.writeFileSync(basename + '/' + scenename + ".metadata.json", JSON.stringify(metadata));
               callback();
             });
           });
         }
-        if (cmd.color_by) {
-          STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
-            color: cmd.color,
-            loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
-            encodeIndex: cmd.encode_index,
-            writeIndex: cmd.write_index? basename : null,
-            restrictToIndex: cmd.restrict_to_color_index,
-            fs: STK.fs,
-            callback: function() { waitImages(); }
-          });
-        } else {
-          waitImages();
-        }
+        render_helper.setVisible(sceneState, cmd);
+        render_helper.colorScene(sceneState.fullScene, sceneState, cmd, basename, waitImages);
       });
     }
   }, function (err, results) {

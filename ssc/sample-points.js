@@ -4,8 +4,10 @@
 var async = require('async');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
+var _ = STK.util;
 var path = require('path');
 var cmd = require('./ssc-parseargs');
+const fs = require("fs");
 cmd
   .version('0.0.1')
   .description('Sample points from a mesh')
@@ -30,13 +32,15 @@ cmd
   .option('--world_up <vector3>', STK.util.cmd.parseVector, STK.Constants.worldUp)
   .option('--world_front <vector3>', STK.util.cmd.parseVector, STK.Constants.worldFront)
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
+  .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
+  .optionGroups(['config_file', 'transform3d'])
   .parse(process.argv);
 
 var argv = cmd;
 
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
-  autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
+  autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 100,
   useColladaScale: false, convertUpAxis: false,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
@@ -166,7 +170,7 @@ function processInputs(assetsDb) {
       outname = sid.id;
       basename = outputDir + '/' + outname;
       info = {fullId: sid.fullId, format: cmd.format};
-      metadata = assetsDb? assetsDb.getAssetInfo(fullId) : null;
+      metadata = assetsDb? assetsDb.getAssetInfo(sid.fullId) : null;
     } else {
       var file = name;
       var split = path.basename(file).split('.');
@@ -192,6 +196,14 @@ function processInputs(assetsDb) {
             var rotationMatrix = getRotationMatrix(alignments, outname);
             STK.geo.Object3DUtil.setMatrix(object3D, rotationMatrix);
           }
+          var transformInfo = STK.geo.Object3DUtil.applyTransforms(mInst.object3D, {
+            assetName: name,
+            hasTransforms: cmd.auto_align || alignments,
+            normalizeSize: cmd.normalize_size,
+            normalizeSizeTo: cmd.normalize_size_to,
+            center: cmd.center,
+            debug: true
+          });
           var opts = { };
           if (cmd.limit_to_visible || cmd.ignore_redundant) {
             var d =  Math.max(cmd.resolution*2, 256); // Make sure resolution is at least somewhat okay
@@ -203,6 +215,13 @@ function processInputs(assetsDb) {
           }
           var samples = samplePoints(object3D, argv.samples, opts);
           exporter.exportSampledPoints(samples, { name: basename });
+          var metadata = {
+            transformInfo: transformInfo,
+            config: _.pick(cmd, ['samples', 'opacity_threshold', 'resolution', 'limit_to_visible', 'ignore_redundant',
+              'check_reverse_faces', 'ignore_redundant_samples', 'restrict_redundant_white_materials',
+              'world_up', 'world_front', 'use_search_controller', 'auto_align', 'center', 'normalize_size_to', 'normalize_size'])
+          };
+          fs.writeFileSync(basename + '.sample-metadata.json', JSON.stringify(metadata));
           callback();
         }
         STK.util.waitImagesLoaded(onDrained);

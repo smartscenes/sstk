@@ -4,6 +4,7 @@
 var async = require('async');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
+var _ = STK.util;
 var path = require('path');
 var cmd = require('./ssc-parseargs');
 cmd
@@ -171,7 +172,7 @@ function processInputs(assetsDb) {
       outname = sid.id;
       basename = outputDir + '/' + outname;
       info = {fullId: sid.fullId, format: cmd.format};
-      metadata = assetsDb? assetsDb.getAssetInfo(fullId) : null;
+      metadata = assetsDb? assetsDb.getAssetInfo(sid.fullId) : null;
     } else if (cmd.input_type === 'path') {
       var file = name;
       var split = path.basename(file).split('.');

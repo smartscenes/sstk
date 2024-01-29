@@ -23,7 +23,9 @@ cmd.Command.prototype.optionGroups = function(opts) {
       .option('--use_lights [flag]', 'Use lights or not', STK.util.cmd.parseBoolean, false)
       .option('--use_physical_lights [flag]', 'Use physical lights or not', STK.util.cmd.parseBoolean, false)
       .option('--use_directional_lights [flag]', 'Use directional lights or not', STK.util.cmd.parseBoolean, false)
+      .option('--use_ambient_light_only [flag]', 'Use only ambient light', STK.util.cmd.parseBoolean, false)
       .option('--use_antialias_pass [flag]', 'Use extra antialiasing pass', STK.util.cmd.parseBoolean, false)
+      .option('--envmap <path>', 'Use environment map')
       .option('--antialias_type <type>', 'Type of antialias to use', /^(ssaa|fxaa)$/, 'ssaa')
       .option('--use_shadows [flag]', 'Use shadows or not', STK.util.cmd.parseBoolean, false)
       .option('--width <width>', 'Image width [default: 1000]', STK.util.cmd.parseInt, 1000)
@@ -32,6 +34,7 @@ cmd.Command.prototype.optionGroups = function(opts) {
       .option('--max_height <height>', 'Maximum image height [default: 20000]', STK.util.cmd.parseInt, 20000)
       .option('--max_pixels <pixels>', 'Maximum image pixels [default: 10000*100000]', STK.util.cmd.parseInt, 10000*10000)
       .option('--save_view_log [flag]', 'Whether to save a view log', STK.util.cmd.parseBoolean)
+      .option('--log_index_info [flag]', 'Whether to save per view index count and bounding boxes (use with --save_view_log)', STK.util.cmd.parseBoolean)
       .option('--compress_png [flag]', 'Compress PNG output using pngquant [false]', STK.util.cmd.parseBoolean, false);
   }
   // Options for rendering views
@@ -48,19 +51,32 @@ cmd.Command.prototype.optionGroups = function(opts) {
   if (opts.view) {
     this.option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt);
     this.option('--view_target_ids <object_ids>', 'Which objects to look at', STK.util.cmd.parseList);
+    this.option('--find_good_views [flag]', 'Whether to optimize for good views or not (applies if --view_target_ids is set)', STK.util.cmd.parseBoolean);
     this.option('--use_scene_camera <camera_name>', 'Use camera from scene');
   }
   // Options for special color by
   if (opts.color_by) {
-    this.option('--color_by <color_by>', 'Recoloring scheme (' + STK.scene.SceneUtil.ColorByOptions.join(',') + ')')
+    this.option('--color_by <color_by>', 'Recoloring scheme (' + STK.scene.SceneUtil.ColorByTypes.join(',') + ')')
       .option('--color <color>', 'Color when coloring by color [silver]', 'silver')
+      .option('--arch_color <color>', 'Color to use for coloring arch')
       .option('--encode_index [flag]', 'Encode color index directly', STK.util.cmd.parseBoolean, false)
       .option('--write_index [flag]', 'Output index to file', STK.util.cmd.parseBoolean, false)
       .option('--index <filename>', 'Input index to use for consistent encoding')
       .option('--object_index <filename>', 'Input index to use for object ids')
       .option('--restrict_to_color_index [flag]', 'Restrict coloring to index', STK.util.cmd.parseBoolean, false)
       .option('--output_image_encoding <encoding>', 'What encoding to use for output image')        // TODO: there is a bit of overlap in this two options
+      .option('--model_category_mapping <filename>', 'Mapping of model id to category mappings')
       .option('--convert_pixels <target_type>', "Target type for pixels (uint8|uint16)", /^(uint8|uint16)$/);
+  }
+  // Options for voxelization
+  if (opts.voxels) {
+    this.option('--use_fixed_voxel_size [flag]', 'Whether to use fixed voxel size', STK.util.cmd.parseBoolean, false)
+      .option('--resolution <number>', 'Voxel grid resolution [default: 32 (32x32x32)]', STK.util.cmd.parseInt, 32)
+      .option('--voxel_size <number>', 'Fixed voxel size [default: 0.1 (10 cm)]', STK.util.cmd.parseFloat, 0.10)
+      .option('--samples <number>', 'Number of samples [default: 100000]', STK.util.cmd.parseInt, 100000)
+      .option('--downsample <multiplier>', 'Downsample voxel grid resolution down from original voxel resolution [default: 1]. Example: use 4 to takes 128^3 to 32^3', STK.util.cmd.parseInt, 1)
+      .option('--voxel_aggregate_mode <mode>', 'Mode to use for aggregating voxels [default: median]', 'median')
+      .option('--voxels <voxel-type>', 'Type of voxels to use [default: none]', 'none');
   }
   // Options for transforming 3d asset
   if (opts.transform3d) {
@@ -166,7 +182,7 @@ cmd.Command.prototype.getAssetSources = function(input_type, inputs, assetSource
   }
 
   return assetSources;
-}
+};
 
 cmd.Command.prototype.getIds = function(ids, assetGroup) {
   if (ids.indexOf('all') >= 0) {
@@ -247,6 +263,17 @@ cmd.Command.prototype.getRendererOptions = function(opts) {
     reuseBuffers: true
   };
 };
+
+cmd.Command.prototype.getLightingOptions = function(opts) {
+  return {
+    lights: opts.lights,
+    useDirectionalLights: opts.use_directional_lights,
+    useAmbientLightOnly: opts.use_ambient_light_only,
+    usePhysicalLights: opts.use_physical_lights,
+    useLights: opts.use_lights
+  };
+};
+
 
 Object.defineProperty(cmd.Command.prototype, 'explicitOptions', {
   get: function () {

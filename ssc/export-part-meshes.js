@@ -13,7 +13,7 @@ STK.ImageUtil.DISABLE_IMAGE_RESIZE = true;  // Don't resize images (no need sinc
 
 cmd
   .version('0.0.1')
-  .description('Export parts as separate objs')
+  .description('Export parts as separate meshes')
   .option('--input <filename>', 'Input path')
   .option('--input_type <type>', 'Input type (id or path)',  /^(id|path)$/, 'path')
   .option('--filter_empty [flag]', STK.util.cmd.parseBoolean, false)
@@ -27,9 +27,10 @@ cmd
   .option('--keep_double_faces_together [flag]', STK.util.cmd.parseBoolean, false)
   .option('--input_format <format>', 'File format to use')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
+  .option('--segmentsType <segmentsType>', 'Segmentation type')
   .option('--segmentation <filename>', 'Segmentation file')
   .option('--segmentLevels <levels>', 'Segmentation levels', STK.util.cmd.parseList, ['components', 'pieces'])
-  .option('--mesh_format <format>', 'Output mesh file format to use', /^(obj|gltf)$/, 'obj')
+  .option('--mesh_format <format>', 'Output mesh file format to use', /^(obj|gltf|glb)$/, 'obj')
   .option('--export_materials [flag]', 'Whether to export materials (mtl)')
   .option('--export_textures <type>',
     'How to export textures (`copy` will make copy of original textures, `export` will export jpg or png directly from the images with simple filenames)',
@@ -52,11 +53,8 @@ STK.Constants.setWorldUpFront(STK.geo.Object3DUtil.toVector3(cmd.world_up), STK.
 STK.materials.Materials.setDefaultMaterialType('phong');
 
 var files = cmd.getInputs(cmd.input);
-var assetSources = cmd.getAssetSources(cmd.input_type, files, cmd.assetGroups);
-if (assetSources) {
-  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
-}
 
+// Need to have search controller before registering assets
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 10,
@@ -65,6 +63,10 @@ var assetManager = new STK.assets.AssetManager({
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
 
+var assetSources = cmd.getAssetSources(cmd.input_type, files, cmd.assetGroups);
+if (assetSources) {
+  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
+}
 
 function exportParts(exporter, exportOpts, object3D, callback) {
   var meshes = STK.geo.Object3DUtil.findNodes(object3D, function(x) { return x instanceof THREE.Mesh; });
@@ -155,7 +157,7 @@ function processFiles() {
   var objExporter;
   if (cmd.mesh_format === 'obj') {
     objExporter = new STK.exporters.OBJMTLExporter({ fs: STK.fs });
-  } else if (cmd.mesh_format === 'gltf') {
+  } else if (cmd.mesh_format === 'gltf' || cmd.mesh_format === 'glb') {
     objExporter = new STK.exporters.GLTFExporter({ fs: STK.fs });
   } else {
     console.error('Unknown output type: ' + cmd.mesh_format);
@@ -199,7 +201,11 @@ function processFiles() {
         var wrapped = modelInstance.getObject3D('Model');
         var object3D;
         if (segments) {
-          object3D = segments.segmentedObject3DHierarchical;
+          if (segments.segmentedObject3DHierarchical) {
+            object3D = segments.segmentedObject3DHierarchical;
+          } else {
+            object3D = segments.segmentedObject3D;
+          }
         } else {
           object3D = wrapped.children[0];
           object3D.name = object3D.name.replace('-orig', '');

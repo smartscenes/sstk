@@ -5,6 +5,7 @@ var async = require('async');
 var path = require('path');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
+var _ = STK.util;
 
 var cmd = require('commander');
 cmd
@@ -142,7 +143,7 @@ function colorize(loadInfo, output, callback) {
     sceneState.fullScene.updateMatrixWorld();
     var target = sceneState.modelInstances[scanIndex].getObject3D('Model');
     var worldToModelTransform = new THREE.Matrix4();
-    worldToModelTransform.getInverse(target.matrixWorld);
+    worldToModelTransform.copy(target.matrixWorld).invert();
 
     STK.scene.SceneUtil.colorScene(sceneState, 'category', {
       index: categoryColorIndex,

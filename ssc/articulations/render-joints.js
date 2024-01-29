@@ -18,7 +18,7 @@ cmd
   .option('--id <id>', 'Scene or model id [default: shape2motion.lamp_0061]', 'shape2motion.lamp_0061')
   .option('--joints <filename>', 'Joints filename')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
-  .option('--use_subdir','Put output into subdirectory per id [false]')
+  .option('--use_subdir [flag]','Put output into subdirectory per id [false]', STK.util.cmd.parseBoolean, false)
   .optionGroups(['config_file', 'render_options', 'render_views', 'asset_cache'])
   .option('--skip_existing', 'Skip rendering existing images [false]')
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)

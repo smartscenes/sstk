@@ -14,6 +14,7 @@ cmd
     .option('--output <filename>', 'Output filename')
     .option('--show_obb [flag]', 'Whether to render the OBB of the part',  STK.util.cmd.parseBoolean,false)
     .option('--show_connected [flag]', 'Whether to highlight connected parts',  STK.util.cmd.parseBoolean, false)
+    .option('--parts_field <name>', 'Field to use for parts',  'articulation-parts')
     .option('--neutral_color <color>', 'Color to use for the other parts', '#a3a3a3')
     .option('--part_color <color>', 'Color to use for the part of interest',  '#42bc67' /* #dc3912 */)
     .option('--connected_color <color>', 'Color to use for connected parts', '#9999ee')
@@ -90,8 +91,8 @@ function setupScene(scene, modelId, parts, cameraControls) {
 
     const assetInfo = assetManager.getLoadModelInfo(null, modelId);
     if (assetInfo != null) {
-        const front = STK.assets.AssetGroups.getDefaultFront(assetInfo);
-        const up = STK.assets.AssetGroups.getDefaultUp(assetInfo);
+        const front = STK.model.ModelInfo.getFront(assetInfo);
+        const up = STK.model.ModelInfo.getUp(assetInfo);
         STK.geo.Object3DUtil.alignToUpFrontAxes(group, up, front, STK.Constants.worldUp, STK.Constants.worldFront);
     }
 
@@ -176,18 +177,13 @@ function renderWithFullId(modelId, output_filename, options) {
     const source = modelId.split('.')[0];
     STK.assets.registerAssetGroupsSync({ assetSources: [source] });
     const partsLoader = new PartsLoader({assetManager: assetManager });
-    partsLoader.lookupPartsInfo(modelId, 'articulation-parts', (err, partsInfo) => {
+    partsLoader.loadPartsWithConnectivityGraphById(modelId, { partsField: options.parts_field, discardHierarchy: true },
+      function(err, partData) {
         if (err) {
-            console.error('Error locating articulation-parts for ' + modelId, err);
+            console.error(`Error loading parts fullId=${modelId}`, err);
         } else {
-            partsLoader.loadPartsWithConnectivityGraph(modelId, partsInfo, { discardHierarchy: true },function(err, partData) {
-                if (err) {
-                    console.error(`Error loading parts fullId=${modelId}`, err);
-                } else {
-                    STK.util.waitImagesLoaded(() =>
-                        renderParts(modelId, partData, output_filename, options));
-                }
-            });
+            STK.util.waitImagesLoaded(() =>
+              renderParts(modelId, partData, output_filename, options));
         }
     });
 }

@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 MY_PATH="`dirname \"$0\"`"
-GEN_GRAPH_VIZ=~/code/articulations/articulations/scripts/generate_connectivity_graph_viz.py
+GEN_GRAPH_VIZ="$MY_PATH/generate_connectivity_graph_viz.py"
 
 csv=$1
 output_dir=${2:-articulations}

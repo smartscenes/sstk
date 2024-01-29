@@ -27,17 +27,19 @@ if (!cmd.input) {
 }
 
 var files = cmd.getInputs(cmd.input);
-var assetSources = cmd.getAssetSources(cmd.inputType, files, cmd.assetGroups);
-if (assetSources) {
-  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
-}
-
 var output_basename = cmd.output;
+
+// Need to have search controller before registering assets
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
+
+var assetSources = cmd.getAssetSources(cmd.inputType, files, cmd.assetGroups);
+if (assetSources) {
+  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
+}
 
 var sceneDefaults = { includeCeiling: true, attachWallsToRooms: true };
 if (cmd.scene) {
@@ -56,6 +58,7 @@ function processFiles() {
     var outputDir = cmd.output_dir;
     var basename = output_basename;
     var scenename;
+    var id;
     if (basename) {
       // Specified output - append index
       if (files.length > 1) {
@@ -66,7 +69,7 @@ function processFiles() {
     } else {
       if (cmd.inputType === 'id') {
         var idparts = file.split('.');
-        var id = idparts[idparts.length-1];
+        id = idparts[idparts.length-1];
         basename = id;
         scenename = basename;
         basename = (outputDir ? outputDir : '.') + '/' + basename;
@@ -84,7 +87,7 @@ function processFiles() {
 
     var doDownload = true;
     if (cmd.skip_existing && shell.test('-d', basename)) {
-      if (cmd.inputTYpe === 'id' && cmd.check_ext) {
+      if (cmd.inputType === 'id' && cmd.check_ext) {
         doDownload = !shell.test('-e', basename + '/' + basename + '.' + cmd.check_ext);
       } else {
         doDownload = false;
@@ -112,7 +115,7 @@ function processFiles() {
         STK.util.waitImagesLoaded(callback);
       });
     } else {
-      console.warn('Skipping existing scene at ' + basename);
+      console.warn('Skipping existing asset at ' + basename);
       setTimeout(function () { callback(); }, 0);
     }
   }, function (err, results) {

@@ -6,6 +6,7 @@ var path = require('path');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var THREE = global.THREE;
+var _ = STK.util;
 var cmd = require('./ssc-parseargs');
 cmd
   .version('0.0.1')
@@ -113,6 +114,7 @@ function processInputs(inputs, assetsDb) {
           console.log('Creating colored voxels');
           mInst.voxels = new STK.model.ModelInstanceVoxels({voxelsField: voxelsField});
           mInst.voxels.init(mInst);
+          STK.geo.Object3DUtil.ensureVertexNormals(mInst.object3D);  // ensure vertex normals (used in voxel color sampling)
           mInst.voxels.createColorVoxels(voxelOpts, function (colorVoxels) {
             var voxelGrid = colorVoxels.getVoxelGrid();
             var nVoxels = voxelGrid.countSetVoxels();
@@ -130,25 +132,10 @@ function processInputs(inputs, assetsDb) {
             }
           });
         }
-        function waitImages() {
-          STK.util.waitImagesLoaded(onDrained);
-        }
-        if (cmd.color_by) {
-          STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
-            color: cmd.color,
-            loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
-            encodeIndex: cmd.encode_index,
-            writeIndex: cmd.write_index? outputDir + '/' + name : null,
-            restrictToIndex: cmd.restrict_to_color_index,
-            fs: STK.fs,
-            callback: function() { waitImages(); }
-          });
-        } else {
-          waitImages();
-        }
+        STK.util.waitImagesLoaded(onDrained);
       }
     }, function (error) {
-      console.error('Error loading ' + fullId, error);
+      console.error('Error loading ' + input, error);
     }, metadata);
   }, function (err, results) {
     console.log('DONE');

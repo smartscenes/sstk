@@ -4,6 +4,7 @@ var cmd = require('./ssc-parseargs');
 var path = require('path');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
+var render_helper = require('./ssc-render-helper');
 var THREE = global.THREE;
 var _ = STK.util;
 
@@ -18,6 +19,7 @@ cmd
   .option('--path <path>', 'File path to scene or model')
   .option('--format <format>', 'File format to use')
   .option('--assetType <type>', 'Asset type (scene or model)')
+  .option('--assetInfo <json>', 'Asset info (up,front)', STK.util.cmd.parseJson)
   .option('--assetGroups <groups>', 'Asset groups (scene or model) to load', STK.util.cmd.parseList)
   .option('--cameras <cameraFile>', 'Read .cam or .conf file with camera extrinsics and intrinsics')
   .option('--cameraSceneUp <vec3>', 'Coordinate frame (up-dir) that the camera is specified in', STK.util.cmd.parseVector)
@@ -299,8 +301,13 @@ if (argv.color_by === 'vertexAttribute') {
   info.options = { customFaceAttributes: [argv.color]};
 }
 
+if (cmd.assetInfo) {
+  info = cmd.combine(info, cmd.assetInfo);
+}
+
+var loadFunction = (info.assetType === 'model')? 'loadAsset' : 'loadAssetAsScene';
 var useSceneState = false;
-assetManager.loadAsset(info, function (err, asset) {
+assetManager[loadFunction](info, function (err, asset) {
   var sceneState;
   if (asset instanceof STK.scene.SceneState) {
     sceneState = asset;
@@ -460,6 +467,7 @@ assetManager.loadAsset(info, function (err, asset) {
     // var views = cameraControls.generateViews(sceneBBox, width, height);
     // cameraControls.viewTarget(views[0]);
     // renderer.renderToPng(scene, defaultCamera, basename + '-' + i + suffix);
+    console.log('DONE');
   };
 
   function waitImages() {
@@ -470,16 +478,7 @@ assetManager.loadAsset(info, function (err, asset) {
     waitImages();
   } else if (argv.color_by) {
     if (useSceneState) {
-      STK.scene.SceneUtil.colorScene(sceneState, argv.color_by, {
-        color: argv.color,
-        loadIndex: {index: cmd.index, objectIndex: cmd.object_index},
-        encodeIndex: argv.encode_index,
-        writeIndex: cmd.write_index ? basename : null,
-        fs: STK.fs,
-        callback: function () {
-          waitImages();
-        }
-      });
+      render_helper.colorScene(scene, sceneState, argv, basename, waitImages);
     } else {
       var okay = STK.scene.SceneUtil.colorObject3D(scene, {
         colorBy: argv.color_by,
@@ -500,4 +499,3 @@ assetManager.loadAsset(info, function (err, asset) {
   }
 });
 
-console.log('DONE');

@@ -4,6 +4,6 @@
     "defaultFront": [ 0, 0, 1],
     "defaultUnit": 1,
     "computeNormals": true,
-    "options": { "preserveMeshes": true, "skipLines": true, "convertUpAxis": false }
+    "options": { "skipLines": true, "convertUpAxis": false }
   }
 }

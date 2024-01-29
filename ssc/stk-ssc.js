@@ -70,6 +70,7 @@ if (STK.Constants.baseUrl.startsWith('http:') || STK.Constants.baseUrl.startsWit
 }
 STK.ImageUtil.getPixelsSync = deasync(getPixels);
 STK.ImageUtil.bufferToRawPixelsSync = deasync(STK.ImageUtil.bufferToRawPixels);
+STK.ImageUtil.makePowerOfTwoSync = deasync(STK.ImageUtil.makePowerOfTwo);
 
 var AssetGroups = STK.assets.AssetGroups;
 var AssetsDb = STK.assets.AssetsDb;
@@ -105,10 +106,10 @@ var FileLoader = function (manager) {
 FileLoader.prototype = {
   constructor: FileLoader,
   load: function (url, onLoad, onProgress, onError) {
-    if (url.startsWith('file://')) { url = url.substr(7); }
+    if (typeof url === 'string' && url.startsWith('file://')) { url = url.substr(7); }
     cachedFileLoader.load({
       key: url,
-      loadOpts: { url: url, encoding: this.responseType },
+      loadOpts: { url: url, encoding: this.responseType === 'text'? 'utf8' : this.responseType },
       callback: function (err, data) {
         if (err) {
           if (onError) {
@@ -186,7 +187,7 @@ var imageQueuePubSub = new STK.PubSub();
 THREE.ImageLoaderQueue.drain = function() {
   imageQueuePubSub.Publish('drain');
 };
-function waitImagesLoaded(cb) {
+function __waitImagesLoaded(cb) {
   if (THREE.ImageLoaderQueue.idle()) {
     if (cb) {
       setTimeout(function() { cb(); }, 0);
@@ -194,10 +195,15 @@ function waitImagesLoaded(cb) {
   } else {
     imageQueuePubSub.SubscribeOnce('drain', imageQueuePubSub, function() {
       // Keep waiting until it done, really really done!
-      setTimeout(function() { waitImagesLoaded(cb); }, 0);
+      setTimeout(function() { __waitImagesLoaded(cb); }, 0);
     });
   }
 }
+function waitImagesLoaded(cb) {
+  console.time('waitImagesLoaded');
+  __waitImagesLoaded(() => { console.timeEnd('waitImagesLoaded'); if (cb) { cb(); } });
+}
+
 function disableImagesLoading() {
   THREE.ImageLoaderQueue.disabled = true;
 }
@@ -417,7 +423,7 @@ STK.ImageUtil.sharp = require('sharp');
 
 // Exports -- just patch functionality into STK and return it all
 STK.fs = fs;
-STK.PNGRenderer = require('./lib/OffscreenRenderer.js')(STK.gfx.Renderer);
+STK.PNGRenderer = require('./lib/OffscreenRenderer.js')(STK.gfx.Renderer, STK.ImageUtil, STK.Colors);
 // Always create PNGRenderer
 STK.gfx.RendererFactory.createRenderer = function(opts) {
   return new STK.PNGRenderer(opts);

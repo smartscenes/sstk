@@ -235,10 +235,10 @@ function fsWriteToFile(filename, content, successCallback, errorCallback) {
 
 
 function fsAppendToFile(filename, content, successCallback, errorCallback) {
+  // console.log('append to file', filename, content.length);
   if (typeof content === 'string') {
     fs.appendFileSync(filename, content);
   } else {  // assume binary
-    console.log(filename);
     fs.appendFileSync(filename, Buffer.from(content), { encoding: null });
   }
   if (successCallback) {
@@ -316,6 +316,7 @@ function execSync(cmd, opts) {
  * @param [opts.skipEmptyLines=true] {boolean} Ignore empty lines
  * @param [opts.dynamicTyping=true] {boolean} Automatically guess and convert type
  * @param [opts.keyBy] {string} If specified, data is converted to a map with the specified key.  Otherwise, array is returned.
+ * @param [opts.groupBy] {string} If specified, data is converted to a map to array with the specified key.  Otherwise, array is returned.
  * @param [opts.filename] {string} If filename ends with '.tsv' then delimiter and quoteChar is set for tab delimited files.
  * @returns {data: {array|map}, errors: array, meta: object}
  */
@@ -332,6 +333,8 @@ function parseDelimited(data, opts) {
   var parsed = csv.parse(data, opts);
   if (opts.keyBy) {
     parsed.data = _.keyBy(parsed.data, opts.keyBy);
+  } else if (opts.groupBy) {
+    parsed.data = _.groupBy(parsed.data, opts.groupBy);
   }
   return parsed;
 }

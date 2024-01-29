@@ -29,7 +29,7 @@ var writePNG = function (path, width, height, pixels) {
   for (var i = 0; i < pixels.length; i++) {
     png.data[i] = pixels[i];
   }
-  buff = PNG.sync.write(png);
+  var buff = PNG.sync.write(png);
   fs.writeFileSync(path, buff);
 };
 
@@ -85,7 +85,7 @@ var getTeapot = function(callback) {
   var json = JSON.parse(fs.readFileSync('../resources/models/teapot-claraio.json'));
   var obj = objectLoader.parse(json);
   callback(obj);
-}
+};
 
 var plane = getPlane();
 //console.log(plane);

@@ -30,19 +30,20 @@ if (!cmd.input) {
   process.exit(-1);
 }
 var files = cmd.getInputs(cmd.input);
-
-var assetSources = cmd.getAssetSources(cmd.input_type, files, cmd.assetGroups);
-if (assetSources) {
-  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
-}
-
 var output_basename = cmd.output;
+
+// Need to have search controller before registering assets
 var useSearchController = cmd.use_search_controller;
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: cmd.auto_align, autoScaleModels: cmd.auto_scale, assetCacheSize: 100,
   useColladaScale: false, convertUpAxis: false,
   searchController: useSearchController? new STK.search.BasicSearchController() : null
 });
+
+var assetSources = cmd.getAssetSources(cmd.input_type, files, cmd.assetGroups);
+if (assetSources) {
+  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
+}
 
 var sceneDefaults = { includeCeiling: true, attachWallsToRooms: true };
 if (cmd.scene) {

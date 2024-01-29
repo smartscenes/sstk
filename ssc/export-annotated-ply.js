@@ -4,6 +4,7 @@ var fs = require('fs');
 var async = require('async');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
+var _ = STK.util;
 
 var cmd = require('commander');
 cmd
@@ -172,7 +173,7 @@ if (labelMappings) {
     mapCategoryFn = function(rawlabel) {
       var entry = labelMappings[rawlabel];
       return entry && entry.category? entry.category : rawlabel;
-    }
+    };
   }
   var mpr40Colors = STK.fs.loadDelimited(argv.mpr40_colors).data;
   var nyu40Colors = STK.fs.loadDelimited(argv.nyu40_colors).data;

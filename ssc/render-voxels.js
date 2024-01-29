@@ -18,7 +18,7 @@ cmd
   .option('--use_ambient_occlusion [flag]', 'Use ambient occlusion or not', STK.util.cmd.parseBoolean, false)
   .option('--mesher <mesher>', 'Mesher to use for visualization' , /^(greedy|stupid|monotone|culled)$/i, 'stupid')
   .option('--size <size>', 'Size to use for voxels when using stupid mesher (default: alpha)', STK.util.cmd.parseFloat)
-  .optionGroups(['config_file', 'render_views'])
+  .optionGroups(['config_file', 'render_views', 'render_options'])
   .option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt)
   .option('--voxel_threshold <threshold>', 'Threshold (from 0 to 1) on alpha channel for showing voxel [0]', STK.util.cmd.parseFloat, 0)
   .option('--width <width>', 'Image width [default: 1000]', STK.util.cmd.parseInt, 1000)
@@ -106,6 +106,12 @@ function processFiles() {
           console.log('Setting voxel threshold to ' + cmd.voxel_threshold);
           voxels.updateGridField('minThreshold', cmd.voxel_threshold);
           var voxelNode = voxels.getVoxelNode();
+          if (cmd.assetInfo && cmd.assetInfo.defaultUp && cmd.assetInfo.defaultFront) {
+            STK.geo.Object3DUtil.alignToUpFrontAxes(voxelNode,
+              STK.geo.Object3DUtil.toVector3(cmd.assetInfo.defaultUp),
+              STK.geo.Object3DUtil.toVector3(cmd.assetInfo.defaultFront),
+              STK.Constants.worldUp, STK.Constants.worldFront);
+          }
           STK.geo.Object3DUtil.centerAndRescaleObject3DToWorld(voxelNode, 200);
           scene.add(voxelNode);
           var sceneBBox = STK.geo.Object3DUtil.getBoundingBox(voxelNode);
@@ -139,9 +145,9 @@ function processFiles() {
               cameraControls.viewTarget(views[cmd.view_index]);  // default
             } else if (cmd.view) {
               var viewOpts = cmd.view;
-              if (cmd.view.coordinate_frame === 'scene') {
-                viewOpts = sceneState.convertCameraConfig(cmd.view);
-              }
+              // if (cmd.view.coordinate_frame === 'scene') {
+              //   viewOpts = sceneState.convertCameraConfig(cmd.view);
+              // }
               viewOpts = _.defaults({targetBBox: sceneBBox}, viewOpts);
               cameraControls.viewTarget(viewOpts);
             } else {  // top down view is default

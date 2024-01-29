@@ -9,7 +9,12 @@ input_format=kmz
 output_format=obj
 n=8
 
-opts="--input_type ${input_type} --input_format ${input_format} --output_format ${output_format} --assetType model --export_textures copy --texture_path images --require_faces --use_search_controller --include_group --normalize_size diagonal --center --handle_material_side"
+common_opts="--assetType model --require_faces --use_search_controller "
+align_opts="--auto_align true"
+normalize_opts="--normalize_size diagonal --center"
+format_opts="--export_textures export --texture_path images --include_group --handle_material_side"
+opts="${common_opts} ${align_opts} ${normalize_opts} ${format_opts}"
+opts="--input_type ${input_type} --input_format ${input_format} --output_format ${output_format} ${opts}"
 
 date
 mkdir -p $output_dir

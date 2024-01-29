@@ -14,7 +14,7 @@ cmd
   .option('--id <id>', 'Scene or model id [default: lamp_0061]', 'lamp_0061')
   .option('--source <source>', 'Scene or model source [default: shape2motion]', 'shape2motion')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
-  .option('--use_subdir','Put output into subdirectory per id [false]')
+  .option('--use_subdir [flag]','Put output into subdirectory per id [false]', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
 function createAssetManager() {

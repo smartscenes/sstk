@@ -3,8 +3,10 @@
 var async = require('async');
 var path = require('path');
 var shell = require('shelljs');
+var fs = require('fs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
+var render_helper = require('./ssc-render-helper');
 var THREE = global.THREE;
 var _ = STK.util;
 
@@ -14,14 +16,19 @@ cmd
   .option('--input <filename>', 'Input path')
   .option('--format <format>', 'File format to use')
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')
+  .option('--assetInfo <json>', 'Asset info (up,front)', STK.util.cmd.parseJson)
   .option('--assetGroups <groups>', 'Asset groups (scene or model) to load', STK.util.cmd.parseList)
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--output <filename>', 'Output path')
+  .option('--video_format <format>', 'Format for output videos', 'mp4')
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .optionGroups(['config_file', 'render_options', 'view', 'render_views', 'color_by', 'transform3d', 'norm_geo'])
   .option('--skip_existing', 'Skip rendering existing images [false]', STK.util.cmd.parseBoolean, false)
   .option('--material_type <material_type>')
   .option('--material_side <material_side>')
+  .option('--show_ceiling [flag]', 'Whether to show ceiling or not', STK.util.cmd.parseBoolean, false)
+  .option('--hide_nonparent_arch [flag]', 'Whether to hide arch nodes that are not support parents', STK.util.cmd.parseBoolean, false)
+  .option('--hide_empty_regions [flag]', 'Whether to hide empty regions', STK.util.cmd.parseBoolean, false)
   .option('--use_search_controller [flag]', 'Whether to lookup asset information online', STK.util.cmd.parseBoolean, false)
   .parse(process.argv);
 
@@ -40,6 +47,13 @@ if (!cmd.input) {
 }
 var files = cmd.getInputs(cmd.input);
 
+// Need to have search controller before registering assets
+var useSearchController = cmd.use_search_controller;
+var assetManager = new STK.assets.AssetManager({
+  autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 100,
+  searchController: useSearchController? new STK.search.BasicSearchController() : null
+});
+
 var assetSources = cmd.getAssetSources('path', files, cmd.assetGroups);
 if (assetSources) {
   STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
@@ -48,7 +62,7 @@ if (assetSources) {
 //STK.Constants.setVirtualUnit(1);  // set to meters
 cmd.material_type = cmd.material_type || 'phong';
 if (cmd.material_type) {
-  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type)
+  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type);
 }
 if (cmd.material_side) {
   STK.materials.Materials.DefaultMaterialSide = STK.materials.Materials.getMaterialSide(cmd.material_side, STK.materials.Materials.DefaultMaterialSide);
@@ -58,12 +72,6 @@ var output_basename = cmd.output;
 var rendererOptions = cmd.getRendererOptions(cmd);
 var renderer = new STK.PNGRenderer(rendererOptions);
 
-var useSearchController = cmd.use_search_controller;
-var assetManager = new STK.assets.AssetManager({
-  autoAlignModels: cmd.auto_align, autoScaleModels: false, assetCacheSize: 100,
-  searchController: useSearchController? new STK.search.BasicSearchController() : null
-});
-
 var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
   type: 'perspective',
   fov: 50,
@@ -71,115 +79,13 @@ var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
   far: 400*STK.Constants.metersToVirtualUnit
 });
 
-var simpleRenderer;
-function getSimpleRenderer() {
-  if (!simpleRenderer) {
-    simpleRenderer = STK.gfx.RendererFactory.createOffscreenRenderer({ width: renderer.width, height: renderer.height });
-  }
-  return simpleRenderer;
-}
-
-/**
- * Render scene
- * @param scene {THREE.Object3D}
- * @param renderer {STK.PNGRenderer}
- * @param renderOpts {Object} Options on how to render and where to save the rendered file
- * @param renderOpts.cameraControls {STK.controls.CameraControls} cameraControls
- * @param renderOpts.targetBBox {STK.geo.BBox} Bounding box of the target
- * @param renderOpts.basename {string} basename to output to
- * @param renderOpts.angleStep {number} turntable_step
- * @param renderOpts.framerate {number} framerate
- * @param renderOpts.tilt {number} tilt from horizontal
- * @param renderOpts.skipVideo {boolean} Whether to skip outputing of video
- * @param cmdOpts {Object} Options on the view to render
- * @param [cmdOpts.render_all_views] {boolean}
- * @param [cmdOpts.render_turntable] {boolean}
- * @param [cmdOpts.view] {Object}
- * @param [cmdOpts.view_index] {int}
- * @param [cmdOpts.width] {int} Requested image width
- * @param [cmdOpts.height] {int} Requested image height
- * @param [cmdOpts.max_width] {int} Maximum number of pixels in the horizontal dimension
- * @param [cmdOpts.max_height] {int} Maximum number of pixels in the vertical dimension
- * @param [cmdOpts.max_pixels] {int} Maximum number of pixels
- * @param renderOpts.callback {function(err,res)} Callback
- */
-function render(scene, renderer, renderOpts, cmdOpts) {
-  var sceneBBox = renderOpts.targetBBox;
-  var outbasename = renderOpts.basename;
-  var cameraControls = renderOpts.cameraControls;
-  var camera = renderOpts.cameraControls.camera;
-  var cb = renderOpts.callback;
-  // console.log('cmdOpts', cmdOpts);
-  var logdata = _.defaults({}, renderOpts.logdata || {});
-  if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
-    renderOpts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
-  }
-  if (cmd.convert_pixels && !renderOpts.postprocess) {
-    renderOpts.postprocess = { operation: 'convert', dataType: cmd.convert_pixels };
-  }
-  if (cmdOpts.render_all_views) {
-    // Render a bunch of views
-    renderer.renderAllViews(scene, renderOpts);
-  } else if (cmdOpts.render_turntable) {
-    // Render turntable
-    renderer.renderTurntable(scene, renderOpts);
-  } else if (cmdOpts.views) {
-    // Render multiple views
-    renderer.renderViews(scene, cmdOpts.views, renderOpts);
-  } else {
-    var errmsg  = null;  // Set to error message
-    // Set view
-    if (cmdOpts.use_scene_camera) {
-      // No need to set view (using scene camera)
-      console.log('use scene camera');
-    } else if (cmdOpts.view_index != undefined) {
-      // Using view index
-      var views = cameraControls.generateViews(sceneBBox, cmdOpts.width, cmdOpts.height);
-      cameraControls.viewTarget(views[cmdOpts.view_index]);  // default
-    } else if (cmdOpts.view) {
-      // Using more complex view parameters
-      var viewOpts = cmdOpts.view.position? cmdOpts.view : cameraControls.getView(_.merge(Object.create(null), cmdOpts.view, { target: scene }));
-
-      if (viewOpts.imageSize) {
-        //console.log('got', viewOpts);
-        var width = viewOpts.imageSize[0];
-        var height = viewOpts.imageSize[1];
-        errmsg = cmd.checkImageSize({ width: width, height: height }, cmdOpts);
-        if (!errmsg && (width !== renderer.width || height !== renderer.height)) {
-          renderer.setSize(width, height);
-          camera.aspect = width / height;
-        }
-      }
-      if (!errmsg) {
-        cameraControls.viewTarget(viewOpts);
-      } else {
-        console.warn('Error rendering scene', msg);
-      }
-    } else {
-      // angled view is default
-      cameraControls.viewTarget({
-        targetBBox: sceneBBox,
-        phi: -Math.PI / 4,
-        theta: Math.PI / 6,
-        distanceScale: 2.0
-      });
-    }
-
-    if (!errmsg) {
-      logdata.cameraConfig = cameraControls.lastViewConfig;
-      var opts = { logdata: logdata, postprocess: renderOpts.postprocess };
-      renderer.renderToPng(scene, camera, outbasename, opts);
-    }
-    setTimeout( function() { cb(errmsg); }, 0);
-  }
-}
-
 function processFiles() {
   async.forEachOfSeries(files, function (file, index, callback) {
     STK.util.clearCache();
 
     // skip if output png already exists
     var outputDir = cmd.output_dir;
+    var videoFormat = cmd.video_format;
     var basename = output_basename;
     if (basename) {
       // Specified output - append index
@@ -199,22 +105,24 @@ function processFiles() {
       callback();
 
     } else {
-
-      shell.mkdir('-p', path.dirname(pngfilename));
+      var dirname = path.dirname(pngfilename);
+      if (!fs.existsSync(dirname)) {
+        shell.mkdir('-p', dirname);
+      }
 
       console.log('Processing ' + file + '(' + index + '/' + files.length + ')');
       var info = { file: file, format: cmd.format, assetType: cmd.assetType, defaultMaterialType: STK.materials.Materials.DefaultMaterialType };
       if (cmd.assetInfo) {
         info = cmd.combine(info, cmd.assetInfo, ['format', 'assetType']);
       }
-      //console.log('info', info)
+      // console.log('info', info);
       var loadFunction = (info.assetType === 'model')? 'loadAsset' : 'loadAssetAsScene';
       assetManager[loadFunction](info, function (err, asset) {
         var sceneState;
         var defaultViewOpts = {};
         if (asset instanceof STK.scene.SceneState) {
           sceneState = asset;
-          if (cmd.view == undefined && cmd.view_index == undefined && cmd.view_target_ids == undefined) {
+          if (cmd.view == undefined && cmd.view_index == undefined) {
             defaultViewOpts = { view_index: 0 };
           }
         } else if (asset instanceof STK.model.ModelInstance) {
@@ -238,39 +146,19 @@ function processFiles() {
         var scene = new THREE.Scene();
         var camera;
         //console.log('use_scene_camera', cmd.use_scene_camera);
-        var use_scene_camera = false;
+        var use_current_view = false;
+        // TODO: check this logic
         if (cmd.use_scene_camera) {
           // Try to get camera from scene!
-          if (sceneState.cameras) {
-            var sceneCameraConfig = sceneState.cameras[cmd.use_scene_camera];
-            if (sceneCameraConfig) {
-              //console.log(sceneCameraConfig);
-              sceneCameraConfig = sceneState.convertCameraConfig(sceneCameraConfig);
-              _.defaults(sceneCameraConfig, cameraConfig);
-              //console.log(sceneCameraConfig);
-              camera = STK.gfx.Camera.fromJson(sceneCameraConfig, cmd.width, cmd.height);
-              use_scene_camera = true;
-            } else {
-              console.warn('no camera ' + cmd.use_scene_camera + ' found for scene!');
-            }
-          } else {
-            console.warn('use_scene_camera is set but there is no camera specified for scene!');
+          camera = render_helper.getSceneCamera(sceneState, cmd.use_scene_camera, cameraConfig, cmd.width, cmd.height);
+          if (camera) {
+            use_current_view = true;
           }
         }
         if (!camera) {
           camera = STK.gfx.Camera.fromJson(cameraConfig, cmd.width, cmd.height);
         }
-        if (cmd.use_directional_lights) {
-          STK.gfx.Lights.addSimple2LightSetup(camera, new THREE.Vector3(0, 0, 0), true);
-        } else if (cmd.lights) {
-          var lights = STK.gfx.Lights.setupLights(cmd.lights);
-          for (var i = 0; i < lights.length; i++) {
-            scene.add(lights[i]);
-          }
-        } else {
-          var light = STK.gfx.Lights.getDefaultHemisphereLight(cmd.use_physical_lights, cmd.use_lights);
-          scene.add(light);
-        }
+        render_helper.addLights(scene, camera, cmd);
         scene.add(camera);
         var cameraControls = new STK.controls.CameraControls({
           camera: camera,
@@ -279,8 +167,10 @@ function processFiles() {
           cameraPositionStrategy: 'positionByCentroid'
         });
 
-
         sceneState.compactify();  // Make sure that there are no missing models
+        render_helper.setShadows(sceneState, cmd.use_shadows);
+        render_helper.setVisible(sceneState, cmd);
+
         scene.add(sceneState.fullScene);
         //if (!cmd.assetInfo) {
         //  STK.geo.Object3DUtil.centerAndRescaleObject3DToWorld(sceneState.fullScene, 200);
@@ -310,10 +200,16 @@ function processFiles() {
           callback();
         };
 
+        var cmdOpts = _.defaults(_.pick(cmd, render_helper.render.cmdFields), defaultViewOpts);
+        render_helper.convertViews(sceneState, cmdOpts);
+        render_helper.updateViewOptsForTargetObjects(sceneState, cmdOpts, cameraControls, renderer);
+        cmdOpts.use_current_view = use_current_view;
+
         var renderOpts = {
           cameraControls: cameraControls,
-          targetBBox: sceneBBox,
+          targetBBox: cmdOpts.targetBBox || sceneBBox,
           basename: outbasename,
+          videoFormat: videoFormat,
           angleStep: cmd.turntable_step,
           framerate: cmd.framerate,
           tilt: cmd.tilt,
@@ -321,39 +217,6 @@ function processFiles() {
           callback: wrappedCallback
         };
 
-        var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'views', 'view', 'view_index', 'view_target_ids',
-            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']), defaultViewOpts);
-        if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
-          cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
-        } else if (cmdOpts.view_target_ids) {
-          var targetIds = cmdOpts.view_target_ids;
-          if (_.isString(targetIds)) {
-            targetIds = targetIds.split(',');
-          }
-          console.log('Target ids: ' + JSON.stringify(targetIds));
-          var targetObjects = sceneState.findNodes(function (x) {
-            console.log(x.userData.id);
-            return targetIds.indexOf(x.userData.id) >= 0;
-          });
-          if (targetObjects && targetObjects.length > 0) {
-            console.log('Target objects: ' + targetObjects.length);
-            var viewOptimizer = new STK.gfx.ViewOptimizer({
-              cameraControls: cameraControls,
-              //scorer: 'simple',
-              renderer: getSimpleRenderer(),
-              maxWidth: 300, maxHeight: 300,
-              width: renderer.width,
-              height: renderer.height
-            });
-            var viewOpts = viewOptimizer.lookAt(sceneState, targetObjects);
-            cmdOpts.view = viewOpts;
-          } else {
-            console.warn('Target objects not found');
-          }
-        }
-
-        cmdOpts.use_scene_camera = use_scene_camera;
         if (cmdOpts.save_view_log) {
           renderer.viewlogFilename = outbasename + '.views.jsonl';
           shell.rm(renderer.viewlogFilename);
@@ -362,26 +225,17 @@ function processFiles() {
         }
 
         function onDrained() {
-          render(scene, renderer, renderOpts, cmdOpts);
+          render_helper.render(scene, renderer, renderOpts, cmdOpts, cmd.checkImageSize);
         }
 
         function waitImages() {
-          STK.util.waitImagesLoaded(onDrained);
+          render_helper.getEnvMap(renderer, cmd.envmap).then(( { envMap } ) => {
+            scene.environment = envMap;
+            STK.util.waitImagesLoaded(onDrained);
+          });
         }
 
-        if (cmd.color_by) {
-          STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
-            color: cmd.color,
-            loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
-            encodeIndex: cmd.encode_index,
-            writeIndex: cmd.write_index? basename : null,
-            restrictToIndex: cmd.restrict_to_color_index,
-            fs: STK.fs,
-            callback: function() { waitImages(); }
-          });
-        } else {
-          waitImages();
-        }
+        render_helper.colorScene(scene, sceneState, cmd, basename, waitImages);
       });
     }
   }, function (err, results) {

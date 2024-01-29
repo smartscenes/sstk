@@ -11,6 +11,7 @@ cmd
   .option('--id <id>', 'Full model id')
   .option('--model_filename <filename>', 'Model filename')
   .option('--parts_filename <filename>', 'Parts filename')
+  .option('--parts_field <name>', 'Field to use for parts',  'articulation-parts')
   .option('--output <filename>', 'Output filename')
   .option('--minDist <number>', 'Minimum distance to consider', 0.001)
   .option('--maxDist <number>', 'Maximum distance to consider', 0.05)
@@ -67,8 +68,8 @@ function precompute(parts, output_filename, options) {
     metadata['relDists'] = relDists;
   }
   const exportedParts = parts.parts.map((p) => {
-    var x = _.omit(p.userData, ['type', 'articulatablePartId', 'isArticulatedNode', 'partId']);
-    var obb = STK.geo.OBBFitter.fitOBB(p, {
+    const x = _.omit(p.userData, ['type', 'articulatablePartId', 'isArticulatedNode', 'partId']);
+    const obb = STK.geo.OBBFitter.fitOBB(p, {
       constrainVertical: options.obbConstrainVertical,
       checkAABB: options.checkAABB,
       upAxis: options.upAxis,
@@ -100,7 +101,7 @@ function precompute(parts, output_filename, options) {
       connectivityGraph: parts.connectivityGraph.toJson().connectivityGraph };
     STK.fs.writeToFile(output_filename, JSON.stringify(data));
   } else {
-    console.log('Computing new connectivityGraph')
+    console.log('Computing new connectivityGraph');
     const distances = ConnectivityGraphHelper.computeDistancesMatrixWithInfo(parts.parts, metadata.minDist, metadata.maxDist);
     const distanceMatrix = distances.distances;
     const closestPoints = distances.closestPoints;
@@ -108,7 +109,7 @@ function precompute(parts, output_filename, options) {
     const connectivityGraph = ConnectivityGraphHelper.computeConnectedParts(parts.parts, distanceMatrix, metadata.minConnDist, metadata.maxConnDist, checkInterveningFn);
     const connectivityGraph2 = _.map(connectivityGraph, (x,i) => Array.from(x));
     const intersectObbs = (options.includeIntersectObbs)?
-      computeIntersectObbs(parts.parts, connectivityGraph2, distanceMatrix, metadata, options) : null;
+      computeIntersectOBBs(parts.parts, connectivityGraph2, distanceMatrix, metadata, options) : null;
     const data = { version: VERSION, id: parts.id, annId: parts.annId,
       metadata: metadata,
       parts: exportedParts,
@@ -134,7 +135,7 @@ function precomputeWithFullId(modelId, output_filename, options) {
     autoScaleModels: false, autoAlignModels: false, supportArticulated: true
   });
   const partsLoader = new PartsLoader({assetManager: assetManager});
-  const loadOptions = { partsField: 'articulation-parts', discardHierarchy: true };
+  const loadOptions = { partsField: options.parts_field, discardHierarchy: true };
   partsLoader.loadPartMeshesById(modelId, loadOptions,(err, parts) => {
     if (err) {
       console.error(`Error loading parts fullId=${modelId}`, err);
@@ -142,7 +143,7 @@ function precomputeWithFullId(modelId, output_filename, options) {
       if (options.upAxis == null) {
         const assetInfo = assetManager.getLoadModelInfo(null, modelId);
         if (assetInfo != null) {
-          const up = STK.assets.AssetGroups.getDefaultUp(assetInfo);
+          const up = STK.model.ModelInfo.getUp(assetInfo);
           const upAxis = _.maxBy(['x', 'y', 'z'], i => up[i]);
           console.log('upAxis', upAxis);
           options.upAxis = upAxis;
@@ -161,11 +162,24 @@ function precomputeWithFullId(modelId, output_filename, options) {
   });
 }
 
+function precomputeWithId(modelId, output_filename, options) {
+  let baseModelId = modelId;
+  if (modelId.endsWith('_0') || modelId.endsWith('_2')) {
+    baseModelId = baseModelId.substring(0, modelId.length-2);
+  }
+  const model_filename = `${STK.Constants.baseUrl}/object/${baseModelId}/${modelId}.obj`;
+  const parts_filename = `${STK.Constants.baseUrl}/object_part_annotations/${modelId}/${modelId}.parts.json`;
+  if (output_filename == null) {
+    output_filename = `${modelId}.artpre.json`;
+  }
+  precomputeWithFiles(model_filename, parts_filename, output_filename, options);
+}
+
 if (cmd.parts_filename != null && cmd.model_filename != null) {
   if (cmd.output == null) {
     cmd.output = cmd.model_filename.replace('.obj', '.artpre.json');
   }
-  precomputeWithFiles(cmd.model_filename, cmd.parts_filename, cmd.output, cmd)
+  precomputeWithFiles(cmd.model_filename, cmd.parts_filename, cmd.output, cmd);
 } else {
   if (cmd.id.indexOf('.') >= 0) {
     if (cmd.output != null) {
@@ -174,6 +188,6 @@ if (cmd.parts_filename != null && cmd.model_filename != null) {
       console.error("Please specify --output");
     }
   } else {
-      console.error("Please specify a full id of the form <source.id>");
+    precomputeWithId(cmd.id, cmd.output, cmd);
   }
 }

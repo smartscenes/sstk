@@ -22,20 +22,32 @@ Rendering scripts:
         `./render --render_all_views`
 
     3. Render encoded semantic segmentation by objectId and exports index for a scene
+       Use `--encode_index` for encoded index and flat coloring for computers (leave out for human consumption)
 
         `./render --color_by objectId --encode_index --write_index`
 
-    4. Render encoded semantic segmentation by objectPartId and exports index for a scene
+    5. Render encoded semantic segmentation by objectPartId and exports index for a scene
 
         `./render --color_by objectPartId --encode_index --write_index`
 
-    5. Render scenes with neutral coloring
+    6. Render encoded semantic segmentation by modelId (same color for same model) and exports index for a scene
+
+        `./render --color_by modelId --encode_index --write_index`
+
+    7. Render encoded semantic segmentation by object category and exports index for a scene
+
+        `./render --color_by objectType --encode_index --write_index`
+  
+       The exported index can be updated with color and additional categories and additional object types.  Use for consistent coloring across scenes.
+        `./render --color_by objectType --encode_index  --index <filename> --model_category_mapping <custom_model_id_to_category_mapping`
+
+    8. Render scenes with neutral coloring
         
         `./render --color_by color --color '#fef9ed'`
 
-2. `./render-file  --input <filename>` - Renders model from file
+1. `./render-file  --input <filename>` - Renders model from file
 
-3. `./scn2img --limit <n> --cameras <camfile> --id <sceneId>` - Renders images for scene based on set of camera viewpoints 
+2. `./scn2img --limit <n> --cameras <camfile> --id <sceneId>` - Renders images for scene based on set of camera viewpoints 
   (use `--limit` to limit number of camera viewpoints to render)
 
 Voxels:

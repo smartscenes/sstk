@@ -5,6 +5,7 @@ var fs = require('fs');
 var shell = require('shelljs');
 var STK = require('./stk-ssc');
 var cmd = require('./ssc-parseargs');
+var render_helper = require('./ssc-render-helper');
 var THREE = global.THREE;
 var _ = STK.util;
 
@@ -17,7 +18,7 @@ cmd
   .option('--format <format>', 'Asset format')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--output_suffix <suffix>', 'Suffix to use in output png (sceneId.suffix.png)')
-  .option('--use_subdir','Put output into subdirectory per id [false]')
+  .option('--use_subdir [flag]','Put output into subdirectory per id [false]', STK.util.cmd.parseBoolean, false)
   .optionGroups(['config_file', 'scene', 'render_options', 'view', 'render_views', 'color_by', 'transform3d', 'norm_geo', 'asset_cache'])
   .option('--skip_existing', 'Skip rendering existing images [false]')
   .option('--voxels <voxel-type>', 'Type of voxels to use [default: none]', 'none')
@@ -26,6 +27,8 @@ cmd
   .option('--level <level>', 'Scene level to render', STK.util.cmd.parseInt)
   .option('--room <room>', 'Room id to render [null]')
   .option('--show_ceiling [flag]', 'Whether to show ceiling or not', STK.util.cmd.parseBoolean, false)
+  .option('--hide_nonparent_arch [flag]', 'Whether to hide arch nodes that are not support parents', STK.util.cmd.parseBoolean, false)
+  .option('--hide_empty_regions [flag]', 'Whether to hide empty regions', STK.util.cmd.parseBoolean, false)
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .option('--seed <num>', 'Random seed to use', STK.util.cmd.parseInt, 12345678)
   .option('--repeat <num>', 'Number of times to repeat rendering of scene (for stress testing)', STK.util.cmd.parseInt, 1)
@@ -55,6 +58,7 @@ if (cmd.material_side) {
 
 var rendererOptions = cmd.getRendererOptions(cmd);
 var renderer = new STK.PNGRenderer(rendererOptions);
+STK.assets.AssetManager.enableCompressedLoading(renderer.renderer);
 var assetManager = new STK.assets.AssetManager({
   autoAlignModels: cmd.auto_align,
   autoScaleModels: false,
@@ -77,7 +81,7 @@ if (!assetGroup) {
   console.log('Unrecognized asset source ' + cmd.source);
   return;
 }
-var supportedAssetTypes = ['scene', 'model', 'scan'];
+var supportedAssetTypes = ['scene', 'model', 'scan', 'arch'];
 if (supportedAssetTypes.indexOf(assetGroup.type) < 0) {
   console.log('Unsupported asset type ' + assetGroup.type);
   return;
@@ -112,148 +116,6 @@ var cameraConfig = _.defaults(Object.create(null), cmd.camera || {}, {
 
 main();
 
-/**
- * Retexture scene
- * @param opts {Object} Options for retexturing
- * @param opts.cache
- * @param opts.sceneState {STK.scene.SceneState}
- * @param opts.assetManager {STK.assets.AssetManager}
- * @param opts.rng
- * @param opts.waitTextures {boolean} Whether to wait for texture images to load
- * @param opts.retexture.textureOnly
- * @param opts.retexture.texturedObjects
- * @param opts.retexture.textureSet
- * @param cb
- */
-function retexture(opts, cb) {
-  STK.scene.SceneUtil.getAggregatedSceneStatistics(opts.cache, function(err, aggregatedSceneStatistics) {
-    STK.scene.SceneUtil.recolorWithCompatibleMaterials(opts.sceneState, {
-      randomize: true,
-      textureOnly: opts.retexture.textureOnly,
-      texturedObjects: opts.retexture.texturedObjects,
-      textureSet: opts.retexture.textureSet,
-      assetManager: opts.assetManager,
-      rng: opts.rng,
-      aggregatedSceneStatistics: aggregatedSceneStatistics
-    });
-    if (opts.waitTextures) {
-      STK.util.waitImagesLoaded(function() {
-        cb();
-      });
-    } else {
-      setTimeout(function() { cb(); }, 0);
-    }
-  }, { fs: STK.fs });
-}
-
-/**
- * Render scene
- * @param scene {THREE.Object3D}
- * @param renderer {STK.PNGRenderer}
- * @param renderOpts {Object} Options on how to render and where to save the rendered file
- * @param renderOpts.cameraControls {STK.controls.CameraControls} cameraControls
- * @param renderOpts.targetBBox {STK.geo.BBox} Bounding box of the target
- * @param renderOpts.basename {string} basename to output to
- * @param renderOpts.angleStep {number} turntable_step
- * @param renderOpts.framerate {number} framerate
- * @param renderOpts.tilt {number} tilt from horizontal
- * @param renderOpts.skipVideo {boolean} Whether to skip outputing of video
- * @param cmdOpts {Object} Options on the view to render
- * @param [cmdOpts.render_all_views] {boolean}
- * @param [cmdOpts.render_turntable] {boolean}
- * @param [cmdOpts.view] {Object}
- * @param [cmdOpts.view_index] {int}
- * @param [cmdOpts.width] {int} Requested image width
- * @param [cmdOpts.height] {int} Requested image height
- * @param [cmdOpts.max_width] {int} Maximum number of pixels in the horizontal dimension
- * @param [cmdOpts.max_height] {int} Maximum number of pixels in the vertical dimension
- * @param [cmdOpts.max_pixels] {int} Maximum number of pixels
- * @param renderOpts.callback {function(err,res)} Callback
- */
-function render(scene, renderer, renderOpts, cmdOpts) {
-  var sceneBBox = renderOpts.targetBBox;
-  var outbasename = renderOpts.basename;
-  var cameraControls = renderOpts.cameraControls;
-  var camera = renderOpts.cameraControls.camera;
-  var cb = renderOpts.callback;
-  //console.log('cmdOpts', cmdOpts);
-  var logdata = _.defaults({}, renderOpts.logdata || {});
-  if (cmd.color_by === 'depth' && cmd.output_image_encoding != 'rgba') {
-    renderOpts.postprocess = { operation: 'unpackRGBAdepth', dataType: 'uint16', metersToUnit: 1000 };
-  }
-  if (cmd.convert_pixels && !renderOpts.postprocess) {
-    renderOpts.postprocess = { operation: 'convert', dataType: cmd.convert_pixels };
-  }
-  if (cmdOpts.render_all_views) {
-    // Render a bunch of views
-    renderer.renderAllViews(scene, renderOpts);
-  } else if (cmdOpts.render_turntable) {
-    // Render turntable
-    renderer.renderTurntable(scene, renderOpts);
-  } else if (cmdOpts.views) {
-    // Render multiple views
-    renderer.renderViews(scene, cmdOpts.views, renderOpts);
-  } else {
-    var errmsg  = null;  // Set to error message
-    // Set view
-    if (cmdOpts.use_scene_camera) {
-      // No need to set view (using scene camera)
-      console.log('use scene camera');
-    } else if (cmdOpts.view_index != undefined) {
-      // Using view index
-      var views = cameraControls.generateViews(sceneBBox, cmdOpts.width, cmdOpts.height);
-      cameraControls.viewTarget(views[cmdOpts.view_index]);  // default
-    } else if (cmdOpts.view) {
-      // Using more complex view parameters
-      var viewOpts = cmdOpts.view.position? cmdOpts.view : cameraControls.getView(_.merge(Object.create(null), cmdOpts.view, { target: scene }));
-
-      if (viewOpts.imageSize) {
-        //console.log('got', viewOpts);
-        var width = viewOpts.imageSize[0];
-        var height = viewOpts.imageSize[1];
-        errmsg = cmd.checkImageSize({ width: width, height: height }, cmdOpts);
-        if (!errmsg && (width !== renderer.width || height !== renderer.height)) {
-          renderer.setSize(width, height);
-          camera.aspect = width / height;
-        }
-      }
-      if (!errmsg) {
-        cameraControls.viewTarget(viewOpts);
-      } else {
-        console.warn('Error rendering scene', msg);
-      }
-    } else {
-      // angled view is default
-      cameraControls.viewTarget({
-        targetBBox: sceneBBox,
-        phi: -Math.PI / 4,
-        theta: Math.PI / 6,
-        distanceScale: 2.0
-      });
-    }
-
-    if (!errmsg) {
-      logdata.cameraConfig = cameraControls.lastViewConfig;
-      var opts = { logdata: logdata, postprocess: renderOpts.postprocess };
-      renderer.renderToPng(scene, camera, outbasename, opts);
-    }
-    setTimeout( function() { cb(errmsg); }, 0);
-  }
-}
-
-function convertViews(sceneState, cmdOpts) {
-  if (cmdOpts.view && cmdOpts.view.coordinate_frame === 'scene') {
-    cmdOpts.view = sceneState.convertCameraConfig(cmdOpts.view);
-  } else if (cmdOpts.views) {
-    for (var i = 0; i < cmdOpts.views.length; i++) {
-      var view = cmdOpts.views[i];
-      if (view.coordinate_frame === 'scene') {
-        cmdOpts.views[i] = sceneState.convertCameraConfig(view);
-      }
-    }
-  }
-}
-
 var rng = new STK.math.RNG();
 rng.seed(cmd.seed);
 var mainCache = {};
@@ -267,17 +129,8 @@ function processIds(assetsDb) {
     var scene = new THREE.Scene();
     var camera = STK.gfx.Camera.fromJson(cameraConfig, cmd.width, cmd.height);
     scene.add(camera);
-    if (cmd.use_directional_lights) {
-      STK.gfx.Lights.addSimple2LightSetup(camera, new THREE.Vector3(0, 0, 0), true);
-    } else if (cmd.lights) {
-      var lights = STK.gfx.Lights.setupLights(cmd.lights);
-      for (var i = 0; i < lights.length; i++) {
-        scene.add(lights[i]);
-      }
-    } else {
-      var light = STK.gfx.Lights.getDefaultHemisphereLight(cmd.use_physical_lights, cmd.use_lights);
-      scene.add(light);
-    }
+    render_helper.addLights(scene, camera, cmd);
+
     var cameraControls = new STK.controls.CameraControls({
       camera: camera,
       container: renderer.canvas,
@@ -307,7 +160,7 @@ function processIds(assetsDb) {
     };
 
     // Scenes
-    if (assetGroup.type === STK.Constants.assetTypeScene) {
+    if (assetGroup.type === STK.Constants.assetTypeScene || assetGroup.type === STK.Constants.assetTypeArch) {
       var floor = cmd.level;
       var room = cmd.room;
       if (floor != null) {
@@ -321,19 +174,16 @@ function processIds(assetsDb) {
         sceneOpts = _.defaults(sceneOpts, cmd.assetInfo);
       }
       sceneOpts = _.defaults(sceneOpts, sceneDefaults);
-      assetManager.loadScene(sceneOpts, function (err, sceneState) {
+      assetManager.loadAssetAsScene(sceneOpts, function (err, sceneState) {
+        if (err) {
+          console.error('Error loading ' + fullId, err);
+          callback(err, null);
+          return;
+        }
         //console.log(sceneState);
         sceneState.compactify();  // Make sure that there are no missing models
-        if (cmd.use_shadows) {
-          STK.geo.Object3DUtil.setCastShadow(sceneState.fullScene, true);
-          STK.geo.Object3DUtil.setReceiveShadow(sceneState.fullScene, true);
-        }
-        sceneState.setVisible(
-          cmd.show_ceiling,
-          function (node) {
-            return node.userData.type === 'Ceiling';
-          }
-        );
+        render_helper.setShadows(sceneState, cmd.use_shadows);
+        render_helper.setVisible(sceneState, cmd);
         scene.add(sceneState.fullScene);
         var sceneBBox = STK.geo.Object3DUtil.getBoundingBox(sceneState.fullScene);
         var bbdims = sceneBBox.dimensions();
@@ -392,13 +242,13 @@ function processIds(assetsDb) {
           }
         }
 
-        var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'views', 'view', 'view_index',
-            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']) );
+        var cmdOpts = _.defaults(_.pick(cmd, render_helper.render.cmdFields));
         if (cmdOpts.view == undefined && cmdOpts.view_index == undefined) {
           cmdOpts.view_index = 0;
         }
-        convertViews(sceneState, cmdOpts);
+        render_helper.convertViews(sceneState, cmdOpts);
+        render_helper.updateViewOptsForTargetObjects(sceneState, cmdOpts, cameraControls, renderer);
+
         if (cmdOpts.save_view_log) {
           renderer.viewlogFilename = outbasename + '.views.jsonl';
           shell.rm(renderer.viewlogFilename);
@@ -408,7 +258,7 @@ function processIds(assetsDb) {
         function doRender(outbasename, cb) {
           var renderOpts = {
             cameraControls: cameraControls,
-            targetBBox: sceneBBox,
+            targetBBox: cmdOpts.targetBBox || sceneBBox,
             basename: outbasename,
             angleStep: cmd.turntable_step,
             framerate: cmd.framerate,
@@ -422,7 +272,7 @@ function processIds(assetsDb) {
             // farther near for scenes to avoid z-fighting
             camera.near = 4 * STK.Constants.metersToVirtualUnit;
           }
-          render(scene, renderer, renderOpts, cmdOpts);
+          render_helper.render(scene, renderer, renderOpts, cmdOpts, cmd.checkImageSize);
         }
 
         function onDrained() {
@@ -438,7 +288,7 @@ function processIds(assetsDb) {
               var newseed = (count === 1 && retextureOpts.seed)? retextureOpts.seed : rng.randBits(31);
               console.log('retexturing with seed ' + newseed + ' for ' + name);
               rng.seed(newseed);
-              retexture({
+              render_helper.retexture({
                 waitTextures: true,
                 cache: mainCache,
                 sceneState: sceneState,
@@ -460,30 +310,18 @@ function processIds(assetsDb) {
         }
 
         function waitImages() {
-          STK.util.waitImagesLoaded(onDrained);
+          render_helper.getEnvMap(renderer, cmd.envmap).then(( { envMap } ) => {
+            scene.environment = envMap;
+            STK.util.waitImagesLoaded(onDrained);
+          });
         }
 
-        if (cmd.color_by) {
-          STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
-            loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
-            color: cmd.color,
-            encodeIndex: cmd.encode_index,
-            writeIndex: cmd.write_index? basename : null,
-            restrictToIndex: cmd.restrict_to_color_index,
-            fs: STK.fs,
-            callback: function(err, res) {
-              if (err) {
-                console.warn('Error coloring scene: ', err);
-              }
-              waitImages();
-            }
-          });
-        } else {
+        render_helper.colorScene(scene, sceneState, cmd, basename, (err, res) => {
+          if (res) {
+            cmdOpts.pixel_index = res.index;
+          }
           waitImages();
-        }
-      }, function(error) {
-        console.error('Error loading ' + fullId, error);
-        callback(error, null);
+        });
       });
     } else if (assetGroup.type === STK.Constants.assetTypeModel || assetGroup.type === STK.Constants.assetTypeScan) {
       assetManager.clearCache();
@@ -518,10 +356,10 @@ function processIds(assetsDb) {
           outbasename = outbasename + '.encoded';
         }
 
-        var cmdOpts = _.defaults(
-          _.pick(cmd, ['render_all_views', 'render_turntable', 'views', 'view', 'view_index',
-            'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log']));
-        convertViews(sceneState, cmdOpts);
+        var cmdOpts = _.defaults(_.pick(cmd, render_helper.render.cmdFields));
+        render_helper.convertViews(sceneState, cmdOpts);
+        render_helper.updateViewOptsForTargetObjects(sceneState, cmdOpts, cameraControls, renderer);
+
         if (cmdOpts.save_view_log) {
           renderer.viewlogFilename = outbasename + '.views.jsonl';
           shell.rm(renderer.viewlogFilename);
@@ -531,7 +369,7 @@ function processIds(assetsDb) {
 
         var renderOpts = {
           cameraControls: cameraControls,
-          targetBBox: sceneBBox,
+          targetBBox: cmdOpts.targetBBox || sceneBBox,
           basename: outbasename,
           angleStep: cmd.turntable_step,
           framerate: cmd.framerate,
@@ -548,42 +386,21 @@ function processIds(assetsDb) {
             mInst.voxels.loadVoxels(function (v) {
               STK.geo.Object3DUtil.setVisible(mInst.object3D, false);
               scene.add(v.getVoxelNode());
-              render(scene, renderer, renderOpts, cmdOpts);
+              render_helper.render(scene, renderer, renderOpts, cmdOpts, cmd.checkImageSize);
             });
           } else {
-            render(scene, renderer, renderOpts, cmdOpts);
+            render_helper.render(scene, renderer, renderOpts, cmdOpts, cmd.checkImageSize);
           }
         }
 
         function waitImages() {
-          STK.util.waitImagesLoaded(onDrained);
+          render_helper.getEnvMap(renderer, cmd.envmap).then(( { envMap } ) => {
+            scene.environment = envMap;
+            STK.util.waitImagesLoaded(onDrained);
+          });
         }
 
-        if (cmd.color_by === 'vertexAttribute' || cmd.color_by === 'faceAttribute') {
-          var okay = STK.scene.SceneUtil.colorObject3D(scene, {
-            colorBy: cmd.color_by,
-            color: cmd.color,
-            encodeIndex: cmd.encode_index
-          });
-          waitImages();
-        } else if (cmd.color_by) {
-          STK.scene.SceneUtil.colorScene(sceneState, cmd.color_by, {
-            loadIndex: { index: cmd.index, objectIndex: cmd.object_index },
-            color: cmd.color,
-            encodeIndex: cmd.encode_index,
-            writeIndex: cmd.write_index? basename : null,
-            restrictToIndex: cmd.restrict_to_color_index,
-            fs: STK.fs,
-            callback: function(err, res) {
-              if (err) {
-                console.warn('Error coloring scene: ', err);
-              }
-              waitImages();
-            }
-          });
-        } else {
-          waitImages();
-        }
+        render_helper.colorScene(scene, sceneState, cmd, basename, waitImages);
       },
       function (error) {
         console.error('Error loading ' + fullId, error);

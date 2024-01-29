@@ -53,12 +53,12 @@ function projectSegmentAnnotations (srcSegments, tgtSegments, tgt2srcVtxMap, out
   var srcMesh = tgtSegments.rawSegmentObject3D;
   var tgtMesh = tgtSegments.rawSegmentObject3D;
 
-  var tgtSegToVertIndices = tgtSegments.rawSegmentObject3D.userData.segToVertIndices;
-  var tgtVertToSegIndices = tgtSegments.rawSegmentObject3D.userData.vertToSegIndices;
+  var tgtSegToVertIndices = tgtSegments.rawSegmentObject3D.userData.segToElemIndices;
+  var tgtVertToSegIndices = tgtSegments.rawSegmentObject3D.userData.elemToSegIndices;
   var tgtSegGroups = tgtSegments.segmentGroups;
 
-  var srcSegToVertIndices = srcSegments.rawSegmentObject3D.userData.segToVertIndices;
-  var srcVertToSegIndices = srcSegments.rawSegmentObject3D.userData.vertToSegIndices;
+  var srcSegToVertIndices = srcSegments.rawSegmentObject3D.userData.segToElemIndices;
+  var srcVertToSegIndices = srcSegments.rawSegmentObject3D.userData.elemToSegIndices;
   var srcSegGroups = srcSegments.segmentGroups;
   var srcSegGroupsById = _.keyBy(srcSegGroups, 'id');
   var srcSegToSegGroupIndices = _.invertMulti(srcSegGroupsById, 'segments');

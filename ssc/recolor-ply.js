@@ -120,7 +120,7 @@ function colorize(loadInfo, basename, callback) {
     var worldToModelTransform = null;
     // obj.updateMatrixWorld();
     // var worldToModelTransform = new THREE.Matrix4();
-    // worldToModelTransform.getInverse(target.matrixWorld);
+    // worldToModelTransform.copy(target.matrixWorld).invert();
 
     async.series([
       function(cb) {
