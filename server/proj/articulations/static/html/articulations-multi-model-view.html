@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>three.js webgl - multiple elements</title>
+  <meta charset="utf-8">
+  <!-- <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"> -->
+  <style>
+    /* * {
+            box-sizing: border-box;
+            -moz-box-sizing: border-box;
+        }
+
+        body {
+            background-color: #fff;
+            color: #444;
+        }
+
+        a {
+            color: #08f;
+        } */
+
+    #wrapper {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+    }
+
+    #content {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      z-index: 1;
+      padding: 3em 0 0 0;
+    }
+
+    #c {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .list-item {
+      display: inline-block;
+      margin: 1em;
+      padding: 1em;
+      box-shadow: 1px 2px 4px 0px rgba(0, 0, 0, 0.25);
+    }
+
+    .list-item .scene {
+      width: 200px;
+      height: 200px;
+    }
+
+    .list-item .description {
+      color: #888;
+      font-family: sans-serif;
+      font-size: large;
+      width: 200px;
+      margin-top: 0.5em;
+    }
+  </style>
+</head>
+
+<body>
+
+  <canvas id="c"></canvas>
+
+  <div id="wrapper">
+    <div id="content">
+    </div>
+  </div>
+
+  <script src="three.min.js"></script>
+  <script src="articulationMultiModelView.bundle.js"></script>
+
+  <script type="module">
+
+    const canvas = document.getElementById("c");
+    const content = document.getElementById("content");
+
+    const modelSet1 = ['shape2motion.lamp_0061', 'shape2motion.lamp_0059', 'shape2motion.lamp_0066', 'shape2motion.lamp_0050', 'shape2motion.lamp_0068']
+    const modelSet2 = ['shape2motion.car_0089', 'shape2motion.car_0045', 'shape2motion.car_0087', 'shape2motion.car_0073', 'shape2motion.car_0074', 'shape2motion.car_0080', 'shape2motion.car_0028', 'shape2motion.car_0017', 'shape2motion.car_0010', 'shape2motion.car_0019', 'shape2motion.car_0026', 'shape2motion.car_0021', 'shape2motion.car_0081', 'shape2motion.car_0075', 'shape2motion.car_0072', 'shape2motion.car_0086', 'shape2motion.car_0044', 'shape2motion.car_0043', 'shape2motion.car_0088', 'shape2motion.car_0100', 'shape2motion.car_0101', 'shape2motion.car_0007', 'shape2motion.car_0038', 'shape2motion.car_0036', 'shape2motion.car_0009', 'shape2motion.car_0031', 'shape2motion.car_0065', 'shape2motion.car_0091', 'shape2motion.car_0096', 'shape2motion.car_0062', 'shape2motion.car_0054', 'shape2motion.car_0098', 'shape2motion.car_0053', 'shape2motion.car_0030', 'shape2motion.car_0037', 'shape2motion.car_0008', 'shape2motion.car_0001', 'shape2motion.car_0006', 'shape2motion.car_0039', 'shape2motion.car_0099', 'shape2motion.car_0052', 'shape2motion.car_0055', 'shape2motion.car_0063', 'shape2motion.car_0097', 'shape2motion.car_0090', 'shape2motion.car_0064', 'shape2motion.car_0046', 'shape2motion.car_0079', 'shape2motion.car_0041', 'shape2motion.car_0077', 'shape2motion.car_0083', 'shape2motion.car_0048', 'shape2motion.car_0084', 'shape2motion.car_0070', 'shape2motion.car_0024', 'shape2motion.car_0023', 'shape2motion.car_0015', 'shape2motion.car_0012', 'shape2motion.car_0071', 'shape2motion.car_0085', 'shape2motion.car_0082', 'shape2motion.car_0076', 'shape2motion.car_0049', 'shape2motion.car_0040', 'shape2motion.car_0047', 'shape2motion.car_0078', 'shape2motion.car_0013', 'shape2motion.car_0014', 'shape2motion.car_0022', 'shape2motion.car_0025', 'shape2motion.water_bottle_0050', 'shape2motion.water_bottle_0003', 'shape2motion.water_bottle_0004', 'shape2motion.water_bottle_0032', 'shape2motion.water_bottle_0035', 'shape2motion.water_bottle_0056', 'shape2motion.water_bottle_0051', 'shape2motion.water_bottle_0034', 'shape2motion.water_bottle_0033', 'shape2motion.water_bottle_0005', 'shape2motion.water_bottle_0002', 'shape2motion.water_bottle_0020', 'shape2motion.water_bottle_0018', 'shape2motion.water_bottle_0027', 'shape2motion.water_bottle_0011', 'shape2motion.water_bottle_0029', 'shape2motion.water_bottle_0016', 'shape2motion.water_bottle_0042', 'shape2motion.water_bottle_0045', 'shape2motion.water_bottle_0028', 'shape2motion.water_bottle_0017', 'shape2motion.water_bottle_0010', 'shape2motion.water_bottle_0019', 'shape2motion.water_bottle_0026', 'shape2motion.water_bottle_0021', 'shape2motion.water_bottle_0044', 'shape2motion.water_bottle_0043', 'shape2motion.water_bottle_0007', 'shape2motion.water_bottle_0038', 'shape2motion.water_bottle_0036'];
+
+    let test = new STK.MultiModelView(canvas, content);
+
+    // test.setAutoRotate(true);
+
+    let modelInfos = [];
+
+    for (let i of modelSet1) {
+      modelInfos.push({ modelId: i, element: null, articulations: [] })
+    }
+
+    // modelInfos.push({ 'modelId': "shape2motion.cabinet_0017" });
+    // // // for(let i = 1; i <= 10000; ++i)
+    // // // {
+    // // //     modelInfos.push({ 'fullId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0});
+    // // // }
+    // modelInfos.push({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0 })
+    test.addModelJoint(modelInfos);
+
+    // setTimeout(function () {
+    //   // Pause;
+    //   test.removeModelJoint(null);
+    //   console.log('clear');
+    //   // test.setAutoRotate(false);
+    // }, 3000)
+
+    // setTimeout(function () {
+    //   Play;
+    //   test.addModelJoint(modelInfos);
+    //     test.setAutoRotate(true);
+    // }, 10000)
+
+    // setTimeout(function () {
+    //   // Pause;
+    //     test.setStaticMode(true);
+    //     // test.setAutoRotate(false);
+    // }, 5000)
+
+    // setTimeout(function () {
+    //   // Play;
+    //     test.setStaticMode(false);
+    //     // test.setAutoRotate(true);
+    // }, 10000)
+
+
+    // test.setStaticMode(true);
+    // test.addModelJoint({ modelId: 'partnetsim.103853'});
+    // test.addModelJoint({ 'modelId': "partnetsim.102402", 'movingPartId': 0, 'basePartId': 1 }, () => { console.log('Callback Testing'); });
+
+    // const test_articulation = [{
+    //   'axis': { x: 0, y: 1, z: 0 },
+    //   // 'axis': [0, 1, 0],
+    //   'base': [1],
+    //   'origin': { x: -0.004910330059422145, y: 0.0010822623422478933, z: 0.20814864215074647 },
+    //   // 'origin': [-0.004910330059422145, 0.0010822623422478933, 0.20814864215074647],
+    //   'pid': 0,
+    //   'rangeMax': 1.57,
+    //   'rangeMin': 0,
+    //   'type': 'Hinge Rotation',
+    //   'ref': [0.013398578979972738, 0.0037865453297777356, -0.9999030653797312],
+    //   'defaultValue': 3.1849747758339393
+    // }];
+    // test.setArticulations({ 'modelId': "partnetsim.102402", 'movingPartId': 0, 'basePartId': 1, 'articulations': test_articulation })
+    // test.addModelJoint({ 'modelId': "shape2motion.lamp_0061", 'movingPartId': 2, 'basePartId': 1 });
+    // test.addModelJoint({ 'modelId': "shape2motion.lamp_0061", 'movingPartId': 1, 'basePartId': 0 });
+    // setTimeout(function () { test.removeModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 }); }, 5000)
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 }, () => { console.log('Callback Testing'); });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 3, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 4, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 5, 'basePartId': 0 });
+
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 3, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 4, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 5, 'basePartId': 0 });
+
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 3, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 4, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 5, 'basePartId': 0 });
+
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 3, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 4, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 5, 'basePartId': 0 });
+
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 3, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 4, 'basePartId': 0 });
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 5, 'basePartId': 0 });
+
+
+    // setTimeout(function () {
+    //     const filterViewTiles = test.filterModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 2, 'basePartId': 0 });
+    //     console.log(filterViewTiles);
+    //     test.setStaticMode(true);
+    //     // test.setAutoRotate(false);
+    // }, 5000)
+
+
+    // test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0, 'articulations': [] }, () => { console.log('Callback Testing'); });
+
+    // // Make sure the model has been loaded
+    // const articulations = [{
+    //   'axis': [1, 0, 0],
+    //   'base': [0],
+    //   'origin': [-0.00108238, 0.000153199, 0.33001],
+    //   'pid': 1,
+    //   'rangeMax': null,
+    //   'rangeMin': null,
+    //   'type': 'rotation',
+    //   'ref': [0, 1, 0],
+    //   'defatultValue': 0
+    // }];
+    // test.setArticulations({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0, 'articulations': articulations })
+
+    // setTimeout(function () {
+    //   test.addModelJoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 5, 'basePartId': 0, });
+    //   // const test_articulation1 = [{
+    //   //   'axis': { x: 0, y: 1, z: 0 },
+    //   //   'axis': [0, 1, 0],
+    //   //   'base': [1],
+    //   //   'origin': { x: -0.004910330059422145, y: 0.0010822623422478933, z: 0.20814864215074647 },
+    //   //   'origin': [-0.004910330059422145, 0.0010822623422478933, 0.20814864215074647],
+    //   //   'pid': 0,
+    //   //   'rangeMax': 3.14,
+    //   //   'rangeMin': 0,
+    //   //   'type': 'Hinge Rotation',
+    //   //   'ref': [0.013398578979972738, 0.0037865453297777356, -0.9999030653797312],
+    //   //   'defaultValue': 3.1849747758339393
+    //   // }];
+    //   // test.setArticulations({ 'modelId': "partnetsim.102402", 'movingPartId': 0, 'basePartId': 1, 'articulations': test_articulation1 })
+    //   // Pause;
+    //   test.showXYZ({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0 }, true);
+    //   // test.setAutoRotate(false);
+    // }, 5000)
+
+    // setTimeout(function () {
+    //   // Pause;
+    //   test.showXYZ({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, true);
+    //   // const new_articulations = [{
+    //   //   'axis': [1, 0, 1.11022e-16],
+    //   //   'base': [0],
+    //   //   'origin': [-0.00108238, 0.000153199, 0.33001],
+    //   //   'pid': 1,
+    //   //   'rangeMax': null,
+    //   //   'rangeMin': null,
+    //   //   'type': 'translation'
+    //   // }];
+    //   // test.setArticulations({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0, 'articulations': new_articulations })
+    //   console.log('showPoints')
+    //   // test.showPoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, true, 'id1', {location: [0,0,0], color: 0xff0000, opacity: 0.8, size: 0.05})
+    //   test.showArrow({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, true, 'id1', {location: [0,0,0], direction: [1, 2, 2], color: 0xff0000, opacity: 0.8, length: 1, arrowSize: 0.3})
+    //   test.showPlane({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, true, 'id1', {location: [0, 0, 0], normal: [1, 2, 2], color: 0xff0000, opacity: 0.8, size: 1})
+    //   test.showPlane({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, true, 'id2', {location: [0, 0, 1], normal: [1, 2, 2], color: 0x00ff00, opacity: 0.8, size: 1})
+
+    //   // test.showPoint({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, true, 'id1', {'location': [0, 0, 0], 'size': 10, 'color': 0xff0000, 'opacity': 0})
+    // }, 1000)
+
+    // setTimeout(function () {
+    //   test.showArrow({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, false, 'id1')
+    // }, 20000)
+
+
+
+    // setTimeout(function () {
+    //   // Pause;
+    //   test.showXYZ({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0}, false);
+    //   // const new_articulations = [{
+    //   //   'axis': [1, 0, 1.11022e-16],
+    //   //   'base': [0],
+    //   //   'origin': [-0.00108238, 0.000153199, 0.33001],
+    //   //   'pid': 1,
+    //   //   'rangeMax': null,
+    //   //   'rangeMin': null,
+    //   //   'type': 'translation'
+    //   // }];
+    //   // test.setArticulations({ 'modelId': "shape2motion.cabinet_0017", 'movingPartId': 1, 'basePartId': 0, 'articulations': new_articulations })
+    // }, 15000)
+  </script>
+
+</body>
+
+</html>

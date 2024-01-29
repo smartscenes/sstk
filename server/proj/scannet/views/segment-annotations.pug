@@ -38,13 +38,18 @@ html(lang='en')
     script(src=`${baseUrl}/client/js/vendor/datatables.editor/js/dataTables.editor.min.js`)
     script(src=`${baseUrl}/client/js/vendor/datatables.editor/js/editor.selectize.js`)
     script(src=`${baseUrl}/js/datatables.js`)
-    script(src=`${baseUrl}/client/js/apps/scan-net/SegmentAnnotationsViewer.js`)
+    script(src=`${baseUrl}/client/js/apps/scan-annotator/SegmentAnnotationsViewer.js`)
     script.
       var viewer = new SegmentAnnotationsViewer({
         baseUrl: !{JSON.stringify(baseUrl || '')},
         resultTableSelector: '#resultTable',
         loadingMessageSelector: '#loadingMessage',
-        buttonsPanel: '#topButtons'
+        buttonsPanel: '#topButtons',
+        datasetFilters: {
+            'ScanNet': {itemId: {'$regex': 'scan-checked.*'}},
+            'NYU': {itemId: {'$regex': 'nyu.*'}},
+            'MPR3D': {itemId: {'$regex': 'mpr3d[.].*'}}
+        }
       })
       viewer.init({
         annotations: !{JSON.stringify(annotations || null)},

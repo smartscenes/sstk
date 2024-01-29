@@ -42,7 +42,7 @@ var verificationServer = new VerificationServer({
   nextSuggestionQueue: []
 });
 
-app.get('/motion-viewer', motionAnnotatorServer.getViewer.bind(motionAnnotatorServer));
+app.get('/motion-annotator', motionAnnotatorServer.getAnnotator.bind(motionAnnotatorServer));
 app.get('/articulation-annotations/list', motionAnnotatorServer.listAnnotations.bind(motionAnnotatorServer));
 app.get('/articulation-annotations/load-annotations', motionAnnotatorServer.loadAnnotations.bind(motionAnnotatorServer));
 app.post('/articulation-annotations/submit-annotations', motionAnnotatorServer.submitAnnotations.bind(motionAnnotatorServer));

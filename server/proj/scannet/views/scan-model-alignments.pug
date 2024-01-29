@@ -1,7 +1,7 @@
 doctype html
 html(lang='en')
   head
-    title='Segment Annotations'
+    title='Scan CAD Alignment Annotations'
     meta(charset= "UTF-8")
     - baseUrl = baseUrl || ''
     link(rel='stylesheet', href='//cdn.datatables.net/1.10.12/css/jquery.dataTables.min.css')
@@ -38,9 +38,9 @@ html(lang='en')
     script(src=`${baseUrl}/client/js/vendor/datatables.editor/js/dataTables.editor.min.js`)
     script(src=`${baseUrl}/client/js/vendor/datatables.editor/js/editor.selectize.js`)
     script(src=`${baseUrl}/js/datatables.js`)
-    script(src=`${baseUrl}/client/js/apps/scan-net/AnnotationsViewer.js`)
+    script(src=`${baseUrl}/scanAnnotationsViewer.bundle.js`)
     script.
-      var viewer = new AnnotationsViewer({
+      var viewer = new STK.ScanAnnotationsViewer({
         baseUrl: !{JSON.stringify(baseUrl || '')},
         resultTableSelector: '#resultTable',
         loadingMessageSelector: '#loadingMessage',

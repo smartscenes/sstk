@@ -79,8 +79,6 @@ SQLAnnotationDb.prototype.queryHandler = function(req,res) {
     this.queryScene(sceneId, res);
   } else if (queryType == 'scenes') {
     this.queryScenes(res);
-  } else if (queryType == 'parts') {
-    this.queryParts(req.query, res);
   } else if (queryType == 'segments') {
     this.querySegmentAnnotations(req.query, res);
   } else if (queryType == 'annotations') {
@@ -133,75 +131,6 @@ SQLAnnotationDb.prototype.reportAnnotations = function(params, res, onSuccess, o
     //res.json({'code': 400, 'status" : 'Test segment annotation for params: ' + JSON.stringify(params)});
   } else {
     res.status(400).json({'code': 400, 'status': 'Invalid annotation for params: ' + JSON.stringify(params)});
-  }
-};
-
-SQLAnnotationDb.prototype.queryParts = function(params, res, onSuccess, onError) {
-  if (params['$latest']) {
-    this.queryCurrentParts(params, res, onSuccess, onError);
-  } else {
-    this.queryAllParts(params, res, onSuccess, onError);
-  }
-};
-
-SQLAnnotationDb.prototype.queryCurrentParts = function(params, res, onSuccess, onError) {
-  this.queryPartsTable('current_part_annotations', params, res, onSuccess, onError);
-};
-
-SQLAnnotationDb.prototype.queryAllParts = function(params, res, onSuccess, onError) {
-  this.queryPartsTable('part_annotations', params, res, onSuccess, onError);
-};
-
-SQLAnnotationDb.prototype.queryPartsTable = function(tablename, params, res, onSuccess, onError) {
-  var log = this.log;
-  var validParamFields = [ 'id', 'appId', 'sessionId', 'workerId', 'modelId', 'annId', 'partSetId', 'partId', 'label', 'labelType', 'data'];
-  var myOnSuccess = function(rows) {
-    rows = rows.map(function (row) {
-      if (row.data) {
-        try {
-          row.data = JSON.parse(row.data);
-        } catch (err) {
-          log.error('Error parsing data ' + row.id, err);
-        }
-      }
-      return row;
-    });
-    if (onSuccess) { onSuccess(rows); }
-    else {
-      res.json(rows);
-    }
-  };
-  if (params['$limitOnAnnotations']) {
-    if (!params['itemId']) {
-      params['itemId'] = params['modelId'];
-    }
-    var annParams = Object.assign({}, params);
-    annParams['$columns'] = ['id'];
-    var scope = this;
-    scope.queryAnnotations(annParams, res, function (rows) {
-      console.log('got rows', rows);
-      if (rows && rows.length) {
-        var annIds = rows.map(function (x) {
-          return x.id;
-        });
-        var f = scope.getQueryFilters(validParamFields, params);
-        scope.appendQueryFilter(f, 'annId', 'IN', '(' + annIds.join(',') + ')', true);
-        f.filters.push(params.label);
-        scope.queryTableByCreatedAt({
-          table: tablename,
-          queryFilters: f
-        }, res, myOnSuccess, onError);
-      } else {
-        myOnSuccess([]);
-      }
-    }, onError);
-  } else {
-    this.queryTableByCreatedAt({
-      table: tablename,
-      validParamFields: validParamFields,
-      params: params,
-      limit: params['$limit']
-    }, res, myOnSuccess, onError);
   }
 };
 
@@ -320,6 +249,7 @@ SQLAnnotationDb.prototype.queryAnnotationsTable = function(tablename, params, re
         table += ' JOIN ' + partTable + ' AS parts ON parts.annId = ann.id ';
         groupBy = 'ann.id';
         aggregate = {
+          'ann.ids': 'ANY_VALUE',
           'label': 'GROUP_CONCAT',
           'nlabels': { op: 'COUNT_DISTINCT', field: 'label' },
           'ninstances': { op: 'COUNT', field: 'label' }
@@ -370,7 +300,7 @@ SQLAnnotationDb.prototype.queryAnnotationsWithPreview = function(params, res, on
   }, res, onSuccess, onError);
 };
 
-SQLAnnotationDb.prototype.convertAnnotationRecords = function(rows) {
+SQLAnnotationDb.prototype.convertAnnotationRecords = function(rows, processRow) {
   if (!rows) return;
   var log = this.log;
   //console.time('convertAnnotationRecords');
@@ -378,6 +308,9 @@ SQLAnnotationDb.prototype.convertAnnotationRecords = function(rows) {
     if (row.data) {
       try {
         row.data = JSON.parse(row.data);
+        if (processRow) {
+          processRow(row);
+        }
       } catch (err) {
         log.error('Error converting annotation data' + row.id, err);
       }

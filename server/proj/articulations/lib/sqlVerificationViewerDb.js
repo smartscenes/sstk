@@ -1,5 +1,5 @@
 //var mysql = require('mariadb');
-const mysql = require('mysql');
+const mysql = require('mysql2');
 // const mysql = require('sync-sql');
 
 class SqlArticulationAnnotationDb {

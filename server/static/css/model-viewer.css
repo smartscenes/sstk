@@ -243,6 +243,14 @@ img.enlarged {
     background-color: #EF9F56;
 }
 
+.textRed {
+    color: #ff0000
+}
+
+.textGreen {
+    color: #085008
+}
+
 .materialNode {
     width: 12px;
     height: 8px;

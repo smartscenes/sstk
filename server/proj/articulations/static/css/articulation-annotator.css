@@ -12,7 +12,7 @@
 	outline: none;
 }
 
-#add-antn-container {
+.add-btn-container {
 	width: 100%;
     text-align: center;
     display: flex;
@@ -20,7 +20,7 @@
     margin-top: 20px;
 }
 
-#add-antn {
+.add-btn {
 	width: 100%;
 	height: 48px;
 	line-height: 48px;
@@ -36,7 +36,7 @@
 	font-size: 14px;
 }
 
-#add-antn:hover {
+.add-btn:hover {
 	background-color: rgba(0, 0, 0, 0.02);
 }
 
@@ -59,40 +59,61 @@
 	margin: 8px 0;
 }
 
-.help {
+.collapse-button {
 	margin-right: 12px;
+}
+
+.expand-button {
+	padding: 20px;
+	background: white;
+	box-shadow: -9px 9px 8px -7px rgba(0, 0, 0, 0.1);
+	z-index: 100;
+	color: rgba(0, 0, 0, 0.7);
+	border-radius: 18px;
+	cursor: pointer;
 }
 
 #help-expand {
-	padding: 20px;
 	position: absolute;
-	background: white;
-	box-shadow: -9px 9px 8px -7px rgba(0, 0, 0, 0.1);
-	z-index: 100;
-	color: rgba(0, 0, 0, 0.7);
-	border-radius: 18px;
-	cursor: pointer;
-}
-
-#help.hidden,
-#help-expand.hidden {
-	display: none;
-}
-
-.connectivity-viz {
-	margin-right: 12px;
+	left: 0px;
 }
 
 #connectivity-viz-expand {
-	left: 54px;
-	padding: 20px;
 	position: absolute;
-	background: white;
-	box-shadow: -9px 9px 8px -7px rgba(0, 0, 0, 0.1);
-	z-index: 100;
-	color: rgba(0, 0, 0, 0.7);
-	border-radius: 18px;
-	cursor: pointer;
+	left: 54px;
+}
+
+#connectivity-viz-current-expand {
+	position: absolute;
+	left: 108px;
+}
+
+#part-hierarchy-viz-expand {
+	position: absolute;
+	left: 178px;
+}
+
+.graphviz-cell {
+	vertical-align: top;
+}
+
+.node rect {
+	stroke: #333;
+	fill: #fff;
+}
+
+.graph-PART rect {
+	fill: #FF99CC;
+}
+
+.node.highlighted {
+	stroke: #ffff00;
+}
+
+.edgePath path {
+	stroke: #333;
+	fill: #333;
+	stroke-width: 1.5px;
 }
 
 #auto-suggest-checkbox {
@@ -137,7 +158,7 @@
     text-transform: capitalize;
 }
 
-#antn-dialog {
+.antn-dialog {
 	/*position: fixed;
 	top: 50px;
 	left: 50px;
@@ -154,7 +175,7 @@
   	overflow: auto;*/
 }
 
-#antn-dialog.fixed {
+.antn-dialog.fixed {
 	position: fixed;
 	top: 50px;
 	left: 50px;
@@ -183,6 +204,11 @@
 	margin-bottom: 20px;
 }
 
+.antn-base-label {
+	width: 13px;
+	text-align: center;
+}
+
 .antn-dialog-button {
 	width: 64px;
 	font-size: 14px;
@@ -202,34 +228,46 @@
 	background-color: rgba(0, 0, 0, 0.1);
 }
 
-.antn-dialog-button#cancel {
+.antn-dialog-button.cancel-btn {
 	/*border: 2px solid rgba(0, 0, 0, 0.1);*/
 	color: rgba(0, 0, 0, 0.6);
 }
 
-.antn-dialog-button#cancel:hover {
+.antn-dialog-button.cancel-btn:hover {
 	background: rgba(0, 0, 0, 0.05);
 }
 
-.antn-dialog-button#submit {
+.antn-dialog-button.add-btn {
 	background: #0055ff;
 	/*border: 2px solid #0055ff;*/
 	/*background: #2700ff;;*/
 	color: white;
 }
 
-.antn-dialog-button#submit:hover {
+.antn-dialog-button.add-btn:hover {
 	background: #3c7cfb;
 	/*border: 2px solid #3c7cfb;*/
 }
 
-#antn-dialog-buttons {
+.antn-dialog-button.submit-btn {
+	background: #0055ff;
+	/*border: 2px solid #0055ff;*/
+	/*background: #2700ff;;*/
+	color: white;
+}
+
+.antn-dialog-button.submit-btn:hover {
+	background: #3c7cfb;
+	/*border: 2px solid #3c7cfb;*/
+}
+
+.antn-dialog-buttons {
 	display: flex;
 	/*float: right;*/
 	justify-content: flex-end;
 }
 
-#antn-dialog-content {
+.antn-dialog-content {
 	min-height: 120px;
 	/*min-height: 200px;*/
 	margin-top: 12px;
@@ -301,7 +339,7 @@ input[type=range] {
 	align-items: center;
 }
 
-#antn-dialog-title {
+.antn-dialog-title {
 	border-bottom: 2px solid rgba(0, 0, 0, 0.1);
     padding-bottom: 12px;
     font-size: 16px;
@@ -503,7 +541,7 @@ body {
 	display: none;
 }
 
-#part-tags {
+#part-tags, #part-tags span {
 	display: flex;
 	flex-wrap: wrap;
 	/*color: rgba(0, 0, 0, 0.8);*/
@@ -513,7 +551,7 @@ body {
 	line-height: 24px;
 }
 
-#part-tags:hover {
+#part-tags:hover, #part-tags span:hover  {
 	padding-right: 0;
 }
 
@@ -567,16 +605,11 @@ body {
 	max-height: 64vh;
 }
 
-#submit-attns {
-	/*background-color: #3c7cfb;*/
-	background-color: #2700ff;
+.large-button {
 	/*position: fixed;*/
-	bottom: 72px;
 	/*left: 96px;*/
-	right: 32px;
 	z-index: 10;
 	width: 280px;
-	color: white;
 	height: 48px;
     line-height: 48px;
     /*color: #2700ff;*/
@@ -592,11 +625,16 @@ body {
     /* display: none; */
     font-size: 14px;
     text-align: center;
-		margin: 0 auto;
+	margin: 0 auto;
 }
 
-#submit-attns:hover {
+.large-button:hover {
 	box-shadow: 0 1px 3px 0 rgba(60,64,67,0.302), 0 4px 8px 3px rgba(60,64,67,0.149);
+}
+
+.submit-button {
+	background-color: #2700ff;
+	color: white;
 }
 
 #submit-txt {
@@ -607,8 +645,6 @@ body {
 	/* z-index: 10; */
 	bottom: 128px;
 	text-align: center;
-
-
 }
 
 #submit-txt textarea {
@@ -616,9 +652,12 @@ body {
 	margin: 0 auto;
 }
 
-
-
-
+.part-geom-button {
+	border-radius: 5px;
+	padding: 5px;
+	text-align: center;
+	line-height: 1.1;
+}
 
 section.range-slider {
     position: relative;
@@ -673,16 +712,6 @@ section.range-slider input:last-of-type::-moz-range-track {
 section.range-slider input[type=range]::-moz-focus-outer {
   border: 0;
 }
-
-/*section.range-slider::after {
-	content: "PHI";
-	display: flex;
-}
-
-section.range-slider::before {
-	content: "PHI";
-	display: flex;
-}*/
 
 #loading-container {
 	position: fixed;

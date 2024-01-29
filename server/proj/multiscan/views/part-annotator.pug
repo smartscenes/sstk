@@ -1,0 +1,87 @@
+doctype html
+html(lang='en')
+    head
+        title='Part Annotator'
+        meta(charset= "UTF-8")
+        link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+        link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+        link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+        link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.css')
+        link(rel='stylesheet', href=`${baseUrl}/client/js/vendor/jquery-ui/css/opentip.css`)
+        link(rel='stylesheet', href=`${baseUrl}/css/part-annotator.css`)
+    body
+        #main
+            #canvas
+                #mouseToolTip.mouse-tooltip
+            #namesPanel.overlay.btn-group.btn-group-vertical
+                button.btn.btn-lg.btn-info.btn-space(id='breakBtn', type='button') BreakItUp! (Shift+B)
+                button.btn.btn-lg.btn-success.btn-space(id='nextBtn', type='button') Next (Shift+N)
+                #nameButtonsDiv.btn-group.btn-group-vertical
+                #newNameDiv.input-group
+                    input#addNewNameTextbox.form-control(type='text', placeholder='Add new part...')
+                    span.input-group-btn
+                        button#addNewNameBtn.btn.btn-default(type='button') Add
+            #instructionsPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-question-sign
+                p#instructions
+            #alert(style="display:none")
+                a.close.alert-close(href="#", aria-label="close") &times;
+                #alertMessage
+            button.overlay.btn.btn-lg.btn-danger.hidden(id='passBtn', type='button') Pass - Can't do it!
+            #counterBox.panel.panel-default.overlay.upper
+            #controlsPanel.overlay(style="left: 50px; bottom: 20px; overflow: auto")
+                div(id="levelSelector" style="overflow:hidden; display:none;")
+                    label Brush size:
+                    div
+                        span(style='padding-right: 15px;') fine
+                        div(style="height: 1.3em; display: inline-block;")
+                            #levelSlider(style="width: 200px;")
+                        span(style='padding-left: 15px;') coarse
+
+        script.
+          window.globals = {
+            modelId: "#{modelId}",
+            userId: "#{userId}",
+            sessionId: "#{sessionId}",
+            condition: "#{condition}",
+            task: "#{task}",
+            parts: "#{parts}",
+            base_url: "#{baseUrl}"
+          };
+
+        script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+        script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+        script(src="//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.js")
+        script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+        script(src=`${baseUrl}/client/js/vendor/bootbox.form.min.js`)
+        script(src=`${baseUrl}/three.min.js`)
+        script(src=`${baseUrl}/partAnnotator.bundle.js`)
+        link(rel='stylesheet', href=`${baseUrl}/css/datgui-light.css`)
+        style.
+            .dg.ac {
+                z-index: 2;
+            }
+        script.
+          var canvas = document.getElementById('canvas');
+          var partAnnotator = new STK.SegmentPartAnnotator({
+            container: canvas,
+            delayedLoading: true,
+            debug: true,
+            levelSelector: {
+              container: '#levelSelector',
+              slider: '#levelSlider'
+            },
+            allowEditLabels: true,
+            allowLevels: true,
+            allowCutting: true,
+            allowHierarchy: true,
+            onCloseUrl: "#{nextUrl}"
+          });
+          partAnnotator.start();
+          partAnnotator.assetManager.registerCustomAssetGroups({
+            assetFiles: STK.Constants.extraAssetsFile,
+            filterByAssetId: partAnnotator.getAnnotationItemId(),
+            callback: function(err, res) {
+            partAnnotator.setupScene();
+            }
+          });
+          window.app = partAnnotator;  // For console debugging!

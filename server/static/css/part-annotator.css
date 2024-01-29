@@ -78,6 +78,12 @@ body {
   bottom: unset;
 }
 
+#counterBox.uppermid
+{
+  top: 80px;
+  left: 20px;
+  bottom: unset;
+}
 
 #passBtn {
   bottom: 20px;

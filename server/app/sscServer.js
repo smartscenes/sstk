@@ -66,11 +66,8 @@ SSCServer.prototype.getAssetManager = function() {
     this.__assetManager = new STK.assets.AssetManager({
       autoAlignModels: false, autoScaleModels: false, assetCacheSize: 100 });
     STK.assets.AssetGroups.registerDefaults();
-    var dataDir = './static/data/';
-    var p5dAssets = STK.assets.registerCustomAssetGroupSync(
-      dataDir + 'suncg/suncg.planner5d.models.json',
-      dataDir + 'suncg/suncg.planner5d.models.full.csv');
-
+    //var dataDir = './static/data/';
+    //STK.assets.registerCustomAssetGroupSync(...);
   }
   return this.__assetManager;
 };

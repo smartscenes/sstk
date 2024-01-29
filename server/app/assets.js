@@ -1,19 +1,19 @@
-var SolrQuerier = require('../lib/solr-querier');
+const SolrQuerier = require('../lib/solr-querier');
 
-var fs = require('fs');
-var request = require('request');
-var _ = require('lodash');
-var log = require('../lib/logger')('assets');
+const fs = require('fs');
+const request = require('request');
+const _ = require('lodash');
+const log = require('../lib/logger')('assets');
 
-var assetGroupsMain = require('../static/data/assets');
-var assetGroupsExtra = require('../static/data/assets-extra');
+const assetGroupsMain = require('../static/data/assets');
+const assetGroupsExtra = require('../static/data/assets-extra');
 
-var config = require('../config');
-var web_vars = { baseUrl: config.baseUrl, assetsDir: config.baseUrl  + '/resources/' };            // Variable for accessing via web
-var fs_vars = { baseUrl: __dirname + '/../static/', assetsDir: __dirname + '/../static/' };        // Variables for accessing via file system
-var port = config.httpServerPort;
-var local_web_vars = { baseUrl: 'http://localhost:' + port, assetsDir: 'http://localhost:' + port + '/resources/'};
-var localBaseUrl = 'http://localhost:' + port;
+const config = require('../config');
+const web_vars = { baseUrl: config.baseUrl, assetsDir: config.baseUrl  + '/resources/' };            // Variable for accessing via web
+const fs_vars = { baseUrl: __dirname + '/../static/', assetsDir: __dirname + '/../static/' };        // Variables for accessing via file system
+const port = config.httpServerPort;
+const local_web_vars = { baseUrl: 'http://localhost:' + port, assetsDir: 'http://localhost:' + port + '/resources/'};
+const localBaseUrl = 'http://localhost:' + port;
 
 _.parseBoolean = function(string, defaultValue) {
   if (string == null || string === '') {
@@ -183,15 +183,15 @@ _.each(assetGroupsAll, function(assetGroup) {
   }
 });
 
-var assetGroupsByName = _.keyBy(assetGroupsAll, 'name');
-var solrUrls = {
+const assetGroupsByName = _.keyBy(assetGroupsAll, 'name');
+const solrUrls = {
   'model': config.defaultSolrUrl + '/models3d',
   'scan': config.defaultSolrUrl + '/models3d',
   'room': config.defaultSolrUrl + '/rooms',
   'scene': config.defaultSolrUrl + '/scenes',
   'texture': config.defaultSolrUrl + '/textures'
 };
-var solrQuerier = new SolrQuerier({ url: solrUrls['model'] + '/select' });
+const solrQuerier = new SolrQuerier({ url: solrUrls['model'] + '/select' });
 
 function getSearchUrl(assetType) {
   var solrUrl = solrUrls[assetType];
@@ -288,7 +288,7 @@ function getAssetInfo(assetGroupName, assetId, defaultConstants, cb) {
 function getAssetDownloadInfo(assetGroupName, assetId, datatype, format, defaultConstants, cb) {
   getAssetInfo(assetGroupName, assetId, defaultConstants, function(err, assetGroupMetadata) {
     if (assetGroupMetadata) {
-      var datatypeInfos = _.get(assetGroupMetadata, ['dataTypes', datatype, 'data']);
+      var datatypeInfos = _.get(assetGroupMetadata, ['dataTypes', datatype, 'data']) || _.get(assetGroupMetadata, ['dataTypes', datatype]);
       if (datatypeInfos) {
         var datatypeInfo = format? _.find(datatypeInfos, function(x) { return x.name === format; }) : datatypeInfos[0];
         if (datatypeInfo) {
@@ -405,6 +405,45 @@ module.exports = {
       }
     });
 
+    app.get('/assets/info/:name/:datatype', function(req, res, next) {
+      var name = req.params['name'];
+      var datatype = req.params['datatype'];
+
+      var assetGroup = assetGroupsByName[name];
+      if (assetGroup && assetGroup.metadata) {
+        var assetGroupMetadata = assetGroup.metadata;
+        if (assetGroupMetadata.dataTypes && assetGroupMetadata.dataTypes[datatype]) {
+          var dataTypeChoices = assetGroupMetadata.dataTypes[datatype].data || assetGroupMetadata.dataTypes[datatype];
+          var supported = _.map(dataTypeChoices, (info) => {
+            var pieces = info.path.split('.');
+            var ext = pieces[pieces.length-1];
+            return {
+              name: info.name || info.format,
+              ext: ext
+            };
+          });
+          res.json({
+            name: name,
+            dataType: datatype,
+            supported: supported
+          });
+        } else {
+          var message = `Error getting info for asset group ${name} with datatype ${datatype}`;
+          log.warn(message);
+          res.status(400).json({
+            'code': 400,
+            'status': message
+          });
+        }
+      } else {
+        var message = `Error getting info for asset group ${name}`;
+        res.status(400).json({
+          'code': 400,
+          'status': message
+        });
+      }
+    });
+
     app.get('/assets/info/:name/:datatype/:id/:format', function(req, res, next) {
       var name = req.params['name'];
       var id = req.params['id'];
@@ -426,10 +465,21 @@ module.exports = {
       var id = req.params['id'];
       var datatype = req.params['datatype'];
       var format = req.params['format'];
+      var thumbnail = req.query['thumbnail'];
       var vars = _.defaults(Object.create(null), local_web_vars, req.query);
       getAssetDownloadInfo(name, id, datatype, format, vars, function(err, info) {
         if (info) {
-          if (info.path) {
+          var use_thumbnail = _.parseBoolean(thumbnail);
+          if (thumbnail === 'auto' && info.thumbnail) {
+            use_thumbnail = true;
+          }
+          if (use_thumbnail) {
+            if (info.thumbnail) {
+              req.pipe(request(info.thumbnail)).pipe(res);
+            } else {
+              res.status(400).json({'code': 400, 'status': 'Error getting thumbnail for asset ' + [name,id,datatype,format].join(' ')});
+            }
+          } else if (info.path) {
             //res.redirect(info.path);
             req.pipe(request(info.path)).pipe(res);
           } else {

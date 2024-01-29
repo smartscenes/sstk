@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+
+<head>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css" />
+	<link rel="stylesheet" href="css/common.css">
+	<link rel="stylesheet" href="css/search-panel.css">
+	<link rel="stylesheet" href="css/scene-viewer.css">
+	<link rel="stylesheet" href="css/camera_controls.css">
+	<link rel="stylesheet" href="css/toolbar.css">
+	<link rel="stylesheet" href="css/rlsd-scene-editor.css">
+	<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css">
+	<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.css">
+	<link rel='stylesheet' href="//use.fontawesome.com/releases/v5.7.0/css/all.css" integrity="sha384-lZN37f5QGtY3VHgisS14W3ExzMWZxybE1SJSEsQp9S+oqd12jhcu+A56Ebc1zFSJ" crossorigin="anonymous">
+
+	<title>Scene Editor</title>
+	<meta charset="utf-8">
+</head>
+
+<body>
+	<!-- UI Markup -->
+
+	<div id="sidebar">
+		<div id="tabs">
+			<ul>
+				<li><a href="#tabs-image-camera-control">Scene Views</a></li>
+				<li><a href="#tabs-model-search-panel">Models</a></li>
+				<li><a href="#tabs-mask-object-panel">Annotated</a></li>
+				<li><a href="#tabs-scene-hierarchy">Scene Hierarchy</a></li>
+			</ul>
+			<div id="tabs-image-camera-control">
+				<div id="imageCameraControl">
+				</div>
+			</div>
+			<div id="tabs-model-search-panel">
+				<div id="modelSearchPanel" class="searchPanel">
+				</div>
+			</div>
+			<div id="tabs-mask-object-panel">
+				<div id="maskObjectPanel">
+				</div>
+			</div>
+			<div id="tabs-scene-hierarchy">
+				<div id="sceneHierarchy">
+				</div>
+			</div>
+		</div>
+	</div>
+	<div id="statusbar">
+	</div>
+	<div id="progress">
+		<div id="bar"></div>
+		<p id="barText"></p>
+	</div>
+	
+	<canvas id="thumbnailCanvas"></canvas>
+	<div id="main">
+		<div id="cameraControls"></div>
+		<div id="highlightControls"></div>
+		<div id="sceneToolbar" class="toolbar"></div>
+		<div id="canvas">
+			<canvas id="panoramaViewerBackground"></canvas>
+			<canvas id="panoramaViewer"></canvas>
+		</div>
+		<div id="commentUI" class="popup">
+		</div>
+		<div id="console" class="console" style="display:none"></div>
+		<div id="instructionsPanel" class="roundBorder grayBackground" style="display:none">
+			<span>Instructions</span>
+			<p id="instructions"></p>
+		</div>
+		<div id="loadingModel">
+			<span>Loading Model...</span>
+		</div>
+	</div>
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/jstree.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/4.4.0/bootbox.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.12/d3.min.js"></script>
+	<!-- Special bootbox -->
+	<script src="client/js/vendor/bootbox.form.min.js"></script>
+	<script src="//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.js"></script>
+	<script src="three.min.js"></script>
+	<script src="rlsd.bundle.js"></script>
+	<script>
+		function onResize() {
+			var tabs = $('#tabs');
+			var tabsPanelTotalHeight = $('#sidebar').height() - $('#info').height() - 10;
+			tabs.height(tabsPanelTotalHeight);
+			var tabsPanelHeight = tabsPanelTotalHeight - tabs.children('ul.ui-tabs-nav').outerHeight() - 10;
+			tabs.children('.ui-tabs-panel').height(tabsPanelHeight);
+		}
+
+		window.addEventListener('resize', onResize, false);
+
+		$('#tabs').tabs();
+		var canvas = document.getElementById('canvas');
+		STK.Constants.defaultModelSource = 'models3d';
+		var toolbarOptions = {hideButtons: ['Edit']};
+		var sceneViewer = new STK.RlsdSceneEditor({
+			container: canvas,
+			tabs: ['cameraImages', 'models', 'maskObjectAnnotations', 'sceneHierarchy'],
+			onTabsActivate: onResize,
+			allowCopyPaste: false,
+			allowUndoStack: false,
+			toolbarOptions: toolbarOptions,
+			putOnArchOnly: false,
+			allowLookAt: true,
+			allowFinish: true,
+			restrictModels: '+datatags:rlsd -isSimClusterRep:false',
+			rlsdSetPutOnArchBasedOnModelCategory: true,
+			imageMaskObjectPlacerOptions: {
+				startPanoMaximized: true
+			},
+			rlsdQueryModelsThroughWizard: true,
+			rlsdAllowSearchSimilar: true,
+			searchOptions: {
+				model: {
+					showCrumbs: true,
+					maxRecent: 30,
+					rootCrumb: [{
+						query: "category:top",
+						source: "rlsd_model_groups_wayfair_3dw",
+						text: "Categories"
+					}]
+				}
+			}
+		});
+		sceneViewer.skipLoadInitialScene = true;
+
+		// NOTE: onSaveURL may get overwritten by the task specific URL
+		sceneViewer.onSaveUrl = STK.Constants.config.rlsd.scene_manager.save_endpoint.url_prefix + `${sceneViewer.urlParams['sceneManagerId']}`;
+		console.log("onSaveURL " + sceneViewer.onSaveUrl);
+		sceneViewer.launch();
+		sceneViewer.assetManager.registerCustomAssetGroups({
+			assetFiles: STK.Constants.extraAssetsFile,
+			//filterByType: ['arch', 'texture'],
+			filterBySource: ['mp3dArch', 'mp3dPano','s3dArch', 's3dRoom', 'smtTexture', 'pix3d', 's3dPhoto', 'wayfair', 'rlsd_model_groups_pix3d', 'rlsd_model_groups_wayfair_3dw'],
+			callback: function (err, res) {
+				sceneViewer.loadInitialScene();
+			}
+		});
+
+		// Make various components draggable
+		$('#instructionsPanel').draggable();
+		onResize();
+		window.app = sceneViewer; // Hack through to sceneViewer for console debugging
+	</script>
+	<link rel="stylesheet" href="css/datgui-light.css">
+</body>
+
+</html>

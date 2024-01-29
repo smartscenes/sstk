@@ -1,7 +1,8 @@
-//var mysql = require('mariadb');
-const mysql = require('mysql');
-var async = require('async');
+// const mysql = require('mariadb');
 // const mysql = require('sync-sql');
+const mysql = require('mysql2');
+const async = require('async');
+const SQLQueryBuilder = require('../../../lib/sql-query-builder');
 
 class SqlArticulationAnnotationDb {
 	constructor(params) {
@@ -32,14 +33,20 @@ class SqlArticulationAnnotationDb {
 		});
 	}
 
-	listAnnotations(callback) {
+	listAnnotations(params, callback) {
 		this.queryColumnNames(this.tableName, (err, columnNames) => {
 			if (err) {
 				callback(err);
 			} else {
-				let columns = columnNames.filter(x => x != 'preview_data' && x != 'data').map( x => this.pool.escapeId(x));
-				let columnStr = columns.join(',');
-				this.execute(`SELECT ${columnStr} FROM ${this.tableName}`, [], callback);
+				const columns = columnNames.filter(x => x != 'preview_data' && x != 'data').map( x => this.pool.escapeId(x));
+				const columnStr = columns.join(',');
+				const queryFilters = SQLQueryBuilder.getQueryFilters(console, params,['full_id']);
+				let query = `SELECT ${columnStr} FROM ${this.tableName}`;
+				if (queryFilters.filters.length > 0) {
+					query = mysql.format(query + ' where ' + queryFilters.filterString, queryFilters.filters);
+					// console.log('got query', query);
+				}
+				this.execute(query, [], callback);
 			}
 		});
 		//this.execute(`SELECT id,modelId FROM ${this.tableName}`, [], callback);

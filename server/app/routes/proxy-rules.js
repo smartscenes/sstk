@@ -1,6 +1,4 @@
-
 var config = require('../../config');
-
 // ROUTER RULES
 // Paths checked in order they are specified, make sure to list them in MOST specific to LEAST specific order.
 // Note: the old version of http-proxy (0.x.x) relied on the fact
@@ -9,7 +7,12 @@ var config = require('../../config');
 var proxyRules = {
   '[^?]*/resources/': config.defaultRoute + '/',
   '[^?]*/annotations/solr/': config.defaultAnnotationsSolrUrl,
-  '[^?]*/solr/': config.defaultSolrUrl
+  '[^?]*/solr/': config.defaultSolrUrl,
+  //LIBSG
+  '[^?]*/ws/libsg': config.libsgUrl,
+  //RLSD
+  '[^?]*/api/scene-manager': config.rlsd.sceneManagerUrl, // Scene Manager backend
+  '[^?]*/api/wizard': config.rlsd.sceneWizardUrl // Scene Manager backend
 };
 
 module.exports = proxyRules;

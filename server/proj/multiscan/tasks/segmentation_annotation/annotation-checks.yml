@@ -1,0 +1,14 @@
+# Check on whether the annotation was good or not
+
+# [min,max] annotation percentages based on vertex counts
+annotationTiers:
+  - { minVerts: 200000, maxVerts: .inf, minPerc: 30, maxPerc: 50 }
+  - { minVerts: 170000, maxVerts: 199999,   minPerc: 40, maxPerc: 60 }
+  - { minVerts: 130000, maxVerts: 169999,   minPerc: 50, maxPerc: 70 }
+  - { minVerts: 0,      maxVerts: 129999,   minPerc: 60, maxPerc: 80 }
+
+# Number of labels that must be included
+hardMinimumLabelCount: 1
+
+# Labels that must be present
+requiredLabels: ['floor', 'wall']

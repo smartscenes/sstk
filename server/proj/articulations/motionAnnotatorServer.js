@@ -5,11 +5,11 @@ let MotionAnnotatorServer = function (params) {
     this.db = params.sqlDB;
 };
 
-MotionAnnotatorServer.prototype.getViewer = function (req, res) {
+MotionAnnotatorServer.prototype.getAnnotator = function (req, res) {
     let modelId = req.query['modelId'];
 
     res.render('motion-annotator', {
-        title: 'Articulation Viewer',
+        title: 'Articulation Annotator',
         modelId: modelId
     });
 };
@@ -34,7 +34,7 @@ MotionAnnotatorServer.prototype.listAnnotations = function (req, res) {
 
 MotionAnnotatorServer.prototype.__listAnnotationsJson = function (req, res) {
     try {
-        this.db.listAnnotations((err, result) => {
+        this.db.listAnnotations(req.query, (err, result) => {
             if (err) {
                 console.error(err);
                 res.status(400).send('Annotations not found');

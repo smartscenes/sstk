@@ -1,0 +1,10 @@
+annotationChecks: './annotation-checks.yml'  # relative to proj/multiscan/tasks/segment_annotation
+surveys: './survey.json'
+labels: './segment-labels.json'
+scansToAnnotate: '../../../../static/data/multiscan/multiscan.anns.stats.csv'   # up to server directory
+idPrefix: 'multiscan'
+percCompleteThreshold: 70
+annotationsPerWorker: 1
+doneThreshold: 2  # filter out anything with more than one annotations
+segmentType: 'vertseg-hier'
+categoryParts: './category-parts.json'

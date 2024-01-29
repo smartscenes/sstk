@@ -51,7 +51,16 @@ AnnotationsServer.prototype.list = function (req, res) {
   if (format === 'json') {
     // Query general annotations table for a summary of segment annotations
     sqlDB.queryAnnotations(queryParams, res, function (rows) {
-      rows = sqlDB.convertAnnotationRecords(rows);
+      var processRow = null;
+      if (queryParams.extractData) {
+        var fields = queryParams.extractData.split(',');
+        processRow = function(row) {
+          if (row.data) {
+            row.data = _.pick(row.data, fields);
+          }
+        };
+      }
+      rows = sqlDB.convertAnnotationRecords(rows, processRow);
       res.json(rows);
     });
   } else {
@@ -73,7 +82,16 @@ AnnotationsServer.prototype.listLatest = function (req, res) {
   var queryParams = _.defaults({'$latest': true}, req.body, req.query);
   // Query general annotations table for a summary of segment annotations
   sqlDB.queryAnnotations(queryParams, res, function (rows) {
-    rows = sqlDB.convertAnnotationRecords(rows);
+    var processRow = null;
+    if (queryParams.extractData) {
+      var fields = queryParams.extractData.split(',');
+      processRow = function(row) {
+        if (row.data) {
+          row.data = _.pick(row.data, fields);
+        }
+      };
+    }
+    rows = sqlDB.convertAnnotationRecords(rows, processRow);
     res.json(rows);
   });
 };

@@ -3,6 +3,10 @@
     width: auto;
 }
 
+#thumbnailCanvas {
+    visibility: hidden;
+}
+
 #textScenePanel {
     position: absolute;
     top: 75px;
@@ -186,3 +190,9 @@ div.pagination {
     position: relative;
     height: 100%;
 }
+
+a.jstree-mark-remove { color:darkgray !important; }
+
+a.jstree-mark-check { color:orange !important; }
+
+a.jstree-mark-good { color:green !important; }

@@ -1,13 +1,10 @@
 var _ = require('lodash');
 var base = require('../../lib/base');
-var csv = require('papaparse');
-var path = require('path');
-var fs = require('fs');
-var YAML = require('yamljs');
 var Promise = require('promise');
 var Logger = require('../../lib/logger');
 var log = Logger('SegmentAnnotatorServer');
 var taskFiles = require('./tasks/segment_annotation');
+var TaskConfigLoader = require('../../lib/task-config-loader');
 
 var SegmentAnnotatorServer = function (params) {
   this.sqlDB = params.sqlDB;
@@ -17,40 +14,8 @@ var SegmentAnnotatorServer = function (params) {
   // Initialize config and user states
   this.tasks = {}; // Task configurations by name
   this.userStates = {};
+  this.taskConfigLoader = new TaskConfigLoader(log);
 };
-
-function loadFile(filename) {
-  log.info('loading file ' + filename);
-  var content = fs.readFileSync(filename, { encoding: 'utf8' });
-  if (filename.endsWith('yml')) {
-    return YAML.parse(content);
-  } else if (filename.endsWith('json')) {
-    return JSON.parse(content);
-  } else if (filename.endsWith('csv')) {
-    return csv.parse(content, { header: true }).data;
-  } else if (filename.endsWith('tsv')) {
-    return csv.parse(content, { header: true, delimiter: '\t', quoteChar: '\0' }).data;
-  } else {
-    log.error('Unsupported file format ' + filename);
-  }
-}
-
-function loadFileIfString(v, basepath, quiet) {
-  if (typeof v === 'string') {
-    var filename = basepath? path.resolve(basepath, v) : v;
-    if (quiet) {
-      try {
-        return loadFile(filename);
-      } catch (error) {
-        log.error('Error loading file: '+ basepath, error);
-      }
-    } else {
-      return loadFile(filename);
-    }
-  } else {
-    return v;
-  }
-}
 
 function preprocessScansToAnnotate(scans, taskConfig) {
   if (scans == undefined) return;
@@ -80,22 +45,9 @@ function preprocessScansToAnnotate(scans, taskConfig) {
 }
 
 SegmentAnnotatorServer.prototype.__loadTaskConfig = function(filename) {
-  log.info('loading task config ' + filename);
-  filename = path.resolve(__dirname + '/tasks/segment_annotation', filename);
-  var taskConfig = loadFile(filename);
-  var task = {
-    config: taskConfig
-  };
-  var basepath = path.dirname(filename);
-  var scans =  loadFileIfString(taskConfig.scansToAnnotate, basepath, true);
-  task.scansToAnnotate = preprocessScansToAnnotate(scans, taskConfig);
-  task.annotationChecks = loadFileIfString(taskConfig.annotationChecks, basepath);
-  task.labels = loadFileIfString(taskConfig.labels, basepath);
-  task.surveys = loadFileIfString(taskConfig.surveys, basepath);
-  var categoryParts = loadFileIfString(taskConfig.categoryParts, basepath);
-  if (categoryParts) {
-    task.categoryParts = _.keyBy(categoryParts, 'name');
-  }
+  var task = this.taskConfigLoader.loadTaskConfig(__dirname + '/tasks/segment_annotation', filename);
+  task.scansToAnnotate = preprocessScansToAnnotate(task.scansToAnnotate, task.config);
+  console.log('got task', task);
   return task;
 };
 
@@ -111,7 +63,6 @@ SegmentAnnotatorServer.prototype.__getTaskInfo = function(taskName, taskConditio
   }
   return this.tasks[taskCondition];
 };
-
 
 SegmentAnnotatorServer.prototype.__getItemsToAnnotate = function (userState, items, opts) {
   var shuffled = _.shuffle(items);
@@ -509,7 +460,7 @@ SegmentAnnotatorServer.prototype.__reportSegmentAnnotations = function (params, 
       params.userId,
       params.condition,
       params.annId,
-      m.modelId,
+      (m.modelId != null)? m.modelId : params.modelId,
       m.objectId,
       JSON.stringify(segments),
       m.label,

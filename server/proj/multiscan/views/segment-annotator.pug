@@ -1,0 +1,133 @@
+doctype html
+html(lang='en')
+  head
+    title='Segment Annotator'
+    meta(charset= "UTF-8")
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+    link(rel='stylesheet', href='//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+    link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+    link(rel='stylesheet', href='//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.css')
+    link(rel='stylesheet', href=`${baseUrl}/client/js/vendor/jquery-ui/css/opentip.css`)
+    link(rel='stylesheet', href=`${baseUrl}/css/part-annotator.css`)
+  body
+    #main
+      #canvas
+        #mouseToolTip.mouse-tooltip
+      video#video.overlay(width='320', height='240', controls, style='display:none')
+      #namesPanel.overlay.btn-group.btn-group-vertical
+        button.btn.btn-lg.btn-success.btn-space(id='nextBtn', type='button') Next (Shift+N)
+        #newNameDiv.input-group
+          input#addNewNameTextbox.form-control(type='text', placeholder='Add new object...')
+          span.input-group-btn
+            button#addNewNameBtn.btn.btn-default(type='button') Add
+        #nameButtonsDiv.btn-group.btn-group-vertical
+      #instructionsPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-question-sign(style='z-index: 2;')
+        #instructions
+      #guidelinesPanel.overlay.btn.btn-default.btn-lg.glyphicon.glyphicon-info-sign(style='z-index: 2;')
+        #guidelines(style="display:none")
+          include segment-annotator-task-details.pug
+      #alert(style="display:none")
+        a.close.alert-close(href="#", aria-label="close") &times;
+        #alertMessage
+      #counterBox.panel.panel-default.overlay.uppermid
+      #controlsPanel.overlay(style="left: 50px; bottom: 20px; overflow: auto")
+        div(id="brushSizeSelector" style="overflow:hidden; display:none;")
+          label Brush size:
+          div(style="height: 1.3em;")
+            #brushSizeSlider(style="width: 200px;")
+        div(id="levelSelector" style="overflow:hidden; display:none;")
+          label Segmentation Level:
+          div
+            span(style='padding-right: 15px;') fine
+            div(style="height: 1.3em; display: inline-block;")
+              #levelSlider(style="width: 200px;")
+            span(style='padding-left: 15px;') coarse
+      .topBtns.overlay.text-center(align="center")
+        button.btn.btn-lg.btn-primary(id='colorBtn', type='button') Show/hide color (C)
+        button.btn.btn-lg.btn-primary(id='labelObbBtn', type='button') Label box (R)
+        button.btn.btn-lg.btn-primary(id='unlabelObbBtn', type='button') Unlabel box (D)
+        button.btn.btn-lg.btn-primary(id='overrideBtn', type='button', style="display:none") Toggle distance override (O)
+      button.overlay.btn.btn-lg.btn-danger.hidden(id='passBtn', type='button') Pass - Can't do it!
+
+    // globals stores data we want to be able to access in the js code
+    script.
+      window.globals = {
+        modelId: "#{modelId}",
+        userId: "#{userId}",
+        sessionId: "#{sessionId}",
+        condition: "#{condition}",
+        task: "#{task}",
+        taskMode: "#{taskMode}",
+        base_url: "#{baseUrl}"
+      };
+
+    // Load require.js and start the app
+    script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+    script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+    script(src="//cdnjs.cloudflare.com/ajax/libs/jquery-contextmenu/2.4.2/jquery.contextMenu.min.js")
+    script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+    // Special bootbox
+    script(src=`${baseUrl}/client/js/vendor/bootbox.form.min.js`)
+    script(src=`${baseUrl}/three.min.js`)
+    script(src=`${baseUrl}/scanAnnotator.bundle.js`)
+    link(rel='stylesheet', href=`${baseUrl}/css/datgui-light.css`)
+    style.
+        .dg.ac {
+            z-index: 2;
+        }
+    script.
+      $('#guidelinesPanel').click(function () {
+        $('#guidelines').toggle();
+      });
+      var annotator = new STK.SegmentAnnotator({
+        container: document.getElementById('canvas'),
+        submitAnnotationsUrl: STK.Constants.submitAnnotationsURL,
+        retrieveAnnotationsUrl: STK.Constants.retrieveAnnotationsURL,
+        storeAnnotationsInDataField: true,
+        delayedLoading: true,
+        video: document.getElementById('video'),
+        useDatGui: true,
+        targetElementType: 'triangles',
+        allowLevels: true,
+        levelSelector: {
+          container: '#levelSelector',
+          slider: '#levelSlider'
+        },
+        checkLabelsUnique: true,
+        labelParser: 'ObjectPartLabelParser',
+        labelType: 'object-part',
+        allowTriLabeler: true,
+        brushSizeSelector: {
+          container: '#brushSizeSelector',
+          slider: '#brushSizeSlider'
+        },
+        brushSize: {
+          value: 20, // TODO: what is this unit?
+          min: 1,
+          max: 150
+        },
+        labelsPanel: {
+          addNewLabelToTop: true,
+          suggestions: !{JSON.stringify(taskInfo.labels || [])}
+        },
+        annotationChecks: !{JSON.stringify(taskInfo.annotationChecks || null)},
+        allowPropagateAnnotations: true,
+        autoPropagate: true,
+        defaultLoadedMeshName: 'textured',
+        segmentType: '#{segmentType}',
+        surveys: !{JSON.stringify(surveys || null)},
+        // Where we will go next after finishing with this annotation
+        onCloseUrl: "#{nextUrl}",
+        // For progress counter display
+        numItemsAnnotated: #{modelsAnnotated},
+        numItemsTotal: #{totalToAnnotate}
+      });
+      annotator.start();
+      annotator.assetManager.registerCustomAssetGroups({
+        assetFiles: STK.Constants.scanAssetsFile,
+        filterByAssetId: annotator.getAnnotationItemId(),
+        callback: function(err, res) {
+          annotator.setupScene();
+        }
+      });
+      window.app = annotator;  // For console debugging!

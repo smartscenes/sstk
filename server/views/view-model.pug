@@ -49,7 +49,17 @@ html(lang='en')
     script(src="STK.bundle.js")
     script.
       var canvas = document.getElementById('canvas');
-      var modelViewer = new STK.SimpleModelViewerWithControls(canvas);
+      var modelViewer = new STK.SimpleModelViewerWithControls({ container: canvas, skipLoadInitialModel: true });
+      if (modelViewer.urlParams.extra) {
+        modelViewer.assetManager.registerCustomAssetGroups({
+          assetFiles: STK.Constants.extraAssetsFile,
+          filterByAssetId: modelViewer.modelId,
+          searchController: modelViewer.modelSearchController,
+          callback: function (err, res) {
+            modelViewer.loadInitialModel();
+          }}
+        );
+      }
       modelViewer.redisplay();
       $('#images').on('shown.bs.collapse', function () {
         modelViewer.modelImagesPanel.onResize();

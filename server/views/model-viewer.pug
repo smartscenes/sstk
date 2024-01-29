@@ -9,6 +9,7 @@ html(lang="en")
     link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
     link(rel='stylesheet', href='client/js/vendor/jpicker/jPicker-1.1.6.min.css')
     link(rel='stylesheet', href='client/js/vendor/jquery-ui/css/jquery.contextMenu.css')
+    link(rel='stylesheet', href='https://use.fontawesome.com/releases/v5.7.0/css/all.css', integrity='sha384-lZN37f5QGtY3VHgisS14W3ExzMWZxybE1SJSEsQp9S+oqd12jhcu+A56Ebc1zFSJ', crossorigin='anonymous')
     link(rel='stylesheet', href='css/common.css')
     link(rel='stylesheet', href='css/search-panel.css')
     link(rel='stylesheet', href='css/model-viewer.css')
@@ -28,6 +29,7 @@ html(lang="en")
           li: a(href="#tabs-2") Textures
           li: a(href="#tabs-3") Colors
           li: a(href="#tabs-6") Parts
+          li: a(href="#tabs-4") Mobility
           li: a(href="#tabs-8") Annotations
         #tabs-1
           #searchPanel
@@ -36,6 +38,8 @@ html(lang="en")
         #tabs-3
           #colorsToolbar.tabsToolbar
           #colorsPanel
+        #tabs-4
+          #articulationsPanel
         #tabs-5
           #alignPanel
             span
@@ -104,18 +108,6 @@ html(lang="en")
             span.btn.btn-default.btn-file Custom Model
               input#loadLocalFile(type="file")
             input#loadLocalFilename.form-control(type="text",readonly)
-        div
-          span.input-group-btn
-            span.btn.btn-default.btn-file Models
-              input#registerAssetsFile(type="file")
-            input#registerAssetsFilename.form-control(type="text",readonly)
-        div
-          span.input-group-btn
-            span.btn.btn-default.btn-file Metadata
-              input#registerMetaFile(type="file")
-            input#registerMetaFilename.form-control(type="text",readonly)
-        div
-          span#registerBtn.btn.btn-default Register
 
     script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
     script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
@@ -136,10 +128,42 @@ html(lang="en")
         includeTestModels: true,
         showSearchSortOption: true,
         useNewImages: true,
+        supportArticulated: true,
         partsPanel: {
+          allowAllSupportedParts: true,
           useColorSequence: true
         },
+        allowMagicColors: true,
         tabs: ['models', 'images', 'align', 'textures', 'colors', 'parts', 'annotations']
+      });
+
+      modelViewer.skipLoadInitialModel = true;
+      modelViewer.Subscribe('Launch', modelViewer, function () {
+        if (modelViewer.urlParams.extra) {
+          modelViewer.assetManager.registerCustomAssetGroups({
+            assetFiles: STK.Constants.extraAssetsFile,
+            filterByType: ['scan', 'model'],
+            searchController: modelViewer.modelSearchController,
+            callback: function (err, res) {
+              console.log('Registered models');
+              var modelId = modelViewer.urlParams['modelId'];
+              if (modelId != null) {
+                var source = modelId.split('.')[0];
+                var initialSearch = 'fullId:' + modelId;
+                modelViewer.setSourceAndSearch(modelViewer.modelSearchController, source, initialSearch);
+              } else {
+                modelViewer.loadInitialModel();
+              }
+            }
+          });
+          modelViewer.assetManager.registerCustomAssetGroups({
+            assetFiles: STK.Constants.extraAssetsFile,
+            filterByType: ['texture'],
+            searchController: modelViewer.textureSearchController
+          });
+        } else {
+          modelViewer.loadInitialModel();
+        }
       });
       modelViewer.launch();
 

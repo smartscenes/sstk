@@ -1,4 +1,5 @@
-var mysql = require('mysql');
+var SQLQueryBuilder = require('./sql-query-builder');
+var mysql = require('mysql2');
 var async = require('async');
 var _ = require('lodash');
 var _log = require('../lib/logger')('SQLQuerier');
@@ -6,7 +7,7 @@ var tables = {};
 
 // NOTE: COUNT_DISTINCT is not true SQL function
 // NOTE: It would be nice to have FIRST/LAST but MySql/MariaDB doesn't appear to support them
-var validAggrFunctions = ['AVG', 'COUNT', 'GROUP_CONCAT', 'MAX', 'MIN', 'STD', 'SUM', 'VAR', 'COUNT_DISTINCT'];
+var validAggrFunctions = ['AVG', 'COUNT', 'GROUP_CONCAT', 'MAX', 'MIN', 'STD', 'SUM', 'VAR', 'COUNT_DISTINCT', 'ANY_VALUE'];
 
 /**
  * Wrapper around mysql for communication with SQL databases
@@ -77,7 +78,7 @@ SQLQuerier.prototype.__getErrorCallback = function(res) {
   var log = this.log;
   return function(err) {
     log.error('Error querying database', err);
-    res.status(500).json({'code': 500, 'status': 'Error in database connection: ' + err});
+    res.status(500).json({'code': 500, 'status': 'Error in database connection'});
   };
 };
 
@@ -257,173 +258,12 @@ SQLQuerier.prototype.handleImageQuery = function(req, res, tablename, field, idF
   );
 };
 
-
-SQLQuerier.OPMAP = {
-  '$ne': '<>',
-  '$eq': '=',
-  '$gt': '>',
-  '$lt': '<',
-  '$gte': '>=',
-  '$lte': '<=',
-  '$in': 'IN',
-  '$nin': 'NOT IN',
-  '$nregex': 'NOT REGEXP',
-  '$regex': 'REGEXP',
-  '$like': 'LIKE',
-  '$exists': 'IS NOT NULL',
-  '$isnull': 'IS NULL'
-};
-SQLQuerier.OPS = _.values(SQLQuerier.OPMAP);
-
-/**
- * Given input query parameters, and a set of valid parameter fields,
- * returns
- * @param params
- * @param validParamFields {Array<string|SqlFieldInfo>>} Valid parameters (with mappings to SQL column fields)
- * @param [tableName] {string} Optional name of table used to prefix field names
- * @returns {SqlQueryFilterInfo}
- */
 SQLQuerier.prototype.getQueryFilters = function(params, validParamFields, tableName) {
-  var baseFilters = this.__getConjQueryFilters(params, validParamFields, tableName);
-  var ors = params['$or'];
-  if (ors) {
-    //console.log(ors);
-    if (!_.isArray(ors)) {
-      ors = [ors];
-    }
-    var scope = this;
-    ors = ors.map(function(or) { return (typeof or === 'string')? JSON.parse(or) : or; });
-    var orfs = ors.map(function(x) { return scope.__getConjQueryFilters(x, validParamFields, tableName); })
-      .filter(function(x) { return x && x.filterString.length > 0; });
-    if (orfs.length > 0) {
-      var filters = [];
-      _.each(orfs, function(f) { filters = _.concat(filters, f.filters); });
-      var filterString = orfs.map(function(f) { return '(' + f.filterString + ')'; }).join(' OR ');
-      //console.log(filters);
-      if (baseFilters.filterString.length > 0) {
-        return { filters: baseFilters.filters.concat(filters), filterString: '(' + baseFilters.filterString + ') AND (' + filterString + ')'};
-      } else {
-        return { filters: filters, filterString: filterString };
-      }
-    }
-  } else {
-    return baseFilters;
-  }
-  return baseFilters;
-};
-
-SQLQuerier.prototype.__getConjQueryFilters = function(params, validParamFields, tableName) {
-  var log = this.log;
-  var filters = [];
-  var filterString = '';
-  var gconj = 'AND';
-  function toConj(str, dft) {
-    if (str && str.toLowerCase() === 'or') {
-      return 'OR';
-    } else if (str && str.toLowerCase() === 'and') {
-      return 'AND';
-    }
-    return dft;
-  }
-  function appendFilterConj(str, conj, fs, vs) {
-    if (str.length > 0) {
-      str = str + ' ' + conj + ' ' + fs;
-    } else {
-      str = fs;
-    }
-    if (vs) {
-      for (var i = 0; i < vs.length; i++) {
-        filters.push(vs[i]);
-      }
-    }
-    return str;
-  }
-  function appendFilter(fs, vs) {
-    filterString = appendFilterConj(filterString, gconj, fs, vs);
-  }
-  for (var i = 0; i < validParamFields.length; i++) {
-    var pfield = validParamFields[i];
-    if (typeof pfield === 'string') {
-      pfield = { field: pfield, param: pfield, op: '=' };
-    }
-    var value = params[pfield.param];
-    if (value !== undefined) {
-      var fieldName = pfield.field;
-      if (tableName) {
-        fieldName = tableName + '.' + fieldName;
-      }
-      if (_.isArray(value)) {
-        var values = value.map(function(x) { return mysql.escape(x); });
-        appendFilter('?? IN (' + values.join(',') + ')', [fieldName]);
-      } else if (_.isObject(value)) {
-        var fconj = toConj(value['$conj'], gconj);
-        var fFilterString = '';
-        for (var k in value) {
-          if (k === '$conj') { continue; }
-          if (value.hasOwnProperty(k)) {
-            var op = k;
-            var v = value[k];
-            if (SQLQuerier.OPS.indexOf(op) < 0) {
-              var op2 = SQLQuerier.OPMAP[op];
-              if (op2) {
-                op = op2;
-              } else {
-                log.warn('Ignoring invalid operator for ' + fieldName + ' ' + op + ' ' + v);
-                op = null;
-              }
-            }
-            if (op) {
-              var fs = '';
-              if (op === 'IS NOT NULL') {
-                if (typeof v === 'string' && v.toLowerCase() === 'false') { v = false; }
-                fs = '?? ' + ((v == undefined || v || v === '')? op : 'IS NULL');
-              } else if (op === 'IS NULL') {
-                if (typeof v === 'string' && v.toLowerCase() === 'false') { v = false; }
-                if (v === '') {
-                  fs = '?? IS NULL OR ' + mysql.escapeId(fieldName) + " = ''";
-                } else {
-                  fs = '?? ' + ((v == undefined || v) ? op : 'IS NOT NULL');
-                }
-              } else if (op === 'IN' || op === 'NOT IN') {
-                if (!_.isArray(v)) {
-                  if (typeof v === 'string') {
-                    v = v.split(',');
-                  } else {
-                    v = [v];
-                  }
-                }
-                var values = v.map(function(x) { return mysql.escape(x); });
-                fs = '?? ' + op + ' (' + values.join(',') + ')';
-              } else {
-                fs = '?? ' + op + ' ' + mysql.escape(v);
-              }
-              fFilterString = appendFilterConj(fFilterString, fconj, fs, [fieldName]);
-            }
-          }
-        }
-        if (fconj !== gconj) {
-          filterString = appendFilterConj(filterString, gconj, '(' + fFilterString + ')');
-        } else {
-          appendFilter(fFilterString);
-        }
-      } else {
-        appendFilter('?? ' + pfield.op + ' ?', [fieldName, value]);
-      }
-    }
-  }
-  return { filters: filters, filterString: filterString };
+  return SQLQueryBuilder.getQueryFilters(this.log, params, validParamFields, tableName);
 };
 
 SQLQuerier.prototype.appendQueryFilter = function(filters, column, op, value, appendValueDirectly) {
-  if (filters.filterString.length > 0) {
-    filters.filterString = filters.filterString + ' AND ';
-  }
-  filters.filterString = filters.filterString + ' ?? ' + op + ' ' + (appendValueDirectly? value:'?');
-  filters.filters.push(column);
-  if (!appendValueDirectly) {
-    filters.filters.push(value);
-  }
-  return filters;
+  return SQLQueryBuilder.appendQueryFilter(filters, column, op, value, appendValueDirectly);
 };
 
 SQLQuerier.prototype.formatQuery = function(sql, filters) {

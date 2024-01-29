@@ -81,6 +81,8 @@ app.get('/scan-annotator', function (req, res) { res.render('scan-annotator'); }
 app.get('/scan-completer', function (req, res) { res.render('scan-completer'); });
 app.get('/house-viewer', function (req, res) { res.render('house-viewer'); });
 
+app.get('/scan-obb-aligner', function (req, res) { res.render('scan-obb-aligner'); });
+
 // Semantic segmentation annotation
 var SegmentAnnotatorServer = require('./segmentAnnotatorServer');
 var segmentAnnotatorServer = new SegmentAnnotatorServer({ sqlDB: annDb, app: app, config: config });

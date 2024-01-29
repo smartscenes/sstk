@@ -60,3 +60,15 @@
 .dg .c .slider:hover {
     background: #eee;
 }
+
+.lil-gui {
+    --background-color: #f6f6f6;
+    --text-color: #3d3d3d;
+    --title-background-color: #efefef;
+    --title-text-color: #3d3d3d;
+    --widget-color: #eaeaea;
+    --hover-color: #f0f0f0;
+    --focus-color: #fafafa;
+    --number-color: #07aacf;
+    --string-color: #8da300;
+}

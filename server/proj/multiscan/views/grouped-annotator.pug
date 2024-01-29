@@ -1,0 +1,62 @@
+doctype html
+html(lang="en")
+    head
+        title= title || 'Multiscan'
+        meta(charset= "UTF-8")
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css')
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css')
+        link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.3/themes/default/style.min.css')
+        link(rel='stylesheet', href='//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.min.css')
+        style.
+            table tr.row-odd {
+                border-bottom: 1px solid silver;
+            }
+            table tr.row-even {
+                border-bottom: 1px solid silver;
+            }
+            table td.cell-parent {
+                background-color: palegoldenrod;
+            }
+    body
+        // UI Markup
+        #main
+            h1 Welcome to Multiscan!
+            #container(style='width: 100%;')
+                span#loading Loading...
+
+        script(src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js")
+        script(src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js")
+        script(src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
+        script(src=`${baseUrl}/three.min.js`)
+        script(src=`${baseUrl}/scanAnnotator.bundle.js`)
+        script.
+            var version = STK.util.getUrlParams()['version'];
+            var annotationConditions = ['manual'];
+            var format = version? 'textured-' + version : 'textured';
+            var segmentType = version? 'triseg-finest-hier-' + version : 'vertseg-hier';
+            var viewerParams = { condition: 'manual', format: format, segmentType: segmentType };
+            var annotationsViewer = new STK.GroupedAnnotationsViewer({
+                annotationConditions: annotationConditions,
+                container: '#container',
+                loadingMessageSelector: '#loading',
+                parentViewerUrl: '#{baseUrl}/scans/scan-annotator',
+                viewerUrl: '#{baseUrl}/multiscan/segment-annotator',
+                viewerParams: viewerParams,
+                listAnnotationsUrl: STK.Constants.listAnnotationsURL + '/latest',
+                annotationsUrl: '#{baseUrl}/scans/annotations/list',
+                alignParams: false,
+                articulateParams: { labelType: 'object-part', useDatGui: true },
+                annotateObbUrl: '#{baseUrl}/multiscan/scan-obb-aligner',
+                annotateObbParams: { format: format,
+                  partType: 'articulation-parts', obbAlignPartType: 'articulation-parts',
+                  obbAlignTask: 'multiscan-annotate-obb',
+                  allowAllSupportedParts: true, includeDefaultLabelRemaps: false },
+                assetGroup: !{JSON.stringify(assetGroup || null)},
+                taskType: 'segment-triindices',
+                segmentType: segmentType,
+                parentType: 'scene type',
+                childType: 'scan',
+                groupBy: 'sceneType'
+            });
+            annotationsViewer.init();
+            window.app = annotationsViewer;  // For console debugging

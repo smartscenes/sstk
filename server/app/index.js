@@ -33,7 +33,7 @@ app.set('view engine', 'pug');
 app.use(compression());
 app.use(bodyParser.urlencoded({ extended: true, parameterLimit: 2000 }));  // extended can probably be false?
 app.use(bodyParser.json({
-  limit: '10mb'  // Limit on size of submissions (10mb is huge!!!)
+  limit: '20mb'  // Limit on size of submissions (20mb is huge!!!)
 }));
 app.use(methodOverride());
 //app.use(express.cookieParser('your secret here'));
