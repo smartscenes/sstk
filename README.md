@@ -12,51 +12,65 @@ The (S)STK provides:
 
 0. The SSTK can be used on Linux, MacOS and Windows systems.
 
-Prerequisites for Ubuntu:
-`sudo apt-get install build-essential libxi-dev libglu1-mesa-dev libglew-dev libvips`
+   Prerequisites for Ubuntu:
+   `sudo apt-get install build-essential libxi-dev libglu1-mesa-dev libglew-dev libvips`
 
-Prerequisites for MacOS:
-Please install [Xcode](https://developer.apple.com/xcode/)
+   Prerequisites for MacOS:
+   Please install [Xcode](https://developer.apple.com/xcode/)
 
-For some weird reason, [`node-gyp`](https://github.com/nodejs/node-gyp) requires python 2.7 so make sure that is the python in your path.
+   For some older version of node (v10.x.x) and on some platforms, [`node-gyp`](https://github.com/nodejs/node-gyp) may require python 2.7 so if you get an error with node-gyp, make sure the python in your path is python 2.7.
 
-1. Install [node.js](https://nodejs.org/).  Using the Node Version Manager ([nvm](https://github.com/creationix/nvm)) is the easiest way to install node.js on most systems.
-```
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.37.2/install.sh | bash
-source ~/.bashrc
-nvm install v10.23.2
-```
-If you use zsh instead of bash, replace all instances of bash with zsh.
-Confirm above works using `node -v` at the terminal.
+1. Install [node.js](https://nodejs.org/) v14.16.0.  Using the Node Version Manager ([nvm](https://github.com/creationix/nvm)) is the easiest way to install node.js on most systems.
+   ```
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+   source ~/.bashrc
+   nvm install v14.16.0
+   ```
+   If you use `zsh` instead of `bash`, replace `source ~/.bashrc` with `source ~/.zshrc`.
+   Confirm above works using `node -v` at the terminal.
 
-2. Build and run server
-```
-  cd stk
-  ./build.sh
-  cd server
-  ./run.sh
-```
+2. Build the STK library.  Enter the root directory of the repo (`${STK}`)
+   ```
+   cd ${STK} 
+   ./build.sh
+   ```
 
-3. Visit http://localhost:8010 in your browser (Chrome is recommended)!
+   This will build the STK library that is needed by the server and command line scripts.  
 
+    Note 1: We are using an older version of node with pinned packages that may have vulnerabilities.  So you may get a warning indicating that there are vulnerabilities.
+    
+    DO NOT run `npm audit fix` - that will upgrade some of the packages and cause the code to break.  
+ 
+    Note 2: if node-gyp gl build issue is encountered due to missing `angle` submodule, this is due to a bug (https://github.com/npm/cli/issues/2774).  To resolve this, downgrade to an older `npm` through `npm install -g npm@'^6.4.11'` prior to running build.
+
+4. Running the server (see [server/README.md](server/README.md) for details
+   ```
+   cd server
+   ./run.sh
+   ```
+
+   Visit http://localhost:8010 in your browser (Chrome is recommended)!
+
+5. Running command line scripts
+
+   See [ssc/README.md](ssc/README.md).
 
 ## Assets
 To use the STK, you will need to get yourself some assets.  There are several open-source datasets that
 you can use with the STK.  Many of these datasets require agreeing to a license and terms of use, 
-so please go to their respective websites to download them.
 
 1. 3D Models
-  - [ShapeNet](www.shapenet.org) is a large dataset of 3D models.    
+  - [ShapeNet](www.shapenet.org) is a large dataset of 3D models.
 2. Synthetic Scenes
   - [Stanford Scene Database](http://graphics.stanford.edu/projects/scenesynth/) consist of 150 synthetic scenes.
   - [SUNCG](suncg.cs.princeton.edu) is a large indoor dataset with over 45K houses.
 3. Reconstructions
-  - [ScanNet](http://www.scan-net.org/) 
+  - [ScanNet](http://www.scan-net.org/)
   - [Matterport3D](https://github.com/niessner/Matterport)
   - [SceneNN](http://people.sutd.edu.sg/~saikit/projects/sceneNN/)
   - [2D-3D-S](http://buildingparser.stanford.edu/dataset.html)
 
-The STK has been developed to be able to easily view and annotate 3D assets.  
+The STK has been developed to be able to easily view and annotate 3D assets.
 Specifically, parts of ShapeNet, SUNCG, ScanNet, and Matterport3D were all developed using the STK.
 
 ## Entry Points
@@ -64,10 +78,30 @@ Specifically, parts of ShapeNet, SUNCG, ScanNet, and Matterport3D were all devel
 - `model-categorizer.html` : Model categorization interface
 - `scene-viewer.html` : Scene Viewer
 
+## Development flow
+If you are developing and changing the STK, the following will monitor changes to the client / server code.
+
+1. In the `/client` folder, run this command: 
+```
+NODE_ENV=dev npm run build
+```
+
+2. In the `/server` folder, run this command:
+```
+npm run watch
+```
+
+You can also specify the remote instance to use for various webservices (such as solr search) by specifying
+```
+STK_REMOTE_HOST=https://<remote-server-name>/scene-toolkit  npm run watch
+```
+
 Advanced Build Instructions
 ==================
 
-You will need to build the client side assets that the server will serve before connecting to any entry point with your browser. To do this run the following in the root repository directory:
+## Different builds of client STK
+To build different builds of the client STK library
+
 * `cd client`
 * Type `npm install` to install client dependencies
 * Run `npm run build` to package the stk source files
@@ -77,16 +111,22 @@ You will need to build the client side assets that the server will serve before 
 For convenience a `build.sh` script is provided that will run the two steps above.
 You will need to repeat the build step every time the client source files are changed or use `NODE_ENV=dev npm run build` to watch and rebuild as you develop!
 
-Running the server
-==================
-Once you have built the client source files as described above, you need to start the server (see [server/README.md](server/README.md) for details, including how to deploy a new instance).
-Do the following from the root repository directory:
+## Build the documentation 
+- `cd client` from the repository root
+- run `npm run jsdoc`
+- Open the generated `jsdoc/index.html` page with a browser
+
+## Running the server
+Once you have built the client library, to start the server do the following from the root repository directory:
 ```
 cd server
 npm install                 
 npm start          # or use "npm watch" to run the server using nodemon and automatically restart the server on changes
 ```
-Again, a `server/run.sh` script is provided that will run the above steps together.
+
+The `server/run.sh` script is provided that will run the above steps together.
+
+See [server/README.md](server/README.md) for details, including how to deploy a new instance.
 
 Development Workflow
 ======================

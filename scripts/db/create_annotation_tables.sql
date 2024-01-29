@@ -42,7 +42,7 @@ SELECT anns.id, anns.appId, anns.sessionId, anns.workerId, anns.itemId,
        x.ids
 FROM (
          SELECT itemId, max(id) as id, group_concat(id) as ids
-         FROM annotations group by itemId
+         FROM annotations group by itemId,task,type
      ) as x inner join annotations as anns on anns.itemId = x.itemId and anns.id = x.id;
 
 CREATE TABLE IF NOT EXISTS `segment_annotations` (
