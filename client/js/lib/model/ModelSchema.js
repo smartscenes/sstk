@@ -17,9 +17,12 @@ var fields = [
     description: 'Prefix indicating where the model originated from'},
   { name: 'category', type: 'categorical',
     description: 'Category of an object' +
-      '(available for ShapeNetSem only, for ShapeNetCore, use wnhyperlemmas or wnlemmas).' +
+      '(available for ShapeNetSem, for ShapeNetCore, use wnhypersynsetkeys/wnhyperlemmas or wnsynsetkey/wnlemmas).' +
       'Not restricted to words in WordNet (includes common modern electronics such as iPad, Xbox, etc.',
     examples: [{ query: 'category:Xbox', description: 'Xbox', filters: '+datasets:ShapeNetSem' }]
+  },
+  { name: 'category0', type: 'categorical',
+    description: 'Original categorization provided for a given data source'
   },
   { name: 'pcaDim', type: 'categorical',
     description: 'object shape is a pole (1D), a plane (2D), or 3D',
@@ -27,16 +30,39 @@ var fields = [
       { query: 'pcaDim:2D', description: 'Flat objects such as paintings, whiteboards, etc.' },
       { query: 'pcaDim:3D', description: 'Other more 3D objects' }]
   },
-  { name: 'wnhyperlemmas', text: 'hypersynset', type: 'categorical', excludeFromFacet: false,
+  { name: 'wnhypersynsetkeys', text: 'hypersynset', type: 'categorical', excludeFromFacet: false,
+    suggestMethod: 'solr',
+    description: 'WordNet synsetkey (includes objects belonging to child WordNet synsets)',
+    examples: [{ query: 'wnhyperlemmas:chair', description: 'Objects identified as chairs' }]
+  },
+  { name: 'wnhyperlemmas', text: 'hypersynset-lemma', type: 'categorical', excludeFromFacet: false,
     suggestMethod: 'solr',
     description: 'WordNet lemma (includes objects belonging to child WordNet synsets)',
     examples: [{ query: 'wnhyperlemmas:chair', description: 'Objects identified as chairs' }]
   },
-  { name: 'wnlemmas', text: 'synset', type: 'categorical', excludeFromFacet: false,
+  { name: 'wnsynsetkey', text: 'synset', type: 'categorical', excludeFromFacet: false,
+    suggestMethod: 'solr',
+    description: 'WordNet synsetkey (exact synset)',
+    examples: [{ query: 'wnlemmas:chair', description: 'Objects identified as chairs' }]
+  },
+  { name: 'wnlemmas', text: 'synset-lemma', type: 'categorical', excludeFromFacet: false,
     suggestMethod: 'solr',
     description: 'WordNet lemma (exact synset)',
     examples: [{ query: 'wnlemmas:chair', description: 'Objects identified as chairs' }]
   },
+  { name: 'hasMultipleObjects', type: 'boolean' },
+  { name: 'hasNestedObjects', type: 'boolean' },
+  { name: 'isArrangement', type: 'boolean' },
+  { name: 'isCornerPiece', type: 'boolean' },
+  { name: 'isContainerLike', type: 'boolean' },
+  { name: 'isCollection', type: 'boolean' },
+  { name: 'isSingleCleanObject', type: 'boolean' },
+  { name: 'support', type: 'categorical' },
+  { name: 'motif', type: 'categorical' },
+  { name: 'foundIn', type: 'categorical' },
+  { name: 'style', type: 'categorical' },
+  { name: 'material', type: 'categorical' },
+  { name: 'theme', type: 'categorical' },
   { name: 'nvertices', text: '# of vertices', type: 'numeric', min: 0,
     description: 'Number of vertices'
   },

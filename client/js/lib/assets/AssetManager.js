@@ -1564,7 +1564,7 @@ AssetManager.prototype.registerCustomAssetGroup = function (options) {
       assetGroup.type = options.assetType;
     }
     assetIdsFile = assetIdsFile || assetGroup.idsFile;
-    if (assetIdsFile) {
+    if (assetIdsFile && !assetGroup.useSolr) {
       var filename = (assetIdsFile instanceof File) ? assetIdsFile.name : assetIdsFile;
       _loadTextFile(assetIdsFile, _assetListLoaded.bind(scope, assetGroup, filename), 'Error loading ids file');
     } else {

@@ -291,6 +291,7 @@ BasicSearchController.prototype.registerSearchModule = function (source, searchM
     console.warn('No search module given for ' + source);
     return;
   }
+  // console.log('register search module', source);
   if (typeof searchModule === 'string') {
     // Just a solr url
     this.searchUrls[source] = searchModule;

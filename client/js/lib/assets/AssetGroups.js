@@ -369,7 +369,7 @@ function _registerDefaultAssetGroups() {
       }
       AssetGroups.registerAssetGroup(ag, { isDefault: true });
       var idsFile = ag.idsFile || asset.metadata.idsFile || asset.idsFile;
-      if (idsFile) {
+      if (idsFile && !asset.metadata.useSolr) {
         var assetsDb = createAssetDbForAssetGroup(ag, asset);
         ag.setAssetDb(assetsDb);
         assetsDb.loadAssetInfo(ag, idsFile, function(err, assets) {

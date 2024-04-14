@@ -16,8 +16,8 @@ function SearchController(params) {
   var defaults = {
     // Fields to include in tooltip
     tooltipIncludeFields: ['fullId', 'name', 'source', 'id',
-      'tags', 'description', 'category', 'category0', 'wnlemmas', 'wnsynsetkey',
-      'color', 'material', 'shape', 'depicts', 'state', 'usedFor', 'foundIn', 'hasPart', 'attr',
+      'tags', 'description', 'category', 'category0', 'wnlemmas', 'wnsynsetkey', 'wnhyperlemmas', 'wnhypersynsetkeys',
+      'color', 'material', 'shape', 'depicts', 'state', "style", "theme", 'usedFor', 'foundIn', 'hasPart', 'attr',
       'solidVolume', 'surfaceVolume', 'supportSurfaceArea',
       'volume', 'weight', 'staticFrictionForce',
       'isCornerPiece', 'isContainerLike', 'materialsCategory',
