@@ -17,6 +17,8 @@ You can specify these values in an `env.sh` file (see [env.example.sh](env.examp
 
 ## Setting up a new instance ##
 ```
+  git clone git@github.com:smartscenes/sstk.git
+  cd sstk
   cp env.example.sh env.sh  
   # Edit env.sh to change the ports and base url
   ./build.sh
@@ -47,7 +49,7 @@ Reload apache conf: `sudo apache2ctl graceful`
   config/                  # Server config: Modify to set annotation database connection info and other configurations
   lib/                     # Utility functions (e.g db querying, logging)
   proj/                    # Project specific server apps (mirrors main app directory structure)
-  proj/                    # Add your project specific app code here
+                          # Add your project specific app code here
   sass/                    # scss (templated css style files)
   static/                  # static content (all our static html, css, data goes here)
     css/                   # static stylesheets
