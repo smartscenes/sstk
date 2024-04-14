@@ -1,4 +1,5 @@
 {
+  "esversion":6,
   "bitwise":false,
   "browser":true,
   "camelcase":false,
