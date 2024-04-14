@@ -43,7 +43,11 @@ class SceneGenerator extends WebService {
         // const ss = currentSceneState.toJsonString();
         // queryData['initialSceneState'] = ss;
       }
-      failedCallback('Please start your command with retrieve or generate');
+      if (failedCallback) {
+        failedCallback('Please start your command with retrieve or generate');
+      } else {
+        console.warn('Please start your command with retrieve or generate');
+      }
     }
 
     if (this.getConfigCallback) {
