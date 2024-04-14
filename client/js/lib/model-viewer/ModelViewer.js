@@ -726,12 +726,12 @@ ModelViewer.prototype.setupDatGui = function () {
     if (showAll || options['lights'] && this.lights) {
       var lightsGui = this.datgui.getFolder('lights');
       if (this.lights.ambient) {
-        lightsGui.add(this.lights.ambient, 'intensity', 0, 10).step(0.05).listen();
+        lightsGui.add(this.lights.ambient, 'intensity', 0, 5).step(0.05).listen();
         lightsGui.addColor(this.lights.ambient, 'color').listen();
         lightsGui.addColor(this.lights.ambient, 'groundColor').listen();
       }
       if (this.lights.hemisphere) {
-        lightsGui.add(this.lights.hemisphere, 'intensity', 0, 10).step(0.05).listen();
+        lightsGui.add(this.lights.hemisphere, 'intensity', 0, 5).step(0.05).listen();
         lightsGui.addColor(this.lights.hemisphere, 'color').listen();
         lightsGui.addColor(this.lights.hemisphere, 'groundColor').listen();
       }
