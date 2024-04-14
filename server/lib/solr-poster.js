@@ -41,10 +41,10 @@ exports.postToSolrData = function(url, data, successCallback, errorCallback) {
             if (successCallback) successCallback(body);
         } else {
             log.error("Error posting to solr: " + url, error);
-            var status;
-            if (response) {
+            var status = 500;
+            if (response && response.statusCode != undefined) {
                 log.info("Response status is " + response.statusCode, body);
-                status = response.statuscode;
+                status = response.statusCode;
             }
             if (errorCallback) errorCallback(status, "Error submitting annotation");
         }
