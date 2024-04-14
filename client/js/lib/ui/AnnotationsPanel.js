@@ -330,12 +330,14 @@ AnnotationsPanel.prototype.__setAnnotationsFromModelInfo = function (modelInfo, 
     // Display attributes
     // Display readwrite attributes
     for (var i = 0; i < this.submittableAttributes.length; i++) {
+      var field = this.attributesMap[name];
       var name = this.submittableAttributes[i];
       var isMainAttribute = this.attributes.indexOf(name) >= 0;
       if (modelInfo.hasOwnProperty(name)) {
-        this.annotations.orig[name] = modelInfo[name];
+        var fieldValue = convertFieldValue(field, modelInfo[name]);
+        this.annotations.orig[name] = fieldValue;
         if (isMainAttribute) {
-          this.setAnnotation(name, modelInfo[name], keepNewAnnotations);
+          this.setAnnotation(name, fieldValue, keepNewAnnotations);
         }
       } else {
         if (isMainAttribute) {
@@ -477,7 +479,7 @@ function convertValue(type, str) {
 }
 
 function convertFieldValue(field, value) {
-  if (value == null) { return value; }
+  if (value == null || field == null) { return value; }
   if (field.multiValued) {
     return Array.isArray(value)? value : value.split(',').map(x => convertValue(field.type, x));
   } else {
