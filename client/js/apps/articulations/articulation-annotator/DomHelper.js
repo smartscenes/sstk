@@ -182,21 +182,21 @@ class DomHelper {
 
 		// Help
 		const partKeyboardShortcuts = [
-			{ key: 'P', description: 	'Toggle play/pause articulation' },
-			{ key: 'E', description: 	'Edit articulation' },
-			{ key: 'A', description: 	'Add articulation' },
-			{ key: 'M', description: 	'Mark part/object as moveable' },
-			{ key: 'F', description: 	'Mark part/object as fixed' },
-			{ key: 'C', description: 	'Show/Hide not moving parts' },
+			{key: 'P', description: 'Toggle play/pause articulation'},
+			{key: 'E', description: 'Edit articulation'},
+			{key: 'A', description: 'Add articulation'},
+			{key: 'M', description: 'Mark part/object as moveable'},
+			{key: 'F', description: 'Mark part/object as fixed'},
+			{key: 'C', description: 'Show/Hide not moving parts'},
 		];
 		const partKeyboardShortcutsHelp = partKeyboardShortcuts.map(
 			(x) => this.createCommandString(x)).join('\n');
 
 		const editArtKeyboardShortcuts =
-			[ { key: 'T', description: 	'Set translation' },
-				{ key: 'R', description: 	'Set rotation' },
-				{ key: 'Enter', description: 	'Save articulation' },
-				{ key: 'Escape', description: 	'Cancel articulation'} ];
+			[{key: 'T', description: 'Set translation'},
+				{key: 'R', description: 'Set rotation'},
+				{key: 'Enter', description: 'Save articulation'},
+				{key: 'Escape', description: 'Cancel articulation'}];
 
 		const editArtKeyboardShortcutsHelp = editArtKeyboardShortcuts.map(
 			(x) => this.createCommandString(x)).join('\n');
@@ -206,14 +206,23 @@ class DomHelper {
 				${partKeyboardShortcutsHelp}
 				<div class="text">The following events trigger when the annotation wizard is open.</div>
 				${editArtKeyboardShortcutsHelp}`;
+
+		const otherCommandsShortcuts = [
+			{key: 'Ctrl-I', description: 'Save image'},
+			{key: 'B', description: 'Toggle allow any part as base'},
+			{key: 'S', description: 'Suggest Axis'}
+		];
+		const otherCommandsHelp = otherCommandsShortcuts.map(
+			(x) => this.createCommandString(x)).join('\n');
+		helpContent = helpContent +  `<div class="text">Other commands</div>${otherCommandsHelp}`;
 		if (this.allowAddGeometry) {
 			const addGeomShortcuts = [
-				{ key: 'G', description: 'Add geometry'},
-				{ key: 'Ctrl-G', description: 'Show add geometry panel'}
+				{key: 'G', description: 'Add geometry'},
+				{key: 'Ctrl-G', description: 'Show add geometry panel'}
 			];
 			const addGeomShortcutsHelp = addGeomShortcuts.map(
 				(x) => this.createCommandString(x)).join('\n');
-			helpContent = helpContent + `<div class="text">Other commands.</div>${addGeomShortcutsHelp}`;
+			helpContent = helpContent + `${addGeomShortcutsHelp}`;
 		}
 
 		this.addExpandable($('#content'), {

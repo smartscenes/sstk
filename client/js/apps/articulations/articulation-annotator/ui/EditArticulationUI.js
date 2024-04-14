@@ -101,6 +101,20 @@ class EditArticulationUI extends Dialog {
     return div;
   }
 
+  selectBaseParts(baseParts, articulationType) {
+    for (let p of baseParts) {
+      const pid = p.pid;
+      const selector = $('.antn-dialog-base-selector-option');//.find(`[data-id="${pid}"]`);
+      if (this.allowSelectAttached) {
+        selector.find(`input#${articulationType}-${pid}-B[data-id="${pid}"]`).prop('checked', true);
+      } else {
+        selector.find(`input[data-id="${pid}"]`).prop('checked', true);
+      }
+    }
+    const pids = baseParts.map(p => p.pid);
+    this.Publish('baseChanged', articulationType, pids, true, false);
+  }
+
   displayBaseOptions(candidates, basePids, attachedPids) {
     if (candidates) {
       const showLabelsAtTop = true;
@@ -404,12 +418,6 @@ class EditArticulationUI extends Dialog {
       this.UnsubscribeAll('baseHover');
     }
     this.Subscribe('baseHover', null, cb);
-  }
-
-  onEdgeSelect(cb) {
-    $("[name=edgePick]").change((event) => {
-      cb(parseInt(event.target.value));
-    });
   }
 
   onLeftRightAxisPivotChange(cb) {

@@ -454,17 +454,42 @@ OBB.prototype.sampleFace = function(faceIndex, out, rng) {
 OBB.prototype.reverseNormal = function() {
   // Reverse the dominant normal
   var smallestIdx = this.__getSmallestIndex();
+  this.reverseBasisAxes(smallestIdx);
+};
+
+OBB.prototype.reverseBasisAxes = function(i) {
+  // Reverse the dominant normal
   var m = this.basis.elements;
-  var si = smallestIdx * 4;
+  var si = i * 4;
   m[si] = -m[si];
   m[si+1] = -m[si+1];
   m[si+2] = -m[si+2];
-  var si2_raw = (smallestIdx === 0)? 2 : ((smallestIdx+1)%3);
+  var si2_raw = (i === 0)? 2 : ((i+1)%3);
   var si2 = si2_raw*4;
   m[si2] = -m[si2];
   m[si2+1] = -m[si2+1];
   m[si2+2] = -m[si2+2];
   this.__isReversed = true;  // track that we made this change
+  this.__dominantNormal = this.__extractDominantNormal();
+  this.clearCache();
+};
+
+OBB.prototype.swapBasisAxes = function(i,j) {
+  // Reverse the dominant normal
+  var m = this.basis.elements;
+  var si = i * 4;
+  var sj = j * 4;
+  var tmp = [ m[si], m[si+1], m[si+2] ];
+  m[si] = m[sj];
+  m[si+1] = m[sj+1];
+  m[si+2] = m[sj+2];
+  m[sj] = tmp[0];
+  m[sj+1] = tmp[1];
+  m[sj+2] = tmp[2];
+  var hs_i = this.halfSizes.getComponent(i);
+  var hs_j = this.halfSizes.getComponent(j);
+  this.halfSizes.setComponent(i, hs_j);
+  this.halfSizes.setComponent(j, hs_i);
   this.__dominantNormal = this.__extractDominantNormal();
   this.clearCache();
 };

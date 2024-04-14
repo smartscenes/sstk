@@ -33,6 +33,7 @@ class PartState {
 		this.isConnected = false;
 		this.isBase = false;
 		this.isCandidate = false;
+		this.articulationOptions = null;
 	}
 
 	clear() {
@@ -58,14 +59,18 @@ class ArticulationAnnotator {
 
 		// Option flags
 		this.refitOBB = this.url.searchParams.get('refitOBB');
+		this.reorientOBB = true;  // orient OBBs if no existing annotation
 		// Experimental features
 		this.allowSelectAttached = params.allowSelectAttached; // Allow specification of what part is attached
 		this.allowAddGeometry = _.parseBoolean(this.url.searchParams.get('allowAddGeometry'), params.allowAddGeometry);       // Allow geometry to be added
+		this.suggestEnabled = true;
 
 		// Whether to show textured or untextured
 		this.__useTextured = false;
 		// Whether to use annotation colors
 		this.__useAnnotationColors = true;
+		// Whether to use special colors for added geometry
+		this.__useAddedGeometryColors = false;
 		// Whether to use double sided materials
 		this.__useDoubleSided = false;
 		// Whether to show part obbs (local) - for debugging
@@ -106,6 +111,23 @@ class ArticulationAnnotator {
 		this.loadScene();
 	}
 
+	get allowAnyBasePart() {
+		if (this.state && this.state.__candidateBasePartsOpts) {
+			return this.state.__candidateBasePartsOpts.useAllPartsForBase;
+		} else {
+			return false;
+		}
+	}
+
+	set allowAnyBasePart(flag) {
+		if (this.state && this.state.__candidateBasePartsOpts) {
+			this.state.__candidateBasePartsOpts.useAllPartsForBase = flag;
+			if (this.active) {
+				this.state.updateCandidateBaseParts();
+				this.displayBaseOptions(this.state.activePart);
+			}
+		}
+	}
 	get isLabelTypeObjectPart() {
 		return this.labelType === 'object-part';
 	}
@@ -144,6 +166,16 @@ class ArticulationAnnotator {
 
 	set useAnnotationColors(flag) {
 		this.__useAnnotationColors = flag;
+		this.useTextured = this.useTextured;
+	}
+
+	get useAddedGeometryColors() {
+		return this.__useAddedGeometryColors;
+	}
+
+	set useAddedGeometryColors(flag) {
+		this.__useAddedGeometryColors = flag;
+		this.useTextured = this.useTextured;
 	}
 
 	get showLocalPartObbs() {
@@ -185,13 +217,21 @@ class ArticulationAnnotator {
 			this.datgui = gui;
 			const appIdGui = this.datgui.add(this, 'appId');
 			$(appIdGui.domElement).find('input').prop('readonly', true);
+			this.datgui.add(this, 'suggestEnabled').name('suggest').listen();
 			this.datgui.add(ArticulationsConstants, 'PART_OPACITY', 0, 1).name('part opacity');
 			this.datgui.add(ArticulationsConstants, 'ACTIVE_PART_OPACITY', 0, 1).name('selected part opacity');
+			if (this.allowAddGeometry) {
+				this.datgui.add(ArticulationsConstants, 'ADDED_PART_OPACITY', 0, 1).name('added part opacity');
+			}
 			this.datgui.add(this, 'useTextured').name('textured').listen();
 			this.datgui.add(this, 'useAnnotationColors').name('colors').listen();
+			if (this.allowAddGeometry) {
+				this.datgui.add(this, 'useAddedGeometryColors').name('color added geometry').listen();
+			}
 			this.datgui.add(this, 'useDoubleSided').name('double-side').listen();
 			this.datgui.add(this, 'showLocalPartObbs').name('local-obbs').listen();
 			this.datgui.add(this, 'showWorldPartObbs').name('world-obbs').listen();
+			this.datgui.add(this, 'allowAnyBasePart').name('any-base').listen();
 			this.datgui.add(this, 'checkClearAnnotations').name('Clear Annotations');
 			this.datgui.add(this, 'exportAnnotations').name('Export annotations');
 			this.datgui.add(this, 'importAnnotations').name('Import annotations');
@@ -212,7 +252,12 @@ class ArticulationAnnotator {
 		this.pauseArticulationAnimation();
 		this.active = true;
 		this.domHelper.partsSelectionUI.setPartTagSelected(part.pid, true);
-		this.annotateArticulationType(part, null);
+		let articulationType = null;
+		if (this.suggestEnabled) {
+			// See if there is a suggested articulationType
+			articulationType = this.state.suggester.getArticulationType(part);
+		}
+		this.annotateArticulationType(part, articulationType);
 	}
 
 	/**
@@ -220,10 +265,9 @@ class ArticulationAnnotator {
 	 *
 	 * @param part {parts.Part}
 	 * @param articulationType {string}
-	 * @param suggest {boolean}
 	 */
-	annotateArticulationType(part, articulationType, suggest=true) {
-		this.state.initAnnotation(part, articulationType, suggest);
+	annotateArticulationType(part, articulationType) {
+		this.state.initAnnotation(part, articulationType, this.suggestEnabled);
 		this.editArticulationType(part, articulationType, null);
 	}
 
@@ -356,9 +400,10 @@ class ArticulationAnnotator {
 	 * @param part {parts.Part}
 	 * @param color Color to apply to the part
 	 * @param opacity opacity to apply to the part
+	 * @param [filter] optional filter function for whether to color the mesh or not
 	 */
-	colorPart(part, color, opacity = 1) {
-		this.partVisualizer.colorPart(part, color, opacity);
+	colorPart(part, color, opacity = 1, filter = null) {
+		this.partVisualizer.colorPart(part, color, opacity, filter);
 	}
 
 	colorPartByState(part) {
@@ -396,6 +441,10 @@ class ArticulationAnnotator {
 					this.colorPart(part, ArticulationsConstants.INITIAL_COLOR, ArticulationsConstants.PART_OPACITY);
 				}
 			}
+		}
+		if (this.__useAddedGeometryColors) {
+			this.colorPart(part, ArticulationsConstants.ADDED_GEOMETRY_COLOR, ArticulationsConstants.ADDED_PART_OPACITY,
+				(mesh) => mesh.userData.shape != null );
 		}
 	}
 
@@ -445,6 +494,13 @@ class ArticulationAnnotator {
 				this.displayRotationAxisOptions(false);
 			}
 		}
+
+		if (this.suggestEnabled && articulationType) {
+			const guessedBaseParts = this.state.guessBaseParts();
+			if (guessedBaseParts) {
+				this.domHelper.editArticulationUI.selectBaseParts(guessedBaseParts, articulationType);
+			}
+		}
 	}
 
 	/**
@@ -461,7 +517,7 @@ class ArticulationAnnotator {
 
 		// bind events
 		this.domHelper.editArticulationUI.onArticulationTypeChanged((articulationType) => {
-			this.annotateArticulationType(part, articulationType, articulationType === ArticulationTypes.TRANSLATION);
+			this.annotateArticulationType(part, articulationType);
 		});
 
 		this.domHelper.editArticulationUI.onSave(() => {
@@ -617,9 +673,8 @@ class ArticulationAnnotator {
 			this.state.resetRotationAxisOptions();
 		}
 		this.state.displayRadar.update();
-		// Setting the default edge (this seems to fix some issues
-		// with the guides being out of sync)
-		this.state.setEdge(this.state.edge);
+		// TODO: check if we need this (at some point seems to fix some issues with the guides being out of sync)
+		this.state.resetRotationUpdateWidgets();
 
 		const pivotOptions = this.state.getRotationPivotOptions();
 		const widgets = this.domHelper.editArticulationUI.displayRotationAxisOptions(
@@ -642,7 +697,6 @@ class ArticulationAnnotator {
 			this.state.updateReferenceAxis(axisIndex);
 		});
 
-		this.domHelper.editArticulationUI.onEdgeSelect(val => this.state.setEdge(val));
 		this.domHelper.editArticulationUI.onLeftRightAxisPivotChange(val => this.state.rotationPivotLeftRight = val);
 		this.domHelper.editArticulationUI.onUpDownAxisPivotChange(val => this.state.rotationPivotUpDown = val);
 		this.domHelper.editArticulationUI.onForwardBackAxisPivotChange(val => this.state.rotationPivotFrontBack = val);
@@ -749,7 +803,9 @@ class ArticulationAnnotator {
 				candidateBasePartsOpts: {
 					useSameObjectInst: useSameObjectInst,
 					allowConnected: true,
-					allowAnyPart: !useSameObjectInst
+					allowAnyPart: !useSameObjectInst,
+					useAllPartsForBase: false,
+					guessBaseByLabel: true    // guess that if a part name is base, then it is base
 				},
 				onPartUpdated: (part) => {
  				  this.colorPartByState(part);
@@ -768,6 +824,9 @@ class ArticulationAnnotator {
 			this.assetSideness = setup.assetSideness;
 			this.useDoubleSided = setup.assetSideness === THREE.DoubleSide;
 			this.parts.forEach(part => part.state = new PartState());
+			if (this.reorientOBB && !state.annotations.length) {
+				this.reorientPartOBBs();
+			}
 			this.loadSave.updateState(state);
 			if (this.allowAddGeometry) {
 				// TODO: wait for this
@@ -804,6 +863,46 @@ class ArticulationAnnotator {
 				}
 			}, false);
 		});
+	}
+
+	reorientPartOBBs() {
+		const parts = this.parts;
+		const object3D = this.object3D;
+		const axes = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+		const objectFront = Constants.worldFront; // TODO: check
+		const raycaster = new THREE.Raycaster();
+		const intersectTargets = [object3D];
+		for (let part of parts) {
+			if (part) {
+				const obb = part.obb;
+				obb.extractBasis(axes[0], axes[1], axes[2]);
+				if (obb.isVerticalPlane()) {
+					// align front to be facing out from object
+					const frontBackDir = obb.localDirToWorldDir(new THREE.Vector3(0,0,1));
+					raycaster.set(obb.position, frontBackDir);
+					raycaster.near = Math.min(obb.halfSizes.x, obb.halfSizes.y)*2;
+					let intersected = raycaster.intersectObjects(intersectTargets, true);
+					if (intersected.length === 0) {
+						// Try reverse direction
+						intersected = raycaster.intersectObjects(intersectTargets, true);
+						if (intersected.length) {
+							obb.reverseNormal();
+						}
+					}
+				} else {
+					// align front to be object front
+					let simToFront = axes[0].dot(objectFront);
+					if (Math.abs(1.0 - Math.abs(simToFront)) < 0.05) {
+						obb.swapBasisAxes(0,2);
+						obb.extractBasis(axes[0], axes[1], axes[2]);
+					}
+					simToFront = axes[2].dot(objectFront);
+					if (simToFront < 0) {
+						obb.reverseNormal();
+					}
+				}
+			}
+		}
 	}
 
 	// Transform controls for free form selection of axis
@@ -913,6 +1012,10 @@ class ArticulationAnnotator {
 		$(window).keydown((event) => {
 			if (!this.preventKeyShortcuts) {
 				if (this.state.activePart && !this.domHelper.editArticulationUI.activeWidget) {
+					if (event.key === 's') {
+						this.state.suggestAxis(this.state.activePart, this.state.articulationType);
+					}
+
 					if (event.key === 'f') {
 						this.domHelper.partsSelectionUI.setPartGroup(this.state.activePart, 'fixed');
 					}
@@ -977,6 +1080,10 @@ class ArticulationAnnotator {
 				// shortcut keys that work any time
 				if (event.key === 'o') {
 					this.useTextured = !this.useTextured;
+				}
+
+				if (event.key === 'b') {
+					this.allowAnyBasePart = !this.allowAnyBasePart;
 				}
 
 				if (event.key === 'i' && event.ctrlKey) {

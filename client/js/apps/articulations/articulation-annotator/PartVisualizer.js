@@ -77,10 +77,16 @@ class PartVisualizer {
    * @param part {parts.Part}
    * @param color Color to apply to the part
    * @param opacity opacity to apply to the part
+   * @param [filter] optional filter function for whether to color the mesh or not
    */
-  colorPart(part, color, opacity = 1) {
+  colorPart(part, color, opacity = 1, filter = null) {
     // Parts may have multiple meshes (e.g. generated geometry)
     this.__traversePartMeshes(part, (p) => {
+      if (filter) {
+        if (!filter(p)) {
+          return;
+        }
+      }
       const materials = Object3DUtil.getMeshMaterials(p);
       materials.forEach(m => m.color.copy(color));
       materials.forEach(m => m.opacity = opacity);

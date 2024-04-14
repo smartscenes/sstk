@@ -5,6 +5,7 @@ const MatrixUtil = require('math/MatrixUtil');
 const DisplayAxis = require('articulations/DisplayAxis');
 const DisplayRadar = require('articulations/DisplayRadar');
 const ArticulatedObject = require('articulations/ArticulatedObject');
+const ArticulationSuggestions = require('./ArticulationSuggestions');
 const AxisOptions = require('./AxisOptions');
 const _ = require('util/util');
 
@@ -12,22 +13,10 @@ const TRANSLATION_RANGE = 0.1;
 
 const ArticulationTypes = Articulation.Type;
 
-const Dirs = Object.freeze({
-	LeftRight: { index: 0, name: "left", label: "Left/Right" },
-	UpDown: { index: 1, name: "up", label: "Up/Down" },
-	FrontBack: { index: 2, name: "front", label: "Front/Back" }
-});
-const OrderedDirs = [Dirs.LeftRight, Dirs.UpDown, Dirs.FrontBack];
-
-const SignedDirs = Object.freeze({
-	Left: { index: 0, name: "left", label: "Left" },
-	Up: { index: 1, name: "up", label: "Up" },
-	Front: { index: 2, name: "front", label: "Front" },
-	Right: { index: 3, name: "right", label: "Right" },
-	Down: { index: 4, name: "down", label: "Down" },
-	Back: { index: 5, name: "back", label: "Back" }
-});
-const OrderedSignedDirs = [SignedDirs.Left, SignedDirs.Right, SignedDirs.Up, SignedDirs.Down, SignedDirs.Front, SignedDirs.Back];
+const Dirs = ArticulationSuggestions.Dirs;
+const OrderedDirs = ArticulationSuggestions.OrderedDirs;
+const SignedDirs = ArticulationSuggestions.SignedDirs;
+const OrderedSignedDirs = ArticulationSuggestions.OrderedSignedDirs;
 
 function isRotationType(t) {
 	return (t === ArticulationTypes.ROTATION);
@@ -51,6 +40,8 @@ function toVector3(ann, res = null) {
 
 class ArticulationAnnotatorState {
 	constructor(params) {
+		this.suggester = new ArticulationSuggestions.ArticulationSuggester();
+
 		this.axis = new THREE.Vector3(1,0,0);
 		this.origin = new THREE.Vector3(0,0,0);
 		this.refAxis = new THREE.Vector3(0,0,1);
@@ -109,10 +100,6 @@ class ArticulationAnnotatorState {
 			};
 		});
 
-		this.left = new THREE.Vector3(0,0,0);
-		this.right = new THREE.Vector3(0,0,0);
-		this.edgeOption = 0;
-		this.edge = 1;
 		this.articulationType = null;
 
 		// Suggestions that are generated or saved
@@ -275,6 +262,10 @@ class ArticulationAnnotatorState {
 			}
 		});
 		// populate candidate / attached parts
+		this.__updateCandidateBaseParts();
+	}
+
+	__updateCandidateBaseParts() {
 		if (this.activePart) {
 			this.candidateParts = this.getCandidateBaseParts();
 			this.candidateParts.forEach(p => p.state.isCandidate = true);
@@ -286,6 +277,17 @@ class ArticulationAnnotatorState {
 		this.parts.forEach(part => {
 			this.onPartUpdated(part);
 		});
+	}
+
+	updateCandidateBaseParts() {
+		this.parts.forEach(part => {
+			if (part) {
+				if (!part.isBase && !part.isConnected) {
+					part.isCandidate = false;
+				}
+			}
+		});
+		this.__updateCandidateBaseParts();
 	}
 
 	findOrthogonalAxisIndex(axisOptions, targetAxis) {
@@ -377,12 +379,16 @@ class ArticulationAnnotatorState {
 			this.axisIndex = this.__axisIndex;
 		}
 
+		this.setOrigin(annotation.origin, annotation.type);
+	}
+
+	setOrigin(origin, articulationType) {
 		// Setting the origin
-		this.origin.copy(annotation.origin);
+		this.origin.copy(origin);
 
 		// Setting relative pivot values
-		if (isRotationType(annotation.type)) {
-			const relativePivotValues = this.findPivotValues(this.pivotAxisOptions, annotation.origin);
+		if (isRotationType(articulationType)) {
+			const relativePivotValues = this.findPivotValues(this.pivotAxisOptions, origin);
 			for (let i = 0; i < OrderedDirs.length; i++) {
 				// TODO: Not really sure what this does but can mutate origin if init not set
 				this.setRotationPivotAxisValue(i, relativePivotValues[i], true);
@@ -447,28 +453,8 @@ class ArticulationAnnotatorState {
 		this.displayAxis.update();
 	}
 
-	setEdge(val) {
+	resetRotationUpdateWidgets() {
 		this.resetPartRotation();
-		if (this.edge != val) {
-			if (val == 0) {
-				if (this.edge != 1) {
-					this.origin.sub(this.right);
-				}
-			  this.origin.add(this.left);
-			} else if (val == 2) {
-				if (this.edge != 1) {
-					this.origin.sub(this.left);
-				}
-				this.origin.add(this.right);
-			} else {
-				if (this.edge == 0) {
-					this.origin.sub(this.left);
-				} else {
-					this.origin.sub(this.right);
-				}
-			}
-			this.edge = val;
-		}
 		this.displayAxis.update();
 		this.displayRadar.update();
 	}
@@ -595,61 +581,8 @@ class ArticulationAnnotatorState {
 		this.setAxisOptions(part);
 
 		if (suggest) {
-			this.suggestAxis(part, isTranslationType(articulationType));
+			this.suggestAxis(part, articulationType);
 		}
-	}
-
-	/**
-	 * Generates axis and origin options using oriented bounding box.
-	 *
-	 * @param part {parts.Part} The part being annotated
-	 */
-	computeArticulationOptions(part) {
-		const obb = part.obb;
-
-		const pivotAxisOptions = this.getOBBAxes(obb);
-		const axisOptions = this.getOBBAxes(obb, true);
-
-		// Note that edges are in the object coordinate
-		// we get them by getting the AABB sides and then rotating them
-		const edgeOptions = [
-			new THREE.Vector3(obb.halfSizes.x, 0, 0),
-			new THREE.Vector3(0, obb.halfSizes.y, 0),
-			new THREE.Vector3(0, 0, obb.halfSizes.z)
-		];
-
-		const originOptions = [
-			new THREE.Vector3(0.5, 0.5, 0.5),
-			new THREE.Vector3(0.5, 0.5, 1),
-			new THREE.Vector3(0.5, 0.5, 0),
-			new THREE.Vector3(0.5, 1, 0.5),
-			new THREE.Vector3(0.5, 0, 0.5),
-			new THREE.Vector3(1, 0.5, 0.5),
-			new THREE.Vector3(0, 0.5, 0.5),
-			new THREE.Vector3(0.5, 1, 1),
-			new THREE.Vector3(0.5, 1, 0),
-			new THREE.Vector3(0.5, 0, 1),
-			new THREE.Vector3(0.5, 0, 0),
-			new THREE.Vector3(1, 0.5, 1),
-			new THREE.Vector3(1, 0.5, 0),
-			new THREE.Vector3(1, 1, 0.5),
-			new THREE.Vector3(1, 0, 0.5),
-			new THREE.Vector3(0, 0.5, 1),
-			new THREE.Vector3(0, 0.5, 0),
-			new THREE.Vector3(0, 1, 0.5),
-			new THREE.Vector3(0, 0, 0.5)
-		];
-
-		// This is to get the orientation of the obb so that the origin is selected correctly
-		originOptions.forEach(opt => {
-			obb.getWorldPosition(opt, opt);
-		});
-
-		edgeOptions.forEach(opt => {
-			opt.applyQuaternion(obb.getRotationQuaternion());
-		});
-
-		return { axisOptions: axisOptions, pivotAxisOptions: pivotAxisOptions, originOptions: originOptions, edgeOptions: edgeOptions };
 	}
 
 	/**
@@ -658,11 +591,11 @@ class ArticulationAnnotatorState {
 	 * @param part {parts.Part} The part being annotated
 	 */
 	setAxisOptions(part) {
-		const computedOptions = this.computeArticulationOptions(part);
+		const computedOptions = this.suggester.computeArticulationOptions(part);
+		part.state.articulationOptions = computedOptions;
 		this.pivotAxisOptions = computedOptions.pivotAxisOptions;
 		this.originOptions = computedOptions.originOptions;
 		this.edgeOptions = computedOptions.edgeOptions;
-		this.edgeOption = 0;
 
 		this.fullAxisOptions = OrderedSignedDirs.map((d,i) =>
 			AxisOptions.create(d.name, d.label, computedOptions.axisOptions[d.index], "axis", "obb"));
@@ -672,27 +605,8 @@ class ArticulationAnnotatorState {
 		}
 	}
 
-	getOBBAxes(obb, includeNegatives) {
-		const axes = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-		obb.extractBasis(axes[0], axes[1], axes[2]);
-		if (includeNegatives) {
-			axes.push(axes[0].clone().negate());
-			axes.push(axes[1].clone().negate());
-			axes.push(axes[2].clone().negate());
-		}
-		return axes;
-	}
-
-	getScaledOBBAxes(obb) {
-		const axes = this.getOBBAxes(obb);
-		axes[0].multiplyScalar(obb.halfSizes.x);
-		axes[1].multiplyScalar(obb.halfSizes.y);
-		axes[2].multiplyScalar(obb.halfSizes.z);
-		return axes;
-	}
-
 	setTranslationAxisOptions() {
-		const baseAxes = this.getScaledOBBAxes(this.baseObb);
+		const baseAxes = this.suggester.getScaledOBBAxes(this.baseObb);
 		const baseCentroid = this.baseObb.position.clone().add(this.partObb.position);
 
 		const origin = this.originOptions[this.originIndex];
@@ -712,7 +626,7 @@ class ArticulationAnnotatorState {
 				customEditMax: +maxSize,
 				fullRangeMin: rangeMin - fullDirLength,
 				fullRangeMax: rangeMax + fullDirLength,
-				defaultRangeMin: rangeMin,
+				defaultRangeMin: 0, //rangeMin,
 				defaultRangeMax: rangeMax,
 				axisLength: Math.abs(rangeMax - rangeMin),
 				dirLength: fullDirLength
@@ -802,7 +716,7 @@ class ArticulationAnnotatorState {
 	}
 
 	isOrthogonalToMainAxis(axis) {
-		console.log('got candidate axis', axis, Math.abs(axis.length() - 1) < 0.01);
+		//console.log('got candidate axis', axis, Math.abs(axis.length() - 1) < 0.01);
 		return Math.abs(this.axis.dot(axis)) < 0.01;
 	}
 
@@ -816,44 +730,18 @@ class ArticulationAnnotatorState {
 	}
 
 	/**
-	 * Suggests most likely axis given OBB of part. Current/only heuristic checks for rotational
-	 * symmetry by seeing if any two dimensions of OBB are of same length; otherwise just defaults
-	 * to vertical axis.
+	 * Suggests most likely axis given OBB of part.
 	 *
 	 * @param part {parts.Part} The part being annotated
+	 * @param articulationType {ArticulationTypes} articulation type
 	 */
-	suggestAxis(part, translation=false) {
-		const EPS = 0.01;
-		const obb = part.obb;
-		if (translation) {
-			const x = Math.abs(obb.halfSizes.y - obb.halfSizes.z);
-			const y = Math.abs( obb.halfSizes.x - obb.halfSizes.z);
-			const z = Math.abs(obb.halfSizes.y - obb.halfSizes.x);
-			if (x < y) {
-				if (x < z) {
-					this.axisIndex = 0;
-				} else {
-					this.axisIndex = 2;
-				}
-			} else if (y < z) {
-				this.axisIndex = 1;
-			} else {
-				this.axisIndex = 2;
-			}
-		} else {
-			if (Math.abs(obb.halfSizes.x - obb.halfSizes.y) < EPS) {
-				this.axisIndex = 0;
-			} else if (Math.abs(obb.halfSizes.x - obb.halfSizes.z) < EPS) {
-				this.axisIndex = 1;
-			} else if (Math.abs(obb.halfSizes.z - obb.halfSizes.y) < EPS) {
-				this.axisIndex = 2;
-			} else {
-				this.axisIndex = 1;
-			}
-		}
-
-		this.originIndex = 0;
-		this.origin.copy(this.originOptions[this.originIndex]);
+	suggestAxis(part, articulationType) {
+		console.log('suggest axis', part, articulationType);
+		const suggestion = this.suggester.suggestAxis(part, articulationType,
+			{ baseObb: this.baseObb, baseParts: this.baseParts, attachedParts: this.attachedParts });
+		this.axisIndex = suggestion.axisIndex;
+		this.originIndex = suggestion.originIndex;
+		this.setOrigin(this.originOptions[this.originIndex], articulationType);
 	}
 
 
@@ -989,16 +877,46 @@ class ArticulationAnnotatorState {
 	 * @private
 	 */
 	__getCandidateBaseParts(part, useSameObjectInst = false, allowConnected = true, allowAnyPart = false) {
+		if (this.__candidateBasePartsOpts.useAllPartsForBase) {
+			return this.parts.filter(p => true);
+		}
 		console.log('getCandidateParts', useSameObjectInst, allowConnected, allowAnyPart)
 		let candidates = useSameObjectInst? this.__getOtherPartsWithSameObjectId(part) : [];
 		if (candidates.length === 0 && allowConnected) {
 			candidates = this.getInitialConnectedParts(part);
+		}
+		const guessed = this.guessBaseParts();
+		if (guessed) {
+			for (let p of guessed) {
+				if (candidates.indexOf(p) < 0) {
+					candidates.push(p);
+				}
+			}
 		}
 		if (candidates.length === 0 && allowAnyPart) {
 			// No possible base parts (return all parts expect for activePart)
 			candidates = this.parts.filter(p => p && p !== part);
 		}
 		return candidates;
+	}
+
+	guessBaseParts() {
+		if (this.__candidateBasePartsOpts.guessBaseByLabel) {
+			if (!this.__candidateBasePartsOpts.useSameObjectInst) {
+				let guessed = this.__guessBaseParts(this.parts);
+				return guessed;
+			}
+		}
+	}
+
+	__guessBaseParts(parts) {
+		const guessed = [];
+		for (let part of parts) {
+			if (part && part.label.toLowerCase() === 'base') {
+				guessed.push(part);
+			}
+		}
+		return guessed;
 	}
 
 	__getOtherPartsWithSameObjectId(part) {
@@ -1110,12 +1028,9 @@ class ArticulationAnnotatorState {
 					upLength: this.rotationPivotUpDown,
 					leftLength: this.rotationPivotLeftRight,
 					forwardLength: this.rotationPivotFrontBack,
-					edgeLeft: this.edgeOptions[this.edgeOption].toArray(),
-					edgeRight: this.edgeOptions[this.edgeOption].clone().negate().toArray(),
 
 					rangeMin: annotation.rangeMin,
 					rangeMax: annotation.rangeMax,
-					edge: this.edge,
 					base: annotation.base.slice(),
 					needsReview: true,
 				}];
