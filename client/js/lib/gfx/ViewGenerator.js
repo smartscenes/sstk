@@ -412,5 +412,78 @@ ViewGenerator.prototype.__generateBasicViewsForBBoxWithDists = function (bbox, d
   return views;
 };
 
+class BucketedViewGenerator {
+  /**
+   * Have buckets with different weights with different distributions on phi and theta
+   * @param options.buckets {math.RNG.ViewPhiThetaOptions|math.RNG.ViewPhiHeightOptions}
+   * @param options.target {THREE.Vector3}
+   * @param options.rng {math.RNG}
+   */
+  constructor(options) {
+    this.buckets = options.buckets;
+    this.rng = options.rng;
+    this.target = options.target;
+    this.totalWeight = _.sum(this.buckets.map(x => x.weight));
+    this.cumulativeWeights = this.buckets.map(x => x);
+    for (let i = 0; i < this.buckets.length; i++) {
+      const p = (this.cumulativeWeights[i - 1] || 0) + this.buckets[i].weight;
+      this.cumulativeWeights.push(p);
+    }
+  }
+
+  sampleBucket() {
+    if (this.buckets.length === 1) {
+      // Only one bucket
+      return this.buckets[0];
+    }
+
+    let w = this.rng.uniform(0, this.totalWeight);
+    let prev = 0;
+    let bucket = null;
+    for (let i = 0; i < this.cumulativeWeights.length; i++) {
+      if ((w > prev && w <= this.cumulativeWeights[i]) || (i === this.cumulativeWeights.length - 1) ) {
+        bucket = this.buckets[i];
+        break;
+      } else {
+        prev = this.cumulativeWeights[i];
+      }
+    }
+  }
+
+  * generator() {
+    const bucket = this.sampleBucket();
+    if (bucket) {
+      yield bucket.sample(this.rng, this.target);
+    }
+  }
+}
+
+class ViewPhiThetaSampler {
+  /**
+   * Construct view sampler with phi and theta
+   * @property {math.RNG.DistOptions} options.phi - Distribution of phi (yaw) (in degrees) - rotation about up axis
+   * @property {math.RNG.DistOptions} options.theta - Distribution of theta (pitch) (in degrees) - angle from horizontal
+   * @property {math.RNG.DistOptions} options.distanceScale - Distribution of distance from target
+   * @property {float} [options.weight] - Optional weight of bucket (to sample from this view distribution)
+   */
+  constructor(options) {
+    this.phi = options.phi;
+    this.theta = options.theta;
+    this.distanceScale = options.distanceScale;
+    this.weight = options.weight;
+  }
+
+  sample(rng, target) {
+    const phi = rng.sampleDist(this.phi);
+    const theta = rng.sampleDist(this.theta);
+    const distanceScale = rng.sampleDist(this.distanceScale);
+
+    return { theta: theta / 180 * Math.PI, phi: phi / 180 * Math.PI, distanceScale: distanceScale };
+  }
+}
+
+ViewGenerator.BucketedViewGenerator = BucketedViewGenerator;
+ViewGenerator.ViewPhiThetaSampler = ViewPhiThetaSampler;
+
 
 module.exports = ViewGenerator;

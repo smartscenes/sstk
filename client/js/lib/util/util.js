@@ -554,6 +554,23 @@ function parseVector(string, delimiter) {
 
 _.parseVector = parseVector;
 
+function parseJSONObjectOrString(string) {
+  try {
+    console.log('parsing json object or string', string)
+    var obj = JSON.parse(string);
+    if (_.isString(obj) || _.isPlainObject(obj)) {
+      console.log('got option', obj);
+      return obj;
+    }
+    return string;
+  } catch (e) {
+    return string;
+  }
+}
+
+_.parseJSONObjectOrString = parseJSONObjectOrString;
+
+
 _.cmd = {
   parseBoolean: function(x, accum) { return parseBoolean(x); },
   parseList: function(x, accum) { return parseList(x); },
@@ -569,6 +586,7 @@ _.cmd = {
   parseVector: function(x, accum) { return parseVector(x); },
   parseRegex: function(x, accum) { return parseRegex(x); },
   parseJson: function(x, accum) { return JSON.parse(x); },
+  parseJSONObjectOrString: function(x, accum) { return parseJSONObjectOrString(x); },
   collect: function(x, accum) {
     accum.push(x);
     return accum;

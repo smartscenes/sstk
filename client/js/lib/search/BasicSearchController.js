@@ -164,7 +164,7 @@ BasicSearchController.prototype.__updateSearchFilterForAssetGroup = function(ass
   if (!this.searchUrls[assetGroup.assetType]) {
     this.searchUrls[assetGroup.assetType] = this.searchUrls[name];
   }
-  var filter = '+source:' + name;
+  var filter = (assetGroup.initialFilter != null)? assetGroup.initialFilter :  '+source:' + name;
   this.defaultSearchOptionsUnfiltered[name] = {
     filter: filter,
     fields: assetTypeOptions.fields
@@ -295,6 +295,9 @@ BasicSearchController.prototype.registerSearchModule = function (source, searchM
   if (typeof searchModule === 'string') {
     // Just a solr url
     this.searchUrls[source] = searchModule;
+    if (!searchModule.endsWith('/select')) {
+      this.searchUrls[source] = this.searchUrls[source] + '/select';
+    }
     if (searchModule === this.searchUrls['models3d'] || searchModule === this.searchUrls['scenes']) {
       var assetGroups = AssetGroups.getAssetGroups();
       this.__updateSearchFilterForAssetGroup(assetGroups[source]);
@@ -370,7 +373,7 @@ BasicSearchController.prototype.__createQueryOptions = function (queryOpts) {
   // Add default options to query data
   var defaultOptions = this.defaultSearchOptions[source];
   //console.log('got defaultOptions', defaultOptions, source, this);
-  if (defaultOptions) {
+  if (defaultOptions && solrQuery) {
     // Skip additional filtering of query if only looking for single fullId model
     var skipFilter = solrQuery.indexOf('fullId:') >= 0;
     if (skipFilter) {

@@ -978,7 +978,8 @@ SceneViewer.prototype.init = function () {
   this.sceneGenerator = new SceneGenerator({
     configContainer: $('#sceneGenConfig'),
     succeededCallback: this.generateSucceededCallback.bind(this),
-    progressCallback: this.handleSceneGenerateProgress.bind(this)
+    progressCallback: this.handleSceneGenerateProgress.bind(this),
+    failedCallback: this.showError.bind(this)
   });
   this.partVisualizer = new VisualizeParts({});
   this.setupSceneTemplateViewer();
@@ -1337,6 +1338,7 @@ SceneViewer.prototype.setupAssets = function () {
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
     onMousedownResultCallback: this.modelSearchResultClickedCallback.bind(this),  // NOTE: instead of onClick to allow dragging into scene
     appendResultElemCallback: this.customizeModelResultElement.bind(this),
+    allowTextEmbeddingSearch: true,
     allowGroupExpansion: true,
     sources: this.modelSources,
     previewImageIndex: 13,
@@ -1810,7 +1812,7 @@ SceneViewer.prototype.addGroundToScene = function (center) {
     ground.castShadow = false;
     ground.receiveShadow = true;
 
-    Object3DUtil.alignToUpFrontAxes(ground, new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), Constants.worldUp, Constants.worldFront);
+    Object3DUtil.alignToUpFrontAxes(ground, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), Constants.worldUp, Constants.worldFront);
     ground.isPickable = true;
     ground.isSelectable = false;
     ground.isEditable = false;

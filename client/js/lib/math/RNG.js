@@ -65,6 +65,46 @@ RNG.prototype.bates = function(n) {
 };
 
 /**
+ * Information about a distribution
+ * @typedef DistOptions
+ * @type {math.RNG.UniformOptions|math.RNG.BatesDistOptions}
+ * @memberof math.RNG
+ **/
+
+/**
+ * Information about a bates distribution
+ * @typedef BatesDistOptions
+ * @type {object}
+ * @property {string} dist - Distribution name ('bates')
+ * @property {float} min
+ * @property {float} max
+ * @property {n} number of unit uniforms to use
+ * @memberof math.RNG
+ **/
+
+/**
+ * Information about a uniform distribution
+ * @typedef UniformDistOptions
+ * @type {object}
+ * @property {string} dist - Distribution name ('uniform')
+ * @property {float} min
+ * @property {float} max
+ * @memberof math.RNG
+ **/
+
+RNG.prototype.sampleDist = function(options) {
+  // Samples a real value from a distribution
+  if (options.dist === 'bates') {
+    const s = (options.max - options.min);
+    return this.bates(options.n)*s + options.min;
+  } else if (options.dist === 'uniform') {
+    return this.uniform(options.min, options.max);
+  } else {
+    throw 'Unsupported distribution ' + options.dist;
+  }
+};
+
+/**
  * Returns element of arr chosen uniformly at random
  * @param arr
  * @returns {*}

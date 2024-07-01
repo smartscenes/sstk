@@ -5,11 +5,21 @@ MY_PATH="`dirname \"$0\"`"
 source=$1
 csv=$2
 format=$3
+segment_config_file=$4
 output_dir=$source.segment
 n=10
 
-opts=""
-#opts="--segment_method connectivity --segment_format trimesh"
+#opts=""
+opts="--segmentator_method connectivity --segmentator_format trimesh"
+if [ -n "$segment_config_file" ]; then
+  if [ -f "$segment_config_file" ]; then
+    opts="$opts --config_file $segment_config_file"
+  else
+    echo "Ignore missing segment_config_file $segment_config_file"
+  fi
+fi
+
+echo "Using opts: $opts"
 
 if [ -n "$format" ]; then
   opts="$opts --format $format"

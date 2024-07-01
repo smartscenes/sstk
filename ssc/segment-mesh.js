@@ -26,6 +26,7 @@ cmd
 //  restrictToPlanarSurfaces (used for clustering based segmentation)
 //  segMinVerts (used for fwab segmentation)
 //  colorWeight (used for fwab segmentation)
+//  ignoreMeshGroups (don't restrict segmentation to within meshes)
 
 // Parse arguments and initialize globals
 if (!cmd.input) {

@@ -5,6 +5,7 @@ const async = require('async');
 const shell = require('shelljs');
 const STK = require('./stk-ssc');
 const _ = STK.util;
+const export_parts_helper = require('./ssc-export-parts-helper');
 
 const cmd = require('./ssc-parseargs');
 cmd
@@ -225,11 +226,11 @@ function exportAnnotation(loadInfo, outdir, renderdir, callback) {
               parts: partsMetadata
             }));
             async_calls.push(function(cb) {
-              exportObject3D(dedupObject3D, outdir, basename + '_dedup', cb);
+              export_parts_helper.exportObject3D(dedupObject3D, outdir, basename + '_dedup', cb);
             });
             async_calls.push(
               function (cb) {
-                exportPartMeshes(partMeshes, outdir, basename, cb);
+                export_parts_helper.exportPartMeshes(partMeshes, 'pid', outdir, basename, cb);
               }
             );
           }
@@ -240,12 +241,12 @@ function exportAnnotation(loadInfo, outdir, renderdir, callback) {
           if (argv.export_meshes) {
             async_calls.push(
               function (cb) {
-                exportObject3D(segments.segmentedObject3D, outdir, basename, cb);
+                export_parts_helper.exportObject3D(segments.segmentedObject3D, outdir, basename, cb);
               }
             );
             async_calls.push(
               function (cb) {
-                exportPartMeshes(segments.partMeshes, outdir, basename, cb);
+                export_parts_helper.exportPartMeshes(segments.partMeshes, 'pid', outdir, basename, cb);
               }
             );
           }
@@ -254,7 +255,7 @@ function exportAnnotation(loadInfo, outdir, renderdir, callback) {
         if (renderer) {
           shell.mkdir('-p', renderdir);
           const renderOutput = renderdir + '/' + basename;
-          renderPartMeshes(renderer, renderOutput, mInst, segments.partMeshes);
+          export_parts_helper.renderPartMeshes(renderer, lightingOptions, renderOutput, mInst, segments.partMeshes);
         }
 
         if (async_calls.length) {
@@ -327,95 +328,6 @@ function cleanUserData(mInst, segments) {
           }
         };
         partMesh.geometry.userData = {};
-      }
-    }
-  }
-}
-
-function exportObject3D(object3D, outdir, basename, callback) {
-  if (object3D) {
-    const exporter = new STK.exporters.GLTFExporter({ fs: STK.fs });
-    // Seems the segmentedObject3D is by default not visible
-    STK.geo.Object3DUtil.setVisible(object3D, true, true);
-    const exportOpts = {
-      dir: outdir,
-      name: basename,
-      binary: true,
-      embedImages: true,
-      includeCustomExtensions: true,
-      //includeNotVisible: true,
-      callback: callback
-    };
-    console.log('export ' + basename);
-    exporter.export(object3D, exportOpts);
-  } else {
-    callback();
-  }
-}
-
-function exportPartMeshes(partMeshes, outdir, basename, callback) {
-  if (partMeshes) {
-    const exporter = new STK.exporters.GLTFExporter({ fs: STK.fs });
-    async.forEachOfSeries(partMeshes, function (partMesh, index, cb) {
-      if (partMesh) {
-        const exportOpts = {
-          dir: outdir,
-          name: basename + '_part_' + partMesh.userData.pid,
-          binary: true,
-          embedImages: true,
-          includeCustomExtensions: true,
-          //includeNotVisible: true,
-          callback: cb
-        };
-        console.log('export ' + basename + '_part_' + partMesh.userData.pid);
-        exporter.export(partMesh, exportOpts);
-      } else {
-        cb();
-      }
-    }, function() {
-      callback();
-    });
-  } else {
-    callback();
-  }
-}
-
-function setView(cameraControls, object3D) {
-  const bbox = STK.geo.Object3DUtil.getBoundingBox(object3D, true);
-  // console.log('got bbox', bbox);
-  cameraControls.viewTarget({
-    targetBBox: bbox, distanceScale: 1.5,
-    phi: -Math.PI / 4,
-    theta: Math.PI / 6,
-  });
-}
-
-function renderPartMeshes(renderer, basename, asset, partMeshes) {
-  console.log('render partMeshes', partMeshes.length);
-  if (partMeshes) {
-    const cameraControls = STK.gfx.SceneSetupHelper.createCameraControls(renderer, {
-      width: cmd.width,
-      height: cmd.height
-    });
-    const up = asset.model.getUp();
-    const front = asset.model.getFront();
-    // console.log('got up front', up, front);
-    const scene = STK.gfx.SceneSetupHelper.createScene(cameraControls.camera, lightingOptions);
-    // console.log('got lighting options', lightingOptions);
-    const group = new THREE.Group();
-    STK.geo.Object3DUtil.alignToUpFrontAxes(group, up, front, STK.Constants.worldUp, STK.Constants.worldFront);
-    scene.add(group);
-    scene.environment = lightingOptions.environment;
-
-    for (let partMesh of partMeshes) {
-      if (partMesh) {
-        const clone = partMesh.clone();
-        group.add(clone);
-        scene.updateMatrixWorld();
-        const name = basename + '_part_' + partMesh.userData.pid;
-        setView(cameraControls, scene);
-        renderer.renderToPng(scene, cameraControls.camera, name + '.png', {});
-        group.remove(clone);
       }
     }
   }

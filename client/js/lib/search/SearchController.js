@@ -52,6 +52,21 @@ function SearchController(params) {
     scope.Publish.apply(scope, arguments);
   });
 
+  this.allowTextEmbeddingSearch = params.allowTextEmbeddingSearch;
+  if (this.allowTextEmbeddingSearch && this.searchPanel.showSearchOptions) {
+    var searchTextEmbeddingElem = $('<input/>').attr('type', 'text').attr('size','20');
+    this.searchPanel.searchByTextEmbeddingButton = $('<input type="button" value="Search Text Emb"/>').click(
+      function() {
+        //var sim = scope.searchPanel.searchSimilarByOptions.val();
+        scope.modelTextSearch(searchTextEmbeddingElem.val(), null, 0, 21);
+      });
+    this.searchPanel.searchTextEmbeddingElem = searchTextEmbeddingElem;
+    var div = $('<div></div>');
+    div.append(this.searchPanel.searchTextEmbeddingElem);
+    div.append(this.searchPanel.searchByTextEmbeddingButton);
+    this.searchPanel.addToSearchOptions(div);
+  }
+
   // Application callback for searchSimilarityModelId
   this.searchSimilarGetModelIdCallback = params.searchSimilarGetModelIdCallback;
   if (this.searchSimilarGetModelIdCallback && this.searchPanel.showSearchOptions) {
@@ -61,17 +76,21 @@ function SearchController(params) {
         var sim = scope.searchPanel.searchSimilarByOptions.val();
         scope.modelSimilaritySearch(scope.searchSimilarGetModelIdCallback(), sim, 0, 21);
       });
-    this.searchSimilarBys = ['gshist', 'lfd', 'sdd', 'shd', 'sis', 'zernike', 'combined'];
+//    this.searchSimilarBys = ['gshist', 'lfd', 'sdd', 'shd', 'sis', 'zernike', 'combined'];
+    this.searchSimilarBys = ['f_openshape_p_1280'];
     this.searchPanel.searchSimilarByOptions = $('<select></select>');
     for (var i = 0; i < this.searchSimilarBys.length; i++) {
       var s = this.searchSimilarBys[i];
       this.searchPanel.searchSimilarByOptions.append('<option value="' + s + '">' + s + '</option>');
     }
-    this.searchPanel.searchSimilarByOptions.val('sdd');
+    //this.searchPanel.searchSimilarByOptions.val('sdd');
+    this.searchPanel.searchSimilarByOptions.val('f_openshape_p_1280');
     //this.searchOptionsElem.append("<br/>");
     this.searchPanel.addToSearchOptions(this.searchPanel.searchSimilarByOptions);
     this.searchPanel.addToSearchOptions(this.searchPanel.searchSimilarButton);
   }
+
+  this.searchPanel.onResize();
 
   if (!params.deferInit) {
     this.init();
@@ -161,7 +180,7 @@ SearchController.prototype.searchByIds = function (source, ids, searchSucceededC
         return {id: id};
       }), idField: 'id'
     });
-  searchFailedCallback || this.searchPanel.searchFailed.bind(this.searchPanel);
+  searchFailedCallback = searchFailedCallback || this.searchPanel.searchFailed.bind(this.searchPanel);
   BasicSearchController.prototype.searchByIds.call(this, source, ids, searchSucceededCallback, searchFailedCallback);
 };
 
@@ -206,7 +225,17 @@ SearchController.prototype.initiateCustomSearch = function(querier, queryData, s
 };
 
 // Model similarity searches
-SearchController.prototype.modelSimilaritySearch = function (modelId, similarity, start, limit, searchSucceededCallback, searchFailedCallback) {
+SearchController.prototype.modelSimilaritySearchSolr = function (modelId, similarity, start, limit, searchSucceededCallback, searchFailedCallback) {
+  searchSucceededCallback = searchSucceededCallback || this.searchPanel.searchSucceeded.bind(this.searchPanel, {});
+  searchFailedCallback = searchFailedCallback || this.searchPanel.searchFailed.bind(this.searchPanel);
+  this.query({
+    knn: { fullId: modelId, field: similarity, k: limit },
+    success: searchSucceededCallback,
+    error: searchFailedCallback,
+  });
+};
+
+SearchController.prototype.modelSimilaritySearchWs = function (modelId, similarity, start, limit, searchSucceededCallback, searchFailedCallback) {
   var callbacks = this.__getSearchCallbacks(this.source, 'modelId', searchSucceededCallback, searchFailedCallback);
   var url = Constants.models3dSimilaritySearchUrl;
   var queryData = {
@@ -229,8 +258,37 @@ SearchController.prototype.modelSimilaritySearch = function (modelId, similarity
       });
 };
 
+SearchController.prototype.modelSimilaritySearch = function(modelId, similarity, start, limit, searchSuccededCallback, searchFailedCallback) {
+  if (similarity.startsWith('f_')) {
+    this.modelSimilaritySearchSolr(modelId, similarity, start, limit, searchSuccededCallback, searchFailedCallback);
+  } else {
+    this.modelSimilaritySearchWs(modelId, similarity, start, limit, searchSuccededCallback, searchFailedCallback);
+  }
+};
+
 // More advanced model text search (using custom nlp)
-SearchController.prototype.modelTextSearch = function (text, sceneState, limit, searchSucceededCallback, searchFailedCallback) {
+SearchController.prototype.modelTextSearch = function (text, sceneState, start, limit, searchSucceededCallback, searchFailedCallback) {
+  var similarity = 'f_openshape_p_1280';
+  searchSucceededCallback = searchSucceededCallback || this.searchPanel.searchSucceeded.bind(this.searchPanel, {});
+  searchFailedCallback = searchFailedCallback || this.searchPanel.searchFailed.bind(this.searchPanel);
+  this.query({
+    knn: { query: text,
+           queryEmbeddingFn: (text, cb) => {
+             const queryData = { "input": text };
+             _.postJSON(Constants.sceneBuilderUrl + '/embedding/retrieve', queryData, {
+               callback: (err, res) => {
+                 if (err) { cb(err); }
+                 else { cb(null, res); }
+               }
+             });
+           },
+           field: similarity, k: limit },
+    success: searchSucceededCallback,
+    error: searchFailedCallback,
+  });
+};
+
+SearchController.prototype.modelTextSearchWs = function (text, sceneState, limit, searchSucceededCallback, searchFailedCallback) {
   var callbacks = this.__getSearchCallbacks(this.source, 'modelId', searchSucceededCallback, searchFailedCallback, function(json) {
     return json.results;
   });

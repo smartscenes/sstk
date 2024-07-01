@@ -1337,6 +1337,7 @@ function generateDefaultUvs(bufferGeometry, attrField) {
 
 function createMergedBufferGeometry(bufferGeometries) {
   var allAttributes = [];
+  var isIndexed = false;
   for (var i = 0; i < bufferGeometries.length; i++) {
     var bufferGeometry = bufferGeometries[i];
     var attributes = Object.keys(bufferGeometry.attributes);
@@ -1345,11 +1346,17 @@ function createMergedBufferGeometry(bufferGeometries) {
         allAttributes.push(attributes[j]);
       }
     }
+    if (bufferGeometry.index) {
+      isIndexed = true;
+    }
   }
   for (var i = 0; i < bufferGeometries.length; i++) {
     var bufferGeometry = bufferGeometries[i];
     var bufferAttributes = Object.keys(bufferGeometry.attributes);
     // ensure all buffer geometries have normal, uv
+    if (isIndexed) {
+      GeometryUtil.ensureIndexed(bufferGeometry);
+    }
     if (allAttributes.indexOf('uv') >= 0 && bufferAttributes.indexOf('uv') < 0) {
       generateDefaultUvs(bufferGeometry, 'uv');
     }
@@ -1404,7 +1411,7 @@ GeometryUtil.mergeMeshes = function (input) {
   }
 };
 
-// TODO: Improved merge meshes (WIP, not yet working)
+// TODO: Improved merge meshes (check status)
 GeometryUtil.mergeMeshesWithTransform = function (input, opts) {
   opts = opts || {};
   var transform = opts.transform;
@@ -1617,7 +1624,8 @@ GeometryUtil.toNonIndexed = function (geom) {
   }
 };
 
-GeometryUtil.toIndexedBufferGeometry = function(geom) {
+GeometryUtil.ensureIndexed = function(geom) {
+  var forcedIndices = false;
   if (!geom.index) {
     var nVerts = geom.attributes.position.count;
     var indexSize = nVerts;
@@ -1627,7 +1635,13 @@ GeometryUtil.toIndexedBufferGeometry = function(geom) {
       index[i] = i;
     }
     geom.setIndex(new THREE.BufferAttribute(index, 1));
+    forcedIndices = true;
   }
+  return forcedIndices;
+};
+
+GeometryUtil.toIndexedBufferGeometry = function(geom) {
+  GeometryUtil.ensureIndexed(geom);
   return geom;
 };
 

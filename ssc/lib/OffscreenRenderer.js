@@ -118,16 +118,6 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
     return buff;
   };
 
-  OffscreenRenderer.prototype.renderViews = function(scene, opts) {
-    if (opts.views === 'turntable') {
-      this.renderTurntable(scene, opts);
-    } else if (opts.views === 'all') {
-      this.renderAllViews(scene, opts);
-    } else  {
-      console.error('Unknown views: ' + opts.views);
-    }
-  };
-
   // Renders turntable views of scene and saves into pngs strippedId_<0-359>.png
   OffscreenRenderer.prototype.renderTurntable = function (scene, opts) {
     var cameraControls = opts.cameraControls;
@@ -174,11 +164,21 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
     var targetBBox = opts.targetBBox;
 
     var views = cameraControls.generateViews(targetBBox, this.width, this.height);
-    this.renderViews(scene, views, opts);
+    this.__renderViews(scene, views, opts);
+  };
+
+  OffscreenRenderer.prototype.renderViews = function(scene, views, opts) {
+    if (views === 'turntable') {
+      this.renderTurntable(scene, opts);
+    } else if (views === 'all') {
+      this.renderAllViews(scene, opts);
+    } else  {
+      this.__renderViews(scene, views, opts);
+    }
   };
 
   // Renders specified views of scene and saves into pngs
-  OffscreenRenderer.prototype.renderViews = function (scene, views, opts) {
+  OffscreenRenderer.prototype.__renderViews = function (scene, views, opts) {
     var cameraControls = opts.cameraControls;
     var basename = opts.basename;
     var onDone = opts.callback;

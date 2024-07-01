@@ -13,14 +13,27 @@ If you want to start the server on ports other than the defaults (8010), or unde
 ```
 NODE_BASE_URL='/myapp' HTTP_SERVER_PORT=8010 npm start
 ```
-You can specify these values in an `env.sh` file (see [env.example.sh](env.example.sh) for an example), and then run `run.sh`.
+You can specify these values in an `env.sh` file (see [env.example.sh](../env.example.sh) for an example), and then run `run.sh`.
 
 ## Setting up a new instance ##
+Clone the scene-toolkit repository:
 ```
   git clone git@github.com:smartscenes/sstk.git
   cd sstk
+```
+
+Make a copy of the example environment shell script and add the following values:
+```
   cp env.example.sh env.sh  
+
   # Edit env.sh to change the ports and base url
+  export NODE_BASE_URL="/scene-toolkit" 
+  export HTTP_SERVER_PORT=8010
+  export USE_LOCAL=1             # add to indicate running of services such as solr and libsg on the machine
+```
+
+Build and run the server:
+```
   ./build.sh
   cd server
   ./run.sh
@@ -33,11 +46,20 @@ You can specify these values in an `env.sh` file (see [env.example.sh](env.examp
 ```
 
 ## Proxying through Apache ##
-Update apache conf:
+
+Create a proxy conf file `/etc/apache2/scene-toolkit.conf`:
    ```
    ProxyPass /scene-toolkit/ http://localhost:8010/
    ProxyPassReverse /scene-toolkit/ http://localhost:8010/
    ```
+
+Update apache configuration by updating the conf files at `/etc/apache2/sites-available/000-default*.conf` with
+```
+  Include scene-toolkit.conf
+```
+
+Make sure to also enable the `proxy` and `proxy_http` modules in apache2 using `sudo a2enmod proxy`, etc.
+
 Reload apache conf: `sudo apache2ctl graceful`
 
 ## Directory Structure

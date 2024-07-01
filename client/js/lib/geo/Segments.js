@@ -853,7 +853,7 @@ Segments.prototype.__setSegments = function (callback, field, format, data, segm
       var origMeshes = Object3DUtil.getMeshList(this.origObject3D);
       this.segments = SegmentationUtil.convertMaterialMeshTrisToMeshTris(this.segments, origMeshes);
     }
-    this.segmentedObject3D = SegmentationUtil.remeshObjectUsingMeshTriSegments(this.origObject3D, this.segments);
+    this.segmentedObject3D = SegmentationUtil.remeshObjectUsingMeshTriSegments(this.origObject3D, this.segments, null, metadata);
     this.segmentedObject3D.userData.segIndexInfo = { type: 'segment', field: 'index' };
     this.obbsByLabelType = {};
     this.rawSegmentObject3DWrapper = null;

@@ -1469,8 +1469,13 @@ AssetManager.prototype.__loadSceneFromJsonFile = function (sceneinfo, callback) 
 
 AssetManager.prototype.__loadScene = function (loader, sceneinfo, callback) {
   if (sceneinfo.data) {
-    var data = (typeof sceneinfo.data === 'string') ? JSON.parse(sceneinfo.data) : sceneinfo.data;
-    loader.parse(data, function(s) { callback(null,s); }, null, sceneinfo);
+    var sceneData = (typeof sceneinfo.data === 'string') ? JSON.parse(sceneinfo.data) : sceneinfo.data;
+    if (sceneinfo.extractField) {
+      sceneData = _.get(sceneData, sceneinfo.extractField);
+      sceneData = (typeof sceneData === 'string') ? JSON.parse(sceneData) : sceneData;
+    }
+
+    loader.parse(sceneData, function(s) { callback(null,s); }, null, sceneinfo);
   } else if (sceneinfo.file) {
     return loader.load(sceneinfo.file, function(s) { callback(null,s); }, null, function(err) { callback(err); }, sceneinfo);
   } else {

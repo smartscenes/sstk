@@ -185,15 +185,16 @@ SegmentationUtil.remapVertToSegIndicesFromOriginalVertices = function(object, ve
  * Remesh object
  * @param object {THREE.Object3D} Object to be remeshed
  * @param segments {Array} Array of TriMesh segments
- * @param material
- * @param options
+ * @param [material] {THREE.Material} Material to use on the remshed object
+ * @param options.ignoreMeshGroups {boolean }- whether to ignore original mesh groups (e.g. treat the entire 3D asset as one mesh) or use original mesh groups
  * @returns {Object3D}
  */
 SegmentationUtil.remeshObjectUsingMeshTriSegments = function (object, segments, material, options) {
   // Get remesh of the object
   // TODO: Have the meshIndex be consistent?  Sorted by userData.meshIndex?
   //       Some models have several different pieces that are loaded, meshIndex only makes sense within each one
-  var origMeshes = Object3DUtil.getMeshList(object);
+  options = options || {};
+  var origMeshes = (options.ignoreMeshGroups)? [GeometryUtil.mergeMeshesWithTransform(object)] : Object3DUtil.getMeshList(object);
 
   var meshes = [];
   var idToMeshIndices = {};
@@ -289,7 +290,7 @@ SegmentationUtil.remeshObjectUsingMeshTriSegments = function (object, segments, 
  * Assign different materials to segments
  * @param object {THREE.Object3D} Object to be remeshed
  * @param segments {Array} Array of TriMesh segments
- * @param material
+ * @param [createMaterialFn] {function(index,segment): THREE.Material} Function that returns the material to use
  * @param options
  * @returns {Object3D}
  */

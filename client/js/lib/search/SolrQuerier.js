@@ -16,7 +16,7 @@ function SolrQuerier(opts) {
       const i = url.lastIndexOf('/');
       url = url.substring(0, i);
     }
-    this.schemaUrl = url + '/fields';
+    this.schemaUrl = url + '/schema/fields';
     this.searchUrl = url + '/select';
   }
   this.timeout = opts.timeout || 5000;
@@ -103,10 +103,22 @@ SolrQuerier.prototype.getQueryOpts = function (params) {
 };
 
 /**
+ * KNN query for NNs to vector or asset
+ * @class KNNQuery
+ * @param {string} field - Field to search over
+ * @param {int} k - k nearest neighbor to fetch
+ * @param {double[]} [vector] - vector to search over
+ * @param {string} [fullId] - id to query over
+ * @param {function} [queryEmbeddingFn] - function to call to obtain embedding (if fullId not specified)
+ * @param {string} [query] - query to provide as input to queryEmbeddingFn
+ **/
+
+/**
  * Execute basic query
  * @param params Query parameters
  * @param [params.url=this.searchUrl] {string} Solr search url
  * @param [params.query=*:*] {string} Solr query
+ * @param [params.knn=] {KNNQuery} KNN query with vector (cannot be specified together with main query)
  * @param [params.start=0] {int} Record to start at
  * @param [params.limit=0] {int} Limit on number of records to fetch
  * @param [params.sort] {string} Sort order
@@ -117,8 +129,69 @@ SolrQuerier.prototype.getQueryOpts = function (params) {
  */
 SolrQuerier.prototype.query = function (params, callback) {
   const solrUrl = params.url || this.searchUrl;
-  const queryData = this.__toQueryData(params);
-  return this.__query(solrUrl, queryData, _.getCallback(params, callback), params.solrQueryProxy);
+  const cb = _.getCallback(params, callback);
+  if (params.knn && params.knn.vector == null) {
+    if (params.knn.queryEmbeddingFn) {
+      this.__queryKNNAssetWithCustomEmbedding(params, cb);
+    } else {
+      this.__queryKNNAsset(params, cb);
+    }
+  } else {
+    const queryData = this.__toQueryData(params);
+    return this.__query(solrUrl, queryData, cb, params.solrQueryProxy);
+  }
+};
+
+SolrQuerier.prototype.__queryKNNAsset = function(params, callback) {
+  // need to fill in params.knn.vector
+  const solrUrl = params.url || this.searchUrl;
+  if (params.knn.fullId) {
+    const queryData = this.__toQueryData({ query: `fullId:${params.knn.fullId}`, fields: [params.knn.field, 'fullId'] });
+    this.__query(solrUrl, queryData, (err, data) => {
+      if (err) {
+        callback(err);
+      } else {
+        if (data.response && data.response.docs && data.response.docs.length > 0) {
+          const doc = data.response.docs[0];
+          const vector = doc[params.knn.field];
+          if (vector) {
+            params.knn.vector = vector;
+            const queryData2 = this.__toQueryData(params);
+            return this.__query(solrUrl, queryData2, callback, params.solrQueryProxy);
+          } else {
+            callback(`Cannot get field ${params.knn.field} for asset ${params.knn.fullId}`);
+          }
+        } else {
+          callback('Cannot find asset');
+        }
+      }
+    }, params.solrQueryProxy);
+  } else {
+    callback('Missing knn vector and fullId');
+  }
+};
+
+SolrQuerier.prototype.__queryKNNAssetWithCustomEmbedding = function(params, callback) {
+  // need to fill in params.knn.vector
+  const solrUrl = params.url || this.searchUrl;
+  if (params.knn.query) {
+    params.knn.queryEmbeddingFn(params.knn.query, (err, data) => {
+      if (err) {
+        callback(err);
+      } else {
+        // handle response
+        if (data) {
+          params.knn.vector = data;
+          const queryData2 = this.__toQueryData(params);
+          return this.__query(solrUrl, queryData2, callback, params.solrQueryProxy);
+        } else {
+          callback(`Cannot get embedding for input ${params.knn.query}`);
+        }
+      }
+    });
+  } else {
+    callback('Missing knn query');
+  }
 };
 
 SolrQuerier.prototype.__toQueryData = function(params) {
@@ -153,7 +226,20 @@ SolrQuerier.prototype.__toQueryData = function(params) {
       queryData[f] = params[f];
     }
   }
+  if (params.knn) {
+    const knnString = this.getKNNQueryString(params.knn.field, params.knn.vector, params.knn.k);
+    if (queryData.q !== '*:*') {
+      console.warn(`replacing query ${queryData.q} with KNN search`, params.knn);
+    }
+    queryData.q = knnString;
+  }
   return queryData;
+};
+
+SolrQuerier.prototype.getKNNQueryString = function(fieldname, vector, k) {
+  const vstr = vector.join(',');
+  const topK = k || 10;
+  return `{!knn f=${fieldname} topK=${topK}}[${vstr}]`;
 };
 
 /**

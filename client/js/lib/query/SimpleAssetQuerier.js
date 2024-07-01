@@ -15,6 +15,7 @@ require('jquery-lazy');
  * @param options Configuration parameters for AssetQuerier
  * @param [options.entriesPerRow=6] {int} Number of entries to show per row
  * @param [options.nRows=50] {int} Number of rows to show
+ * @param [options.suggester] Autocomplete suggester
  * @param [options.viewerUrl] {string} Base url for viewer (asset is shown using the pattern `${viewerUrl}?fullId=${fullId}`)
  * @param [options.viewerIframe] {jQueryObject} If specified, asset is shown in the specified iframe vs a new tab.
  * @param [options.viewerModal] {jQueryObject} If specified, asset is shown in the specified iframe/modal vs a new tab.  Requires `viewerIframe` be specified as well.
@@ -96,6 +97,7 @@ AssetQuerier.prototype.__initSearch = function (options, assetGroups) {
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
     onClickResultCallback: options.onClickAsset || this.showResult.bind(this),
     appendResultElemCallback: options.customizeResult,
+    tooltipIncludeFields: options.tooltipIncludeFields,
     entriesPerRow: options.entriesPerRow,
     nRows: options.nRows,
     searchPanel: this.searchPanel,
@@ -113,6 +115,9 @@ AssetQuerier.prototype.__initSearch = function (options, assetGroups) {
       var assetGroup = assetGroups[i];
       this.searchController.registerSearchModule(assetGroup.source, assetGroup.assetDb || assetGroup.solrUrl);
     }
+  }
+  if (options.suggester) {
+    this.searchController.searchPanel.setAutocomplete(options.suggester);
   }
 
   var idsFile = options.idsFile;

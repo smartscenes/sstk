@@ -240,6 +240,10 @@ Model.prototype.isRoof = function () {
   return this.hasCategory('roof', true);
 };
 
+Model.prototype.isRoom = function () {
+  return this.hasCategory('room', true);
+};
+
 Model.prototype.isPlant = function () {
   return this.hasCategory('plant', true);
 };

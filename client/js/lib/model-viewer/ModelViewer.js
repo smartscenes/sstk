@@ -314,6 +314,7 @@ ModelViewer.prototype.init = function () {
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
     onClickResultCallback: this.loadModel.bind(this),
     searchSimilarGetModelIdCallback: (this.showSearchSimilar)? this.getTargetModelId.bind(this) : undefined,
+    allowTextEmbeddingSearch: true,
     sources: this.modelSources,
     searchPanel: $('#searchPanel'),
     showSearchOptions: this.showSearchOptions,

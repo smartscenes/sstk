@@ -3083,7 +3083,7 @@ Object3DUtil.getAllMeshMaterials = function(object3D) {
  * @property {string} name
  * @property {string} type material
  * @property {THREE.Material} material - Material
- * @property {Array<THREE.Mesh|PartialMesh>} meshes - Meshes associated with this material
+ * @property {Array<THREE.Mesh|geo.PartialMesh>} meshes - Meshes associated with this material
  * @memberOf geo
  */
 
@@ -3095,7 +3095,7 @@ Object3DUtil.getAllMeshMaterials = function(object3D) {
  * @property {string} name
  * @property {string} type material_set
  * @property {Array<THREE.Material>} materials - Set of materials
- * @property {Array<THREE.Mesh|PartialMesh>} meshes - Meshes associated with a material in this set of materials
+ * @property {Array<THREE.Mesh|geo.PartialMesh>} meshes - Meshes associated with a material in this set of materials
  * @memberOf geo
  */
 

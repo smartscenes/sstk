@@ -50,8 +50,8 @@ cmd.Command.prototype.optionGroups = function(opts) {
   // Options for specifying view point
   if (opts.view) {
     this.option('--view_index <view_index>', 'Which view to render [0-7]', STK.util.cmd.parseInt);
-    this.option('--view_target_ids <object_ids>', 'Which objects to look at', STK.util.cmd.parseList);
-    this.option('--find_good_views [flag]', 'Whether to optimize for good views or not (applies if --view_target_ids is set)', STK.util.cmd.parseBoolean);
+    this.option('--view_target_ids <object_ids>', 'Which objects to look at (use object to include all objects)', STK.util.cmd.parseList);
+    this.option('--find_good_views [flag]', 'Whether to optimize for good views or not (applies if --view_target_ids is set)', STK.util.cmd.parseBoolean, false);
     this.option('--use_scene_camera <camera_name>', 'Use camera from scene');
   }
   // Options for special color by
@@ -65,7 +65,7 @@ cmd.Command.prototype.optionGroups = function(opts) {
       .option('--object_index <filename>', 'Input index to use for object ids')
       .option('--restrict_to_color_index [flag]', 'Restrict coloring to index', STK.util.cmd.parseBoolean, false)
       .option('--output_image_encoding <encoding>', 'What encoding to use for output image')        // TODO: there is a bit of overlap in this two options
-      .option('--model_category_mapping <filename>', 'Mapping of model id to category mappings')
+      .option('--model_category_mapping <filename>', 'Mapping of model id to category mappings (with id and category columns).  Can also be JSON object with path, useFullId, modelIdKey, categoryKey.', STK.util.cmd.parseJSONObjectOrString)
       .option('--convert_pixels <target_type>', "Target type for pixels (uint8|uint16)", /^(uint8|uint16)$/);
   }
   // Options for voxelization
@@ -82,7 +82,7 @@ cmd.Command.prototype.optionGroups = function(opts) {
   if (opts.transform3d) {
     this.option('--center [flag]', 'Center so scene is at origin', STK.util.cmd.parseBoolean, false)
       .option('--normalize_size <type>', 'What to normalize (diagonal or max dimension)', /^(diagonal|max)$/)
-      .option('--normalize_size_to <target>', 'What to normalize the size to', STK.util.cmd.parseFloat, 1.0)
+      .option('--normalize_size_to <target>', 'What to normalize the size to', STK.util.cmd.parseFloat, 1.0);
   }
   // Options for normalizing geometry
   if (opts.norm_geo) {

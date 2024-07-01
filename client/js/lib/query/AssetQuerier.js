@@ -166,6 +166,7 @@ AssetQuerier.prototype.__initSearch = function (options) {
     getImagePreviewUrlCallback: this.assetManager.getImagePreviewUrl.bind(this.assetManager),
     onClickResultCallback: options.onClickAsset || this.showResult.bind(this),
     appendResultElemCallback: options.customizeResult,
+    tooltipIncludeFields: options.tooltipIncludeFields,
     entriesPerRow: options.entriesPerRow,
     nRows: options.nRows,
     searchPanel: this.searchPanel,

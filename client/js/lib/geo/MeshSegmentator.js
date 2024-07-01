@@ -25,10 +25,28 @@ Object.assign(PlanarMeshSegment.prototype, {
   }())
 });
 
+/**
+ * Options specifying how the mesh should be segmented
+ * @typedef MeshSegmentatorOptions
+ * @type {object}
+ * @property {string} method - What method to use for the segmentation: 'connectivity|clustering|fwab-vert|fwab-tri'
+ * @memberOf geo
+ */
+
+/**
+ * MeshSegmentator is responsible for segmenting a mesh
+ * @memberof geo
+ */
 class MeshSegmentator {
   constructor() {
   }
 
+  /**
+   * Segment mesh into segments
+   * @param mesh {THREE.Mesh} - Mesh to segment
+   * @param [opts] {geo.MeshSegmentatorOptions} - Options specifying how the mesh should be segmented
+   * @returns {MeshFaces[]}
+   */
   segment(mesh, opts) {
     opts = opts || {};
     if (opts.method === 'connectivity') {
@@ -47,6 +65,8 @@ class MeshSegmentator {
   segmentByConnectivity(mesh, opts) {
     const connectivityGraph = new ConnectivityGraph(mesh.geometry, true);
     const triAccessor = new TriangleAccessor(mesh);
+    // indices: subset of triangle indices to segment
+    // (TODO: remove indices as we can use mesh with faceIndices and ExtendedTriangleAccessor for this)
     const nTris = opts.indices? opts.indices.length : triAccessor.numTriangles();
     const indices = opts.indices? opts.indices : _.range(nTris);
     const components = DSUtil.identifyConnectedComponents(indices, (ti1, ti2) => {
@@ -184,7 +204,7 @@ class MeshSegmentator {
     _.forEach(vertSets, (vertSet, setId) => {
       _.forEach(vertSet, (vertIndex) => {
         vert2setId[vertIndex] = setId;
-      })
+      });
     });
     for (let iTri =0; iTri < nTris; iTri++) {
       triAccessor.getTriangle(iTri, tri);

@@ -43,6 +43,7 @@ Example of using `STK.SimpleModelViewer` from `STK.bundle.js`
 #### Building the [jsdoc](http://usejsdoc.org/index.html)
 - run `npm run jsdoc`
   - If jsdoc not found, run `npm install -g jsdoc` to install it
+  - If ink-docstrap not found, run `npm install ink-docstrap` to install it
 - Open the generated `jsdoc/index.html` page with a browser
 
 #### Directory Structure

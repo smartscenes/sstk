@@ -65,7 +65,8 @@ function render(scene, renderer, renderOpts, cmdOpts, checkImageSize) {
       console.log('use existing camera');
     } else if (cmdOpts.view) {
       // Using more complex view parameters
-      const viewOpts = cmdOpts.view.position? cmdOpts.view : cameraControls.getView(_.merge(Object.create(null), cmdOpts.view, { target: scene }));
+      const viewOpts = cmdOpts.view.position? cmdOpts.view :
+        cameraControls.getView(_.merge(Object.create(null), cmdOpts.view, { target: scene }));
 
       if (viewOpts.imageSize) {
         //console.log('got', viewOpts);
@@ -110,7 +111,7 @@ function render(scene, renderer, renderOpts, cmdOpts, checkImageSize) {
 // Fields (from cmdOpts) that the render functions looks at
 render.cmdFields = [ 'color_by', 'output_image_encoding', 'convert_pixels',
   'render_all_views', 'render_turntable',
-  'views', 'view', 'view_index', 'view_target_ids', 'use_current_view',
+  'views', 'view', 'view_index', 'view_target_ids', 'find_good_views', 'use_current_view',
   'width', 'height', 'max_width', 'max_height', 'max_pixels', 'save_view_log',
   'log_index_info', 'pixel_index'
 ];
@@ -166,7 +167,8 @@ function getTargetObjects(sceneState, targetIds) {
   const includeAnyObject = (targetIds.indexOf('object') >= 0);
   const targetObjects = sceneState.findNodes(function (x) {
     if (includeAnyObject) {
-      return !!STK.geo.Object3DUtil.getModelInstance(x);
+      const modelInstance = STK.geo.Object3DUtil.getModelInstance(x);
+      return !!modelInstance && (!modelInstance.model.isRoom());
     } else {
       return targetIds.indexOf(x.userData.id) >= 0;
     }
@@ -180,7 +182,7 @@ function getSimpleRenderer(width, height) {
   return rendererFactory.getOffscreenRenderer('simple', { width: width, height: height });
 }
 
-function getTargetObjectViews(sceneState, view_target_ids, cameraControls, rendererOpts) {
+function getTargetObjectViews(sceneState, view_target_ids, cameraControls, rendererOpts, initialViewOpts) {
   if (view_target_ids) {
     const targetObjects = getTargetObjects(sceneState, view_target_ids);
     if (targetObjects && targetObjects.length > 0) {
@@ -195,7 +197,7 @@ function getTargetObjectViews(sceneState, view_target_ids, cameraControls, rende
         height: rendererOpts.height
       });
       // TODO: allow for several different views
-      const viewOpts = viewOptimizer.lookAt(sceneState, targetObjects);
+      const viewOpts = viewOptimizer.lookAt(sceneState, targetObjects, initialViewOpts);
       return { view: viewOpts };
     } else {
       console.warn('Target objects not found');
@@ -208,15 +210,18 @@ function updateViewOptsForTargetObjects(sceneState, cmdOpts, cameraControls, ren
   if (cmdOpts.view_target_ids) {
     if (cmdOpts.find_good_views) {
       // we want to find some good views for the object
+      const initialViewOpts = cmdOpts.view;
       const viewInfo = getTargetObjectViews(
         sceneState, cmdOpts.view_target_ids, cameraControls, {
           width: renderer.width,
           height: renderer.height,
           maxWidth: 300,
           maxHeight: 300
-        });
+        }, initialViewOpts);
       if (viewInfo) {
-        cmdOpts.view = viewInfo;
+        // console.log('got viewInfo', viewInfo);
+        cmdOpts.initialViewOpts = cmdOpts.view;
+        cmdOpts.view = viewInfo.view;
       }
     } else {
       // normal case

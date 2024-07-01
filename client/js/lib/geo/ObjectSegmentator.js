@@ -64,10 +64,16 @@ class ObjectSegmentator {
   }
 
   getSegmentation(object3D, opts) {
-    const meshes = Object3DUtil.getMeshList(object3D);
-    let segmented = meshes.map(mesh => {
-      return { mesh: mesh, meshSegs: this.meshSegmentator.segment(mesh, opts) };
-    });
+    let segmented = null;
+    if (opts.ignoreMeshGroups) {
+      const combinedMesh = GeometryUtil.mergeMeshesWithTransform(object3D);
+      segmented = [{mesh: combinedMesh, meshSegs: this.meshSegmentator.segment(combinedMesh, opts)}];
+    } else {
+      const meshes = Object3DUtil.getMeshList(object3D);
+      segmented = meshes.map(mesh => {
+        return {mesh: mesh, meshSegs: this.meshSegmentator.segment(mesh, opts)};
+      });
+    }
     if (opts.format === 'trimesh') {
       // each segment should be of the form {meshIndex: x, triIndex: [...] }
       segmented = segmented.map((m, meshIndex) =>
@@ -85,6 +91,7 @@ class ObjectSegmentator {
         return buffer;
       });
     } else if (opts.format === 'meshSegs') {
+      // segmented already in this format
     } else {
       console.error('Cannot convert to unsupported mesh segmentation format', opts.format);
     }

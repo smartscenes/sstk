@@ -29,6 +29,7 @@ STK.util.assign(STK, {
   SceneViewer: require('./scene-viewer/SceneViewer'),
   SceneQuerier: require('./query/SceneQuerier'),
   SearchController: require('./search/SearchController'),
+  SolrQuerySuggester: require('./search/SolrQuerySuggester'),
   SimpleAssetQuerier: require('./query/SimpleAssetQuerier'),
   Stats: require('./stats/stats'),
   SimpleModelViewer: require('./model-viewer/SimpleModelViewer'),

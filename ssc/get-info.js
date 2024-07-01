@@ -15,6 +15,7 @@ cmd
   .option('--input_format <format>', 'Input file format to use')
   .option('--input_type <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
   .option('--assetType <type>', 'Asset type (scene or model)', 'model')
+  .option('--assetGroups <groups>', 'Asset groups (scene or model) to load', STK.util.cmd.parseList)
   .option('--auto_scale [flag]', 'Whether to auto scale asset', STK.util.cmd.parseBoolean, false)
   .option('--auto_align [flag]', 'Whether to auto align asset', STK.util.cmd.parseBoolean, false)
   .option('--skip_existing [flag]', 'Whether to skip existing', STK.util.cmd.parseBoolean, false)

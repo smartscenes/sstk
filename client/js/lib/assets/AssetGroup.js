@@ -233,7 +233,8 @@ AssetGroup.prototype.__getInterpolateContext = function() {
 };
 
 AssetGroup.prototype.__getInterpolationVars = function(id, metadata) {
-  return _.defaults(Object.create(null), {id: id}, metadata, this.__getInterpolateContext());
+  return _.defaults(Object.create(null), {id: id, fullId: this.name + '.' + id, source: this.name},
+    metadata, this.__getInterpolateContext());
 };
 
 AssetGroup.prototype.__getInterpolatedAssetInfo = function(obj, id, metadata) {

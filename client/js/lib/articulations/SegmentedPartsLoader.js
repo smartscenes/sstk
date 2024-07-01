@@ -124,6 +124,7 @@ class SegmentedPartsLoader {
     let meshTris = null;
     let indexByPartId = false;
     const meshes = Object3DUtil.getMeshList(object3D);
+    let remeshOptions = null;
     if (options.skipUnlabeledSegment && meshes.lengths === 1) {
       meshTris = parts.map((part) => {
         return part ? {id: part.partId, meshIndex: 0, triIndex: part.triIndices} : null;
@@ -140,6 +141,7 @@ class SegmentedPartsLoader {
       indexByPartId = false;
     } else if (options.format === 'segmentation') {
       if (options.segmentation) {
+        remeshOptions = options.segmentation.metadata;
         if (options.segmentation.metadata.format === 'trimesh') {
           parts.forEach((part,i) => {
             if (part.partSetId != null) {
@@ -181,7 +183,7 @@ class SegmentedPartsLoader {
     } else {
       throw 'Unsupported format ' + options.format;
     }
-    const remeshed = SegmentationUtil.remeshObjectUsingMeshTriSegments(object3D, meshTris);
+    const remeshed = SegmentationUtil.remeshObjectUsingMeshTriSegments(object3D, meshTris, null, remeshOptions);
     // console.log('remeshed', remeshed, meshTris, parts);
     const partMeshes = [];
     const partsById = _.keyBy(parts.filter(x => x), 'partId');

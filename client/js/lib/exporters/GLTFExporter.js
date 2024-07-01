@@ -1077,6 +1077,7 @@ const DataUriUtil = require('util/DataUriUtil');
         2: 'VEC2',
         3: 'VEC3',
         4: 'VEC4',
+        9: 'MAT3',
         16: 'MAT4'
       };
       let componentType; // Detect the component type of the attribute array (float, uint or ushort)
@@ -1520,17 +1521,19 @@ const DataUriUtil = require('util/DataUriUtil');
       const json = this.json;
       const meshCacheKeyParts = [ mesh.geometry.uuid ];
 
-      if ( Array.isArray( mesh.material ) ) {
+      // AXC: old support for MultiMaterials...
+      const meshMaterial = (mesh.material instanceof THREE.MultiMaterial)? mesh.material.materials : mesh.material;
+      if ( Array.isArray( meshMaterial ) ) {
 
-        for ( let i = 0, l = mesh.material.length; i < l; i ++ ) {
+        for ( let i = 0, l = meshMaterial.length; i < l; i ++ ) {
 
-          meshCacheKeyParts.push( mesh.material[ i ].uuid );
+          meshCacheKeyParts.push( meshMaterial[ i ].uuid );
 
         }
 
       } else {
 
-        meshCacheKeyParts.push( mesh.material.uuid );
+        meshCacheKeyParts.push( meshMaterial.uuid );
 
       }
 
@@ -1724,17 +1727,27 @@ const DataUriUtil = require('util/DataUriUtil');
 
       }
 
-      // AXC: still handle old style THREE.MultiMaterial....
-      const isMultiMaterial = Array.isArray( mesh.material ) || mesh.material instanceof THREE.MultiMaterial;
-      let materials = isMultiMaterial ? mesh.material : [ mesh.material ];
-      if (materials instanceof THREE.MultiMaterial) {
-        materials = materials.materials;
-      }
+      // AXC: use our local meshMaterial variable
+      const isMultiMaterial = Array.isArray( meshMaterial );
       if ( isMultiMaterial && geometry.groups.length === 0 ) {
         // AXC: warn if multi materials and no geometry groups
-        console.warn('GLTFExporter: multimaterial but no geometry.groups')
+        console.warn('GLTFExporter: multimaterial but no geometry.groups');
         return null;
       }
+
+      // AXC: https://github.com/mrdoob/three.js/commit/1b4dff01c0d488d3fccea11ab508ba7ca96101eb
+      let didForceIndices = false;
+      if ( isMultiMaterial && geometry.index === null ) {
+        const indices = [];
+        for ( let i = 0, il = geometry.attributes.position.count; i < il; i ++ ) {
+          indices[ i ] = i;
+        }
+
+        geometry.setIndex( indices );
+        didForceIndices = true;
+      }
+
+      const materials = isMultiMaterial ? meshMaterial : [ meshMaterial ];
       const groups = isMultiMaterial ? geometry.groups : [ {
         materialIndex: 0,
         start: undefined,
@@ -1779,6 +1792,11 @@ const DataUriUtil = require('util/DataUriUtil');
         if ( material !== null ) primitive.material = material;
         primitives.push( primitive );
 
+      }
+
+      // AXC: https://github.com/mrdoob/three.js/commit/1b4dff01c0d488d3fccea11ab508ba7ca96101eb
+      if ( didForceIndices === true ) {
+        geometry.setIndex( null );
       }
 
       meshDef.primitives = primitives;

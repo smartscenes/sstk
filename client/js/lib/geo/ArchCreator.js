@@ -302,7 +302,7 @@ ArchCreator.prototype.roomsToLevels = function(rooms) {
 /**
  * Information about an architectural element.
  * @typedef ArchElement
- * @type {geo.WallDef|geo.CeilingDef|geo.FloorDef|ColumnDef|StairsDef}
+ * @type {geo.WallDef|geo.CeilingDef|geo.FloorDef|geo.ColumnDef|geo.StairsDef}
  * @property {string} type - Type of architectural element (`Wall|Ceiling|Floor|Ground|Landing|Column|Stairs`)
  * @property {string} id - Id of the element
  * @property {string} roomId - Room the architectural element is associated with
@@ -358,8 +358,8 @@ ArchCreator.prototype.roomsToLevels = function(rooms) {
  * Information about a set of stairs.
  * @typedef StairsDef
  * @type {object}
- * @property {StepSpec[]} steps - Specification of steps making up the stair
- * @property {RailingSpec[]} railing - Specification of railings associated with the stair
+ * @property {geo.StepSpec[]} steps - Specification of steps making up the stair
+ * @property {geo.RailingSpec[]} railing - Specification of railings associated with the stair
  * @memberOf geo
  */
 
@@ -390,9 +390,9 @@ ArchCreator.prototype.roomsToLevels = function(rooms) {
  *  (currently assuming no gap)
  * @typedef StepSpec
  * @type {object}
- * @property {int} nSteps - Opening is a box with coordinates specified relative to wall lower left
- * @property {THREE.Vector3[]} basePoints - Opening is polygon with coordinates specified relative to wall lower left
- * @property {THREE.Vector3[]} endPoints - Opening is polygon with coordinates specified relative to wall lower left
+ * @property {int} nSteps - Number of steps
+ * @property {THREE.Vector3[]} basePoints - Array of two points at the bottom of the stairs
+ * @property {THREE.Vector3[]} endPoints - Array of two points at the top of the stairs
  * @property {number} stepHeight - Height of each step
  * @property {number} treadDepth - How thick is the tread (the top surface of each step)
  * @property {boolean} hasRiser - Whether there is riser (the vertical part between steps).  Most stairs have risers.

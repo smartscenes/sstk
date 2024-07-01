@@ -288,10 +288,8 @@ ViewOptimizer.prototype.sample = function(options) {
  * @param options.sceneState
  * @param options.target
  * @param [options.viewGenerator] Generator with generate() function for generating stream of views
- * @param [options.phiStart=0] {number}
- * @param [options.phiEnd=Math.PI*2] {number}
- * @param [options.theta] {number}
- * @param [options.nViews] {int}
+ * @param [options.phi=[0,Math.PI*2]] {number|RangeSpec}
+ * @param [options.theta=Math.PI/4] {number|RangeSpec}
  * @param [options.keepTargetsVisible] {boolean}
  * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
  */
@@ -317,65 +315,104 @@ ViewOptimizer.prototype.optimize = function(options) {
   }
 };
 
+function getRangeSpecification(value, defaults) {
+  if (_.isNumber(value)) {
+    return { start: value, end: value, step: 0, n: 1 };
+  } else {
+    var range = {start: value.start, end: value.end, step: value.step, n: value.n};
+    if (range.start == null) {
+      range.start = defaults.start;
+    }
+    var inferN = range.n == null;
+    var inferStep = range.step == null;
+    if (range.n == null && range.step == null) {
+      // Take these values from defaults
+      range.n = defaults.n;
+      range.step = defaults.step;
+    }
+    if (range.end == null) {
+      if (range.n === 1) {
+        range.end = range.start;
+      } else {
+        range.end = range.start + defaults.rangeSize;
+      }
+    }
+    if (inferN && range.step) {
+      range.n = Math.round((range.end - range.start) / (range.step));
+    } else if (inferStep && range.n != null) {
+      range.step = (range.end - range.start)/range.n;
+    }
+    return range;
+  }
+}
 /**
  * Find and returns the best view parameters
  * @param options
  * @param options.targetBBox {geo.BBox}
  * @param options.sceneState
  * @param options.target
- * @param [options.phiStart=0] {number}
- * @param [options.phiEnd=Math.PI*2] {number}
- * @param [options.theta] {number}
- * @param [options.nViews] {int}
+ * @param [options.phi=[0,Math.PI*2]] {number|RangeSpec}
+ * @param [options.theta=Math.PI/4] {number|RangeSpec}
  * @param [options.keepTargetsVisible] {boolean}
+ * @param [options.scoredViews] {Array}
  * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
  */
 ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
-  // For now, just iterate on phi (and we cover 0 to 360)
+  // iterate over theta and phi
   this.scorer.init(this.cameraControls.camera);
-  var phi = (options.phiStart != undefined)? options.phiStart : 0;
-  var phiEnd = (options.phiEnd != undefined)? options.phiEnd : (Math.PI*2);
-  var phiDelta = (phiEnd-phi) / options.nViews;
-  var best = undefined;
-  for (var i = 0; i < options.nViews; i++) {
-    var opts = {
-      targetBBox: options.targetBBox,
-      theta: options.theta,
-      phi: phi
-    };
-    this.cameraControls.viewTarget(opts);
-    opts.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target);
-    //console.log('Got score: ' + opts.score + ', best so far ', best);
-    if (!best || opts.score > best.score) {
-      best = opts;
-    }
-    if (opts.score < 0.05 && options.keepTargetsVisible) {
-      var res = findPositionWithVisibleTargets( {
-        scene: options.sceneState.scene,
-        position: this.cameraControls.camera.position,
-        targets: options.target
-      });
-      if (res) {
-        var opts2 = {position: res.position, target: res.target};
-        this.cameraControls.viewTarget(opts2);
-        // Add distance penalty
-        var distPenaltyUnscaled = res.distance/res.originalDistanceFromCenter;
+  var thetaRange = getRangeSpecification(options.theta, {start: Math.PI / 4, end: Math.PI / 4, n: 1, rangeSize: Math.PI*2});
+  var phiRange = getRangeSpecification(options.phi, {start: 0, end: Math.PI * 2, n: 8, rangeSize: Math.PI*2});
+  var best;
+  for (let itheta = 0, theta = thetaRange.start; itheta < thetaRange.n; theta += thetaRange.step, itheta++) {
+    for (let iphi = 0, phi = phiRange.start; iphi < phiRange.n; phi += phiRange.step, iphi++) {
+      var opts = {
+        targetBBox: options.targetBBox,
+        theta: theta,
+        phi: phi
+      };
+      this.cameraControls.viewTarget(opts);
+      opts.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target);
+      if (options.scoredViews) {
+        options.scoredViews.push(opts);
+      }
+      //console.log('Got score: ' + opts.score + ', best so far ', best);
+      if (!best || opts.score > best.score) {
+        best = opts;
+      }
+      if (opts.score < 0.05 && options.keepTargetsVisible) {
+        var res = findPositionWithVisibleTargets({
+          scene: options.sceneState.scene,
+          position: this.cameraControls.camera.position,
+          targets: options.target
+        });
+        if (res) {
+          var opts2 = {position: res.position, target: res.target};
+          this.cameraControls.viewTarget(opts2);
+          // Add distance penalty
+          var distPenaltyUnscaled = res.distance / res.originalDistanceFromCenter;
 
-        opts2.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target) * distPenaltyUnscaled;
-        //console.log('Got score2: ' + opts2.score + ', best so far ', best, res);
-        if (!best || opts2.score > best.score) {
-          best = opts2;
+          opts2.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target) * distPenaltyUnscaled;
+          //console.log('Got score2: ' + opts2.score + ', best so far ', best, res);
+          if (!best || opts2.score > best.score) {
+            best = opts2;
+          }
+          if (options.scoredViews) {
+            options.scoredViews.push(opts2);
+          }
         }
       }
     }
-    phi += phiDelta;
   }
   return best;
 };
 
-ViewOptimizer.prototype.lookAt = function(sceneState, objects) {
+ViewOptimizer.prototype.lookAt = function(sceneState, objects, viewOpts) {
   // TODO: Find a good view point of looking at the object
   console.time('lookAt');
+  viewOpts = _.defaults(Object.create(null), viewOpts || {}, {
+    phi: {start: 0, n: 4},
+    theta: Math.PI / 4
+  });
   var bbox = Object3DUtil.getBoundingBox(objects);
   // Limit this by the size of the scene
   bbox = bbox.scaleBy(2.0);
@@ -383,9 +420,8 @@ ViewOptimizer.prototype.lookAt = function(sceneState, objects) {
     sceneState: sceneState,
     target: objects,
     targetBBox: bbox,
-    phiStart: 0,
-    theta: Math.PI / 4,
-    nViews: 4
+    phi: viewOpts.phi,
+    theta: viewOpts.theta
   });
   // TODO: Improve optimization and scoring
   if (opt.score < 0.05) {
@@ -393,9 +429,8 @@ ViewOptimizer.prototype.lookAt = function(sceneState, objects) {
       sceneState: sceneState,
       target: objects,
       targetBBox: bbox,
-      phiStart: Math.PI / 4,
-      theta: Math.PI / 4,
-      nViews: 4
+      phi: { start: viewOpts.phi.start + Math.PI / viewOpts.phi.n, n: viewOpts.phi.n },
+      theta: viewOpts.theta
     });
     if (opt2.score > opt.score) {
       opt = opt2;
@@ -406,9 +441,8 @@ ViewOptimizer.prototype.lookAt = function(sceneState, objects) {
       sceneState: sceneState,
       target: objects,
       targetBBox: bbox,
-      phiStart: Math.PI / 4,
-      theta: Math.PI / 4,
-      nViews: 8,
+      phi: { start: viewOpts.phi.start + Math.PI / viewOpts.phi.n, n: viewOpts.phi.n * 2 },
+      theta: viewOpts.theta,
       keepTargetsVisible: true
     });
     if (opt2.score > opt.score) {
