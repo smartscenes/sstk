@@ -116,7 +116,7 @@ class ArticulationsRenderHelper {
     this.__setupRender(modelId, options,
       (scene, objectNode, renderOpts, cb) =>
         this.renderJointsWithConnectivity(scene, objectNode, connectivityGraph, joints, renderOpts, cb),
-      callback)
+      callback);
   }
 
   renderJointsWithConnectivity(scene, objectNode, connectivityGraph, joints, options, callback) {
@@ -240,7 +240,7 @@ class ArticulationsRenderHelper {
     this.__setupRender(modelId, options,
       (scene, objectNode, renderOpts, cb) =>
         this.renderProposedArticulationsWithConnectivity(scene, objectNode, connectivityGraph, articulations, renderOpts, cb),
-      callback)
+      callback);
   }
 
   renderProposedArticulationsWithConnectivity(scene, objectNode, connectivityGraph, articulations, options, callback) {
@@ -252,7 +252,8 @@ class ArticulationsRenderHelper {
       const pid = articulation.pid;
 
       const basename = options.basename + '-' + pid + '-' + articulationHash;
-      const filename = basename + '.gif';
+      const outputFormat = options.format || 'gif';
+      const filename = basename + '.' + outputFormat;
       const fileExists = this.__fs && this.__fs.existsSync(filename);
       let status = fileExists ? 'overwrite' : 'new';
       if (options.skipExisting && fileExists) {
@@ -362,7 +363,7 @@ class ArticulationsRenderHelper {
       async.eachSeries(articulatedObjects, (artObj, cb) => {
         const opts = (articulatedObjects.length === 1) ? options :
           _.defaults({ basename: options.basename + '/1' }, options);
-        this.renderArticulatedObject(scene, artObj, opts, cb)
+        this.renderArticulatedObject(scene, artObj, opts, cb);
       }, callback);
     } else {
       console.log(`No articulated objects for ${mInst.model.getFullID()}`);
@@ -376,12 +377,13 @@ class ArticulationsRenderHelper {
     for (let pid of Object.keys(articulationStatesByPart)) {
       /** Render articulation animation files */
       const opts = _.defaults({ basename: options.basename + '-' + pid }, options);
-      this.renderArticulations(scene, articulatedObject, articulationStatesByPart[pid], opts)
+      this.renderArticulations(scene, articulatedObject, articulationStatesByPart[pid], opts);
     }
     if (!options.skipVideo && options.combineAll) {
-      // TODO: be careful here - if there are other gifs that matches, lots of things will be combined
-      this.renderer.removeFile(options.basename + '.gif');
-      this.renderer.gifSeqToGif(options.basename + '*.gif', options.basename + '.gif');
+      // TODO: be careful here - if there are other gifs / files that matches, lots of things will be combined
+      const outputFormat = options.format || 'gif';
+      this.renderer.removeFile(options.basename + '.' + outputFormat);
+      this.renderer.mergeVideoSequence(options.basename + '*.' + outputFormat, options.basename + '.' + outputFormat);
     }
     const res = _.map(articulatedObject.articulations, art => {
       const s = art.toJson();
@@ -468,20 +470,30 @@ class ArticulationsRenderHelper {
   renderArticulation(scene, node, articulationState, opts) {
     const basename = opts.basename;
     console.time('render ' + basename);
+    const pngfiles = [];
     this.renderArticulationFrames(scene, node, articulationState, opts,
       (scene, camera, iter, renderOpts) => {
         const pngfile = basename + '-' + _.padStart(iter.toString(), 4, '0') + '.png';
+        pngfiles.push(pngfile);
         this.renderer.renderToPng(scene, camera, pngfile, renderOpts);
       });
 
     if (!opts.skipVideo) {
       console.time('convert ' + basename);
-      this.renderer.pngSeqToGif(basename + '*.png', basename + '.gif', {
+      const outputFormat = opts.format || 'gif';
+      const outputFilename = basename + '.' + outputFormat;
+      const pattern = this.renderer.getMatchingPngPattern(basename, outputFormat);
+      this.renderer.pngSeqToVideo(pattern, outputFilename, {
         framerate: opts.framerate
       });
+      if (opts.clearPngs) {
+        for (let pngfile of pngfiles) {
+          this.renderer.removeFile(pngfile);
+        }
+      }
       console.timeEnd('convert ' + basename);
+      console.log('rendered ' + outputFilename);
     }
-    console.log('rendered ' + basename + '.gif');
     console.timeEnd('render ' + basename);
   }
 
@@ -512,14 +524,14 @@ class ArticulationsRenderHelper {
       if (articulationState.articulation.isTranslation) {
         onStateUpdated = function() {
           displayAxis.updateValue();
-        }
+        };
       } else {
         const displayRadar = new DisplayRadar({articulation: articulationState});
         displayRadar.update();
         displayRadar.attach(widgetsNode);
         onStateUpdated = function() {
           displayRadar.updateValue();
-        }
+        };
       }
       scene.add(widgetsNode);
     }

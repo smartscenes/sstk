@@ -14,9 +14,10 @@ const ArticulationsRenderHelper = STK.articulations.ArticulationsRenderHelper;
 
 cmd
   .version('0.0.1')
-  .description('Renders asset by id')
+  .description('Renders proposed articulations for asset by id')
   .option('--id <id>', 'Scene or model id [default: shape2motion.lamp_0061]', 'shape2motion.lamp_0061')
   .option('--articulations <filename>', 'Articulations filename')
+  .option('--articulations_field <fieldname>', 'Field to look up in metadata to get articulations filename')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--use_subdir [flag]','Put output into subdirectory per id [false]', STK.util.cmd.parseBoolean, false)
   .optionGroups(['config_file', 'render_options', 'render_views', 'asset_cache'])
@@ -35,8 +36,8 @@ cmd
   .option('--show_axis_radar [flag]', 'Whether to display axis and radar for the articulated parts', STK.util.cmd.parseBoolean)
   .parse(process.argv);
 
-if (!cmd.articulations) {
-  console.error('Articulations file not specified');
+if (!cmd.articulations && !cmd.articulations_field) {
+  console.error('Articulations file and articulations_field not specified');
   process.exit(-1);
 }
 
@@ -57,24 +58,8 @@ if (cmd.material_side) {
 }
 
 function createRenderer() {
-  const use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
-  const renderer = new STK.PNGRenderer({
-    width: cmd.width,
-    height: cmd.height,
-    useAmbientOcclusion: cmd.encode_index ? false : use_ambient_occlusion,
-    useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
-    useOutlineShader: cmd.encode_index ? false : cmd.use_outline_shader,
-    ambientOcclusionOptions: {
-      type: use_ambient_occlusion ? cmd.ambient_occlusion_type : undefined
-    },
-    outlineColor: cmd.encode_index ? false : cmd.outline_color,
-    usePhysicalLights: cmd.encode_index ? false : cmd.use_physical_lights,
-    useShadows: cmd.encode_index ? false : cmd.use_shadows,
-    compress: cmd.compress_png,
-    skip_existing: cmd.skip_existing,
-    reuseBuffers: true
-  });
-  return renderer;
+  const rendererOptions = cmd.getRendererOptions(cmd);
+  return new STK.PNGRenderer(rendererOptions);
 }
 
 function createAssetManager() {
@@ -127,6 +112,7 @@ function checkAssetId(assetGroup, sid) {
 }
 
 function readArticulations(filename) {
+  console.log('Loading articulations from ', filename);
   const data = STK.fs.readSync(filename, 'utf8');
   return JSON.parse(data);
 }
@@ -143,7 +129,7 @@ if (errMsg) {
   process.exit(-1);
 }
 
-function renderArticulations(sid, articulations) {
+function renderArticulations(sid, articulations, callback) {
   const fullId = sid.fullId;
 
   let outputDir = cmd.output_dir;
@@ -152,7 +138,9 @@ function renderArticulations(sid, articulations) {
     if (cmd.skip_existing && shell.test('-d', outputDir)) {
       console.warn('Skipping existing output at: ' + outputDir);
       setTimeout(function () {
-        callback();
+        if (callback) {
+          callback();
+        }
       });
       return;
     }
@@ -181,5 +169,22 @@ function renderArticulations(sid, articulations) {
   });
 }
 
-const articulations = readArticulations(cmd.articulations);
-renderArticulations(sid, articulations);
+function getArticulationsFilename(sid, filename, fieldname, callback) {
+  if (filename != null) {
+    callback(null, filename);
+  } else {
+    assetManager.lookupModelInfo(sid.source, sid.id, (res) => {
+      callback(null, res[fieldname]['files']['articulations']);
+    });
+  }
+}
+
+getArticulationsFilename(sid, cmd.articulations, cmd.articulations_field, (err, filename) => {
+  if (err) {
+    console.error('Cannot get articulations filename', sid, err);
+  } else {
+    const articulations = readArticulations(filename);
+    renderArticulations(sid, articulations);
+  }
+});
+

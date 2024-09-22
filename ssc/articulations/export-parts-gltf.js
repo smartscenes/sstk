@@ -3,6 +3,8 @@
 /* jshint esversion: 6 */
 const VERSION = '0.0.1';
 const STK = require('../stk-ssc');
+const OBBFitter = STK.geo.OBBFitter;
+const PartGeomsGen = STK.parts.PartGeomsGen;
 const shell = require('shelljs');
 const path = require('path');
 const cmd = require('../ssc-parseargs');
@@ -13,6 +15,9 @@ cmd
   .option('--name [name]', 'Optional scene name (default to id)')
   .option('--output <filename>', 'Output filename')
   .option('--parts_field <name>', 'Field to use for parts',  'articulation-parts')
+  .option('--add_geometry [flag]', 'Whether to add interior geometry', STK.util.cmd.parseBoolean, true)
+  .option('--infer_geometry [flag]', 'Whether to infer missing geometry', STK.util.cmd.parseBoolean, false)
+  .option('--ensure_connectivity [flag]', 'Whether to ensure (compute) part connectivity', STK.util.cmd.parseBoolean, true)
   .option('--include_connectivity [flag]', 'Whether to export part connectivity', STK.util.cmd.parseBoolean, true)
   .option('--include_articulations [flag]', 'Whether to export articulations', STK.util.cmd.parseBoolean, true)
   .option('--embed_images [flag]', 'Whether to embed images', STK.util.cmd.parseBoolean, true)
@@ -24,7 +29,7 @@ cmd
 const PartsLoader = STK.articulations.PartsLoader;
 const _ = STK.util;
 
-function createObject3D(name, parts) {
+function createObject3D(name, parts, assetInfo) {
   const object3D = new THREE.Group();
   for (let part of parts) {
     if (part) {
@@ -32,12 +37,13 @@ function createObject3D(name, parts) {
     }
   }
 
-  // const assetInfo = assetManager.getLoadModelInfo(null, modelId);
-  // if (assetInfo != null) {
-  //   const front = STK.assets.AssetGroups.getDefaultFront(assetInfo);
-  //   const up = STK.assets.AssetGroups.getDefaultUp(assetInfo);
-  //   STK.geo.Object3DUtil.alignToUpFrontAxes(object3D, up, front, STK.Constants.worldUp, STK.Constants.worldFront);
-  // }
+  if (assetInfo != null) {
+    const front = STK.model.ModelInfo.getFront(assetInfo);
+    const up = STK.model.ModelInfo.getUp(assetInfo);
+    const unit = STK.model.ModelInfo.getUnit(assetInfo);
+    STK.Constants.setVirtualUnit(unit);
+    STK.geo.Object3DUtil.alignToUpFrontAxes(object3D, up, front, STK.Constants.worldUp, STK.Constants.worldFront);
+  }
   object3D.name = name;
   return object3D;
 }
@@ -88,16 +94,65 @@ function exportParts(modelId, partData, outputFilename, options, callback) {
   exporter.export(scene, exportOpts);
 }
 
+function ensurePartObbs(parts, object3D, obbFitter) {
+  object3D.updateMatrixWorld();
+  const objectToWorld = object3D.matrixWorld.clone();
+  const worldToObject = objectToWorld.clone().invert();
+  parts.forEach(part => {
+    if (part) {
+      if (part.object3D) {
+        if (!part.obb) {
+          part.obbWorld = obbFitter(part.object3D);
+          part.obb = part.obbWorld.clone().applyMatrix4(worldToObject);
+        } else {
+          part.obbWorld = part.obb.clone().applyMatrix4(objectToWorld);
+        }
+        object3D.add(part.object3D);
+      }
+    }
+  });
+}
+
+/**
+ * Generate geometry
+ * @param add_missing - add missing geometry
+ * @param infer_geometry - if false, use annotated geometry only.  if true, infer missing geometry
+ * @param parts
+ * @param callback
+ */
+function generateGeometry(add_missing, infer_geometry, parts, assetInfo, callback) {
+  const obbFitter = function(object3D) {
+    console.log('fit obb');
+    return OBBFitter.fitOBB(object3D, { constrainVertical: true });
+  };
+  if (add_missing) {
+    const shapeGenerator = PartGeomsGen.getShapeGenerator();
+    const object3D = createObject3D('object3d', parts, assetInfo);
+    ensurePartObbs(parts, object3D, obbFitter);
+    if (infer_geometry) {
+      PartGeomsGen.generateDefaultGeometries(shapeGenerator, object3D, parts, callback);
+    } else {
+      PartGeomsGen.generateGeometries(shapeGenerator, object3D, parts, false, callback);
+    }
+  } else {
+    callback();
+  }
+}
+
 function exportWithFullId(modelId, output_filename, options) {
   const source = modelId.split('.')[0];
   STK.assets.registerAssetGroupsSync({ assetSources: [source] });
   const partsLoader = new PartsLoader({assetManager: assetManager, labelParser: options.label_parser });
+  partsLoader.autocomputeConnectivityGraph = options.ensure_connectivity;
   const taskQueue = new STK.TaskQueue();
   partsLoader.loadPartsWithConnectivityGraphById(modelId,{ partsField: options.parts_field, discardHierarchy: true },
     function(err, partData) {
-      if (err) {
+      if (!partData) {
         console.error(`Error loading parts fullId=${modelId}`, err);
       } else {
+        if (err) {
+          console.warn(`Warning loading parts fullId=${modelId}`, err);
+        }
         taskQueue.push(STK.util.waitImagesLoaded);
         if (options.include_articulations) {
           taskQueue.push((cb) => {
@@ -106,14 +161,24 @@ function exportWithFullId(modelId, output_filename, options) {
                 STK.util.getJSON(artsInfo['files']['articulations'], (err2, articulations) => {
                   if (articulations.data) {
                     partData.articulations = articulations.data.articulations;
-                    if (articulations.data.connections) {
-                      partData.connectivityGraph = new STK.parts.PartConnectivityGraph(
-                        articulations.data.connections, partData.parts);
+                    const connectivity = articulations.data.connections || articulations.data.connectivity;
+                    if (connectivity) {
+                      console.log('using annotated connectivity graph from articulations');
+                      const connectivityGraph = new STK.parts.PartConnectivityGraph(connectivity, partData.parts);
+                      const reducedConnectivityGraph = connectivityGraph.clone();
+                      reducedConnectivityGraph.cutExtraConnectionsFromChildParts(partData.articulations);
+                      partData.connectivityGraph = reducedConnectivityGraph;
                     }
+                    partData.parts.map((part,i) => {
+                      const p = articulations.data.parts[i];
+                      if (p) {
+                        part.geoms = p.geoms;
+                      }
+                    });
                   } else {
                     partData.articulations = articulations;
                   }
-                  var nArticulations = (partData.articulations)? partData.articulations.length : 0;
+                  const nArticulations = (partData.articulations)? partData.articulations.length : 0;
                   console.log(`got ${nArticulations} articulations`);
                   cb();
                 });
@@ -124,10 +189,13 @@ function exportWithFullId(modelId, output_filename, options) {
             });
           });
         }
-        taskQueue.awaitAll(() =>
-          exportParts(modelId, partData, output_filename, options, () => {
-            console.log('Parts for ' + modelId + ' exported');
-          }));
+        taskQueue.awaitAll(() => {
+          generateGeometry(options.add_geometry, options.infer_geometry, partData.parts, partData.metadata.assetInfo,(err, generated) => {
+            exportParts(modelId, partData, output_filename, options, () => {
+              console.log('Parts for ' + modelId + ' exported');
+            });
+          });
+        });
       }
     });
 }

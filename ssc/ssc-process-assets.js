@@ -14,8 +14,12 @@ function processAssets(cmd, files, assetManager, callback) {
     shell.mkdir('-p', cmd.render_dir);
   }
 
+  const memcheckOpts = { heapdump: { limit: cmd.heapdump } };
   async.forEachOfSeries(files, function (file, index, cb) {
     STK.util.clearCache();
+    if (cmd.heapdump != null) {
+      STK.util.checkMemory('Processing ' + id + ' index=' + index, memcheckOpts);
+    }
 
     var outputDir = cmd.output_dir;
     var basename = cmd.output;

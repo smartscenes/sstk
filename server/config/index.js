@@ -7,9 +7,10 @@ config.defaultRoute = 'http://127.0.0.1:' + config.httpServerPort;
 
 // URLs
 config.remoteHost = process.env.STK_REMOTE_HOST;
+config.solrHost = process.env.SOLR_REMOTE_HOST || config.remoteHost;
 config.useLocal = process.env.USE_LOCAL || process.env.remoteHost == null;
-config.defaultSolrUrl = config.useLocal || process.env.USE_LOCAL_SOLR ? 'http://localhost:8798/solr/' : config.remoteHost + '/solr/';
-config.defaultAnnotationsSolrUrl = config.useLocal || process.env.USE_LOCAL_SOLR ? 'http://localhost:8799/solr/' : config.remoteHost + '/annotations/solr/';
+config.defaultSolrUrl = config.useLocal || process.env.USE_LOCAL_SOLR ? 'http://localhost:8798/solr/' : config.solrHost + '/solr/';
+config.defaultAnnotationsSolrUrl = config.useLocal || process.env.USE_LOCAL_SOLR ? 'http://localhost:8799/solr/' : config.solrHost + '/annotations/solr/';
 config.libsgUrl =  config.useLocal || process.env.USE_LOCAL_LIBSG ? 'http://localhost:5000/' : config.remoteHost + '/ws/libsg/';
 config.modelsSolrQueryUrl = config.defaultSolrUrl + 'models3d/select';
 

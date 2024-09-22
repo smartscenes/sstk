@@ -28,6 +28,7 @@ var doc = jsdom.jsdom('<!doctype html><html><head></head><body><div id="canvas">
 var win = doc.defaultView;
 global.window = win;
 global.document = doc;
+global.isNode = true;
 // take all properties of the window object and also attach it to the node global object
 function propagateToGlobal(w) {
   for (var key in w) {

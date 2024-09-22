@@ -1,6 +1,6 @@
 {
   "name": "sstk-core",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "SmartScenes ToolKit: a library for viewing, editing and annotating 3D models and scenes",
   "main": "build/STK-core.bundle.js",
   "dependencies": {
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "better-require": "^0.0.3",
-    "chai": "^4.3.4",
+    "chai": "^4.3.6",
     "deasync": "^0.1.10",
     "envify": "^3.4.0",
     "eslint": "^6.8.0",
@@ -44,7 +44,7 @@
     "jsdom": "^9.12.0",
     "jshint": "^2.9.5",
     "json-loader": "^0.5.4",
-    "mocha": "^7.1.1",
+    "mocha": "^7.1.2",
     "nyc": "^15.1.0",
     "raw-loader": "^0.5.1",
     "rimraf": "^2.5.0",

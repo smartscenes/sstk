@@ -35,7 +35,7 @@ function __init() {
 function ArticulationRenderServer(params) {
   params = params || {};
   this.__renderer = null;
-  this.sources = params.sources || ['shape2motion', 'rpmnet', 'partnetsim'];
+  this.sources = params.sources || ['shape2motion', 'rpmnet', 'partnetsim', 'p5d'];
   this.width = params.width || DEFAULT_WIDTH;
   this.height = params.height || DEFAULT_HEIGHT;
   this.outputDir = params.outputDir || "../../../../../renderings";

@@ -221,7 +221,7 @@ class ArticulatedObject extends THREE.Object3D {
                 newPart.sourceParts = [origParts[node.userData.partId]];
             } else {
                 const linkedNodes = node.children.filter(n => n.userData.articulatablePartId === node.userData.partId);
-                const mergedNode = GeometryUtil.mergeMeshes(linkedNodes);
+                const mergedNode = GeometryUtil.mergeMeshesWithTransform(linkedNodes);
                 const obb = OBBFitter.fitMeshOBB(mergedNode, {constrainedVertical: true});
                 mergedNode.name = 'Part' + pid;
                 mergedNode.userData.type = 'Part';
@@ -362,7 +362,7 @@ class ArticulatedObject extends THREE.Object3D {
                     console.log(`Part ${cid} already parented to ${parts[cid].parentId}`);
                 }
                 parts[cid].parentId = pid;
-                remainingPids.delete(cid)
+                remainingPids.delete(cid);
             }
             remainingPids.delete(pid);
         });
@@ -488,7 +488,7 @@ class ArticulatedObject extends THREE.Object3D {
             if (objectInstId !== 'undefined') {
                 object.name = objectInstId;
             } else {
-                object.name = 'unnamed'
+                object.name = 'unnamed';
             }
             scene.add(object);
         });

@@ -187,6 +187,8 @@ function getTargetObjectViews(sceneState, view_target_ids, cameraControls, rende
     const targetObjects = getTargetObjects(sceneState, view_target_ids);
     if (targetObjects && targetObjects.length > 0) {
       console.log('Target objects: ' + targetObjects.length);
+      const nviews = (initialViewOpts && initialViewOpts.nviews > 1)? initialViewOpts.nviews : 1;
+      const scoredViews = (nviews > 1)? [] : null;
       const viewOptimizer = new STK.gfx.ViewOptimizer({
         cameraControls: cameraControls,
         //scorer: 'simple',
@@ -196,9 +198,15 @@ function getTargetObjectViews(sceneState, view_target_ids, cameraControls, rende
         width: rendererOpts.width,
         height: rendererOpts.height
       });
-      // TODO: allow for several different views
+      // Allow for several different views
+      initialViewOpts.scoredViews = scoredViews;
       const viewOpts = viewOptimizer.lookAt(sceneState, targetObjects, initialViewOpts);
-      return { view: viewOpts };
+      if (nviews > 1) {
+        const views = viewOptimizer.select(scoredViews, nviews);
+        return {views: views};
+      } else {
+        return {view: viewOpts};
+      }
     } else {
       console.warn('Target objects not found');
     }
@@ -220,8 +228,10 @@ function updateViewOptsForTargetObjects(sceneState, cmdOpts, cameraControls, ren
         }, initialViewOpts);
       if (viewInfo) {
         // console.log('got viewInfo', viewInfo);
-        cmdOpts.initialViewOpts = cmdOpts.view;
+        cmdOpts.initialViewOpts = initialViewOpts;
         cmdOpts.view = viewInfo.view;
+        cmdOpts.views = viewInfo.views;
+        // console.log('got views', viewInfo);
       }
     } else {
       // normal case

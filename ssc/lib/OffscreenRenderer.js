@@ -134,6 +134,7 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
     var framerate = opts.framerate || 25;
 
     var scope = this;
+    var pngfiles = [];
     var angles = _.range(angleStart, angleEnd, angleStep);
     async.forEachOfSeries(angles, function (angle, key, callback) {
       var phi = angle / 180 * Math.PI;
@@ -143,6 +144,7 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
         phi: phi
       });
       var pngfile = basename + '-' + _.padStart(key.toString(), 4, '0') + '.png';
+      pngfiles.push(pngfile);
       cameraControls.camera.updateProjectionMatrix();
       var renderOpts = _.clone(opts);
       renderOpts.logdata = _.defaults({ cameraConfig: cameraControls.lastViewConfig },
@@ -151,8 +153,14 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
       setTimeout(function () { callback(); });
     }, function () {
       if (!opts.skipVideo) {
-        scope.pngSeqToVideo(basename + '-%04d.png', basename + '.' + format,
+        var pattern = scope.getMatchingPngPattern(basename, format);
+        scope.pngSeqToVideo(pattern, basename + '.' + format,
           {width: scope.width, height: scope.height, framerate: framerate});
+        if (opts.clearPngs) {
+          for (let pngfile of pngfiles) {
+            scope.removeFile(pngfile);
+          }
+        }
       }
       onDone();
     });
@@ -280,10 +288,18 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
     }
   };
 
+  OffscreenRenderer.prototype.getMatchingPngPattern = function(basename, format) {
+    if (format === 'gif') {
+      return basename + '-*.png';         // convert
+    } else {
+      return basename + '-%04d.png';      // ffmpeg pattern
+    }
+  };
+
   OffscreenRenderer.prototype.pngSeqToWebp = function (input, out, opts) {
     var framerate = opts.framerate || 25;
     var cmdWithArgs = ['ffmpeg', '-y', '-i', input, '-loop','0',
-      '-filter:v', 'fps=fps=30', '-r', framerate, out];
+      '-filter:v', 'fps=fps=' + framerate, '-r', framerate, out];
     var cmdline = cmdWithArgs.join(' ');
     this.__fs.execSync(cmdline);
   };
@@ -291,9 +307,10 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
   // converts png sequence input to video file out (uses ffmpeg)
   OffscreenRenderer.prototype.pngSeqToMp4 = function (input, out, opts) {
     var tmpfilename = __getTempFilename('white', 'png');
-    //console.log(tmpfilename);
-    var whitePixels = new Uint8Array(opts.width * opts.height * 4).fill(255);
-    this.writePNG(tmpfilename, opts.width, opts.height, whitePixels);
+    var width = opts.width || this.width;
+    var height = opts.height || this.height;
+    var whitePixels = new Uint8Array(width * height * 4).fill(255);
+    this.writePNG(tmpfilename, width, height, whitePixels);
     var framerate = opts.framerate || 25;
     var cmdWithArgs = ['ffmpeg', '-y', '-loop','1','-i',tmpfilename,
       '-r', framerate, '-i', input, '-filter_complex','overlay=shortest=1',
@@ -325,6 +342,15 @@ function OffscreenRendererFactory (baseRendererClass, ImageUtil, Colors) {
     var cmdWithArgs = ['convert', input, out];
     var cmdline = cmdWithArgs.join(' ');
     this.__fs.execSync(cmdline);
+  };
+
+  // merge video sequence
+  OffscreenRenderer.prototype.mergeVideoSequence = function (input, out) {
+    if (out.endsWith('.gif')) {
+      this.gifSeqToGif(input, out);
+    } else {
+      console.log('Skipping merging of videos: unsupported video type ' + out);
+    }
   };
 
   OffscreenRenderer.prototype.removeFile = function (input) {

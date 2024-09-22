@@ -1,6 +1,7 @@
 'use strict';
 
 var Constants = require('Constants');
+var CameraState = require('gfx/CameraState');
 var Object3DUtil = require('geo/Object3DUtil');
 var SegmentationUtil = require('geo/seg/SegmentationUtil');
 var RaycasterUtil = require('geo/RaycasterUtil');
@@ -1283,7 +1284,7 @@ SceneState.prototype.useCameraState = function (camState) {
     var sceneToWorld = this.getSceneToWorldAlignmentMatrix();
     // Convert to world orientation
     var scale = this.getVirtualUnit();
-    camState = this.transformCameraState(camState, sceneToWorld, scale);
+    camState = CameraState.transformCameraState(camState, sceneToWorld, scale);
     this.currentCameraControls.setCameraState(camState);
     return true;
   }
@@ -1294,7 +1295,7 @@ SceneState.prototype.convertCameraConfig = function (cameraConfig) {
   // Convert to world orientation
   var scale = this.getVirtualUnit();
   console.log('scale', scale);
-  cameraConfig = this.transformCameraState(cameraConfig, sceneToWorld, scale);
+  cameraConfig = CameraState.transformCameraState(cameraConfig, sceneToWorld, scale);
   return cameraConfig;
 };
 
@@ -1373,44 +1374,6 @@ SceneState.prototype.getWorldToSceneMatrix = function(out) {
   out = out || new THREE.Matrix4();
   out.copy(this.scene.matrixWorld).invert();
   return out;
-};
-
-SceneState.prototype.transformCameraState = function (camState, matrix, scale) {
-  //TODO(MS): Account for direction vs position vector transformation
-  // Takes camera state using matrix
-  var fields = ['up', 'position', 'target', 'direction'];
-  var transformedCamState = {};
-  for (var i = 0; i < fields.length; i++) {
-    var field = fields[i];
-    var fieldValue = camState[field];
-    if (fieldValue) {
-      transformedCamState[field] = new THREE.Vector3();
-      if (fieldValue instanceof Array) {
-        transformedCamState[field].set(fieldValue[0], fieldValue[1], fieldValue[2]);
-      } else {
-        transformedCamState[field].copy(fieldValue);
-      }
-      transformedCamState[field].applyMatrix4(matrix);
-      if (field === 'position' || field === 'target') {
-        // also apply scale
-        transformedCamState[field].multiplyScalar(scale);
-      }
-    }
-  }
-  var scaleFields = ['left','right','bottom','top','near','far'];
-  for (var i = 0; i < scaleFields.length; i++) {
-    var field = scaleFields[i];
-    var fieldValue = camState[field];
-    if (fieldValue) {
-      transformedCamState[field] = fieldValue*scale;
-    }
-  }
-  for (var prop in camState) {
-    if (camState.hasOwnProperty(prop) && !transformedCamState[prop]) {
-      transformedCamState[prop] = camState[prop];
-    }
-  }
-  return transformedCamState;
 };
 
 SceneState.prototype.__getMatchingRegions = function(object3D, rtype, level) {
@@ -1640,7 +1603,7 @@ SceneState.prototype.toJson = function (includeUserData, includeSemanticOBBs) {
     // Convert to scene orientation
     var worldToScene = this.getWorldToSceneAlignmentMatrix();
     var scale = 1.0 / this.getVirtualUnit();
-    currentCameraState = this.transformCameraState(currentCameraState, worldToScene, scale);
+    currentCameraState = CameraState.transformCameraState(currentCameraState, worldToScene, scale);
     currentCameraState['name'] = 'current';
     // Let other components set the viewer coordinate frame from the current camera state
     // Also set the scene cameras

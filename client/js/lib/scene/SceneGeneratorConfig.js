@@ -20,6 +20,20 @@ class SceneGeneratorConfig extends ConfigControls {
       values: ['RoomType', 'LLM', 'InstructScene'],
       defaultValue: 'LLM'
     }, {
+      id: 'si.archGenMethod',
+      name: 'sceneInference.arch.genMethod',
+      text: 'Architecture Generation Method',
+      type: 'text',
+      values: ['generate', 'retrieve'],
+      defaultValue: 'retrieve'
+    }, {
+      id: 'si.archGenModel',
+      name: 'sceneInference.arch.genModel',
+      text: 'Architecture Generation Model',
+      type: 'text',
+      values: ['SquareRoomGenerator'],
+      defaultValue: 'SquareRoomGenerator'
+    }, {
       id: 'si.layout',
       name: 'sceneInference.layoutModel',
       text: 'Layout Generation Model',
@@ -46,6 +60,18 @@ class SceneGeneratorConfig extends ConfigControls {
       type: 'text',
       values: ['category', 'embedding'],
       defaultValue: 'category'
+    }, {
+      id: 'si.retrieveSources',
+      name: 'sceneInference.assetSources',
+      text: 'Object Asset Sources',
+      type: 'text',
+      defaultValue: 'fpModel'
+    }, {
+      id: 'si.useCategory',
+      name: 'sceneInference.useCategory',
+      text: 'Retrieve within Object Category',
+      type: 'boolean',
+      defaultValue: true
     }];
 
     super(params);

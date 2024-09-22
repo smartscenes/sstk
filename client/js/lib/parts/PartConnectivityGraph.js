@@ -113,6 +113,107 @@ class PartConnectivityGraph {
         }
     }
 
+    __getArticulationPartDists(articulations) {
+        const articulationPartDists = [];
+        for (let articulation of articulations) {
+            const pid = articulation.pid;
+            const distanceFromArticulatedPart = [];
+            distanceFromArticulatedPart[pid] = 0;
+
+            // Follow base and their connected parts
+            const basePartIds = articulation.base;
+            const todo = [];
+            for (let bid of basePartIds) {
+                distanceFromArticulatedPart[bid] = -1;
+                if (todo.indexOf(bid) < 0) {
+                    todo.push(bid);
+                }
+            }
+
+            while (todo.length > 0) {
+                const tid = todo.pop();
+                const dt = distanceFromArticulatedPart[tid];
+                const nids = this.getConnectedPartIds(tid);
+                const dn = dt - 1;
+                for (let nid of nids) {
+                    const d = distanceFromArticulatedPart[nid];
+                    if (d == null || dn > d) {
+                        distanceFromArticulatedPart[nid] = dn;
+                        todo.push(nid);
+                    }
+                }
+            }
+
+            // Follow child and their connected parts
+            let childPartIds = this.getConnectedPartIds(pid).filter(pid => basePartIds.indexOf(pid) < 0);
+            for (let cid of childPartIds) {
+                distanceFromArticulatedPart[cid] = 1;
+                if (todo.indexOf(cid) < 0) {
+                    todo.push(cid);
+                }
+            }
+
+            while (todo.length > 0) {
+                const tid = todo.pop();
+                const dt = distanceFromArticulatedPart[tid];
+                const nids = this.getConnectedPartIds(tid);
+                const dn = dt + 1;
+                for (let nid of nids) {
+                    const d = distanceFromArticulatedPart[nid];
+                    if (d == null || dn <= Math.abs(d)) {
+                        distanceFromArticulatedPart[nid] = dn;
+                        todo.push(nid);
+                    }
+                }
+            }
+
+            articulationPartDists.push({ articulation: articulation, partDists: distanceFromArticulatedPart});
+        }
+        return articulationPartDists;
+    }
+
+    __groupPartToArticulatedPart(articulationPartDists) {
+        const pidToArticulatedPart = [];
+        for (let artPartDist of articulationPartDists) {
+            const articulation = artPartDist.articulation;
+            const partDists = artPartDist.partDists;
+            for (let pid in partDists) {
+                const d = partDists[pid];
+                if (d != null) {
+                    const absd = Math.abs(d);
+                    let update = (pidToArticulatedPart[pid] == null) || (absd < pidToArticulatedPart[pid].dist);
+                    if (!update && pidToArticulatedPart[pid].dist === absd) {
+                        if ((d >= 0) && pidToArticulatedPart[pid].articulation == null) {
+                            update = true;
+                        }
+                    }
+                    if (update) {
+                        pidToArticulatedPart[pid] = { pid: pid, dist: absd, articulation: (d < 0)? null: articulation };
+                    }
+                }
+            }
+        }
+        return pidToArticulatedPart;
+    }
+
+    cutExtraConnectionsFromChildParts(articulations) {
+        const articulationPartDists = this.__getArticulationPartDists(articulations);
+        const pidToArticulatedPart = this.__groupPartToArticulatedPart(articulationPartDists);
+        for (let pid in pidToArticulatedPart) {
+            const articulation = pidToArticulatedPart[pid].articulation;
+            const dist = pidToArticulatedPart[pid].dist;
+            if (articulation && dist > 0) {
+                let connectedPartIds = this.getConnectedPartIds(pid);
+                for (let cid of connectedPartIds) {
+                    const cart = pidToArticulatedPart[cid];
+                    if (cart == null || cart.pid !== articulation.pid) {
+                        this.remove(cid, pid, true);
+                    }
+                }
+            }
+        }
+    }
+
     clone(cloneParts = false) {
         const parts = cloneParts? _.map(this.parts, (p) => p? p.clone() : null) : this.parts;
         return new PartConnectivityGraph(this.connectivityAsArray(), parts, this.metadata);

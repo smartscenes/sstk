@@ -7,7 +7,7 @@
 	"camera": {
 		"type": "perspective"
 	},
-	"assetGroups": ["wss"],
+	"assetGroups": ["3dw"],
 	"assetInfo": {
 		"assetType": "scene",
 		"includeCeiling": false,

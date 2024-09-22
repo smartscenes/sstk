@@ -121,6 +121,25 @@ class PartGeomsGen {
       }
     }, callback);
   }
+
+  static generateDefaultGeometries(shapeGenerator, root, parts, callback) {
+    async.eachOfSeries(parts, function (part, iPart, cb) {
+      if (part) {
+        const defaultSpec = GeomTypeParams[part.label];
+        if (defaultSpec) {
+          const spec = _.clone(defaultSpec);
+          spec.type = part.label;
+          part.geoms = [ { spec: spec }];
+          const geomSpecs = [defaultSpec];
+          PartGeomsGen.generateGeometriesFromSpecForPart(shapeGenerator, root, part, geomSpecs, cb);
+        } else {
+          cb();
+        }
+      } else {
+        cb();
+      }
+    }, callback);
+  }
 }
 
 PartGeomsGen.GeomTypes = GeomTypes;

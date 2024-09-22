@@ -135,6 +135,16 @@ function selectBackHingeAxis(part, connected) {
   return res;
 }
 
+function selectBottomHingeAxis(part, connected) {
+  const selectedOrigin = getOriginOppositeFromHandle(part, EdgeOriginIndices, connected,
+    (candidateInfo) => {
+      return Math.abs(candidateInfo.localOrigin.y) < 0.001;
+    });
+  const res = { axis: SignedDirs.Left};
+  res.origin = selectedOrigin;
+  return res;
+}
+
 function selectPartHorizontalAxis(part, connected) {
   // return part axis that is the aligned to the part (e.g. not the normal), but not the upward axis
   const obb = part.obb;
@@ -150,11 +160,13 @@ function selectPartHorizontalAxis(part, connected) {
 const SelectionStrategies = {
   selectVerticalHingeAxis: selectVerticalHingeAxis,
   selectBackHingeAxis: selectBackHingeAxis,
+  selectBottomHingeAxis: selectBottomHingeAxis,
   selectPartHorizontalAxis: selectPartHorizontalAxis
 };
 
 const AxisSuggestionRules = [
   { partLabel: 'door', articulationType: ArticulationTypes.ROTATION, axisSelection: SelectionStrategies.selectVerticalHingeAxis },
+  { partLabel: 'door', objectLabel: 'oven', articulationType: ArticulationTypes.ROTATION, axisSelection: SelectionStrategies.selectBottomHingeAxis },
   { partLabel: 'door', articulationType: ArticulationTypes.TRANSLATION, axisSelection: SelectionStrategies.selectPartHorizontalAxis },
   { partLabel: "drawer", articulationType: ArticulationTypes.TRANSLATION, axisSelection: { axis: SignedDirs.Front } },
   { partLabel: "lid", articulationType: ArticulationTypes.ROTATION, axisSelection: SelectionStrategies.selectBackHingeAxis }
@@ -224,6 +236,13 @@ class ArticulationSuggester {
     if (matchingRules) {
       if (articulationType != null) {
         matchingRules = matchingRules.filter(rule => rule.articulationType === articulationType);
+      }
+      if (matchingRules.length > 1) {
+        const objectLabel = part.object3D.userData.name;
+        const matchingRulesByObjectLabel = matchingRules.filter(rule => rule.objectLabel === objectLabel);
+        if (matchingRulesByObjectLabel.length) {
+          matchingRules = matchingRulesByObjectLabel;
+        }
       }
       return matchingRules;
     }

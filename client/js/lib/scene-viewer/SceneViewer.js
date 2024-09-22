@@ -1072,7 +1072,11 @@ SceneViewer.prototype.init = function () {
   if (bvhVisualizerContainer.length) {
     this.bvhVisualizer = new BVHVisualizer({
       container: bvhVisualizerContainer,
+      assetManager: this.assetManager,
       tooltipIncludeFields: this.modelSearchController.searchPanel.tooltipIncludeFields,
+      getObjectIconUrl: function(source, id, metadata) {
+        return scope.assetManager.getImagePreviewUrl(source, id, scope.modelSearchController.searchPanel.previewImageIndex, metadata);
+      },
       onhoverCallback: function (node, objects) {
         scope.highlightObjects(objects);
       },

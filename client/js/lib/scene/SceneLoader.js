@@ -120,18 +120,19 @@ SceneLoader.prototype.__onSceneCompleted = function (callback, sceneResult) {
         if (metadata.position) {
           modelInst.setTranslation(metadata.position);
         }
-        if (metadata.visible != null) {
-          modelInst.object3D.visible = metadata.visible;
+      }
+      // Apply other metadata properties
+      if (metadata.visible != null) {
+        modelInst.object3D.visible = metadata.visible;
+      }
+      if (metadata.vertexColor != null) {
+        Object3DUtil.colorVertices(modelInst.object3D, metadata.vertexColor, metadata.opacity);
+      } else {
+        if (metadata.color != null) {
+          Object3DUtil.setMaterial(modelInst.object3D, Object3DUtil.getColor(metadata.color));
         }
-        if (metadata.vertexColor != null) {
-          Object3DUtil.colorVertices(modelInst.object3D, metadata.vertexColor, metadata.opacity);
-        } else {
-          if (metadata.color != null) {
-            Object3DUtil.setMaterial(modelInst.object3D, Object3DUtil.getColor(metadata.color));
-          }
-          if (metadata.opacity != null) {
-            Object3DUtil.setOpacity(modelInst.object3D, metadata.opacity);
-          }
+        if (metadata.opacity != null) {
+          Object3DUtil.setOpacity(modelInst.object3D, metadata.opacity);
         }
       }
       transforms.push(modelInst.object3D.matrix.clone());

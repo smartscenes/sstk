@@ -74,7 +74,7 @@ class SegmentedPartsLoader {
     return {
       id: json.id,
       annId: json.id,
-      parts: json.annotations || json.data.annotations || json.parts
+      parts: json.annotations || (json.data? json.data.annotations : null) || json.parts
     };
   }
 

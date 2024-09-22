@@ -70,7 +70,7 @@ class URDFExporter {
   // Makes the provided name unique.
   // 'map' is an object with keys of already taken names
   _makeNameUnique(name, map, appendNum = 0) {
-    const normalized_name = name.replaceAll(':', '-').replaceAll('.', '_');
+    const normalized_name = _.replaceAll(_.replaceAll(name, ':', '-'), '.', '_');
     const appendSuffix = (appendNum)? ('-' + appendNum) : '';
     const newName = `${ normalized_name }${ appendSuffix }`;
     return newName in map ? this._makeNameUnique(name, map, appendNum + 1) : newName;
@@ -84,16 +84,16 @@ class URDFExporter {
   }
 
   // The default callback for generating mesh data from a link
-  _defaultMeshCallback(o, linkName, meshFormat, queue) {
+  _defaultMeshCallback(o, linkName, meshFormat, meshExportOpts, queue) {
     const id = _.generateRandomId();
     this.__waitPubSub.addWaiting(id, linkName, queue);
-    const exportOpts = {
+    const exportOpts = _.defaults({
       name: linkName,
       // dir: 'meshes',  // AXC: TODO: put into meshes if not from web
       callback: () => {
         this.__waitPubSub.removeWaiting(id, queue);
       }
-    };
+    }, meshExportOpts);
 
     console.log('exporting mesh', linkName, meshFormat);
     const exporter = this.getMeshExporter(meshFormat, exportOpts);
@@ -192,7 +192,7 @@ class URDFExporter {
   // Remove any unnecessary joints and links that fixed and have identity transforms
   _collapseLinks(urdf) {
 
-    console.warn('URDFExporter : The "collapse" functionality isn\'t stable and my corrupt the structure of the URDF');
+    console.warn('URDFExporter : The "collapse" functionality isn\'t stable and may corrupt the structure of the URDF');
 
     const xmlDoc = (new DOMParser()).parseFromString(urdf, 'text/xml');
     const robottag = xmlDoc.children[0];
@@ -281,7 +281,7 @@ class URDFExporter {
 
     });
 
-    // remove any links that arent referenced by the existing joints
+    // remove any links that aren't referenced by the existing joints
     [...robottag.children]
       .filter(t => t.tagName.toLowerCase() === 'joint')
       .forEach(j => {
@@ -308,8 +308,13 @@ class URDFExporter {
       .filter(n => n !== root)
       .forEach(n => robottag.removeChild(linksMap[n]));
 
-    return new XMLSerializer().serializeToString(xmlDoc.documentElement);
-
+    // AXC: handle when XMLSerializer is not defined
+    if (typeof XMLSerializer !== 'undefined') {
+      return new XMLSerializer().serializeToString(xmlDoc.documentElement);
+    } else {
+      const serializer = require('xmlserializer');
+      return serializer.serializeToString(xmlDoc.documentElement);
+    }
   }
 
   // AXC: export to file
@@ -445,7 +450,7 @@ class URDFExporter {
 
         // TODO: Some deduping should be happening here
         // Issue #9
-        const meshInfo = options.createMeshCb(child, linkName, options.meshFormat, queue);
+        const meshInfo = options.createMeshCb(child, linkName, options.meshFormat, options.meshExportOpts, queue);
 
         if (meshInfo != null) {
 
@@ -601,7 +606,7 @@ class URDFExporter {
           artType = 'prismatic';
         } else if (art.type === 'rotation') {
           artType = limit? 'continuous' : 'revolute';
-          origin = new THREE.Vector3(...art.origin)
+          origin = new THREE.Vector3(...art.origin);
         }
         if (artType) {
           return {
@@ -615,7 +620,7 @@ class URDFExporter {
           console.warn('Ignore articulation with unsupported type', art);
         }
       }
-    }
+    };
     const jointFunc = (options && options.jointFunc)? options.jointFunc : defaultJointFunc;
     const onComplete = (options && options.callback)? (res) => options.callback(null, res) : null;
     this.parse(input, jointFunc, onComplete, options);

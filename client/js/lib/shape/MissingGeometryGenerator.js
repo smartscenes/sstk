@@ -246,7 +246,7 @@ MissingGeometryGenerator.prototype.__generatePanelFromOBB = function(part, spec,
   obb.ensureMinSize(thickness);
 
   var material = spec.material;
-  if (!material && this.inferMaterial) {
+  if (!material && this.inferMaterial && objectOBB) {
     var sideDir = new THREE.Vector3(1, 0, 0);
     var raycaster = new THREE.Raycaster(objectOBB.position.clone(), sideDir);
     raycaster.ray.origin = objectOBB.position.clone().add(objectOBB.halfSizes.clone().multiply(new THREE.Vector3(-1.5, -1, 0)));

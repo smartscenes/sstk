@@ -1,18 +1,27 @@
 const async = require('async');
+const _ = require('util/util');
+
+// Some old code to handle if vector stored with x,y,z
+function toVector3(v) {
+  if (v.x != null) {
+    return [ parseFloat(v.x), parseFloat(v.y), parseFloat(v.z) ];
+  } else {
+    return v;
+  }
+}
 
 class ArticulationAnnotationsLoader {
 
   static loadArticulationAnnotations(articulations_filename, precomputed_filename, callback) {
     function convertArticulation(articulation) {
-      // TODO: Store data in DB with correct types
       return {
         pid: parseInt(articulation.pid),
         type: articulation.type,
         base: articulation.base.map(b => parseInt(b)),
-        axis: [ parseFloat(articulation.axis.x), parseFloat(articulation.axis.y), parseFloat(articulation.axis.z) ],
-        origin: [ parseFloat(articulation.origin.x), parseFloat(articulation.origin.y), parseFloat(articulation.origin.z) ],
+        axis: toVector3(articulation.axis),
+        origin: toVector3(articulation.origin),
         rangeMin: parseFloat(articulation.rangeMin),
-        rangeMax: parseFloat(articulation.rangeMax),
+        rangeMax: parseFloat(articulation.rangeMax)
       };
     }
 
@@ -22,7 +31,11 @@ class ArticulationAnnotationsLoader {
         _.getJSON(articulations_filename, cb);
       },
       function (cb) {
-        _.getJSON(precomputed_filename, cb);
+        if (precomputed_filename && precomputed_filename !== 'none') {
+          _.getJSON(precomputed_filename, cb);
+        } else {
+          cb(null, null);
+        }
       }
     ], function (err, res) {
       console.timeEnd('loadArticulations');

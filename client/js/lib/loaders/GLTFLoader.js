@@ -2156,7 +2156,7 @@ const DataUriUtil = require('util/DataUriUtil');
 			// expensive work of uploading a texture to the GPU off the main thread.
 
 			// AXC: handle nodejs loading
-			const isNodejs = (typeof Blob === 'undefined');
+			const isNodejs = (typeof global !== 'undefined' && global.isNode);
 			const isSafari = !isNodejs && /^((?!chrome|android).)*safari/i.test( navigator.userAgent ) === true;
 			const isFirefox = !isNodejs && navigator.userAgent.indexOf( 'Firefox' ) > - 1;
 			const firefoxVersion = isFirefox ? navigator.userAgent.match( /Firefox\/([0-9]+)\./ )[ 1 ] : - 1;
@@ -2774,7 +2774,7 @@ const DataUriUtil = require('util/DataUriUtil');
 			if ( sourceDef.bufferView !== undefined ) {
 
 				// AXC: handle nodejs loading
-				const isNodejs = (typeof Blob === 'undefined');
+				const isNodejs = (typeof global !== 'undefined' && global.isNode);
 
 				if (isNodejs) {
 					// AXC: handle nodejs loading
@@ -3347,6 +3347,9 @@ const DataUriUtil = require('util/DataUriUtil');
 					}
 
 					mesh.name = parser.createUniqueName( meshDef.name || 'mesh_' + meshIndex );
+					// AXC: add meshIndex and primitiveIndex
+					mesh.userData.meshIndex = meshIndex;
+					mesh.userData.primitiveIndex = i;
 					assignExtrasToUserData( mesh, meshDef );
 					if ( primitive.extensions ) addUnknownExtensionsToUserData( extensions, mesh, primitive );
 					parser.assignFinalMaterial( mesh );
@@ -3717,6 +3720,8 @@ const DataUriUtil = require('util/DataUriUtil');
 
 				}
 
+				// AXC: add nodeIndex
+				node.userData.nodeIndex = nodeIndex;
 				assignExtrasToUserData( node, nodeDef );
 				if ( nodeDef.extensions ) addUnknownExtensionsToUserData( extensions, node, nodeDef );
 

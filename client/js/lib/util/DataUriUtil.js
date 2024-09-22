@@ -20,7 +20,7 @@ function bufferToDataURI( buffer, mediatype ) {
 }
 
 function toDataURI(buffer, mediatype) {
-  if (typeof Blob !== 'undefined') {
+  if (Constants.isBrowser) {
     // for running on the web
     const buffers = Array.isArray(buffer)? buffer : [buffer];
     const blob = new Blob(buffers, {

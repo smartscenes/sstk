@@ -391,6 +391,15 @@ Materials.setMaterialSide = function (material, side) {
   }
 };
 
+Materials.setMaterialProperty = function (material, field, value) {
+  var materials = Materials.toMaterialArray(material);
+  for (var i = 0; i < materials.length; i++) {
+    var m = materials[i];
+    m[field] = value;
+    m.needsUpdate = true;
+  }
+};
+
 Materials.setTextureProperty = function (material, propName, propValue) {
   var materials = Materials.toMaterialArray(material);
   for (var i = 0; i < materials.length; i++) {
@@ -657,7 +666,7 @@ Materials.isMaterialsSame = function(mat1, mat2, exactMatch) {
   if (mats1.length === mats2.length) {
     // TODO: order materials
     for (let i = 0; i < mats1.length; i++) {
-      // console.log('check material ${i} ${exactMatch}')
+      // console.log(`check material ${i} ${exactMatch}`)
       if (!isSame(mats1[i], mats2[i])) {
         return false;
       }

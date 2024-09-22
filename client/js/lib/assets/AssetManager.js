@@ -8,6 +8,7 @@ var LightsLoader = require('assets/LightsLoader');
 var Object3DLoader = require('loaders/Object3DLoader');
 var AssetGroups = require('assets/AssetGroups');
 var AssetLoaders = require('assets/AssetLoaders');
+var ShapeGenerator = require('shape/ShapeGenerator');
 var CachedAssetLoader = require('assets/CachedAssetLoader');
 var AssetCache = require('assets/AssetCache');
 var AssetLoader = require('assets/AssetLoader');
@@ -518,11 +519,24 @@ AssetManager.prototype.getModelInstance = function (source, id, callback, onerro
   if (sid.source === 'shape') {
     // special shape creator - create dummy shape model
     if (sid.id === 'box') {
-      // TODO: use ShapeGenerator to generate shapes
       var box = new THREE.BoxGeometry(1,1,1);
       var mesh = new THREE.Mesh(box, Object3DUtil.TransparentMat);
       var model = new Model(mesh, { id: sid.id, fullId: AssetManager.toFullId(sid.source, sid.id), source: sid.source, unit: this.virtualUnitToMeters });
       callback(model.newInstance(false));
+    } else if (metadata && metadata.shape) {
+      // TODO: check code to use ShapeGenerator to generate shapes
+      if (this.__shapeGenerator == null) {
+        this.__shapeGenerator = new ShapeGenerator();
+      }
+      var shapeOptions = metadata.shape;
+      this.__shapeGenerator.generate({shape: shapeOptions}, (err, obj3D) => {
+        if (err) {
+          onerror(err);
+        } else {
+          var model = new Model(obj3D, { id: sid.id, fullId: AssetManager.toFullId(sid.source, sid.id), source: sid.source, unit: this.virtualUnitToMeters });
+          callback(model.newInstance(false));
+        }
+      });
     } else {
       onerror('Unsupported shape ' + sid.id);
     }
@@ -873,8 +887,11 @@ AssetManager.prototype.__loadModelUncached = function (modelinfo, callback) {
 AssetManager.prototype.__loadObject3D = function(modelinfo, onsuccess, onerror) {
   if (this.supportArticulated) {
     var ArticulatedObjectLoader = require('articulations/ArticulatedObjectLoader');
-    var articulatedLoader = new ArticulatedObjectLoader({ assetManager: this, mergeFixedParts: this.mergeFixedParts });
+    var mergeFixedParts = this.mergeFixedParts;
+    var articulatedLoader = new ArticulatedObjectLoader({ assetManager: this, mergeFixedParts: mergeFixedParts });
+    // console.log('supportArticulated', articulatedLoader.checkModelHasArticulatedMesh(modelinfo));
     if (modelinfo.hasArticulations && articulatedLoader.checkModelHasArticulatedMesh(modelinfo)) {
+      // console.log('hasArticulated');
       articulatedLoader.load(modelinfo, function(err, res) {
         if (err) { if (onerror) { onerror(err); }}
         else { if (onsuccess) { onsuccess(res); }}
@@ -884,6 +901,10 @@ AssetManager.prototype.__loadObject3D = function(modelinfo, onsuccess, onerror) 
       onsuccess = function(object3D) {
         var ArticulatedObject = require('articulations/ArticulatedObject');
         var articulatedObject3D = ArticulatedObject.toArticulatedHierarchical(object3D);
+        if (mergeFixedParts) {
+          articulatedObject3D = articulatedObject3D.toCondensed();
+        }
+        ArticulatedObject.populateArticulationUserData(articulatedObject3D);
         origOnsuccess(articulatedObject3D || object3D);
       };
       var obj3dLoader = new Object3DLoader(this);

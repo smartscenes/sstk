@@ -18,6 +18,7 @@ class PlayArticulationUI extends PubSub {
     const unit = (articulation.type === Articulation.Type.TRANSLATION)? 'm':'π';
     const min = (articulation.type === Articulation.Type.TRANSLATION)? articulation.rangeMin : articulation.rangeMin/Math.PI;
     const max = (articulation.type === Articulation.Type.TRANSLATION)? articulation.rangeMax : articulation.rangeMax/Math.PI;
+    const base = articulation.base.filter(pid => parts[pid]);
     return $(`
 			<div class="part-antn">
 				<div class="part-antn-title">${articulation.type}
@@ -55,7 +56,7 @@ class PlayArticulationUI extends PubSub {
 				<div class="part-antn-data">
 					<div class="part-antn-data-type">Base parts:</div>
 					<div class="part-antn-data-value">
-						${articulation.base.map(pid => parts[pid].name).join(', ')}
+						${base.map(pid => parts[pid].name).join(', ')}
 					</div>
 				</div>
 			</div>`);

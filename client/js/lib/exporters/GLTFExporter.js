@@ -504,7 +504,8 @@ const DataUriUtil = require('util/DataUriUtil');
 
       // AXC: redo output pass
       function convertBuffers(buffers, binary, callback) {
-        if (typeof Blob !== 'undefined') {
+        const isNodejs = (typeof global !== 'undefined' && global.isNode);
+        if (!isNodejs) {
           const blob = new Blob( buffers, { type: 'application/octet-stream' } );
           const reader = new window.FileReader();
           reader.onloadend = function () {

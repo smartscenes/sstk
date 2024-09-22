@@ -80,8 +80,8 @@ class PartsLoader {
     });
   }
 
-  computeConnectivityGraph(partsData, assetInfo, options) {
-    const parts = partsData.parts.map(mesh => {
+  partMeshesToParts(partMeshes, options) {
+    const parts = partMeshes.map(mesh => {
       const partInfo = mesh.userData.partInfo;
       delete mesh.userData.partInfo;
       let obb = partInfo.obb? OBB.fromJSON(partInfo.obb) : null;
@@ -97,6 +97,11 @@ class PartsLoader {
       //_.defaults(part, partInfo);
       return part;
     });
+    return parts;
+  }
+
+  computeConnectivityGraph(partsData, assetInfo, options) {
+    const parts = this.partMeshesToParts(partsData.parts, options);
     // compute connectivity graph
     const distances = ConnectivityGraphHelper.computeDistancesMatrixWithInfo(parts, options.minDist, options.maxDist,
       (p1, p2) => {
@@ -180,7 +185,14 @@ class PartsLoader {
                 metadata: partsInfo
               });
             } else {
-              callback('Cannot load connectivity graph for ' + fullId);
+              const parts = this.partMeshesToParts(partsData.parts, this.__computeConnectivityGraphOptions);
+              callback('Cannot load connectivity graph for ' + fullId,
+                {
+                  annId: partsData.annId,
+                  parts: parts,
+                  connectivityGraph: null,
+                  metadata: partsInfo
+                });
             }
           }
         } else {
@@ -292,7 +304,7 @@ class PartsLoader {
             }
             partMeshes = meshes;
           }
-          callback(null, { parts: partMeshes, connectivityGraph: object3D.connectivityGraph })
+          callback(null, { parts: partMeshes, connectivityGraph: object3D.connectivityGraph });
         }
       });
     }

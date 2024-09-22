@@ -13,6 +13,6 @@ output_dir=${source}
 date
 mkdir -p $output_dir/render_articulations
 mkdir -p $output_dir/logs
-parallel --colsep=',' -j $n --eta "node --max-old-space-size=4000 $MY_PATH/render-articulations.js --source ${source} --id {1} --output_dir $output_dir/render_articulations/{1} $opts >& $output_dir/logs/{1}.render_art.log" :::: $csv
+parallel --colsep=',' -j $n --eta "node --max-old-space-size=4000 $MY_PATH/render-articulations.js  --input ${source}.{1} --input_type id --output_dir $output_dir/render_articulations/{1} $opts >& $output_dir/logs/{1}.render_art.log" :::: $csv
 find ${output_dir}/render_articulations -name '*.gif' | wc
 date

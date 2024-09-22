@@ -1,8 +1,8 @@
-var Object3DUtil = require('geo/Object3DUtil');
-var Sampler = require('math/Sampler');
-var SceneUtil = require('scene/SceneUtil');
-var RendererFactory = require('gfx/RendererFactory');
-var _ = require('util/util');
+const Object3DUtil = require('geo/Object3DUtil');
+const Sampler = require('math/Sampler');
+const SceneUtil = require('scene/SceneUtil');
+const RendererFactory = require('gfx/RendererFactory');
+const _ = require('util/util');
 
 /**
  * Interface for classes that scores viewpoints
@@ -12,6 +12,30 @@ var _ = require('util/util');
  */
 function ViewScorer(opts) {
 }
+
+/**
+ * Specifies a range of values
+ * @typedef {Object} RangeSpec
+ * @property start {number} Start of range
+ * @property end {number} End of range
+ * @property n {int} Number of bins to bucket the range into
+ * @property rangeSize {number} Extent of range (end - start, used to determine end if start is specified, but end is not)
+ * @property step {number} For n steps, how many steps is needed to cover the range (range.end - range.start)/range.n
+ **/
+
+const ViewOptimizerDefaults = {
+  'scoring': {
+    'visibility': {
+      threshold: 0.05,
+      type: 'percent'                       /* percent or absolute number of pixels */
+    }
+  },
+  'view': {
+    phi: {start: 0, n: 4},                /* can be number or rangeSpec */
+    theta: Math.PI / 4,                   /* can be number or rangeSpec */
+    distanceScale: 2.0
+  }
+};
 
 /**
  * Initializes the ViewScorer
@@ -159,6 +183,7 @@ function OffscreenScorer(opts) {
   this.maxWidth = opts.maxWidth;
   this.maxHeight = opts.maxHeight;
   this.__offscreenRenderer = opts.renderer || this.__getOffscreenRenderer(opts);
+  this.__options = _.defaultsDeep(Object.create(null), opts.scoring || {}, ViewOptimizerDefaults.scoring);
 }
 
 OffscreenScorer.prototype = Object.create(ViewScorer.prototype);
@@ -199,6 +224,7 @@ OffscreenScorer.prototype.__getOffscreenRenderer = function(opts) {
 };
 
 OffscreenScorer.prototype.score = function(camera, sceneState, targetObjs) {
+  var options = this.__options;
   // Slightly hacky
   if (!Array.isArray(targetObjs)) {
     targetObjs = [targetObjs];
@@ -213,7 +239,7 @@ OffscreenScorer.prototype.score = function(camera, sceneState, targetObjs) {
     camera: camera
   });
   var targetObjIds = targetObjs.map(getId);
-  var thresh = objCounts.nPixels * 0.05;
+  var thresh = (options.visibility.type === 'percent')? objCounts.nPixels * options.visibility.threshold : options.visibility.threshold;
   var targetObjCounts = targetObjIds.map(function(id) { return objCounts.counts[id] || 0; });
   var totalPixelsWithTargetObjs = _.sum(targetObjCounts);
   var nTargetObjsVisible = _.filter(targetObjCounts, function(c) { return c >= thresh; }).length;
@@ -288,21 +314,27 @@ ViewOptimizer.prototype.sample = function(options) {
  * @param options.sceneState
  * @param options.target
  * @param [options.viewGenerator] Generator with generate() function for generating stream of views
- * @param [options.phi=[0,Math.PI*2]] {number|RangeSpec}
+ * @param [options.phi=[0,Math.PI x 2]] {number|RangeSpec}
  * @param [options.theta=Math.PI/4] {number|RangeSpec}
  * @param [options.keepTargetsVisible] {boolean}
+ * @param [options.scoredViews] {Array}
+ * @param [options.minScore=0] {number}
  * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
  */
 ViewOptimizer.prototype.optimize = function(options) {
   if (options.viewGenerator) {
     this.scorer.init(this.cameraControls.camera);
     var views = options.viewGenerator.generate();
+    var minScore = options.minScore || 0;
     var next = views.next();
     var best = undefined;
     while (next && !next.done) {
       var opts = next.value;
       this.cameraControls.viewTarget(opts);
       opts.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target);
+      if (options.scoredViews && opts.score > minScore) {
+        options.scoredViews.push(opts);
+      }
       //console.log('Got score: ' + opts.score + ', best so far ', best);
       if (!best || opts.score > best.score) {
         best = opts;
@@ -311,7 +343,7 @@ ViewOptimizer.prototype.optimize = function(options) {
     }
     return best;
   } else {
-    return this.__optimizeRotatingViews(options);
+    return this.__optimizeRotatingViewsForDistances(options);
   }
 };
 
@@ -338,7 +370,7 @@ function getRangeSpecification(value, defaults) {
       }
     }
     if (inferN && range.step) {
-      range.n = Math.round((range.end - range.start) / (range.step));
+      range.n = Math.floor((range.end - range.start) / (range.step) + 1);
     } else if (inferStep && range.n != null) {
       range.step = (range.end - range.start)/range.n;
     }
@@ -351,10 +383,11 @@ function getRangeSpecification(value, defaults) {
  * @param options.targetBBox {geo.BBox}
  * @param options.sceneState
  * @param options.target
- * @param [options.phi=[0,Math.PI*2]] {number|RangeSpec}
+ * @param [options.phi=[0,Math.PI x 2]] {number|RangeSpec}
  * @param [options.theta=Math.PI/4] {number|RangeSpec}
  * @param [options.keepTargetsVisible] {boolean}
  * @param [options.scoredViews] {Array}
+ * @param [options.minScore=0] {number}
  * @returns {{targetBBox: BBox, theta: number, phi: number, score: number}}
  */
 ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
@@ -363,6 +396,7 @@ ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
   var thetaRange = getRangeSpecification(options.theta, {start: Math.PI / 4, end: Math.PI / 4, n: 1, rangeSize: Math.PI*2});
   var phiRange = getRangeSpecification(options.phi, {start: 0, end: Math.PI * 2, n: 8, rangeSize: Math.PI*2});
   var best;
+  var minScore = options.minScore || 0;
   for (let itheta = 0, theta = thetaRange.start; itheta < thetaRange.n; theta += thetaRange.step, itheta++) {
     for (let iphi = 0, phi = phiRange.start; iphi < phiRange.n; phi += phiRange.step, iphi++) {
       var opts = {
@@ -372,7 +406,7 @@ ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
       };
       this.cameraControls.viewTarget(opts);
       opts.score = this.scorer.score(this.cameraControls.camera, options.sceneState, options.target);
-      if (options.scoredViews) {
+      if (options.scoredViews && opts.score > minScore) {
         options.scoredViews.push(opts);
       }
       //console.log('Got score: ' + opts.score + ', best so far ', best);
@@ -396,7 +430,7 @@ ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
           if (!best || opts2.score > best.score) {
             best = opts2;
           }
-          if (options.scoredViews) {
+          if (options.scoredViews && opts.score > minScore) {
             options.scoredViews.push(opts2);
           }
         }
@@ -406,22 +440,47 @@ ViewOptimizer.prototype.__optimizeRotatingViews = function(options) {
   return best;
 };
 
+ViewOptimizer.prototype.__optimizeRotatingViewsForDistances = function(options) {
+  // iterate over distanceScale
+  var best;
+  var distRange = getRangeSpecification(options.distanceScale, { n: 1 });
+  var targetBBox = options.targetBBox;
+  for (let idist = 0, dist = distRange.start; idist < distRange.n; dist += distRange.step, idist++) {
+    // console.log('use distance scale', dist, distRange);
+    const bbox = targetBBox.clone();
+    bbox.scaleBy(dist);
+    options.targetBBox = bbox;
+    const b = this.__optimizeRotatingViews(options);
+    if (!best || b.score > best.score) {
+      best = b;
+    }
+  }
+  options.targetBBox = targetBBox;
+  return best;
+};
+
+
+ViewOptimizer.prototype.select = function(scoredViews, n) {
+  scoredViews = _.sortBy(scoredViews, s => -s.score);
+  const selected = _.take(scoredViews, n);
+  return selected;
+};
+
 ViewOptimizer.prototype.lookAt = function(sceneState, objects, viewOpts) {
   // TODO: Find a good view point of looking at the object
   console.time('lookAt');
-  viewOpts = _.defaults(Object.create(null), viewOpts || {}, {
-    phi: {start: 0, n: 4},
-    theta: Math.PI / 4
-  });
+  viewOpts = _.defaults(Object.create(null), viewOpts || {}, ViewOptimizerDefaults.view);
   var bbox = Object3DUtil.getBoundingBox(objects);
   // Limit this by the size of the scene
-  bbox = bbox.scaleBy(2.0);
   var opt = this.optimize({
     sceneState: sceneState,
     target: objects,
     targetBBox: bbox,
     phi: viewOpts.phi,
-    theta: viewOpts.theta
+    theta: viewOpts.theta,
+    distanceScale: viewOpts.distanceScale,
+    scoredViews: viewOpts.scoredViews,
+    minScore: viewOpts.minScore
   });
   // TODO: Improve optimization and scoring
   if (opt.score < 0.05) {
@@ -430,7 +489,10 @@ ViewOptimizer.prototype.lookAt = function(sceneState, objects, viewOpts) {
       target: objects,
       targetBBox: bbox,
       phi: { start: viewOpts.phi.start + Math.PI / viewOpts.phi.n, n: viewOpts.phi.n },
-      theta: viewOpts.theta
+      theta: viewOpts.theta,
+      distanceScale: viewOpts.distanceScale,
+      scoredViews: viewOpts.scoredViews,
+      minScore: viewOpts.minScore
     });
     if (opt2.score > opt.score) {
       opt = opt2;
@@ -443,7 +505,10 @@ ViewOptimizer.prototype.lookAt = function(sceneState, objects, viewOpts) {
       targetBBox: bbox,
       phi: { start: viewOpts.phi.start + Math.PI / viewOpts.phi.n, n: viewOpts.phi.n * 2 },
       theta: viewOpts.theta,
-      keepTargetsVisible: true
+      distanceScale: viewOpts.distanceScale,
+      keepTargetsVisible: true,
+      scoredViews: viewOpts.scoredViews,
+      minScore: viewOpts.minScore
     });
     if (opt2.score > opt.score) {
       opt = opt2;

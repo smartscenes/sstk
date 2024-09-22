@@ -6,10 +6,10 @@
 	"camera": {
 		"type": "perspective"
 	},
-	"assetGroups": ["wss"],
+	"assetGroups": ["3dw"],
 	"assetInfo": {
 		"assetType": "scene",
-		"defaultModelFormat": "obj",
+		"defaultModelFormat": null,
 		"includeCeiling": false,
 		"ignoreOriginalArchHoles": false,
 		"attachWallsToRoom": false,

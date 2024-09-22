@@ -45,6 +45,7 @@ module.exports = {
     JSONExporter: require('./exporters/JSONExporter'),
     OBJMTLExporter: require('./exporters/OBJMTLExporter'),
     PLYExporter: require('./exporters/PLYExporter'),
+    URDFExporter: require('./exporters/URDFExporter'),
     SceneStateExporter: require('./exporters/SceneStateExporter')
   },
   /** @namespace geo */
@@ -144,7 +145,8 @@ module.exports = {
   parts: {
     LabeledParts: require('./parts/LabeledParts'),
     Part: require('./parts/Part'),
-    PartConnectivityGraph: require('./parts/PartConnectivityGraph')
+    PartConnectivityGraph: require('./parts/PartConnectivityGraph'),
+    PartGeomsGen: require('./parts/PartGeomsGen')
   },
   Colors: require('./util/Colors'),
   LabelRemap: require('./util/LabelRemap'),

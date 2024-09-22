@@ -3,25 +3,24 @@
     This renders articulations for an object. 
     The following example command can be run from the ssc folder
     NODE_BASE_URL=http://localhost:8010/articulations/ ./render-articulations.js 
-      --source shape2motion --id lamp_0061--use_subdir --output_dir ./
+      --input shape2motion.lamp_0061 --input_type id
+      --use_subdir --output_dir ./
       --static_color neutral --moving_part_color highlight --show_axis_radar
       --background_color lightgrey --framerate 40
  */
 
-const async = require('async');
-const fs = require('fs');
-const shell = require('shelljs');
 const STK = require('../stk-ssc');
+const _ = STK.util;
 const cmd = require('../ssc-parseargs');
+const processAssetsHelper = require('../ssc-process-assets');
 const THREE = global.THREE;
 const ArticulationsRenderHelper = STK.articulations.ArticulationsRenderHelper;
 
 cmd
   .version('0.0.1')
-  .description('Renders asset by id')
-  .option('--id <id>', 'Scene or model id [default: lamp_0061]', 'lamp_0061')
-  .option('--ids_file <file>', 'File with model ids')
-  .option('--source <source>', 'Scene or model source [default: shape2motion]', 'shape2motion')
+  .description('Renders articulations for asset by id or path')
+  .option('--input <filename>', 'Input path', 'shape2motion.lamp_0061')
+  .option('--inputType <type>', 'Input type (id or path)',  /^(id|path)$/, 'id')
   .option('--format <format>', 'Asset format')
   .option('--output_dir <dir>', 'Base directory for output files', '.')
   .option('--use_subdir [flag]','Put output into subdirectory per id [false]', STK.util.cmd.parseBoolean, false)
@@ -41,7 +40,16 @@ cmd
   .option('--tilt <tilt>', 'Default tilt (from horizontal) in degrees [20]', STK.util.cmd.parseInt, 30)
   .option('--show_axis_radar [flag]', 'Whether to display axis and radar for the articulated parts', STK.util.cmd.parseBoolean)
   .option('--combine_all [flag]', 'Whether to combine all generated gif into one final gif', STK.util.cmd.parseBoolean)
+  .option('--clear_pngs [flag]', 'Whether to remove generated pngs', STK.util.cmd.parseBoolean)
+  .option('--video_format <format>', 'Format for output videos', 'gif')
   .parse(process.argv);
+
+if (!cmd.input) {
+  console.error('Please specify --input <filename>');
+  process.exit(-1);
+}
+const inputs = cmd.getInputs(cmd.input);
+cmd.assetType = 'model';
 
 const msg = cmd.checkImageSize(cmd);
 if (msg) {
@@ -53,31 +61,15 @@ if (msg) {
 STK.Constants.setVirtualUnit(1);  // set to meters
 cmd.material_type = cmd.material_type || 'phong';
 if (cmd.material_type) {
-  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type)
+  STK.materials.Materials.setDefaultMaterialType(cmd.material_type, cmd.material_type);
 }
 if (cmd.material_side) {
   STK.materials.Materials.DefaultMaterialSide = STK.materials.Materials.getMaterialSide(cmd.material_side, STK.materials.Materials.DefaultMaterialSide);
 }
 
 function createRenderer() {
-  const use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
-  const renderer = new STK.PNGRenderer({
-    width: cmd.width,
-    height: cmd.height,
-    useAmbientOcclusion: cmd.encode_index ? false : use_ambient_occlusion,
-    useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
-    useOutlineShader: cmd.encode_index ? false : cmd.use_outline_shader,
-    ambientOcclusionOptions: {
-      type: use_ambient_occlusion ? cmd.ambient_occlusion_type : undefined
-    },
-    outlineColor: cmd.encode_index ? false : cmd.outline_color,
-    usePhysicalLights: cmd.encode_index ? false : cmd.use_physical_lights,
-    useShadows: cmd.encode_index ? false : cmd.use_shadows,
-    compress: cmd.compress_png,
-    skip_existing: cmd.skip_existing,
-    reuseBuffers: true
-  });
-  return renderer;
+  const rendererOptions = cmd.getRendererOptions(cmd);
+  return new STK.PNGRenderer(rendererOptions);
 }
 
 function createAssetManager() {
@@ -150,113 +142,61 @@ const assetManager = createAssetManager();
 const cameraControls = createCameraControls(renderer);
 const renderHelper = createRenderHelper(assetManager, renderer);
 
-let ids = cmd.id ? [cmd.id] : ['lamp_0061'];
-
 STK.assets.registerAssetGroupsSync({ assetSources: [cmd.source] });
 if (cmd.format) {
   STK.assets.AssetGroups.setDefaultFormat(cmd.format);
 }
-
-const assetGroup = assetManager.getAssetGroup(cmd.source);
-if (!assetGroup) {
-  console.log('Unrecognized asset source ' + cmd.source);
-  return;
-}
-const supportedAssetTypes = ['model'];
-if (supportedAssetTypes.indexOf(assetGroup.type) < 0) {
-  console.log('Unsupported asset type ' + assetGroup.type);
-  return;
+var assetSources = cmd.getAssetSources(cmd.inputType, inputs, cmd.assetGroups);
+if (assetSources) {
+  STK.assets.registerAssetGroupsSync({ assetSources: assetSources });
 }
 
-if (cmd.ids_file) {
-  const data = fs.readFileSync(cmd.ids_file, 'utf8');
-  ids = data.split('\n').map(function(x) { return x.trim(); }).filter(function(x) { return x.length; });
-  ids = STK.util.shuffle(ids);
-} else if (cmd.id === 'all') {
-  ids = assetGroup.assetDb.assetInfos.map(function(info) { return info.id; });
-  ids = STK.util.shuffle(ids);
-}
+function processAsset(asset, opts, callback) {
+  console.log('Processing ' + opts.basename);
+  // Create THREE scene
+  const scene = createScene(cameraControls.camera);
 
-function processIds(assetsDb) {
-  const memcheckOpts = { heapdump: { limit: cmd.heapdump } };
-  async.forEachOfSeries(ids, function (id, index, callback) {
-    console.log('Processing ' + id);
-    STK.util.clearCache();
-    STK.util.checkMemory('Processing ' + id + ' index=' + index, memcheckOpts);
-    // Create THREE scene
-    const scene = createScene(cameraControls.camera);
+  // const metadata = assetsDb? assetsDb.getAssetInfo(fullId) : null;
 
-    let outputDir = cmd.output_dir;
-    if (cmd.use_subdir) {
-      outputDir = outputDir + '/' + id;
-      if (cmd.skip_existing && shell.test('-d', outputDir)) {
-        console.warn('Skipping existing output at: ' + outputDir);
-        setTimeout(function () {
-          callback();
-        });
-        return;
-      }
-    }
-    const basename = outputDir + '/' + id;
-    shell.mkdir('-p', outputDir);
-    //shell.rm('-rf', basename);
-    const fullId = cmd.source + '.' + id;
-    const metadata = assetsDb? assetsDb.getAssetInfo(fullId) : null;
+  const wrappedCallback = function() {
+    assetManager.clearCache();
+    STK.geo.Object3DUtil.dispose(scene);
+    callback();
+  };
 
-    const wrappedCallback = function() {
-      STK.geo.Object3DUtil.dispose(scene);
-      callback();
-    };
+  const mInst = asset;
+  const sceneState = new STK.scene.SceneState(null, mInst.model.info);
+  sceneState.addObject(mInst, cmd.auto_align);
+  scene.add(sceneState.fullScene);
+  const sceneBBox = STK.geo.Object3DUtil.getBoundingBox(mInst.object3D);
+  const bbdims = sceneBBox.dimensions();
+  console.log('Loaded ' + sceneState.getFullID() +
+    ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
 
-    if (assetGroup.type === STK.Constants.assetTypeModel) {
-      assetManager.clearCache();
-      assetManager.getModelInstance(cmd.source, fullId, function (mInst) {
-        // Ensure is normal geometry (for some reason, BufferGeometry not working with ssc)
-        STK.geo.Object3DUtil.traverseMeshes(mInst.object3D, false, function(m) {
-          m.geometry = STK.geo.GeometryUtil.toGeometry(m.geometry);
-        });
+  const fullId = mInst.model.info.fullId;
+  console.log('fullId', fullId);
+  const renderOpts = {
+    cameraControls: cameraControls,
+    targetBBox: sceneBBox,
+    basename: opts.basename,
+    framerate: cmd.framerate,
+    tilt: cmd.tilt,
+    skipVideo: cmd.skip_video,
+    combineAll: cmd.combine_all,
+    format: cmd.video_format,
+    clearPngs: cmd.clear_pngs,
+    iterations: cmd.iterations,
+    logdata: { fullId: fullId, assetType: 'model', toWorld: mInst.getObject3D('Model').matrixWorld.toArray() },
+    callback: wrappedCallback
+  };
 
-        const sceneState = new STK.scene.SceneState(null, mInst.model.info);
-        sceneState.addObject(mInst, cmd.auto_align);
-        scene.add(sceneState.fullScene);
-        const sceneBBox = STK.geo.Object3DUtil.getBoundingBox(mInst.object3D);
-        const bbdims = sceneBBox.dimensions();
-        console.log('Loaded ' + sceneState.getFullID() +
-          ' bbdims: [' + bbdims.x + ',' + bbdims.y + ',' + bbdims.z + ']');
-
-        const renderOpts = {
-          cameraControls: cameraControls,
-          targetBBox: sceneBBox,
-          basename: basename,
-          framerate: cmd.framerate,
-          tilt: cmd.tilt,
-          skipVideo: cmd.skip_video,
-          combineAll: cmd.combine_all,
-          iterations: cmd.iterations,
-          logdata: { fullId: fullId, assetType: assetGroup.type, toWorld: mInst.getObject3D('Model').matrixWorld.toArray() },
-          callback: wrappedCallback
-        };
-
-        function onDrained() {
-          setTimeout( function() {
-            renderHelper.renderArticulatedModelInstance(scene, mInst, renderOpts); }, 0);
-        }
-
-        STK.util.waitImagesLoaded(onDrained);
-      },
-      function (error) {
-        console.error('Error loading ' + fullId, error);
-        callback(error, null);
-      },
-      metadata);
-    }
-  }, function (err, results) {
-    console.log('DONE');
-  });
+  setTimeout( function() {
+    renderHelper.renderArticulatedModelInstance(scene, mInst, renderOpts);
+  }, 0);
 }
 
 function main() {
-  processIds();
+  processAssetsHelper.processAssets(cmd, inputs, assetManager, processAsset);
 }
 
 main();

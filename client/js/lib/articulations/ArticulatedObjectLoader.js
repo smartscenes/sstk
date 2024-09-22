@@ -183,6 +183,7 @@ class ArticulatedObjectLoader {
                         //console.log('Condensed articulated object', articulatedObject);
                     }
                     articulatedObject.name = modelinfo.fullId + '-articulated';
+                    ArticulatedObject.populateArticulationUserData(articulatedObject);
                     callback(null, articulatedObject);
                 } catch (err) {
                     callback(err);

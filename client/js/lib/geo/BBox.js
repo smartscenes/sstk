@@ -810,6 +810,12 @@ BBox.getJaccardOverlapRatio = function(bb1, bb2, opts) {
   return _.safeDivide(intersectValue, unionValue, 0);
 };
 
+BBox.createFromHalfSizes = function(halfSizes) {
+  const min = halfSizes.clone().negate();
+  const max = halfSizes.clone();
+  return new BBox(min, max);
+}
+
 /**
  * Aspect ratio is two numbers: shortest/longest, shortest/middle
  */

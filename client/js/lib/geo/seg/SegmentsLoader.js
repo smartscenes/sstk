@@ -63,8 +63,9 @@ SegmentsLoader.prototype.__loadSegmentationWithAnnotation = function(files, segm
     _.getJSON(files['segmentation'])
       .done(function (data) {
         var res = { field: segmentsDataField, format: segmentsInfo['format'], data: data, segmentsInfo: segmentsInfo };
-        if (files['annotation']) {
-          _.getJSON(files['annotation'])
+        var annotationOrPartsFile = files['annotation'] || files['parts'];
+        if (annotationOrPartsFile) {
+          _.getJSON(annotationOrPartsFile)
             .done(function (annotation) {
               res.annotation = annotation;
               callback(null, res);

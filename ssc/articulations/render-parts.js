@@ -26,24 +26,8 @@ cmd
 const PartsLoader = STK.articulations.PartsLoader;
 
 function createRenderer() {
-    const use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
-    const renderer = new STK.PNGRenderer({
-        width: cmd.width,
-        height: cmd.height,
-        useAmbientOcclusion: cmd.encode_index? false : use_ambient_occlusion,
-        useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
-        useOutlineShader: cmd.encode_index? false : cmd.use_outline_shader,
-        ambientOcclusionOptions: {
-            type: use_ambient_occlusion? cmd.ambient_occlusion_type : undefined
-        },
-        outlineColor: cmd.encode_index? false : cmd.outline_color,
-        usePhysicalLights: cmd.encode_index ? false : cmd.use_physical_lights,
-        useShadows: cmd.encode_index? false : cmd.use_shadows,
-        compress: cmd.compress_png,
-        skip_existing: cmd.skip_existing,
-        reuseBuffers: true
-    });
-    return renderer;
+    const rendererOptions = cmd.getRendererOptions(cmd);
+    return new STK.PNGRenderer(rendererOptions);
 }
 
 function createCameraControls(renderer) {
@@ -109,7 +93,7 @@ function setupScene(scene, modelId, parts, cameraControls) {
         assetInfo: assetInfo,
         debugNode: debugNode,
         object3D: object3D
-    }
+    };
 }
 
 const highlightMaterial = STK.geo.Object3DUtil.getSimpleFalseColorMaterial(1, cmd.part_color);

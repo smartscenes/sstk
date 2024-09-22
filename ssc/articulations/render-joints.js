@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
-    This renders articulations for an object. 
+    This renders images showing the joints for an object.
     The following example command can be run from the ssc folder
     NODE_BASE_URL=http://ec2-52-14-172-161.us-east-2.compute.amazonaws.com/articulations/ ./render-proposed-articulations.js
       --id shape2motion.lamp_0061 --use_subdir --output_dir ./
@@ -9,6 +9,7 @@
  */
 const shell = require('shelljs');
 const STK = require('../stk-ssc');
+const _ = STK.util;
 const cmd = require('../ssc-parseargs');
 const ArticulationsRenderHelper = STK.articulations.ArticulationsRenderHelper;
 
@@ -56,24 +57,8 @@ if (cmd.material_side) {
 }
 
 function createRenderer() {
-  const use_ambient_occlusion = (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type !== 'edl');
-  const renderer = new STK.PNGRenderer({
-    width: cmd.width,
-    height: cmd.height,
-    useAmbientOcclusion: cmd.encode_index ? false : use_ambient_occlusion,
-    useEDLShader: (cmd.use_ambient_occlusion && cmd.ambient_occlusion_type === 'edl'),
-    useOutlineShader: cmd.encode_index ? false : cmd.use_outline_shader,
-    ambientOcclusionOptions: {
-      type: use_ambient_occlusion ? cmd.ambient_occlusion_type : undefined
-    },
-    outlineColor: cmd.encode_index ? false : cmd.outline_color,
-    usePhysicalLights: cmd.encode_index ? false : cmd.use_physical_lights,
-    useShadows: cmd.encode_index ? false : cmd.use_shadows,
-    compress: cmd.compress_png,
-    skip_existing: cmd.skip_existing,
-    reuseBuffers: true
-  });
-  return renderer;
+  const rendererOptions = cmd.getRendererOptions(cmd);
+  return new STK.PNGRenderer(rendererOptions);
 }
 
 function createAssetManager() {
@@ -143,7 +128,7 @@ if (errMsg) {
   process.exit(-1);
 }
 
-function renderJoints(sid, articulations) {
+function renderJoints(sid, joints, callback) {
   const fullId = sid.fullId;
 
   let outputDir = cmd.output_dir;
@@ -152,7 +137,9 @@ function renderJoints(sid, articulations) {
     if (cmd.skip_existing && shell.test('-d', outputDir)) {
       console.warn('Skipping existing output at: ' + outputDir);
       setTimeout(function () {
-        callback();
+        if (callback) {
+          callback();
+        }
       });
       return;
     }

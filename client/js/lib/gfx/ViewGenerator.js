@@ -1,5 +1,6 @@
 var Object3DUtil = require('geo/Object3DUtil');
 var BBox = require('geo/BBox');
+var CameraState = require('gfx/CameraState');
 var Constants = require('Constants');
 var _ = require('util/util');
 
@@ -131,7 +132,7 @@ ViewGenerator.prototype.__getDistsFromBBoxFaces = function(bbox, dists, cameraPo
  * Returns a good view for an axis aligned bounding box
  * @param opts View parameters
  * @param opts.name {string} view name
- * @param opts.bbox {geo.BBox} axis aligned bounding box
+ * @param opts.target {geo.BBox} axis aligned bounding box
  * @param opts.theta {number} angleFromHorizontal (latitude)
  * @param opts.phi {number} rotation from front (longitude)
  * @param [opts.dists] {THREE.Vector3|number} distance from bounding box
@@ -209,8 +210,8 @@ ViewGenerator.prototype.__getViewBBoxDims = function(dims, theta, phi) {
  */
 ViewGenerator.prototype.getFixedResolutionViewForBBox = function (name, bbox, objectDepth, imageHeight, pixelWidth, theta, phi, useSquareImage) {
   pixelWidth = pixelWidth || 0.01;  // 1cm
-  theta = (theta != undefined)? theta : (Math.PI / 2);
-  phi = (phi != undefined)? phi : 0;
+  theta = (theta != undefined) ? theta : (Math.PI / 2);
+  phi = (phi != undefined) ? phi : 0;
 
   var dims = bbox.dimensions();
   var viewDims = this.__getViewBBoxDims(dims, theta, phi);
@@ -242,6 +243,14 @@ ViewGenerator.prototype.getFixedResolutionViewForBBox = function (name, bbox, ob
   return viewOpts;
 };
 
+ViewGenerator.prototype.getViewForOBB = function (obb, getAABBView) {
+  const aabb = BBox.createFromHalfSizes(obb.halfSizes);
+  const view = getAABBView(aabb);
+  const transform = new THREE.Matrix4().copy(obb.basis).setPosition(obb.position);
+  const view2 = CameraState.transformCameraState(view, transform, 1);
+  return view2;
+};
+
 /**
  * Returns camera parameters for looking at a point
  * @param name {string} view name
@@ -264,17 +273,17 @@ ViewGenerator.prototype.getViewForPoint = function (name, target, theta, phi, di
 
   var eye = [camX, camY, camZ];
   var up = Constants.worldUp.clone();
-  var camVec = new THREE.Vector3(target.x - camX, target.y - camY, target.z - camZ);
-  var lookatUp;
-  var dot = Math.abs(camVec.normalize().dot(up));
-  if (dot > 0.95) {
-    lookatUp = Constants.worldFront.clone().negate();
-  }
+  //var camVec = new THREE.Vector3(target.x - camX, target.y - camY, target.z - camZ);
+  // var lookatUp;
+  // var dot = Math.abs(camVec.normalize().dot(up));
+  // if (dot > 0.95) {
+  //   lookatUp = Constants.worldFront.clone().negate();
+  // }
   return {
     name: name,
     position: eye,
     target: target,
-    lookatUp: lookatUp,
+    //lookatUp: lookatUp,
     up: up,
     fov: fov,
     near: near,

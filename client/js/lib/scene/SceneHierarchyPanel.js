@@ -91,7 +91,7 @@ function SceneHierarchyPanel(params) {
 
   const scope = this;
   this.getObjectIconUrl = params.getObjectIconUrl || function(source, id, metadata) {
-    return scope.assetManager.getObjectIconUrl(source, id, undefined, metadata);
+    return scope.assetManager? scope.assetManager.getImagePreviewUrl(source, id, undefined, metadata) : null;
   };
 
   const iconBaseUrl = Constants.baseUrl + '/images/icons/';

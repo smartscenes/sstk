@@ -2334,6 +2334,31 @@ Object3DUtil.isDescendantOf = function (candidate, object3D, includeSelf) {
   return isDesc;
 };
 
+Object3DUtil.getAncestors = function (object3D, includeSelf, convertFn, stopFn) {
+  const ancestors = [];
+  if (includeSelf) {
+    const value = convertFn? convertFn(object3D) : object3D;
+    if (value != null) {
+      ancestors.push(value);
+    }
+  }
+  Object3DUtil.traverseAncestors(object3D, (node) => {
+    const value = convertFn? convertFn(node) : node;
+    if (value != null) {
+      ancestors.push(value);
+    }
+    if (stopFn) {
+      return !stopFn(node);
+    } else {
+      return true;
+    }
+  });
+  return ancestors;
+};
+
+
+
+
 Object3DUtil.deepClone = function(object3D) {
   // Deep clone that makes a copy of the geometry as well
   var clone = object3D.clone();

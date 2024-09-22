@@ -112,6 +112,23 @@ Annotation tools:
 
 1. `./sample-points` - Samples points from a mesh (sampled points are output as a PLY file)
 
+Other scripts:
+
+1. `./print-mesh-index-mapping.js` - Print array of meshes to indicate how the STK linearizes the meshes.  Currently works for loaded GLTF files.
+    1.  `./print-mesh-index-mapping.js --input <FILENAME.GLB> --inputType path`
+        Will produce `<FILENAME>.meshIndex.json` with information about how the linearized meshes maps to the original information from the GLB.
+        ```json
+          "meshMapping": [
+             {"index":0,"meshIndex":3,"primitiveIndex":0,"nodePath":[19,3]}, 
+             ... 
+          ]
+        ```
+        The `meshMapping` field contains an array indicating the STK mesh `index`, the original GLB `meshIndex` and `primitiveIndex` as well as
+        the indices of the nodes used to instantiate this mesh (starting from the scene node and traversing the children).
+
+1. `./get-info.js` - Print out information for a 3D asset for indexing
+
+
 See `scripts` directory for examples of how to batch run these scripts.
 
 Known Issues:
