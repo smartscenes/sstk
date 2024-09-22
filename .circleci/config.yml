@@ -1,17 +1,42 @@
 version: 2.1
 
 orbs:
-  node: circleci/node@4.1
+  node: circleci/node@6.1.0
   # The Node.js orb contains a set of prepackaged CircleCI configuration you can utilize
   # See the orb's test job here: https://circleci.com/developer/orbs/orb/circleci/node#jobs-test
+
+executors:
+  docker: # Docker using the Base Convenience Image
+    docker:
+      - image: cimg/base:stable
+  linux: # a Linux VM running Ubuntu 20.04
+    machine:
+      image: ubuntu-2004:202107-02
+  macos: # macos executor running Xcode
+    macos:
+      xcode: 14.2.0
+
+jobs:
+  test:
+    parameters:
+      os:
+        type: executor
+      node-version:
+        type: string
+    executor: << parameters.os >>
+    steps:
+      - checkout
+      - node/install:
+          node-version: << parameters.node-version >>
 
 workflows:
   sample:
     jobs:
-      - node/test:
+      - test:
           matrix:
             parameters:
-              version: ['10.24.0']
+              os: [linux, macos]
+              node-version: ["14.21.3", "16.20.2", "18.20.4"]
           # For more information about matrix testing see the detailed blog post:
           # https://circleci.com/blog/circleci-matrix-jobs/
           # or the configuration reference:
