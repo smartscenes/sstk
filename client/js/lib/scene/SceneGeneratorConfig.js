@@ -17,7 +17,7 @@ class SceneGeneratorConfig extends ConfigControls {
       name: 'sceneInference.parserModel',
       text: 'Scene Parser Model',
       type: 'text',
-      values: ['RoomType', 'LLM', 'InstructScene'],
+      values: ['SKIP', 'RoomType', 'LLM', 'RoomTypeLLM', 'InstructScene'],
       defaultValue: 'LLM'
     }, {
       id: 'si.archGenMethod',
@@ -31,14 +31,14 @@ class SceneGeneratorConfig extends ConfigControls {
       name: 'sceneInference.arch.genModel',
       text: 'Architecture Generation Model',
       type: 'text',
-      values: ['SquareRoomGenerator'],
+      values: ['SquareRoomGenerator', 'Holodeck'],
       defaultValue: 'SquareRoomGenerator'
     }, {
       id: 'si.layout',
       name: 'sceneInference.layoutModel',
       text: 'Layout Generation Model',
       type: 'text',
-      values: ['ATISS', 'DiffuScene', 'InstructScene'],
+      values: ['ATISS', 'DiffuScene', 'Holodeck', 'InstructScene'],
       defaultValue: 'ATISS'
     }, {
       id: 'si.passText',
