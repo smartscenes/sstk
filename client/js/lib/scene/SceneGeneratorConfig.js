@@ -38,7 +38,7 @@ class SceneGeneratorConfig extends ConfigControls {
       name: 'sceneInference.layoutModel',
       text: 'Layout Generation Model',
       type: 'text',
-      values: ['ATISS', 'DiffuScene', 'Holodeck', 'InstructScene'],
+      values: ['ATISS', 'DiffuScene', 'LayoutGPT', 'Holodeck', 'InstructScene'],
       defaultValue: 'ATISS'
     }, {
       id: 'si.passText',
