@@ -69,9 +69,21 @@ class SceneGeneratorConfig extends ConfigControls {
     }, {
       id: 'si.useCategory',
       name: 'sceneInference.useCategory',
-      text: 'Retrieve within Object Category',
+      text: 'Object Retrieval: Filter by Category',
+      type: 'boolean',
+      defaultValue: false
+    }, {
+      id: 'si.useWnsynset',
+      name: 'sceneInference.retrieve.useWnsynset',
+      text: 'Object Retrieval: Filter by Wnsynset',
       type: 'boolean',
       defaultValue: true
+    }, {
+      id: 'si.mapTo3dfront',
+      name: 'sceneInference.retrieve.mapTo3dfront',
+      text: 'Object Retrieval: Map Categories to 3D-FRONT',
+      type: 'boolean',
+      defaultValue: false
     }];
 
     super(params);
